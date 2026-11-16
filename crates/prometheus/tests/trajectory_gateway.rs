@@ -69,6 +69,8 @@ fn normalized(home: &Path, id: &str) -> Vec<Value> {
             let mut event: Value = serde_json::from_str(line).unwrap();
             if let Some(payload) = event["payload"].as_object_mut() {
                 payload.remove("source");
+                // Who sent the input (the gateway stamps a webhook's).
+                payload.remove("author");
             }
             strip(&mut event);
             event

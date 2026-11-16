@@ -40,10 +40,15 @@ fn peer(server_requests: bool) -> (Peer, mpsc::UnboundedReceiver<Message>) {
     (peer, rx)
 }
 
+/// The frames sent so far, without `session.presence` (each attach and
+/// detach sends one; `tests/live_sessions.rs` covers them).
 fn frames(rx: &mut mpsc::UnboundedReceiver<Message>) -> Vec<Value> {
     let mut out = Vec::new();
     while let Ok(Message::Text(text)) = rx.try_recv() {
-        out.push(serde_json::from_str(text.as_str()).unwrap());
+        let frame: Value = serde_json::from_str(text.as_str()).unwrap();
+        if frame["method"] != "session.presence" {
+            out.push(frame);
+        }
     }
     out
 }
@@ -224,7 +229,10 @@ async fn the_first_answer_wins_and_the_others_see_it_resolved() {
     };
     let request = loop {
         if let Some(Message::Text(text)) = rx_a.recv().await {
-            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+            let frame = serde_json::from_str::<Value>(text.as_str()).unwrap();
+            if frame["method"] != "session.presence" {
+                break frame;
+            }
         }
     };
     let id = request["id"].as_str().unwrap().to_owned();
@@ -400,7 +408,10 @@ async fn an_open_request_is_resent_to_a_driver_that_reattaches() {
     };
     let sent = loop {
         if let Some(Message::Text(text)) = rx_a.recv().await {
-            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+            let frame = serde_json::from_str::<Value>(text.as_str()).unwrap();
+            if frame["method"] != "session.presence" {
+                break frame;
+            }
         }
     };
     assert_eq!(
@@ -471,7 +482,10 @@ async fn a_driver_that_reattaches_as_observer_can_no_longer_answer() {
     };
     let sent = loop {
         if let Some(Message::Text(text)) = rx.recv().await {
-            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+            let frame = serde_json::from_str::<Value>(text.as_str()).unwrap();
+            if frame["method"] != "session.presence" {
+                break frame;
+            }
         }
     };
     let id = sent["id"].as_str().unwrap().to_owned();
@@ -521,7 +535,10 @@ async fn detaching_one_session_keeps_another_sessions_requests() {
     };
     let sent = loop {
         if let Some(Message::Text(text)) = rx.recv().await {
-            break serde_json::from_str::<Value>(text.as_str()).unwrap();
+            let frame = serde_json::from_str::<Value>(text.as_str()).unwrap();
+            if frame["method"] != "session.presence" {
+                break frame;
+            }
         }
     };
     let id = sent["id"].as_str().unwrap().to_owned();

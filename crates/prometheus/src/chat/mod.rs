@@ -382,6 +382,7 @@ impl Tui<'_> {
             terminal: terminal::identity().filter(|_| scope.config().sessions.terminal_continue),
             cwd,
             egress: self.args.egress_overrides(),
+            join: None,
         };
         crate::tui_cmd::start(&launch, scope, ctx, ui)
     }

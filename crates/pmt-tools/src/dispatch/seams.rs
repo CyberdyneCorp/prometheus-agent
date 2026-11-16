@@ -133,10 +133,19 @@ pub struct GateRequest<'a> {
 }
 
 /// The approval gate's answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GateVerdict {
     /// Run the call.
     Allow,
+    /// Run the call with `arguments` instead: a person reviewed the file
+    /// edit it makes and kept only part of it, or edited it (spec: tui,
+    /// Inline diff review for file edits). `note` goes with its result.
+    Revised {
+        /// The arguments the tool runs with.
+        arguments: Value,
+        /// What the result tells the model about the review.
+        note: String,
+    },
     /// Never run (hardline, deny rule): `status = "blocked"`.
     Blocked(String),
     /// Refused (denied approval, unattended deny): `status = "denied"`.

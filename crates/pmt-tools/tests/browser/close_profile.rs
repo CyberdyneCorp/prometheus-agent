@@ -12,7 +12,9 @@ use pmt_config::schema::{ApprovalsConfig, Config, SecurityConfig, UnattendedAppr
 use pmt_config::{Home, ProfileName};
 use pmt_core::capability::{BASELINE, CapabilitySet};
 use pmt_core::human::Channel;
-use pmt_tools::approval::{ApprovalRequest, CommandGate, Context, Decision, Floors, GateSetup};
+use pmt_tools::approval::{
+    ApprovalRequest, CommandGate, Context, Decision, Floors, GateSetup, Reply,
+};
 use pmt_tools::browser::close_profile::NAME;
 use pmt_tools::browser::real_profile::{Browser, Detect};
 use pmt_tools::environments::{Environments, SessionEnv};
@@ -95,7 +97,7 @@ fn config(autoclose: bool) -> Config {
 fn gate(
     fixture: &Fixture,
     context: Context,
-    channel: Channel<ApprovalRequest, Decision>,
+    channel: Channel<ApprovalRequest, Reply>,
 ) -> Arc<CommandGate> {
     let home = Home::open(&fixture.home.join("prometheus-home")).unwrap();
     let profile = home
@@ -167,7 +169,7 @@ async fn closing_the_users_browser_asks_every_time_and_ends_it_once_approved() {
         };
         let prompt = prompts.next().await.expect("asked under YOLO");
         assert_eq!(prompt.request().remember, None, "never remembered");
-        prompt.respond(answer);
+        prompt.respond(answer.into());
         let result = pending.await.unwrap();
         if ends {
             assert_eq!(result.status, Status::Ok, "{}", result.text_content());

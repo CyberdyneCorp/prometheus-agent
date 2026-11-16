@@ -46,6 +46,9 @@ pub struct Status {
     pub approvals: usize,
     /// Sessions this TUI is attached to (shown from two on).
     pub live: usize,
+    /// Who else is attached to the shown session, and whether this TUI
+    /// only observes it (`with desktop-7`, `observing`).
+    pub shared: Option<String>,
     /// A turn runs.
     pub busy: bool,
     /// How long the busy period has lasted.
@@ -104,6 +107,9 @@ impl Status {
         }
         if self.live > 1 {
             items.push(live_item(strings, self.live));
+        }
+        if let Some(shared) = &self.shared {
+            items.push(shared.clone());
         }
         if let Some(note) = &self.note {
             items.push(note.clone());

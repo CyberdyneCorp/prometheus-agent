@@ -222,7 +222,7 @@
       "properties": {
         "accepted_hunks": {
           "default": null,
-          "description": "For a diff approval: the hunks accepted.",
+          "description": "For a diff approval: the hunks to apply (numbered from 1, as the\nrequest's `diff.hunks`); absent: all of them.",
           "items": {
             "format": "uint32",
             "minimum": 0,
@@ -239,7 +239,7 @@
         },
         "replacement": {
           "default": null,
-          "description": "An edited command to run instead.",
+          "description": "For a diff approval: the file content to write instead of the\nproposed one (`edit then accept`).",
           "type": [
             "string",
             "null"
@@ -355,7 +355,7 @@
       "properties": {
         "accepted_hunks": {
           "default": null,
-          "description": "For a diff approval: the hunks accepted.",
+          "description": "For a diff approval: the hunks to apply (numbered from 1, as the\nrequest's `diff.hunks`); absent: all of them.",
           "items": {
             "format": "uint32",
             "minimum": 0,
@@ -376,7 +376,7 @@
         },
         "replacement": {
           "default": null,
-          "description": "An edited command to run instead.",
+          "description": "For a diff approval: the file content to write instead of the\nproposed one (`edit then accept`).",
           "type": [
             "string",
             "null"
@@ -564,6 +564,13 @@
       "additionalProperties": false,
       "description": "`session.attach` / `session.resume` result.",
       "properties": {
+        "client_id": {
+          "description": "This connection's client id, as `session.presence` lists it and\nits inputs are stamped with.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "epoch": {
           "description": "The daemon epoch the sequence numbers belong to.",
           "type": "string"
@@ -1968,6 +1975,13 @@
       "additionalProperties": false,
       "description": "A file edit an approval asks about.",
       "properties": {
+        "hunks": {
+          "description": "The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what\n`accepted_hunks` refers to.",
+          "items": {
+            "$ref": "#/$defs/EditHunk"
+          },
+          "type": "array"
+        },
         "new_text": {
           "description": "The content after the edit.",
           "type": "string"
@@ -1987,6 +2001,28 @@
       "required": [
         "path",
         "new_text"
+      ],
+      "type": "object"
+    },
+    "EditHunk": {
+      "additionalProperties": false,
+      "description": "One hunk of a file edit.",
+      "properties": {
+        "header": {
+          "description": "`@@ -<old start>,<old lines> +<new start>,<new lines> @@`.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "Its lines, each starting with ` `, `-` or `+`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "header",
+        "lines"
       ],
       "type": "object"
     },
@@ -4580,6 +4616,35 @@
       ],
       "type": "object"
     },
+    "PresenceClient": {
+      "additionalProperties": false,
+      "description": "One client attached to a session.",
+      "properties": {
+        "client_id": {
+          "description": "The client's id within the daemon (`<kind>-<connection>`), the one\nits inputs are stamped with.",
+          "type": "string"
+        },
+        "client_kind": {
+          "description": "Its kind from `rpc.hello` (`tui`, `desktop`, ...).",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/AttachRole",
+          "description": "Driver or observer."
+        },
+        "since": {
+          "description": "When it attached (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_id",
+        "client_kind",
+        "role",
+        "since"
+      ],
+      "type": "object"
+    },
     "ProcessEntry": {
       "additionalProperties": false,
       "description": "One background process of a session.",
@@ -5563,6 +5628,27 @@
       ],
       "type": "object"
     },
+    "RewindParams": {
+      "additionalProperties": false,
+      "description": "`session.rewind` params.",
+      "properties": {
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "to_turn": {
+          "description": "The last turn the branch keeps (from 1).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "to_turn"
+      ],
+      "type": "object"
+    },
     "Roster": {
       "additionalProperties": false,
       "description": "`bot.roster.list` result.",
@@ -6007,6 +6093,28 @@
       },
       "type": "object"
     },
+    "SessionPresencePayload": {
+      "additionalProperties": false,
+      "description": "`session.presence` payload.",
+      "properties": {
+        "clients": {
+          "description": "Every client attached now, in the order they attached.",
+          "items": {
+            "$ref": "#/$defs/PresenceClient"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "clients"
+      ],
+      "type": "object"
+    },
     "SessionProject": {
       "additionalProperties": false,
       "description": "`session.project` payload: a session moved to another project.",
@@ -6047,6 +6155,42 @@
       },
       "required": [
         "session_id"
+      ],
+      "type": "object"
+    },
+    "SessionRewound": {
+      "additionalProperties": false,
+      "description": "`session.rewind` result.",
+      "properties": {
+        "checkpoint": {
+          "default": null,
+          "description": "The workspace checkpoint holding the files as they were after\n`to_turn` (`files.rollback {checkpoint}`), when later turns changed\nfiles; restoring is the client's offer to make.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "parent_session_id": {
+          "description": "The session it branched from (kept unchanged).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The new branch session, ending at `to_turn`.",
+          "type": "string"
+        },
+        "turns": {
+          "description": "The turns the branch holds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "parent_session_id",
+        "turns"
       ],
       "type": "object"
     },
@@ -6335,6 +6479,76 @@
       ],
       "type": "object"
     },
+    "SubagentEventKind": {
+      "description": "What one `subagent.event` carries.",
+      "oneOf": [
+        {
+          "const": "assistant",
+          "description": "The child's assistant text.",
+          "type": "string"
+        },
+        {
+          "const": "tool_call",
+          "description": "A tool call it made (`tool`, `text` = what it works on).",
+          "type": "string"
+        },
+        {
+          "const": "tool_result",
+          "description": "That call's result (`tool`, `text` = its output or error).",
+          "type": "string"
+        },
+        {
+          "const": "finished",
+          "description": "It ended (`status`).",
+          "type": "string"
+        }
+      ]
+    },
+    "SubagentEventPayload": {
+      "additionalProperties": false,
+      "description": "`subagent.event` payload: one item of a subscribed child's transcript,\nsent to the subscribing connection only.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SubagentEventKind",
+          "description": "What it is."
+        },
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "status": {
+          "description": "How the child ended, for `finished`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "description": "The tool, for a call or result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id",
+        "kind"
+      ],
+      "type": "object"
+    },
     "SubagentList": {
       "additionalProperties": false,
       "description": "`subagent.list` result.",
@@ -6392,6 +6606,44 @@
         "session_id",
         "subagent_id",
         "text"
+      ],
+      "type": "object"
+    },
+    "SubagentSubscribeParams": {
+      "additionalProperties": false,
+      "description": "`subagent.subscribe` params.",
+      "properties": {
+        "session_id": {
+          "description": "The parent session the connection is attached to.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child (`sa-<ULID>`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id"
+      ],
+      "type": "object"
+    },
+    "SubagentSubscribed": {
+      "additionalProperties": false,
+      "description": "`subagent.subscribe` result.",
+      "properties": {
+        "status": {
+          "description": "`running`, or how it ended (`completed`, `failed`, ...).",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subagent_id",
+        "status"
       ],
       "type": "object"
     },
@@ -6644,6 +6896,70 @@
       },
       "type": "object"
     },
+    "Timeline": {
+      "additionalProperties": false,
+      "description": "`session.timeline` result.",
+      "properties": {
+        "turns": {
+          "description": "The active transcript's turns, oldest first.",
+          "items": {
+            "$ref": "#/$defs/TimelineTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "turns"
+      ],
+      "type": "object"
+    },
+    "TimelineTurn": {
+      "additionalProperties": false,
+      "description": "One turn of a session's timeline.",
+      "properties": {
+        "at": {
+          "description": "When it started (RFC 3339).",
+          "type": "string"
+        },
+        "cost_usd": {
+          "default": null,
+          "description": "What its model calls cost, when known.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "first_line": {
+          "description": "The first line of its input.",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "The user message that started it (`msg_<ULID>`).",
+          "type": "string"
+        },
+        "tools": {
+          "description": "Tool calls it made.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "turn": {
+          "description": "Its number, from 1.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "turn",
+        "message_id",
+        "at",
+        "first_line",
+        "tools"
+      ],
+      "type": "object"
+    },
     "Transcript": {
       "additionalProperties": false,
       "description": "`session.transcript` result.",
@@ -6665,6 +6981,13 @@
       "additionalProperties": false,
       "description": "One message of a transcript.",
       "properties": {
+        "author": {
+          "description": "Who sent a user message: the client id the gateway stamped it with\n(spec: tui, Shared live sessions).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "description": "`msg_<ULID>`.",
           "type": "string"
@@ -7727,14 +8050,23 @@
       "since": "1.0"
     },
     "session.presence": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "payload": {
+        "$ref": "#/$defs/SessionPresencePayload"
+      },
       "since": "1.0"
     },
     "session.project": {
       "owner": "projects",
       "payload": {
         "$ref": "#/$defs/SessionProject"
+      },
+      "since": "1.0"
+    },
+    "subagent.event": {
+      "owner": "tui",
+      "payload": {
+        "$ref": "#/$defs/SubagentEventPayload"
       },
       "since": "1.0"
     },
@@ -8965,6 +9297,17 @@
       },
       "since": "1.0"
     },
+    "session.rewind": {
+      "long": true,
+      "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/RewindParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionRewound"
+      },
+      "since": "1.0"
+    },
     "session.settings": {
       "owner": "acp-adapter",
       "params": {
@@ -8992,6 +9335,16 @@
       },
       "result": {
         "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "session.timeline": {
+      "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Timeline"
       },
       "since": "1.0"
     },
@@ -9047,8 +9400,13 @@
       "since": "1.0"
     },
     "subagent.subscribe": {
-      "declared": false,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SubagentSubscribeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentSubscribed"
+      },
       "since": "1.0"
     },
     "system.health": {

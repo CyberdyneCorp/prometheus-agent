@@ -48,6 +48,12 @@ pub enum Action {
     ExpandPaste,
     /// Move to the startup banner's headers.
     Banner,
+    /// Show or hide the subagents pane.
+    PaneSubagents,
+    /// Show or hide the tool-output pane.
+    PaneTools,
+    /// Open the session timeline.
+    Timeline,
 }
 
 /// One action: its `ui.tui.keys` name, its default chord, and its
@@ -173,6 +179,24 @@ const SPECS: &[Spec] = &[
         name: "banner",
         default: Chord::ctrl(Key::Char('b')),
         configured: |k| k.banner.as_ref(),
+    },
+    Spec {
+        action: Action::PaneSubagents,
+        name: "pane_subagents",
+        default: Chord::plain(Key::F(2)),
+        configured: |k| k.pane_subagents.as_ref(),
+    },
+    Spec {
+        action: Action::PaneTools,
+        name: "pane_tools",
+        default: Chord::plain(Key::F(3)),
+        configured: |k| k.pane_tools.as_ref(),
+    },
+    Spec {
+        action: Action::Timeline,
+        name: "timeline",
+        default: Chord::ctrl(Key::Char('t')),
+        configured: |k| k.timeline.as_ref(),
     },
 ];
 

@@ -399,6 +399,11 @@ fn trace_events(m: &Message) -> Vec<(&'static str, Value)> {
         Event::UserMessage(MessageText {
             message_id: id.clone(),
             text: text.to_owned(),
+            author: m
+                .metadata
+                .as_ref()
+                .and_then(|meta| meta.get("author"))
+                .cloned(),
         })
         .payload()
     };

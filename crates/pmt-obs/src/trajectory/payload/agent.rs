@@ -104,6 +104,11 @@ pub struct MessageText {
     pub message_id: Option<String>,
     /// The text.
     pub text: String,
+    /// Who sent a user message, as the gateway stamped it (`client_kind`,
+    /// `client_id`, `principal`): what a shared session's clients label
+    /// each input with (spec: tui, Shared live sessions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<Value>,
 }
 
 /// `assistant.reasoning`.

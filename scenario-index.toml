@@ -94,6 +94,7 @@ capabilities = [
     "replay-and-evaluation",
     "session-storage",
     "skills",
+    "tui",
     "web-dashboard",
 ]
 
@@ -4896,3 +4897,19 @@ capabilities = [
 [session-storage."Encryption at rest option (upgrade)"]
 "Store unreadable without key" = ["crates/pmt-store/tests/store/encryption.rs::an_encrypted_store_is_unreadable_as_sqlite_and_keeps_its_rows", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
 "Missing key fails closed" = ["crates/pmt-store/tests/store/encryption.rs::a_missing_key_fails_closed_without_creating_a_store", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
+
+# Group 72.3: TUI split panes, inline diff review, timeline scrubber and
+# shared live sessions.
+[tui."Split panes for subagents and tool output (upgrade)"]
+"Watching a delegated child" = ["crates/prometheus/tests/tui_live.rs::f2_lists_both_children_and_streams_the_selected_ones_transcript_to_its_end", "crates/pmt-tui/tests/upgrades.rs::the_subagents_pane_sits_beside_the_transcript_from_120_columns", "crates/pmt-tui/tests/upgrades.rs::the_subagents_pane_sits_below_the_transcript_from_80_to_119_columns", "crates/pmt-tui/tests/upgrades.rs::under_80_columns_the_tool_pane_is_a_tab_with_the_full_output", "crates/pmt-delegation/src/live.rs::a_late_subscriber_gets_the_backlog_then_live_items_until_the_end"]
+"Foreign subagent subscription" = ["crates/pmt-gateway/tests/live_sessions.rs::subscribing_to_a_child_of_an_unattached_session_is_session_not_attached"]
+
+[tui."Inline diff review for file edits (upgrade)"]
+"Partial acceptance" = ["crates/prometheus/tests/tui_live.rs::accepting_hunks_1_and_3_writes_only_those_and_the_model_hears_hunk_2_was_rejected", "crates/pmt-tui/tests/upgrades.rs::an_edit_approval_shows_numbered_hunks_and_the_review_choices", "crates/pmt-tools/src/approval/review.rs::only_the_accepted_hunks_are_applied", "crates/pmt-tools/src/approval/review.rs::a_reviewed_patch_writes_the_merged_file_and_names_the_rejected_hunk"]
+
+[tui."Session timeline scrubber (upgrade)"]
+"Rewind keeps the original" = ["crates/prometheus/tests/tui_live.rs::rewinding_a_12_turn_session_to_turn_7_shows_a_7_turn_branch_and_keeps_the_original", "crates/prometheus/tests/tui_live.rs::a_rewind_offers_the_turns_checkpoint_and_yes_restores_its_files", "crates/pmt-tui/tests/upgrades.rs::the_timeline_lists_turns_over_a_read_only_preview_of_the_highlighted_one"]
+
+[tui."Shared live sessions (upgrade)"]
+"Observer cannot submit" = ["crates/prometheus/tests/tui_live.rs::a_tui_observing_a_session_shows_it_read_only_and_cannot_submit", "crates/pmt-gateway/tests/live_sessions.rs::an_observer_is_listed_as_one_and_cannot_submit"]
+"Desktop joins a TUI session" = ["crates/prometheus/tests/tui_live.rs::a_desktop_joining_the_tuis_session_is_shown_and_its_input_labelled", "crates/pmt-gateway/tests/live_sessions.rs::a_desktop_joining_a_tui_session_is_listed_to_both_and_gets_the_same_turn_seqs", "crates/pmt-tui/tests/upgrades.rs::a_shared_session_names_the_other_clients_in_the_status_line"]

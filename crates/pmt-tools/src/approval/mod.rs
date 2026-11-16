@@ -39,6 +39,7 @@ pub mod hardline;
 pub mod hooks;
 pub mod paths;
 mod printable;
+pub mod review;
 pub mod rules;
 pub mod selfterm;
 pub mod shell;
@@ -49,7 +50,9 @@ use std::path::Path;
 
 use serde::Serialize;
 
-pub use gate::{ApprovalRequest, CommandGate, Decision, EditDiff, GateSetup, OwnProcesses, STOP};
+pub use gate::{
+    ApprovalRequest, CommandGate, Decision, EditDiff, GateSetup, OwnProcesses, Reply, STOP,
+};
 pub use printable::printable;
 pub use shell::ParseError;
 

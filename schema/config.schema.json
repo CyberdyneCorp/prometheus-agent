@@ -10785,12 +10785,15 @@
             "page_down": null,
             "page_up": null,
             "palette": null,
+            "pane_subagents": null,
+            "pane_tools": null,
             "paste_image": null,
             "quit": null,
             "scroll_down": null,
             "scroll_up": null,
             "sessions": null,
-            "submit": null
+            "submit": null,
+            "timeline": null
           },
           "description": "Key bindings: action name to key chord (`Ctrl+P`, `Alt+Enter`,\n`PageUp`, `F2`); `/keys` lists the effective bindings."
         },
@@ -10967,6 +10970,30 @@
           "default": null,
           "description": "Open the command palette (default `Ctrl+P`)."
         },
+        "pane_subagents": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Show or hide the subagents pane (default `F2`)."
+        },
+        "pane_tools": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Show or hide the tool-output pane (default `F3`)."
+        },
         "paste_image": {
           "anyOf": [
             {
@@ -11038,6 +11065,18 @@
           ],
           "default": null,
           "description": "Send the composer (default `Enter`)."
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Open the session timeline (default `Ctrl+T`)."
         }
       },
       "type": "object"
@@ -11108,12 +11147,15 @@
               "page_down": null,
               "page_up": null,
               "palette": null,
+              "pane_subagents": null,
+              "pane_tools": null,
               "paste_image": null,
               "quit": null,
               "scroll_down": null,
               "scroll_up": null,
               "sessions": null,
-              "submit": null
+              "submit": null,
+              "timeline": null
             },
             "reduced_motion": false,
             "theme": "auto"
@@ -13303,12 +13345,15 @@
             "page_down": null,
             "page_up": null,
             "palette": null,
+            "pane_subagents": null,
+            "pane_tools": null,
             "paste_image": null,
             "quit": null,
             "scroll_down": null,
             "scroll_up": null,
             "sessions": null,
-            "submit": null
+            "submit": null,
+            "timeline": null
           },
           "reduced_motion": false,
           "theme": "auto"

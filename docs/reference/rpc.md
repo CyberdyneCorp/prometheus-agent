@@ -169,15 +169,17 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
+| `session.rewind` | `tui` | 1.0 | [`RewindParams`](#rewindparams) | [`SessionRewound`](#sessionrewound) |
 | `session.settings` | `acp-adapter` | 1.0 | [`SessionRef`](#sessionref) | [`SessionSettings`](#sessionsettings) |
 | `session.siblings` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `session.steer` | `agent-turn-loop` | 1.0 | [`SteerParams`](#steerparams) | [`Ack`](#ack) |
+| `session.timeline` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`Timeline`](#timeline) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
 | `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.steer` | `desktop-app` | 1.0 | [`SubagentSteerParams`](#subagentsteerparams) | [`SubagentControlled`](#subagentcontrolled) |
 | `subagent.stop` | `desktop-app` | 1.0 | [`SubagentRef`](#subagentref) | [`SubagentControlled`](#subagentcontrolled) |
-| `subagent.subscribe` | `tui` | 1.0 | not served yet | |
+| `subagent.subscribe` | `tui` | 1.0 | [`SubagentSubscribeParams`](#subagentsubscribeparams) | [`SubagentSubscribed`](#subagentsubscribed) |
 | `system.health` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`SystemHealth`](#systemhealth) |
 | `system.metrics` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`MetricsSnapshot`](#metricssnapshot) |
 | `tools.call` | `tool-system` | 1.0 | not served yet | |
@@ -236,8 +238,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `request.cancel` | `workspace-architecture` | 1.0 | [`RequestCancel`](#requestcancel) |
 | `request.resolved` | `workspace-architecture` | 1.0 | [`RequestResolved`](#requestresolved) |
 | `session.event` | `workspace-architecture` | 1.0 | any |
-| `session.presence` | `messaging-gateway` | 1.0 | not served yet |
+| `session.presence` | `messaging-gateway` | 1.0 | [`SessionPresencePayload`](#sessionpresencepayload) |
 | `session.project` | `projects` | 1.0 | [`SessionProject`](#sessionproject) |
+| `subagent.event` | `tui` | 1.0 | [`SubagentEventPayload`](#subagenteventpayload) |
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
 | `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
@@ -326,9 +329,9 @@ The answer to `approval.request` (also `approval.respond` params, with its `id`)
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks accepted. |
+| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. |
 | `decision` | [`Decision`](#decision) | yes | The decision. |
-| `replacement` | string or null | no | An edited command to run instead. |
+| `replacement` | string or null | no | For a diff approval: the file content to write instead of the proposed one (`edit then accept`). |
 
 ### `ApprovalFinding`
 
@@ -362,10 +365,10 @@ Why a call needs approval.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks accepted. |
+| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. |
 | `decision` | [`Decision`](#decision) | yes | The decision. |
 | `id` | string | yes | The `approval.request` id (`srq-<12 hex>`). |
-| `replacement` | string or null | no | An edited command to run instead. |
+| `replacement` | string or null | no | For a diff approval: the file content to write instead of the proposed one (`edit then accept`). |
 
 ### `Artifact`
 
@@ -428,6 +431,7 @@ What an attached connection may do in the session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `client_id` | string or null | no | This connection's client id, as `session.presence` lists it and its inputs are stamped with. |
 | `epoch` | string | yes | The daemon epoch the sequence numbers belong to. |
 | `latest_seq` | integer | yes | The newest event sequence number kept for it. |
 | `open_requests` | array of [`OpenRequest`](#openrequest) | no | Requests of the session still waiting for an answer (re-sent to this connection when it is a capable driver). |
@@ -911,9 +915,19 @@ A file edit an approval asks about.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `hunks` | array of [`EditHunk`](#edithunk) | no | The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what `accepted_hunks` refers to. |
 | `new_text` | string | yes | The content after the edit. |
 | `old_text` | string or null | no | The current content (`null`: a new file). |
 | `path` | string | yes | The absolute path. |
+
+### `EditHunk`
+
+One hunk of a file edit.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `header` | string | yes | `@@ -<old start>,<old lines> +<new start>,<new lines> @@`. |
+| `lines` | array of string | yes | Its lines, each starting with ` `, `-` or `+`. |
 
 ### `EditMode`
 
@@ -1794,6 +1808,17 @@ The daemon's build target and its support tier.
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
 
+### `PresenceClient`
+
+One client attached to a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | yes | The client's id within the daemon (`<kind>-<connection>`), the one its inputs are stamped with. |
+| `client_kind` | string | yes | Its kind from `rpc.hello` (`tui`, `desktop`, ...). |
+| `role` | [`AttachRole`](#attachrole) | yes | Driver or observer. |
+| `since` | string | yes | When it attached (RFC 3339). |
+
 ### `ProcessEntry`
 
 One background process of a session.
@@ -2164,6 +2189,15 @@ What `session.resolve` looks up.
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `setup` | [`SessionSetup`](#sessionsetup) or null | no | How the session runs from now on; a loaded, idle session is reloaded with it. Absent: as it is (or the profile's defaults). |
 
+### `RewindParams`
+
+`session.rewind` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The session. |
+| `to_turn` | integer | yes | The last turn the branch keeps (from 1). |
+
 ### `Roster`
 
 `bot.roster.list` result.
@@ -2289,6 +2323,15 @@ What the daemon serves.
 | `source` | [`ClientKind`](#clientkind) or null | no | Only sessions this kind of client created. |
 | `tips_only` | boolean | no | One row per conversation: a session continued after compression is listed as its newest continuation. |
 
+### `SessionPresencePayload`
+
+`session.presence` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clients` | array of [`PresenceClient`](#presenceclient) | yes | Every client attached now, in the order they attached. |
+| `session_id` | string | yes | The session. |
+
 ### `SessionProject`
 
 `session.project` payload: a session moved to another project.
@@ -2307,6 +2350,17 @@ A session named by id.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `session_id` | string | yes | `ses_<ULID>`. |
+
+### `SessionRewound`
+
+`session.rewind` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `checkpoint` | integer or null | no | The workspace checkpoint holding the files as they were after `to_turn` (`files.rollback {checkpoint}`), when later turns changed files; restoring is the client's offer to make. |
+| `parent_session_id` | string | yes | The session it branched from (kept unchanged). |
+| `session_id` | string | yes | The new branch session, ending at `to_turn`. |
+| `turns` | integer | yes | The turns the branch holds. |
 
 ### `SessionSettings`
 
@@ -2388,6 +2442,30 @@ What a control call did.
 | `status` | string | yes | `queued` (steer: delivered at the child's next checkpoint) or `interrupt_requested` (stop). |
 | `subagent_id` | string | yes | The child. |
 
+### `SubagentEventKind`
+
+What one `subagent.event` carries.
+
+| Value | Meaning |
+|---|---|
+| `assistant` | The child's assistant text. |
+| `tool_call` | A tool call it made (`tool`, `text` = what it works on). |
+| `tool_result` | That call's result (`tool`, `text` = its output or error). |
+| `finished` | It ended (`status`). |
+
+### `SubagentEventPayload`
+
+`subagent.event` payload: one item of a subscribed child's transcript, sent to the subscribing connection only.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | [`SubagentEventKind`](#subagenteventkind) | yes | What it is. |
+| `session_id` | string | yes | The parent session. |
+| `status` | string or null | no | How the child ended, for `finished`. |
+| `subagent_id` | string | yes | The child. |
+| `text` | string or null | no | Its text. |
+| `tool` | string or null | no | The tool, for a call or result. |
+
 ### `SubagentList`
 
 `subagent.list` result.
@@ -2414,6 +2492,24 @@ What a control call did.
 | `session_id` | string | yes | The parent session. |
 | `subagent_id` | string | yes | The child. |
 | `text` | string | yes | The guidance. |
+
+### `SubagentSubscribeParams`
+
+`subagent.subscribe` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The parent session the connection is attached to. |
+| `subagent_id` | string | yes | The child (`sa-<ULID>`). |
+
+### `SubagentSubscribed`
+
+`subagent.subscribe` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | yes | `running`, or how it ended (`completed`, `failed`, ...). |
+| `subagent_id` | string | yes | The child. |
 
 ### `SubagentSummary`
 
@@ -2504,6 +2600,27 @@ A subscription's status in `session.context_usage`.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `Timeline`
+
+`session.timeline` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `turns` | array of [`TimelineTurn`](#timelineturn) | yes | The active transcript's turns, oldest first. |
+
+### `TimelineTurn`
+
+One turn of a session's timeline.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `at` | string | yes | When it started (RFC 3339). |
+| `cost_usd` | number or null | no | What its model calls cost, when known. |
+| `first_line` | string | yes | The first line of its input. |
+| `message_id` | string | yes | The user message that started it (`msg_<ULID>`). |
+| `tools` | integer | yes | Tool calls it made. |
+| `turn` | integer | yes | Its number, from 1. |
+
 ### `Transcript`
 
 `session.transcript` result.
@@ -2518,6 +2635,7 @@ One message of a transcript.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `author` | string or null | no | Who sent a user message: the client id the gateway stamped it with (spec: tui, Shared live sessions). |
 | `id` | string | yes | `msg_<ULID>`. |
 | `reactions` | array of [`Reaction`](#reaction) | no | Its reactions (spec: desktop-app, Agent reactions). |
 | `role` | string | yes | `user`, `assistant`, `tool` or `system`. |

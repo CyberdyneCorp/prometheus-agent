@@ -44,6 +44,10 @@ pub enum Local {
     Handoff,
     /// Voice mode: `/voice [on|off|tts|status]` (recorded and spoken here).
     Voice,
+    /// Show a split pane: `/pane subagents|tools|off`.
+    Pane,
+    /// Open the session timeline.
+    Timeline,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -182,6 +186,18 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "voice",
         aliases: &[],
         key: "tui.cmd_voice",
+    },
+    LocalCommand {
+        command: Local::Pane,
+        name: "pane",
+        aliases: &[],
+        key: "tui.cmd_pane",
+    },
+    LocalCommand {
+        command: Local::Timeline,
+        name: "timeline",
+        aliases: &[],
+        key: "tui.cmd_timeline",
     },
 ];
 

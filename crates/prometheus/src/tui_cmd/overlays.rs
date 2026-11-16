@@ -20,7 +20,7 @@ use super::link::{create, resume};
 use super::screen::{Done, Tui};
 
 /// What a key does inside an overlay.
-enum Step {
+pub(super) enum Step {
     /// Nothing more.
     Stay,
     /// Close the overlay.
@@ -42,10 +42,16 @@ impl Tui<'_> {
                 self.app.overlay = Some(Overlay::Switcher(switcher));
                 step
             }
+            Some(Overlay::Timeline(mut timeline)) => {
+                let step = self.timeline_key(&mut timeline, key);
+                self.app.overlay = Some(Overlay::Timeline(timeline));
+                step
+            }
             None => return self.banner_key(key),
         };
         if matches!(step, Step::Close) {
             self.app.overlay = None;
+            self.app.preview = None;
         }
         true
     }

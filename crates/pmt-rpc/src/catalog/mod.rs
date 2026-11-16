@@ -180,6 +180,18 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::HealthChangedEvent>();
     declare_evolution(d);
     declare_desktop(d);
+    declare_live(d);
+}
+
+/// Split panes, the session timeline and shared live sessions (spec: tui,
+/// M3 upgrades).
+fn declare_live(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::SubagentSubscribe>()
+        .method::<c::SessionTimeline>()
+        .method::<c::SessionRewind>()
+        .event::<c::SessionPresence>()
+        .event::<c::SubagentStreamed>();
 }
 
 /// Harness evolution and its experience library (spec:

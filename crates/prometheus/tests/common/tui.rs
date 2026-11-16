@@ -16,11 +16,33 @@ pub fn tui(home: &Path, args: &[&str], env: &[(&str, &str)]) -> OsSession {
     tui_with(home, args, env, &[])
 }
 
+/// [`tui`] working in `cwd` on a `cols` by `rows` terminal.
+pub fn tui_at(home: &Path, cwd: &Path, args: &[&str], (cols, rows): (u16, u16)) -> OsSession {
+    let mut session = spawn(home, cwd, args, &[], &[]);
+    session
+        .get_process_mut()
+        .set_window_size(cols, rows)
+        .unwrap();
+    session
+}
+
 /// [`tui`] with the variables `removed` unset too.
 pub fn tui_with(home: &Path, args: &[&str], env: &[(&str, &str)], removed: &[&str]) -> OsSession {
+    let mut session = spawn(home, home, args, env, removed);
+    session.get_process_mut().set_window_size(100, 30).unwrap();
+    session
+}
+
+fn spawn(
+    home: &Path,
+    cwd: &Path,
+    args: &[&str],
+    env: &[(&str, &str)],
+    removed: &[&str],
+) -> OsSession {
     let mut cmd: Command = super::command(home);
     cmd.args(args)
-        .current_dir(home)
+        .current_dir(cwd)
         .env("TERM", "xterm-256color")
         // The developer's terminal must not pick the theme.
         .env_remove("COLORFGBG")
@@ -32,7 +54,6 @@ pub fn tui_with(home: &Path, args: &[&str], env: &[(&str, &str)], removed: &[&st
         cmd.env(key, value);
     }
     let mut session = OsSession::spawn(cmd).unwrap();
-    session.get_process_mut().set_window_size(100, 30).unwrap();
     session.set_expect_timeout(Some(Duration::from_secs(30)));
     session
 }
@@ -56,7 +77,21 @@ pub fn finish(mut p: OsSession) -> (String, Option<i32>) {
 /// that change, so the spaces of a line are not always written). Returns
 /// everything read up to and including it.
 pub fn see(p: &mut OsSession, text: &str) -> String {
-    try_see(p, text).unwrap()
+    match try_see(p, text) {
+        Ok(found) => found,
+        Err(err) => {
+            // What was drawn instead (escape sequences dropped).
+            p.set_expect_timeout(Some(Duration::from_millis(200)));
+            let drawn = p
+                .expect(expectrl::Regex("(?s).+"))
+                .map(|f| String::from_utf8_lossy(f.as_bytes()).into_owned())
+                .unwrap_or_default();
+            let plain = regex::Regex::new(r"\x1b\[[0-9;?]*[A-Za-z]")
+                .unwrap()
+                .replace_all(&drawn, " ");
+            panic!("{text:?} never shown: {err}; the screen got: {plain}")
+        }
+    }
 }
 
 /// [`see`] that reports a timeout instead of panicking.

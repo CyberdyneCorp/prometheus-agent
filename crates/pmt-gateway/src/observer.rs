@@ -25,6 +25,8 @@ const READS: &[&str] = &[
     "session.context_usage",
     "session.banner",
     "subagent.list",
+    "subagent.subscribe",
+    "session.timeline",
     "commands.catalog",
     "complete.slash",
     "model.options",

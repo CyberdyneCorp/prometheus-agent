@@ -49,6 +49,13 @@ pub(super) struct Link {
     pub(super) profile: String,
     /// The daemon.
     pub(super) record: DaemonRecord,
+    /// How this TUI attaches: as the sessions' owner, or as a driver or
+    /// observer beside other clients (`--attach`, `--observe`).
+    pub(super) role: AttachRole,
+    /// It owns its sessions (exclusive; not when it joined one).
+    pub(super) owner: bool,
+    /// This connection's client id, as presence lists it.
+    pub(super) me: Option<String>,
 }
 
 /// Connects to `record`'s daemon for `profile` as a `tui` client (it
@@ -92,7 +99,24 @@ impl Link {
             commands: Vec::new(),
             profile: profile.to_owned(),
             record,
+            role: AttachRole::Driver,
+            owner: launch.join.is_none(),
+            me: None,
         };
+        if let Some(join) = &launch.join {
+            let session = resolve(
+                &link.client,
+                ResolveKind::Resume,
+                join.reference.clone(),
+                launch,
+            )
+            .await?;
+            let attached = link.join(&session, join.role).await?;
+            link.role = join.role;
+            link.adopt(session, &attached);
+            link.refresh_commands().await;
+            return Ok((link, notice));
+        }
         // Resolved first: the store, not the daemon's memory, says whether
         // the session still exists.
         if let Some(recent) = recent
@@ -120,12 +144,33 @@ impl Link {
     /// Shows `session` (attached as `attached` says), keeping the others
     /// live.
     fn adopt(&mut self, session: String, attached: &Attached) {
+        if attached.client_id.is_some() {
+            self.me.clone_from(&attached.client_id);
+        }
         self.epoch.clone_from(&attached.epoch);
         self.seen.insert(session.clone(), attached.latest_seq);
         if !self.live.contains(&session) {
             self.live.push(session.clone());
         }
         self.session = session;
+    }
+
+    /// Joins the live `session` beside its other clients: as a driver
+    /// (loaded if needed, never claimed) or read-only as an observer.
+    async fn join(&self, session: &str, role: AttachRole) -> Result<Attached, Error> {
+        if role == AttachRole::Driver {
+            return resume_as(&self.client, session, None, false).await;
+        }
+        let params = AttachParams {
+            session_id: session.to_owned(),
+            role,
+            last_seen_seq: None,
+            epoch: None,
+        };
+        self.client
+            .call_typed::<SessionAttach>(&params)
+            .await
+            .map_err(|e| rpc(&e))
     }
 
     /// The stored session `-r`/`-c` names.
@@ -234,7 +279,7 @@ impl Link {
         for session in self.live.clone() {
             let params = AttachParams {
                 session_id: session.clone(),
-                role: AttachRole::Driver,
+                role: self.role,
                 last_seen_seq: self.seen.get(&session).copied(),
                 epoch: Some(self.epoch.clone()),
             };
@@ -248,7 +293,12 @@ impl Link {
                 }
             };
             // Owner again: a client that lost its connection lost ownership.
-            let _ = resume(&client, &session, None).await;
+            if self.owner {
+                let _ = resume(&client, &session, None).await;
+            }
+            if attached.client_id.is_some() {
+                self.me.clone_from(&attached.client_id);
+            }
             if attached.truncated {
                 self.epoch.clone_from(&attached.epoch);
                 self.seen.insert(session.clone(), attached.latest_seq);
@@ -322,9 +372,24 @@ pub(super) async fn resume(
     session: &str,
     setup: Option<&SessionSetup>,
 ) -> Result<Attached, Error> {
+    resume_as(client, session, setup, true).await
+}
+
+/// Loads `session` in the daemon and attaches as a driver, its owner when
+/// `exclusive`.
+///
+/// # Errors
+///
+/// `session.in_use` (75) when `exclusive`, resume errors.
+async fn resume_as(
+    client: &Client,
+    session: &str,
+    setup: Option<&SessionSetup>,
+    exclusive: bool,
+) -> Result<Attached, Error> {
     let params = ResumeParams {
         session_id: session.to_owned(),
-        exclusive: true,
+        exclusive,
         setup: setup.filter(|s| **s != SessionSetup::default()).cloned(),
     };
     client

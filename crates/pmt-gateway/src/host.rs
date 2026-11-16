@@ -624,6 +624,13 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host delegates to no subagents")) })
     }
 
+    /// Child transcripts, the session timeline and rewinds
+    /// (`subagent.subscribe`, `session.timeline`, `session.rewind`);
+    /// `None` answers them `rpc.not_served`.
+    fn live(&self) -> Option<&dyn crate::live::LiveHost> {
+        None
+    }
+
     /// The desktop's panes (`git.*`, `projects.*`, `manage.*`, pairing,
     /// `center.list`); `None` answers them `rpc.not_served`.
     fn panes(&self) -> Option<&dyn crate::panes::PanesHost> {

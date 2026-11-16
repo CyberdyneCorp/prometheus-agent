@@ -27,6 +27,12 @@ pub struct Theme {
     pub code: Style,
     /// The selected row of an overlay (palette, switcher, banner header).
     pub selected: Style,
+    /// A diff's added lines.
+    pub added: Style,
+    /// A diff's removed lines.
+    pub removed: Style,
+    /// A diff's hunk headers.
+    pub hunk: Style,
     battery_high: Style,
     battery_medium: Style,
     battery_low: Style,
@@ -60,6 +66,9 @@ impl Theme {
             busy: Style::new().fg(Color::Magenta),
             code: Style::new().fg(Color::LightGreen),
             selected: Style::new().add_modifier(Modifier::REVERSED),
+            added: Style::new().fg(Color::Green),
+            removed: Style::new().fg(Color::Red),
+            hunk: Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
             battery_high: Style::new().fg(Color::Green),
             battery_medium: Style::new().fg(Color::Yellow),
             battery_low: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
@@ -79,6 +88,9 @@ impl Theme {
             busy: Style::new().fg(Color::Blue),
             code: Style::new().fg(Color::Green),
             selected: Style::new().add_modifier(Modifier::REVERSED),
+            added: Style::new().fg(Color::Green),
+            removed: Style::new().fg(Color::Red),
+            hunk: Style::new().fg(Color::Blue).add_modifier(Modifier::BOLD),
             battery_high: Style::new().fg(Color::Green),
             battery_medium: Style::new().fg(Color::Yellow),
             battery_low: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
@@ -99,6 +111,9 @@ impl Theme {
             busy: plain,
             code: plain,
             selected: plain.add_modifier(Modifier::REVERSED),
+            added: plain,
+            removed: plain,
+            hunk: plain.add_modifier(Modifier::BOLD),
             battery_high: plain,
             battery_medium: plain,
             battery_low: plain.add_modifier(Modifier::BOLD),

@@ -34,6 +34,7 @@ pub mod experience;
 pub mod health_http;
 pub mod host;
 pub mod hub;
+pub mod live;
 pub mod local;
 pub mod messaging;
 pub mod methods;

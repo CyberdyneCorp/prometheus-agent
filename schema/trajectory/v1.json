@@ -417,6 +417,9 @@
           "payload": {
             "description": "`user.message` and `assistant.message`.",
             "properties": {
+              "author": {
+                "description": "Who sent a user message, as the gateway stamped it (`client_kind`,\n`client_id`, `principal`): what a shared session's clients label\neach input with (spec: tui, Shared live sessions)."
+              },
               "message_id": {
                 "description": "The stored message, when it is one.",
                 "type": [
@@ -450,6 +453,9 @@
           "payload": {
             "description": "`user.message` and `assistant.message`.",
             "properties": {
+              "author": {
+                "description": "Who sent a user message, as the gateway stamped it (`client_kind`,\n`client_id`, `principal`): what a shared session's clients label\neach input with (spec: tui, Shared live sessions)."
+              },
               "message_id": {
                 "description": "The stored message, when it is one.",
                 "type": [

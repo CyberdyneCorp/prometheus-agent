@@ -32,7 +32,7 @@ use pmt_agent::tools::clarify::{ClarifyAnswer, ClarifyRequest};
 use pmt_core::error::Error;
 use pmt_core::human::Surface as Prompts;
 use pmt_store::EndReason;
-use pmt_tools::approval::{ApprovalRequest, Decision};
+use pmt_tools::approval::{ApprovalRequest, Reply};
 use tokio::sync::mpsc;
 
 use self::input::{Event, Input};
@@ -79,7 +79,7 @@ struct Repl {
     display: Display,
     queue: VecDeque<String>,
     pending: Option<Pending>,
-    approvals: Option<Prompts<ApprovalRequest, Decision>>,
+    approvals: Option<Prompts<ApprovalRequest, Reply>>,
     clarify: Option<Prompts<ClarifyRequest, ClarifyAnswer>>,
     /// The session's tool activity and what this turn showed of it.
     progress: Option<mpsc::UnboundedReceiver<crate::chat::session::progress::Progress>>,

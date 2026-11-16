@@ -109,11 +109,11 @@ export type Admission = "started" | "queued" | "steered" | "handled";
 
 /** The answer to `approval.request` (also `approval.respond` params, with its `id`). */
 export interface ApprovalAnswer {
-  /** For a diff approval: the hunks accepted. */
+  /** For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. */
   accepted_hunks?: Array<number> | null;
   /** The decision. */
   decision: Decision;
-  /** An edited command to run instead. */
+  /** For a diff approval: the file content to write instead of the proposed one (`edit then accept`). */
   replacement?: string | null;
 }
 
@@ -151,13 +151,13 @@ export interface ApprovalRequestParams {
 
 /** `approval.respond` params. */
 export interface ApprovalRespondParams {
-  /** For a diff approval: the hunks accepted. */
+  /** For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. */
   accepted_hunks?: Array<number> | null;
   /** The decision. */
   decision: Decision;
   /** The `approval.request` id (`srq-<12 hex>`). */
   id: string;
-  /** An edited command to run instead. */
+  /** For a diff approval: the file content to write instead of the proposed one (`edit then accept`). */
   replacement?: string | null;
 }
 
@@ -218,6 +218,8 @@ export type AttachRole = "driver" | "observer";
 
 /** `session.attach` / `session.resume` result. */
 export interface Attached {
+  /** This connection's client id, as `session.presence` lists it and its inputs are stamped with. */
+  client_id?: string | null;
   /** The daemon epoch the sequence numbers belong to. */
   epoch: string;
   /** The newest event sequence number kept for it. */
@@ -684,12 +686,22 @@ export type Disposition = "exec" | "unavailable" | "hidden";
 
 /** A file edit an approval asks about. */
 export interface EditDiff {
+  /** The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what `accepted_hunks` refers to. */
+  hunks?: Array<EditHunk>;
   /** The content after the edit. */
   new_text: string;
   /** The current content (`null`: a new file). */
   old_text?: string | null;
   /** The absolute path. */
   path: string;
+}
+
+/** One hunk of a file edit. */
+export interface EditHunk {
+  /** `@@ -<old start>,<old lines> +<new start>,<new lines> @@`. */
+  header: string;
+  /** Its lines, each starting with ` `, `-` or `+`. */
+  lines: Array<string>;
 }
 
 /** How file edits of an editor session are approved (ACP session modes). */
@@ -1606,6 +1618,18 @@ export interface PlatformSupport {
   tier: string;
 }
 
+/** One client attached to a session. */
+export interface PresenceClient {
+  /** The client's id within the daemon (`<kind>-<connection>`), the one its inputs are stamped with. */
+  client_id: string;
+  /** Its kind from `rpc.hello` (`tui`, `desktop`, ...). */
+  client_kind: string;
+  /** Driver or observer. */
+  role: AttachRole;
+  /** When it attached (RFC 3339). */
+  since: string;
+}
+
 /** One background process of a session. */
 export interface ProcessEntry {
   /** Its command line. */
@@ -1958,6 +1982,14 @@ export interface ResumeParams {
   setup?: SessionSetup | null;
 }
 
+/** `session.rewind` params. */
+export interface RewindParams {
+  /** The session. */
+  session_id: string;
+  /** The last turn the branch keeps (from 1). */
+  to_turn: number;
+}
+
 /** `bot.roster.list` result. */
 export interface Roster {
   /** Every agent. */
@@ -2098,6 +2130,14 @@ export interface SessionListParams {
   tips_only?: boolean;
 }
 
+/** `session.presence` payload. */
+export interface SessionPresencePayload {
+  /** Every client attached now, in the order they attached. */
+  clients: Array<PresenceClient>;
+  /** The session. */
+  session_id: string;
+}
+
 /** `session.project` payload: a session moved to another project. */
 export interface SessionProject {
   /** The working directory the session moves to at its next tool call. */
@@ -2114,6 +2154,18 @@ export interface SessionProject {
 export interface SessionRef {
   /** `ses_<ULID>`. */
   session_id: string;
+}
+
+/** `session.rewind` result. */
+export interface SessionRewound {
+  /** The workspace checkpoint holding the files as they were after `to_turn` (`files.rollback {checkpoint}`), when later turns changed files; restoring is the client's offer to make. */
+  checkpoint?: number | null;
+  /** The session it branched from (kept unchanged). */
+  parent_session_id: string;
+  /** The new branch session, ending at `to_turn`. */
+  session_id: string;
+  /** The turns the branch holds. */
+  turns: number;
 }
 
 /** A session's settings as clients show and change them. */
@@ -2209,6 +2261,25 @@ export interface SubagentControlled {
   subagent_id: string;
 }
 
+/** What one `subagent.event` carries. */
+export type SubagentEventKind = "assistant" | "tool_call" | "tool_result" | "finished";
+
+/** `subagent.event` payload: one item of a subscribed child's transcript, sent to the subscribing connection only. */
+export interface SubagentEventPayload {
+  /** What it is. */
+  kind: SubagentEventKind;
+  /** The parent session. */
+  session_id: string;
+  /** How the child ended, for `finished`. */
+  status?: string | null;
+  /** The child. */
+  subagent_id: string;
+  /** Its text. */
+  text?: string | null;
+  /** The tool, for a call or result. */
+  tool?: string | null;
+}
+
 /** `subagent.list` result. */
 export interface SubagentList {
   /** The session's children, oldest first. */
@@ -2231,6 +2302,22 @@ export interface SubagentSteerParams {
   subagent_id: string;
   /** The guidance. */
   text: string;
+}
+
+/** `subagent.subscribe` params. */
+export interface SubagentSubscribeParams {
+  /** The parent session the connection is attached to. */
+  session_id: string;
+  /** The child (`sa-<ULID>`). */
+  subagent_id: string;
+}
+
+/** `subagent.subscribe` result. */
+export interface SubagentSubscribed {
+  /** `running`, or how it ended (`completed`, `failed`, ...). */
+  status: string;
+  /** The child. */
+  subagent_id: string;
 }
 
 /** One delegated child of a session. */
@@ -2321,6 +2408,28 @@ export interface SystemParams {
   profile?: string | null;
 }
 
+/** `session.timeline` result. */
+export interface Timeline {
+  /** The active transcript's turns, oldest first. */
+  turns: Array<TimelineTurn>;
+}
+
+/** One turn of a session's timeline. */
+export interface TimelineTurn {
+  /** When it started (RFC 3339). */
+  at: string;
+  /** What its model calls cost, when known. */
+  cost_usd?: number | null;
+  /** The first line of its input. */
+  first_line: string;
+  /** The user message that started it (`msg_<ULID>`). */
+  message_id: string;
+  /** Tool calls it made. */
+  tools: number;
+  /** Its number, from 1. */
+  turn: number;
+}
+
 /** `session.transcript` result. */
 export interface Transcript {
   /** The active messages, oldest first. */
@@ -2329,6 +2438,8 @@ export interface Transcript {
 
 /** One message of a transcript. */
 export interface TranscriptMessage {
+  /** Who sent a user message: the client id the gateway stamped it with (spec: tui, Shared live sessions). */
+  author?: string | null;
   /** `msg_<ULID>`. */
   id: string;
   /** Its reactions (spec: desktop-app, Agent reactions). */
@@ -2778,14 +2889,17 @@ export interface Methods {
   "session.list": { params: SessionListParams; result: SessionList };
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
+  "session.rewind": { params: RewindParams; result: SessionRewound };
   "session.settings": { params: SessionRef; result: SessionSettings };
   "session.siblings": { params: SessionRef; result: Lineage };
   "session.steer": { params: SteerParams; result: Ack };
+  "session.timeline": { params: SessionRef; result: Timeline };
   "session.transcript": { params: SessionRef; result: Transcript };
   "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
   "subagent.steer": { params: SubagentSteerParams; result: SubagentControlled };
   "subagent.stop": { params: SubagentRef; result: SubagentControlled };
+  "subagent.subscribe": { params: SubagentSubscribeParams; result: SubagentSubscribed };
   "system.health": { params: SystemParams; result: SystemHealth };
   "system.metrics": { params: SystemParams; result: MetricsSnapshot };
   "ui.prefs.get": { params: UiPrefsGetParams; result: UiPrefs };
@@ -2833,7 +2947,9 @@ export interface Events {
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
+  "session.presence": SessionPresencePayload;
   "session.project": SessionProject;
+  "subagent.event": SubagentEventPayload;
   "turn.finished": TurnFinished;
   "ui.prefs.changed": UiPrefs;
   "usage.updated": UsageUpdated;
@@ -2851,7 +2967,6 @@ export const UNDECLARED = [
   "groups.replicate",
   "screen.handback",
   "screen.takeover",
-  "subagent.subscribe",
   "tools.call",
   "tools.list",
   "voice.client_config",
@@ -2859,6 +2974,5 @@ export const UNDECLARED = [
   "achievement.unlocked",
   "local_model.context_grown",
   "message.delivery",
-  "session.presence",
   "wake.detected",
 ] as const;

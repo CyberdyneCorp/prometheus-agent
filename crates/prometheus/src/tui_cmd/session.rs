@@ -8,7 +8,7 @@ use pmt_i18n::{Strings, Surface, t};
 use pmt_rpc::RpcError;
 use pmt_rpc::client::ServerCall;
 use pmt_rpc::contracts::{
-    ASSISTANT_DELTA, Admission, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList,
+    ASSISTANT_DELTA, Admission, Attached, COMMAND_NOTICE, Dispatched, Envelope, ModelOptionsList,
     PROCESS_NOTICE, SessionContextUsage, SessionRef, TurnFinished,
 };
 use pmt_tui::app::Card;
@@ -39,6 +39,11 @@ impl Tui<'_> {
                         _ => continue,
                     };
                     if let Some(text) = message.text.filter(|t| !t.is_empty()) {
+                        let text = if kind == Kind::User {
+                            self.input_line(&text, message.author.as_deref())
+                        } else {
+                            text
+                        };
                         self.app.transcript.push(kind, text);
                     }
                 }
@@ -79,6 +84,13 @@ impl Tui<'_> {
     /// the transcript; the other live sessions only report their turns'
     /// ends.
     pub(super) fn on_event(&mut self, event: &Envelope) {
+        // Sent to this connection only, outside the sessions' numbered
+        // logs: they never move a watermark.
+        match event.event.as_str() {
+            "session.presence" => return self.on_presence(&event.data),
+            "subagent.event" => return self.on_child_event(&event.data),
+            _ => {}
+        }
         if !self.link.applies(event) {
             return;
         }
@@ -125,12 +137,26 @@ impl Tui<'_> {
 
     fn on_session_event(&mut self, data: &Value) {
         let text = |key: &str| data["payload"][key].as_str().unwrap_or_default().to_owned();
+        let payload = &data["payload"];
         match data["type"].as_str() {
-            Some("user.message") => self.app.transcript.push(Kind::User, text("text")),
+            Some("user.message") => {
+                let author = payload["author"]["client_id"].as_str();
+                let line = self.input_line(&text("text"), author);
+                self.app.transcript.push(Kind::User, line);
+            }
             Some("assistant.message") if !text("text").is_empty() => {
                 self.app.transcript.push(Kind::Assistant, text("text"));
             }
-            Some("tool.call") => self.app.transcript.push(Kind::Tool, text("tool")),
+            Some(kind @ "tool.call") => {
+                self.pane_event(kind, payload);
+                self.app.transcript.push(Kind::Tool, text("tool"));
+            }
+            Some(kind @ "tool.result") => {
+                self.pane_event(kind, payload);
+                if let Some(line) = super::panes::summary(payload) {
+                    self.app.transcript.push(Kind::Tool, line);
+                }
+            }
             Some(ASSISTANT_DELTA) => self.voice_delta(data),
             Some(COMMAND_NOTICE) => self.notice(text("text")),
             Some(PROCESS_NOTICE) => {
@@ -140,6 +166,7 @@ impl Tui<'_> {
                 self.notice(line);
             }
             Some(kind @ ("subagent.spawned" | "subagent.progress" | "subagent.finished")) => {
+                self.pane_event(kind, payload);
                 if let Some(line) = self.subagents.line(kind, &data["payload"]) {
                     self.notice(line);
                 }
@@ -201,12 +228,20 @@ impl Tui<'_> {
         let asked = self.clarify.len();
         let typed = self.masked.chars().count();
         let strings = self.strings();
+        let editing = self.editing_hint();
         self.app.card = self
             .asking
             .front()
             .map(|a| card(a, asked, typed, &strings))
+            .map(|mut card| {
+                if let Some(hint) = editing {
+                    card.hint = hint;
+                }
+                card
+            })
             .or_else(|| self.delete_card())
             .or_else(|| self.setup_card())
+            .or_else(|| self.restore_card())
             .or_else(|| self.prune_card());
     }
 
@@ -216,6 +251,9 @@ impl Tui<'_> {
         if self.asking.front().is_some_and(|a| a.call.id == id) {
             self.clarify.clear();
             self.masked.clear();
+            if self.editing.take().is_some() {
+                self.app.composer.take();
+            }
         }
         self.asking.retain(|a| a.call.id != id);
         if self.asking.len() != before {
@@ -231,6 +269,9 @@ impl Tui<'_> {
             return false;
         };
         let call = &asked.call;
+        if call.method == "approval.request" && super::review::has_diff(&call.params) {
+            return self.answer_diff(line);
+        }
         let answer = if call.method == "approval.request" {
             let Some(decision) = crate::chat::remote::turn::decision(line) else {
                 return false;
@@ -256,11 +297,17 @@ impl Tui<'_> {
             }
             json!({ "answers": std::mem::take(&mut self.clarify) })
         };
-        let id = call.id.clone();
-        self.link.client.respond(&id, Ok(answer));
-        self.asking.pop_front();
-        self.show_question();
+        self.respond_front(answer);
         true
+    }
+
+    /// Answers the request on the card with `answer`; the next one shows.
+    pub(super) fn respond_front(&mut self, answer: Value) {
+        let Some(asked) = self.asking.pop_front() else {
+            return;
+        };
+        self.link.client.respond(&asked.call.id, Ok(answer));
+        self.show_question();
     }
 
     /// A background request finished.
@@ -279,7 +326,11 @@ impl Tui<'_> {
                 self.error(&err);
             }
             Done::Voice(ask) => self.on_voice(ask),
-            Done::Dispatched(Err(err)) | Done::Switched(Err(err), _) => {
+            Done::Dispatched(Err(err))
+            | Done::Switched(Err(err), _)
+            | Done::HandedOff(Err(err))
+            | Done::Branched(Err(err), _)
+            | Done::Restored(Err(err)) => {
                 self.error(&err);
             }
             Done::Dispatched(Ok(dispatched)) => self.dispatched(dispatched),
@@ -306,16 +357,13 @@ impl Tui<'_> {
             }
             Done::Completed(start, completions) => self.completed(start, &completions),
             Done::Switched(Ok((session, attached)), prompt) => {
-                self.link.switch(session, &attached).await;
-                self.shown_changed();
-                self.reload().await;
-                let shown = self.link.session.clone();
-                self.notice(t!(self.strings(), "tui.session_shown", 0 = shown));
-                // `/resume` of a stored session; a new or forked one has none.
-                self.memory_summary(&shown).await;
-                if let Some(prompt) = prompt {
-                    self.submit(prompt, Vec::new());
-                }
+                self.switched(session, &attached, prompt).await;
+            }
+            Done::Branched(Ok((session, attached)), restore) => {
+                self.switched(session, &attached, None).await;
+                // Offered once the branch is the shown, attached session.
+                self.restore = restore;
+                self.show_question();
             }
             Done::Banner(info) => self.show_banner(info),
             Done::Titles(titles) => self.titles_listed(titles),
@@ -323,7 +371,25 @@ impl Tui<'_> {
             Done::Show(id) => self.shown(&id).await,
             Done::Close(id) => self.closed(&id).await,
             Done::HandedOff(Ok(line)) => self.ending = Some(super::Ending::Detached(line)),
-            Done::HandedOff(Err(err)) => self.error(&err),
+            Done::Timeline(loaded) => self.timeline_loaded(loaded),
+            Done::Rewound(rewound) => self.rewound(rewound),
+            Done::Restored(Ok(output)) => self.notice(output),
+            Done::Children(list) => self.children_listed(list),
+        }
+    }
+
+    /// Another session (new, resumed, forked or a rewind's branch) is
+    /// shown; `prompt` is submitted in it.
+    async fn switched(&mut self, session: String, attached: &Attached, prompt: Option<String>) {
+        self.link.switch(session, attached).await;
+        self.shown_changed();
+        self.reload().await;
+        let shown = self.link.session.clone();
+        self.notice(t!(self.strings(), "tui.session_shown", 0 = shown));
+        // `/resume` of a stored session; a new or forked one has none.
+        self.memory_summary(&shown).await;
+        if let Some(prompt) = prompt {
+            self.submit(prompt, Vec::new());
         }
     }
 
@@ -388,6 +454,20 @@ fn card_at(
 }
 
 fn approval_card(p: &Value, within: &str, strings: &Strings) -> Card {
+    if super::review::has_diff(p) {
+        return Card {
+            title: strings.fmt(
+                "tui.approval_title",
+                &[
+                    ("0", &p["tool"].as_str().unwrap_or("tool")),
+                    ("1", &p["subject"].as_str().unwrap_or_default()),
+                ],
+            ),
+            diff: super::review::hunks(p),
+            hint: format!("{}{within}", strings.get("tui.diff_hint")),
+            ..Card::default()
+        };
+    }
     let findings: Vec<String> = p["findings"]
         .as_array()
         .into_iter()
@@ -407,6 +487,7 @@ fn approval_card(p: &Value, within: &str, strings: &Strings) -> Card {
         body.push_str(explanation);
     }
     Card {
+        diff: Vec::new(),
         title: strings.fmt(
             "tui.approval_title",
             &[
@@ -428,6 +509,7 @@ fn clarify_card(question: &Value, within: &str, strings: &Strings) -> Card {
         .map(|(n, c)| format!("{}. {}", n + 1, c.as_str().unwrap_or_default()))
         .collect();
     Card {
+        diff: Vec::new(),
         title: question["question"].as_str().unwrap_or_default().to_owned(),
         body: choices.join("\n"),
         hint: format!("{}{within}", strings.get("tui.clarify_hint")),

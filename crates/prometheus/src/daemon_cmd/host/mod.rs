@@ -59,6 +59,7 @@ mod health_sample;
 mod interop;
 mod kanban;
 mod listing;
+mod live;
 mod model_picker;
 mod notify;
 mod panes;
@@ -709,6 +710,11 @@ impl Host for DaemonHost {
                     id: m.id.to_string(),
                     role: m.role.as_str().to_owned(),
                     reactions: desktop_ui::reactions_of(m.metadata.as_ref()),
+                    author: m
+                        .metadata
+                        .as_ref()
+                        .and_then(|meta| meta["author"]["client_id"].as_str())
+                        .map(str::to_owned),
                     text: m.content,
                 })
                 .collect();
@@ -1143,6 +1149,10 @@ impl Host for DaemonHost {
     }
 
     fn panes(&self) -> Option<&dyn pmt_gateway::panes::PanesHost> {
+        Some(self)
+    }
+
+    fn live(&self) -> Option<&dyn pmt_gateway::live::LiveHost> {
         Some(self)
     }
 

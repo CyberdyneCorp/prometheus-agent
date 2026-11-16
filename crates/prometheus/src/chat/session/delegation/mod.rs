@@ -25,7 +25,7 @@ use pmt_core::human::{Channel, Surface};
 use pmt_core::id::SessionId;
 use pmt_delegation::budget::OneShotBudget;
 use pmt_tools::Selection;
-use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
+use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision, Reply};
 use pmt_tools::environments::tool_output_reads;
 
 pub use launcher::ChildLauncher;
@@ -220,17 +220,15 @@ impl Factory {
 /// it the root session's surface).
 pub trait Escalate: Send + Sync {
     /// Asks; `None` when nobody answered.
-    fn ask(
-        &self,
-        request: ApprovalRequest,
-    ) -> pmt_agent::turn::model::BoxFuture<'_, Option<Decision>>;
+    fn ask(&self, request: ApprovalRequest)
+    -> pmt_agent::turn::model::BoxFuture<'_, Option<Reply>>;
 }
 
 impl Escalate for CommandGate {
     fn ask(
         &self,
         request: ApprovalRequest,
-    ) -> pmt_agent::turn::model::BoxFuture<'_, Option<Decision>> {
+    ) -> pmt_agent::turn::model::BoxFuture<'_, Option<Reply>> {
         Box::pin(async move { self.escalate(request).await.ok() })
     }
 }
@@ -239,7 +237,7 @@ impl Escalate for CommandGate {
 /// gate's surface and denied when unanswered within `timeout`. Every
 /// denial is logged with the child's id.
 async fn forward(
-    mut prompts: Surface<ApprovalRequest, Decision>,
+    mut prompts: Surface<ApprovalRequest, Reply>,
     subagent_id: String,
     policy: ChildApproval,
     parent: Option<Arc<dyn Escalate>>,
@@ -247,17 +245,17 @@ async fn forward(
 ) {
     while let Some(prompt) = prompts.next().await {
         let request = prompt.request().clone();
-        let decision = match (policy, &parent) {
+        let answer = match (policy, &parent) {
             (ChildApproval::Escalate, Some(gate)) => {
                 let tagged = tagged(request.clone(), &subagent_id);
                 match tokio::time::timeout(timeout, gate.ask(tagged)).await {
-                    Ok(Some(decision)) => decision,
-                    _ => Decision::Deny,
+                    Ok(Some(answer)) => answer,
+                    _ => Decision::Deny.into(),
                 }
             }
-            _ => Decision::Deny,
+            _ => Decision::Deny.into(),
         };
-        if decision == Decision::Deny {
+        if answer.decision == Decision::Deny {
             tracing::warn!(
                 subagent_id = %subagent_id,
                 tool = %request.tool,
@@ -266,7 +264,7 @@ async fn forward(
                 "subagent approval denied"
             );
         }
-        prompt.respond(decision);
+        prompt.respond(answer);
     }
 }
 
@@ -284,10 +282,7 @@ mod tests {
     struct Silent;
 
     impl Escalate for Silent {
-        fn ask(
-            &self,
-            _: ApprovalRequest,
-        ) -> pmt_agent::turn::model::BoxFuture<'_, Option<Decision>> {
+        fn ask(&self, _: ApprovalRequest) -> pmt_agent::turn::model::BoxFuture<'_, Option<Reply>> {
             Box::pin(std::future::pending())
         }
     }
@@ -298,9 +293,9 @@ mod tests {
         fn ask(
             &self,
             request: ApprovalRequest,
-        ) -> pmt_agent::turn::model::BoxFuture<'_, Option<Decision>> {
+        ) -> pmt_agent::turn::model::BoxFuture<'_, Option<Reply>> {
             assert!(request.subject.unwrap().starts_with("[subagent sa-1] "));
-            Box::pin(async { Some(Decision::Once) })
+            Box::pin(async { Some(Decision::Once.into()) })
         }
     }
 
@@ -325,7 +320,7 @@ mod tests {
             parent,
             Duration::from_mins(5),
         ));
-        channel.ask(request()).await.unwrap()
+        channel.ask(request()).await.unwrap().decision
     }
 
     /// Scenario: Escalation times out to deny.

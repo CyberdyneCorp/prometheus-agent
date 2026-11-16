@@ -248,26 +248,37 @@ impl Dispatcher {
             Err(result) => return (raw(call), result),
         };
         let result = match self.admit(call, tool, &mut arguments).await {
-            Ok(()) => match (&tool.executor, agent) {
-                (Executor::AgentLoop, Some(agent)) => {
-                    // The loop owns their timing (clarify waits for a human).
-                    agent.call(&call.name, arguments.clone(), cancel).await
+            Ok(note) => {
+                let mut result = match (&tool.executor, agent) {
+                    (Executor::AgentLoop, Some(agent)) => {
+                        // The loop owns their timing (clarify waits for a human).
+                        agent.call(&call.name, arguments.clone(), cancel).await
+                    }
+                    _ => self.run(call, tool, arguments.clone(), cancel).await,
+                };
+                // Only a written edit is described; a failed call says why
+                // it failed.
+                if let Some(text) =
+                    note.filter(|_| matches!(result.status, Status::Ok | Status::Degraded))
+                {
+                    result.content.push(Content::Text { text });
                 }
-                _ => self.run(call, tool, arguments.clone(), cancel).await,
-            },
+                result
+            }
             Err(result) => result,
         };
         (arguments, result)
     }
 
     /// `pre_tool_call` hooks (which may rewrite `arguments`), capability
-    /// re-check and approval gate.
+    /// re-check and approval gate (whose review of a file edit may rewrite
+    /// them too, with a note for the result).
     async fn admit(
         &self,
         call: &ToolCall,
         tool: &RegisteredTool,
         arguments: &mut Value,
-    ) -> Result<(), ToolResult> {
+    ) -> Result<Option<String>, ToolResult> {
         let setup = &self.setup;
         let hook_call = HookCall {
             session_id: &setup.session_id,
@@ -285,7 +296,7 @@ impl Dispatcher {
                 None
             }
         };
-        let arguments = &*arguments;
+        let current = &*arguments;
         let held = setup
             .capabilities
             .current()
@@ -302,17 +313,24 @@ impl Dispatcher {
         let guarded = tool
             .guard
             .as_ref()
-            .and_then(|guard| guard(&setup.session_id, arguments));
+            .and_then(|guard| guard(&setup.session_id, current));
         let request = GateRequest {
             session_id: &setup.session_id,
             call_id: &call.call_id,
             tool,
-            arguments,
+            arguments: current,
             escalation: escalation.as_ref(),
             guarded: guarded.as_ref(),
         };
         match setup.gate.check(request).await {
-            GateVerdict::Allow => Ok(()),
+            GateVerdict::Allow => Ok(None),
+            GateVerdict::Revised {
+                arguments: revised,
+                note,
+            } => {
+                *arguments = revalidated(call, tool, revised)?;
+                Ok(Some(note))
+            }
             GateVerdict::Blocked(message) => Err(ToolResult::text(Status::Blocked, message)),
             GateVerdict::Denied(message) => Err(ToolResult::text(Status::Denied, message)),
         }
@@ -398,6 +416,29 @@ fn checked_arguments(call: &ToolCall, tool: &RegisteredTool) -> Result<Value, To
         call.name,
         lines.join("\n")
     )))
+}
+
+/// Arguments a review rewrote, checked against the tool's schema again.
+fn revalidated(
+    call: &ToolCall,
+    tool: &RegisteredTool,
+    mut arguments: Value,
+) -> Result<Value, ToolResult> {
+    let schema = &tool.descriptor.parameters;
+    args::coerce(schema, &mut arguments);
+    let violations = args::validate(schema, &arguments);
+    if violations.is_empty() {
+        return Ok(arguments);
+    }
+    let lines: Vec<String> = violations.iter().map(ToString::to_string).collect();
+    Err(ToolResult::text(
+        Status::Blocked,
+        format!(
+            "the reviewed edit made the arguments of {} invalid:\n{}",
+            call.name,
+            lines.join("\n")
+        ),
+    ))
 }
 
 /// `arguments` with a hook's `fields` shallow-merged in, re-validated

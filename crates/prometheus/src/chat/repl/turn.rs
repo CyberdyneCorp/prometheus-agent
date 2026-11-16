@@ -309,7 +309,7 @@ impl Repl {
                     if let Some(outcome) = prompts::outcome(decision, &strings) {
                         self.notice(outcome);
                     }
-                    prompt.respond(decision);
+                    prompt.respond(decision.into());
                 } else {
                     self.notice(strings.get("approval.answer_hint"));
                     self.pending = Some(Pending::Approval(prompt));

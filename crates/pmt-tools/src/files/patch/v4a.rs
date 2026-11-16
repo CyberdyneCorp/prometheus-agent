@@ -118,6 +118,42 @@ pub fn touched_paths(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// The patch text of `ops`, as [`parse`] reads it back.
+#[must_use]
+pub fn render(ops: &[Op]) -> String {
+    let mut lines = vec![BEGIN.to_owned()];
+    for op in ops {
+        match op {
+            Op::Add { path, content } => {
+                lines.push(format!("{ADD}{path}"));
+                lines.extend(content.lines().map(|l| format!("+{l}")));
+            }
+            Op::Delete { path } => lines.push(format!("{DELETE}{path}")),
+            Op::Update {
+                path,
+                move_to,
+                hunks,
+            } => {
+                lines.push(format!("{UPDATE}{path}"));
+                lines.extend(move_to.iter().map(|to| format!("{MOVE}{to}")));
+                for hunk in hunks {
+                    lines.push(match &hunk.header {
+                        Some(header) => format!("@@ {header}"),
+                        None => "@@".to_owned(),
+                    });
+                    lines.extend(hunk.lines.iter().map(|line| match line {
+                        Line::Context(text) => format!(" {text}"),
+                        Line::Remove(text) => format!("-{text}"),
+                        Line::Add(text) => format!("+{text}"),
+                    }));
+                }
+            }
+        }
+    }
+    lines.push(END.to_owned());
+    lines.join("\n")
+}
+
 /// Parses a whole patch.
 ///
 /// # Errors

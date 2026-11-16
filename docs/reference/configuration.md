@@ -1047,12 +1047,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `ui.tui.keys.page_down` | string | unset | any | `next_session` | Scroll the transcript one page down (default `PageDown`). |
 | `ui.tui.keys.page_up` | string | unset | any | `next_session` | Scroll the transcript one page up (default `PageUp`). |
 | `ui.tui.keys.palette` | string | unset | any | `next_session` | Open the command palette (default `Ctrl+P`). |
+| `ui.tui.keys.pane_subagents` | string | unset | any | `next_session` | Show or hide the subagents pane (default `F2`). |
+| `ui.tui.keys.pane_tools` | string | unset | any | `next_session` | Show or hide the tool-output pane (default `F3`). |
 | `ui.tui.keys.paste_image` | string | unset | any | `next_session` | Attach the clipboard's image (default `Ctrl+V`). |
 | `ui.tui.keys.quit` | string | unset | any | `next_session` | Leave the TUI when the composer is empty (default `Ctrl+D`). |
 | `ui.tui.keys.scroll_down` | string | unset | any | `next_session` | Scroll the transcript one line down (default `Ctrl+Down`). |
 | `ui.tui.keys.scroll_up` | string | unset | any | `next_session` | Scroll the transcript one line up (default `Ctrl+Up`). |
 | `ui.tui.keys.sessions` | string | unset | any | `next_session` | Open the live session switcher (default `Ctrl+X`). |
 | `ui.tui.keys.submit` | string | unset | any | `next_session` | Send the composer (default `Enter`). |
+| `ui.tui.keys.timeline` | string | unset | any | `next_session` | Open the session timeline (default `Ctrl+T`). |
 | `ui.tui.reduced_motion` | boolean | `false` | any | `next_session` | No spinners or animation: a static busy glyph. |
 | `ui.tui.theme` | one of "auto", "dark", "light" | `"auto"` | `"auto"`, `"dark"`, `"light"` | `next_session` | Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer to a background-colour query, else dark), `dark` or `light`; `NO_COLOR` turns colours off whatever it says. |
 | `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |

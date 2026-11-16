@@ -36,7 +36,7 @@ impl Tui<'_> {
     }
 
     fn on_key(&mut self, key: &KeyEvent) {
-        if self.overlay_key(key) {
+        if self.overlay_key(key) || self.pane_key(key) {
             return;
         }
         // Cmd+V, on terminals that report the Super modifier.
@@ -70,7 +70,7 @@ impl Tui<'_> {
             KeyCode::Right => composer.right(),
             KeyCode::Home => composer.line_start(),
             KeyCode::End => composer.line_end(),
-            KeyCode::Esc => self.app.completions.clear(),
+            KeyCode::Esc if !self.cancel_edit() => self.app.completions.clear(),
             _ => {}
         }
     }
@@ -78,14 +78,26 @@ impl Tui<'_> {
     /// `o`/`s`/`a`/`d`/`e` on an empty composer answers an approval card,
     /// `y`/`n` the `/terminal-setup` card.
     fn answer_key(&mut self, c: char) -> bool {
-        let approval = self
-            .asking
-            .front()
-            .is_some_and(|asked| asked.method() == "approval.request");
+        let front = self.asking.front();
+        let approval = front.is_some_and(|asked| asked.method() == "approval.request");
+        // A diff card: y accepts, n rejects, e edits.
+        let letters = if front.is_some_and(|a| super::review::has_diff(&a.call.params)) {
+            "yne"
+        } else {
+            "osade"
+        };
         if self.asking.is_empty() && self.setup.is_some() && "yn".contains(c) {
             return self.answer_setup(&c.to_string());
         }
-        approval && "osade".contains(c) && self.answer(&c.to_string())
+        if self.asking.is_empty() && self.restore.is_some() && "yn".contains(c) {
+            return self.answer_restore(&c.to_string());
+        }
+        if self.editing.is_some() || !approval || !letters.contains(c) {
+            return false;
+        }
+        let answered = self.answer(&c.to_string());
+        self.apply_fill();
+        answered
     }
 
     pub(super) fn on_action(&mut self, action: Action) {
@@ -127,6 +139,9 @@ impl Tui<'_> {
                 composer.expand();
             }
             Action::Banner => self.focus_banner(),
+            Action::PaneSubagents => self.toggle_pane(pmt_tui::panes::Which::Subagents),
+            Action::PaneTools => self.toggle_pane(pmt_tui::panes::Which::Tools),
+            Action::Timeline => self.open_timeline(),
         }
     }
 
@@ -150,16 +165,13 @@ impl Tui<'_> {
     }
 
     fn submit_line(&mut self) {
+        if self.submit_edit() {
+            return;
+        }
         let line = self.app.composer.text().to_owned();
-        let answered = if self.asking.is_empty() {
-            (self.exit_delete.asked && self.answer_delete(&line))
-                || (self.setup.is_some() && self.answer_setup(&line))
-                || (self.prune && self.answer_prune(&line))
-        } else {
-            self.answer(line.trim())
-        };
-        if answered {
+        if self.answer_card(&line) {
             self.app.composer.take();
+            self.apply_fill();
             return;
         }
         let (line, images) = self.take_prompt();
@@ -180,6 +192,18 @@ impl Tui<'_> {
         if !self.voice_line(&line) {
             self.run_line(&line);
         }
+    }
+
+    /// Answers the card on screen with `line`; `false` when there is none
+    /// or `line` is no answer to it.
+    fn answer_card(&mut self, line: &str) -> bool {
+        if !self.asking.is_empty() {
+            return self.answer(line.trim());
+        }
+        (self.exit_delete.asked && self.answer_delete(line))
+            || (self.setup.is_some() && self.answer_setup(line))
+            || (self.restore.is_some() && self.answer_restore(line))
+            || (self.prune && self.answer_prune(line))
     }
 
     /// A typed line: a client-local command, a command for the daemon, or
@@ -248,6 +272,8 @@ impl Tui<'_> {
             Local::New | Local::Resume | Local::Fork => self.switch(command, args),
             Local::Handoff => self.handoff(args),
             Local::Voice => self.voice_command(args),
+            Local::Pane => self.pane_command(args),
+            Local::Timeline => self.open_timeline(),
         }
     }
 

@@ -18,7 +18,7 @@ use pmt_core::panic::CrashReporter;
 use pmt_core::secret::Redactor;
 use serde_json::{Value, json};
 
-use super::{ApprovalRequest, CommandGate, Decision, GateSetup, STOP};
+use super::{ApprovalRequest, CommandGate, Decision, GateSetup, Reply, STOP};
 use crate::approval::{Context, Floors};
 use crate::budget::ResultBudget;
 use crate::descriptor::{
@@ -37,7 +37,7 @@ use crate::spillover::session_dir;
 use crate::surface::{SurfaceInputs, ToolSurface};
 use crate::testing::FnHandler;
 
-type Prompts = Surface<ApprovalRequest, Decision>;
+type Prompts = Surface<ApprovalRequest, Reply>;
 
 struct Fixture {
     _temp: tempfile::TempDir,
@@ -164,7 +164,7 @@ struct Session {
 
 async fn session(
     fx: &Fixture,
-    channel: Channel<ApprovalRequest, Decision>,
+    channel: Channel<ApprovalRequest, Reply>,
     options: Options,
 ) -> Session {
     let caps = CapabilitySet::parse(BASELINE.iter().copied().chain(["process.spawn:*"])).unwrap();
@@ -252,11 +252,11 @@ async fn command(session: &Session, line: &str) -> ToolResult {
 async fn answer(prompts: &mut Prompts, decision: Decision) -> ApprovalRequest {
     let prompt = prompts.next().await.expect("a prompt");
     let request = prompt.request().clone();
-    prompt.respond(decision);
+    prompt.respond(decision.into());
     request
 }
 
-fn attached() -> (Channel<ApprovalRequest, Decision>, Prompts) {
+fn attached() -> (Channel<ApprovalRequest, Reply>, Prompts) {
     Channel::attached(Duration::from_mins(5))
 }
 

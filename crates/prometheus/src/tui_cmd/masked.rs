@@ -50,6 +50,7 @@ pub(super) fn card(
     let input = format!("› {}", "•".repeat(typed));
     let body = why.map_or_else(|| input.clone(), |why| format!("{why}\n{input}"));
     Card {
+        diff: Vec::new(),
         title,
         body,
         hint: format!("{}{within}", strings.get("tui.masked_hint")),

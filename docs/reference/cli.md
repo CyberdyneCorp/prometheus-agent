@@ -33197,8 +33197,14 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --attach <REF>
+          Join a live session as a driver beside the clients already on it: an id, an id prefix or a title
+
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --observe <REF>
+          Join a live session read-only, as an observer: an id, an id prefix or a title
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews

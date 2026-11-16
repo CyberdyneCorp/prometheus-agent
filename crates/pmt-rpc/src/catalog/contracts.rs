@@ -86,6 +86,7 @@ mod experience;
 mod files;
 mod interop;
 mod journey;
+mod live;
 mod local;
 mod lsp;
 mod manage;
@@ -111,6 +112,7 @@ pub use experience::*;
 pub use files::*;
 pub use interop::*;
 pub use journey::*;
+pub use live::*;
 pub use local::*;
 pub use lsp::*;
 pub use manage::*;
@@ -526,6 +528,10 @@ pub struct Attached {
     /// this connection when it is a capable driver).
     #[serde(default)]
     pub open_requests: Vec<OpenRequest>,
+    /// This connection's client id, as `session.presence` lists it and
+    /// its inputs are stamped with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
 }
 
 /// `session.list` params.
@@ -678,6 +684,10 @@ pub struct TranscriptMessage {
     /// Its reactions (spec: desktop-app, Agent reactions).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reactions: Vec<Reaction>,
+    /// Who sent a user message: the client id the gateway stamped it with
+    /// (spec: tui, Shared live sessions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 /// `session.transcript` result.
@@ -939,10 +949,12 @@ pub enum Decision {
 pub struct ApprovalAnswer {
     /// The decision.
     pub decision: Decision,
-    /// For a diff approval: the hunks accepted.
+    /// For a diff approval: the hunks to apply (numbered from 1, as the
+    /// request's `diff.hunks`); absent: all of them.
     #[serde(default)]
     pub accepted_hunks: Option<Vec<u32>>,
-    /// An edited command to run instead.
+    /// For a diff approval: the file content to write instead of the
+    /// proposed one (`edit then accept`).
     #[serde(default)]
     pub replacement: Option<String>,
 }
@@ -955,10 +967,12 @@ pub struct ApprovalRespondParams {
     pub id: String,
     /// The decision.
     pub decision: Decision,
-    /// For a diff approval: the hunks accepted.
+    /// For a diff approval: the hunks to apply (numbered from 1, as the
+    /// request's `diff.hunks`); absent: all of them.
     #[serde(default)]
     pub accepted_hunks: Option<Vec<u32>>,
-    /// An edited command to run instead.
+    /// For a diff approval: the file content to write instead of the
+    /// proposed one (`edit then accept`).
     #[serde(default)]
     pub replacement: Option<String>,
 }
@@ -1015,6 +1029,20 @@ pub struct EditDiff {
     pub old_text: Option<String>,
     /// The content after the edit.
     pub new_text: String,
+    /// The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what
+    /// `accepted_hunks` refers to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hunks: Vec<EditHunk>,
+}
+
+/// One hunk of a file edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EditHunk {
+    /// `@@ -<old start>,<old lines> +<new start>,<new lines> @@`.
+    pub header: String,
+    /// Its lines, each starting with ` `, `-` or `+`.
+    pub lines: Vec<String>,
 }
 
 /// `clarify.request` params.

@@ -123,6 +123,8 @@ pub const INDEX: &[IndexEntry] = &[
     long("model.options", "tui"),
     method("subagent.list", "tui"),
     method("subagent.subscribe", "tui"),
+    method("session.timeline", "tui"),
+    long("session.rewind", "tui"),
     method("config.get", "tui"),
     long("session.banner", "tui"),
     // tool-system
@@ -283,6 +285,7 @@ pub const INDEX: &[IndexEntry] = &[
     event("message.delivery", "messaging-gateway"),
     event("adapter.state", "messaging-gateway"),
     event("session.presence", "messaging-gateway"),
+    event("subagent.event", "tui"),
     event("request.cancel", WA),
     event("request.resolved", WA),
     event("automation.state", "session-automation"),

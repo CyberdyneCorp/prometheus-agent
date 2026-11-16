@@ -16,12 +16,13 @@ use super::edits::EditPolicy;
 use super::explain::Previewer;
 use super::guardian::{Breaker, Guardian, GuardianVerdict};
 use super::hooks::{ApprovalHooks, TransportOutcome, TransportRequest, choice_name};
+use super::review::EditReview;
 use super::rules::{PLUGIN_RULE_PREFIX, literal};
 use super::selfterm::{Daemon, Guarded};
 use super::{Context, Finding, Floors, Policy, Verdict, evaluate};
 use crate::descriptor::{PathClaim, RegisteredTool};
 use crate::dispatch::{ApprovalGate, Escalation, GateRequest, GateVerdict, SeamFuture};
-use crate::files::guards::{absolute, device_namespace, resolve_existing};
+use crate::files::guards::resolve_existing;
 use crate::files::patch::v4a::touched_paths;
 use crate::grants::GrantAnswer;
 use crate::protected::ProtectedFiles;
@@ -29,6 +30,26 @@ use crate::protected::ProtectedFiles;
 /// A human's decision: `once`, `session`, `always` or `deny` (the
 /// `decision` of `approval.respond`; the same choices as grant prompts).
 pub type Decision = GrantAnswer;
+
+/// A human's answer to an approval prompt: the decision and, for a file
+/// edit, which of its hunks to apply or the content to write instead
+/// (spec: tui, Inline diff review for file edits).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reply {
+    /// The decision.
+    pub decision: Decision,
+    /// What of the edit to apply (all of it by default).
+    pub review: EditReview,
+}
+
+impl From<Decision> for Reply {
+    fn from(decision: Decision) -> Self {
+        Self {
+            decision,
+            review: EditReview::default(),
+        }
+    }
+}
 
 /// How many times one prompt may be explained before it counts as a
 /// denial (a client answering `explain` forever must not hold the call).
@@ -100,7 +121,7 @@ pub struct GateSetup {
     /// Protected instruction files.
     pub protected: ProtectedFiles,
     /// The human channel (`Channel::unattended()` when none exists).
-    pub channel: Channel<ApprovalRequest, Decision>,
+    pub channel: Channel<ApprovalRequest, Reply>,
     /// `--yolo` for the whole process.
     pub yolo: bool,
     /// Plugin observers and the selected approval transport.
@@ -281,47 +302,6 @@ impl CommandGate {
             .unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// An editor session's edit policy: each edit it asks about becomes an
-    /// approval request carrying the diff, answered once (never
-    /// remembered).
-    async fn check_edits(&self, request: &GateRequest<'_>) -> GateVerdict {
-        let Some(policy) = self.edit_policy() else {
-            return GateVerdict::Allow;
-        };
-        if self.bypassing() {
-            return GateVerdict::Allow;
-        }
-        let floors = &self.setup.floors;
-        let cwd = Path::new(&floors.cwd);
-        let user_home = floors.user_home.as_deref().map(Path::new);
-        let resolve = |path: &str| absolute(path, cwd, user_home);
-        let diffs = super::edits::previews(request.tool.name(), request.arguments, &resolve);
-        for diff in diffs {
-            if !policy.asks(Path::new(&diff.path), cwd) {
-                continue;
-            }
-            let verdict = self
-                .decide(ApprovalRequest {
-                    tool: request.tool.name().to_owned(),
-                    call_id: request.call_id.to_owned(),
-                    subject: Some(diff.path.clone()),
-                    findings: vec![Finding {
-                        detector: super::edits::FILE_EDIT.to_owned(),
-                        reason: "this editor session asks before file edits".to_owned(),
-                        fragment: diff.path.clone(),
-                    }],
-                    remember: None,
-                    explanation: None,
-                    diff: Some(diff),
-                })
-                .await;
-            if verdict != GateVerdict::Allow {
-                return verdict;
-            }
-        }
-        GateVerdict::Allow
-    }
-
     /// `[approvals].allow` as on disk now, then this session's approvals.
     /// An unreadable `grants.toml` allows nothing (more prompts, never
     /// fewer).
@@ -406,62 +386,28 @@ impl CommandGate {
         .await
     }
 
-    /// Writes to protected instruction files ask in every mode. A written
-    /// device-namespace or UNC path is refused here, before the protected
-    /// check resolves it (which would open it on Windows), in every mode.
-    async fn check_protected(&self, request: &GateRequest<'_>) -> GateVerdict {
-        let floors = &self.setup.floors;
-        let user_home = floors.user_home.as_deref().map(Path::new);
-        for path in written_paths(request.tool, request.arguments) {
-            let absolute = absolute(&path, Path::new(&floors.cwd), user_home);
-            if let Some(refusal) =
-                device_namespace(&path).or_else(|| device_namespace(&absolute.to_string_lossy()))
-            {
-                return GateVerdict::Denied(refusal);
-            }
-            let reason = self
-                .setup
-                .protected
-                .requires_approval(&absolute)
-                .map(|protected| protected.reason())
-                .or_else(|| ssh_config(&absolute, user_home));
-            let Some(reason) = reason else {
-                continue;
-            };
-            let verdict = self
-                .decide(ApprovalRequest {
-                    tool: request.tool.name().to_owned(),
-                    call_id: request.call_id.to_owned(),
-                    subject: Some(path.clone()),
-                    findings: vec![Finding {
-                        detector: PROTECTED.to_owned(),
-                        reason,
-                        fragment: path,
-                    }],
-                    remember: None,
-                    explanation: None,
-                    diff: None,
-                })
-                .await;
-            if verdict != GateVerdict::Allow {
-                return verdict;
-            }
-        }
-        GateVerdict::Allow
-    }
-
     /// The decision step, with the plugin observers around it.
     async fn decide(&self, request: ApprovalRequest) -> GateVerdict {
-        let Some(hooks) = self.setup.hooks.clone() else {
-            let (verdict, choice, by) = self.decide_with(request.clone(), None).await;
-            self.audit(&request, choice, by);
-            return verdict;
+        self.decide_reviewed(request).await.0
+    }
+
+    /// [`CommandGate::decide`], with what a human's answer said about the
+    /// edit's content (nothing for any other decider).
+    async fn decide_reviewed(&self, request: ApprovalRequest) -> (GateVerdict, EditReview) {
+        let hooks = self.setup.hooks.clone();
+        if let Some(hooks) = &hooks {
+            hooks.before(&request).await;
+        }
+        let decided = self.decide_with(request.clone(), hooks.as_deref()).await;
+        let (verdict, choice, by, review) = match decided {
+            Some((verdict, choice, by)) => (verdict, choice, by, EditReview::default()),
+            None => self.ask(request.clone()).await,
         };
-        hooks.before(&request).await;
-        let (verdict, choice, by) = self.decide_with(request.clone(), Some(&*hooks)).await;
         self.audit(&request, choice, by);
-        hooks.after(&request, choice, by).await;
-        verdict
+        if let Some(hooks) = &hooks {
+            hooks.after(&request, choice, by).await;
+        }
+        (verdict, review)
     }
 
     /// Appends one decision to the audit log, when the gate has one.
@@ -481,33 +427,32 @@ impl CommandGate {
     }
 
     /// The selected plugin transport when there is one, otherwise the
-    /// human in an interactive session and the typed mode elsewhere.
-    /// Never waits outside interactive sessions. Answers the verdict, the
-    /// choice and who made it.
+    /// typed mode outside interactive sessions; `None` when the human must
+    /// be asked. Answers the verdict, the choice and who made it.
     async fn decide_with(
         &self,
         request: ApprovalRequest,
         hooks: Option<&dyn ApprovalHooks>,
-    ) -> (GateVerdict, &'static str, &'static str) {
+    ) -> Option<(GateVerdict, &'static str, &'static str)> {
         if let Some(decided) = self.guarded(&request).await {
-            return decided;
+            return Some(decided);
         }
         if let Some(hooks) = hooks {
             match self.transport(hooks, &request).await {
                 Some(TransportOutcome::Decided(decision)) => {
-                    return (
+                    return Some((
                         self.apply(&request, decision),
                         choice_name(decision),
                         "transport",
-                    );
+                    ));
                 }
                 Some(TransportOutcome::Denied(why)) => {
                     let summary = request.summary();
-                    return (
+                    return Some((
                         GateVerdict::Denied(format!("BLOCKED: {summary} ({why}). {STOP}")),
                         "deny",
                         "transport",
-                    );
+                    ));
                 }
                 Some(TransportOutcome::Builtin) | None => {}
             }
@@ -524,7 +469,7 @@ impl CommandGate {
                 "API".to_owned(),
                 "api_server.unattended_approvals".to_owned(),
             ),
-            (Context::Interactive, None) => return self.ask(request).await,
+            (Context::Interactive, None) => return None,
             (Context::Cron, None) => (
                 self.approvals().cron_mode,
                 context.to_string(),
@@ -544,7 +489,7 @@ impl CommandGate {
         if request.remember.is_none() || mode == UnattendedApproval::Deny {
             self.unobtainable.fetch_add(1, Ordering::Relaxed);
         }
-        match (request.remember.is_some(), mode) {
+        Some(match (request.remember.is_some(), mode) {
             (false, _) if request.findings.iter().any(|f| f.detector == PROTECTED) => (
                 GateVerdict::Denied(format!(
                     "BLOCKED: {summary}. Protected instruction files need a human approval, which {context} runs cannot give."
@@ -567,7 +512,7 @@ impl CommandGate {
                 "deny",
                 "policy",
             ),
-        }
+        })
     }
 
     /// The guardian's verdict in `smart` mode on a call whose approval can
@@ -674,18 +619,25 @@ impl CommandGate {
         }
     }
 
-    async fn ask(&self, request: ApprovalRequest) -> (GateVerdict, &'static str, &'static str) {
+    async fn ask(
+        &self,
+        request: ApprovalRequest,
+    ) -> (GateVerdict, &'static str, &'static str, EditReview) {
         let summary = request.summary();
         let remember = request.remember.clone();
         let denied = |why: &str| GateVerdict::Denied(format!("BLOCKED: {summary} ({why}). {STOP}"));
         let answer = self.ask_explaining(request).await;
+        let (decision, review) = match answer {
+            Ok(Reply { decision, review }) => (Ok(decision), review),
+            Err(unanswered) => (Err(unanswered), EditReview::default()),
+        };
         if matches!(
-            answer,
+            decision,
             Ok(Decision::Once | Decision::Session | Decision::Always)
         ) {
             self.breaker.reset();
         }
-        match answer {
+        let (verdict, choice, by) = match decision {
             Ok(Decision::Once) => (GateVerdict::Allow, "once", "user"),
             Ok(Decision::Session) => {
                 self.lock().extend(remember);
@@ -709,7 +661,8 @@ impl CommandGate {
                 "timeout",
             ),
             Err(other) => (denied(&other.to_string()), "deny", "user"),
-        }
+        };
+        (verdict, choice, by, review)
     }
 
     /// Asks the human; an `explain` answer adds the explanation and asks
@@ -722,20 +675,23 @@ impl CommandGate {
     /// # Errors
     ///
     /// [`Unanswered`] when nobody answered.
-    pub async fn escalate(&self, request: ApprovalRequest) -> Result<Decision, Unanswered> {
+    pub async fn escalate(&self, request: ApprovalRequest) -> Result<Reply, Unanswered> {
         self.ask_explaining(request).await
     }
 
-    async fn ask_explaining(&self, mut request: ApprovalRequest) -> Result<Decision, Unanswered> {
+    async fn ask_explaining(&self, mut request: ApprovalRequest) -> Result<Reply, Unanswered> {
         for _ in 0..EXPLAINS {
             match self.setup.channel.ask(request.clone()).await {
-                Ok(Decision::Explain) => {
+                Ok(Reply {
+                    decision: Decision::Explain,
+                    ..
+                }) => {
                     request.explanation = Some(self.explain(&request).await);
                 }
                 other => return other,
             }
         }
-        Ok(Decision::Deny)
+        Ok(Decision::Deny.into())
     }
 
     /// The explanation of `request`'s command (or, for a call without
@@ -786,11 +742,16 @@ impl ApprovalGate for CommandGate {
                     return verdict;
                 }
             }
-            let verdict = self.check_protected(&request).await;
+            let mut reviewed = Reviewed::new(request.arguments);
+            let verdict = self.check_protected(&request, &mut reviewed).await;
             if verdict != GateVerdict::Allow {
                 return verdict;
             }
-            self.check_edits(&request).await
+            let verdict = self.check_edits(&request, &mut reviewed).await;
+            if verdict != GateVerdict::Allow {
+                return verdict;
+            }
+            reviewed.verdict()
         })
     }
 }
@@ -840,6 +801,10 @@ fn written_paths(tool: &RegisteredTool, arguments: &Value) -> Vec<String> {
         })
         .collect()
 }
+
+mod reviewed;
+
+use reviewed::Reviewed;
 
 #[cfg(test)]
 mod tests;

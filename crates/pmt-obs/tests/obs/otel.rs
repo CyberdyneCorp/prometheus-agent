@@ -138,6 +138,7 @@ fn turn(trace: &SessionTrace, prompt: &str) {
         Event::UserMessage(MessageText {
             message_id: None,
             text: prompt.to_owned(),
+            author: None,
         }),
         "turn_1",
     ));

@@ -1,0 +1,26 @@
+› split the work
+· delegate_task
+
+dispatched both
+
+? approval needed: write_file AGENTS.md
+  protected-file: an agent instruction file (AGENTS.md)
+  [1] @@ -1,3 +1,3 @@
+     keep
+    -b
+    +B
+     keep
+  [2] @@ -6,3 +6,3 @@
+     keep
+    -g
+    +G
+     keep
+  [3] @@ -12,3 +12,3 @@
+     keep
+    -m
+    +M
+     keep
+[y] accept all  [n] reject  hunks 1,3: accept those  [e] edit then accept
+──────────────────────────────────────────────────────────────────────────────────────────
+›
+  default │ mock/m1

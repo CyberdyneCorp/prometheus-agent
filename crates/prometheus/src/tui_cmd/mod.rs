@@ -17,12 +17,16 @@ mod input;
 mod link;
 mod masked;
 mod overlays;
+mod panes;
 mod paste;
+mod presence;
 mod recent;
+mod review;
 mod screen;
 mod session;
 mod signals;
 mod terminal_setup;
+mod timeline;
 mod upkeep;
 mod voice;
 
@@ -57,6 +61,23 @@ pub struct TuiArgs {
     /// The provider of a new session.
     #[arg(long, value_name = "ID")]
     pub provider: Option<String>,
+    /// Join a live session as a driver beside the clients already on it:
+    /// an id, an id prefix or a title.
+    #[arg(long, value_name = "REF", conflicts_with_all = ["resume", "continue_", "observe"])]
+    pub attach: Option<String>,
+    /// Join a live session read-only, as an observer: an id, an id prefix
+    /// or a title.
+    #[arg(long, value_name = "REF", conflicts_with_all = ["resume", "continue_"])]
+    pub observe: Option<String>,
+}
+
+/// A live session to join (`--attach`, `--observe`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Join {
+    /// The session's id, id prefix or title.
+    pub reference: String,
+    /// Driver or observer.
+    pub role: pmt_rpc::contracts::AttachRole,
 }
 
 /// What a TUI run opens.
@@ -82,6 +103,8 @@ pub struct Launch {
     pub terminal: Option<String>,
     /// `--egress` and `--allow-host`, applied with `egress.set`.
     pub egress: crate::egress::Overrides,
+    /// A live session to join instead of opening one.
+    pub join: Option<Join>,
 }
 
 /// How the TUI ended.
@@ -132,7 +155,16 @@ pub fn run(args: &TuiArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
             format!("no working directory: {e}"),
         )
     })?;
+    let join = match (&args.attach, &args.observe) {
+        (Some(reference), _) => Some((reference, pmt_rpc::contracts::AttachRole::Driver)),
+        (None, Some(reference)) => Some((reference, pmt_rpc::contracts::AttachRole::Observer)),
+        (None, None) => None,
+    };
     let launch = Launch {
+        join: join.map(|(reference, role)| Join {
+            reference: reference.clone(),
+            role,
+        }),
         resume: args.resume.clone(),
         continue_: args.continue_.clone(),
         setup: SessionSetup {

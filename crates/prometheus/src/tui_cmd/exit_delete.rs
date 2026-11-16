@@ -36,6 +36,7 @@ impl Tui<'_> {
     pub(super) fn delete_card(&self) -> Option<Card> {
         let strings = pmt_config::language::strings(self.open.scope.dir(), Surface::Core);
         self.exit_delete.asked.then(|| Card {
+            diff: Vec::new(),
             title: pmt_i18n::t!(
                 strings,
                 "cli.confirm_destructive",

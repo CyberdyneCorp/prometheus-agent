@@ -1,0 +1,14 @@
+› split the work                                                        │subagents (2)
+· delegate_task                                                         │  1. first child job · completed · 2s · 120 tok
+                                                                        │› 2. second child job · completed · 4s · 340 tok $0.0012
+dispatched both                                                         │─────────────────────────────────────────────────────────
+                                                                        │· read_file notes.txt
+                                                                        │  remember the milk
+                                                                        │second child read the notes
+                                                                        │■ completed
+                                                                        │
+                                                                        │
+                                                                        │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+›
+  default │ mock/m1

@@ -70,7 +70,7 @@ use pmt_skills::review::Nudge;
 use pmt_skills::secrets::SecretPrompt;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
 use pmt_store::{NewSession, Source, Store};
-use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
+use pmt_tools::approval::{ApprovalRequest, CommandGate, Reply};
 use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
 
@@ -226,7 +226,7 @@ pub struct Live {
     /// The approval gate.
     pub gate: Arc<CommandGate>,
     /// Approval prompts to show (interactive only).
-    pub approvals: Option<Surface<ApprovalRequest, Decision>>,
+    pub approvals: Option<Surface<ApprovalRequest, Reply>>,
     /// Clarify questions to show (interactive only).
     pub clarify: Option<ClarifyPrompts>,
     /// The session's skills.

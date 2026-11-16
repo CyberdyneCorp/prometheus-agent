@@ -198,10 +198,16 @@ async fn an_older_minor_client_attaches_and_gets_nothing_newer() {
         .server
         .hub()
         .publish(&session, "session.event", json!({"type": "x"}));
-    let first = tokio::time::timeout(Duration::from_secs(5), inbox.events.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    // (`session.presence` from the attach comes first.)
+    let first = loop {
+        let event = tokio::time::timeout(Duration::from_secs(5), inbox.events.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        if event.event != "session.presence" {
+            break event;
+        }
+    };
     assert_eq!(
         first.event, "session.event",
         "the 1.3 event was not sent to a 1.2 client"

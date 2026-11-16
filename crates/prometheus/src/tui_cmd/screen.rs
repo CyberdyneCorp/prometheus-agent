@@ -88,6 +88,20 @@ pub(super) enum Done {
     HandedOff(Result<String, Error>),
     /// Voice mode needs the screen (spec: voice-mode).
     Voice(super::voice::Ask),
+    /// `session.timeline` and the transcript its previews come from.
+    Timeline(Result<(pmt_rpc::contracts::Timeline, pmt_rpc::contracts::Transcript), Error>),
+    /// `session.rewind` answered.
+    Rewound(Result<pmt_rpc::contracts::SessionRewound, Error>),
+    /// A rewind's branch was attached, with the workspace restore to
+    /// offer once it shows.
+    Branched(
+        Result<(String, Attached), Error>,
+        Option<super::timeline::Restore>,
+    ),
+    /// `files.rollback` restored a rewind's checkpoint.
+    Restored(Result<String, Error>),
+    /// `subagent.list` answered (the subagents pane's rows).
+    Children(pmt_rpc::contracts::SubagentList),
 }
 
 /// The TUI's state.
@@ -137,6 +151,18 @@ pub(super) struct Tui<'a> {
     pub(super) subagents: pmt_core::subagent_tree::TreeLines,
     /// `/voice` and the voice conversation of this terminal.
     pub(super) voice: super::voice::Voice,
+    /// Who is attached to each live session (`session.presence`).
+    pub(super) presence: HashMap<String, Vec<pmt_rpc::contracts::PresenceClient>>,
+    /// The diff review being edited (`edit then accept`): the request id.
+    pub(super) editing: Option<String>,
+    /// What the composer holds once the current answer is taken.
+    pub(super) fill: Option<String>,
+    /// The children whose transcripts stream to this TUI.
+    pub(super) subscribed: HashSet<String>,
+    /// The timeline's turns as read-only transcripts, oldest first.
+    pub(super) previews: Vec<pmt_tui::transcript::Transcript>,
+    /// The workspace restore a rewind offers.
+    pub(super) restore: Option<super::timeline::Restore>,
 }
 
 /// A server request on screen or waiting for it.
@@ -301,6 +327,12 @@ impl<'a> Tui<'a> {
             panic_on_draw: open.panic_on_draw,
             lost: None,
             subagents: pmt_core::subagent_tree::TreeLines::default(),
+            presence: HashMap::new(),
+            editing: None,
+            fill: None,
+            subscribed: HashSet::new(),
+            previews: Vec::new(),
+            restore: None,
             voice: super::voice::Voice::new(crate::chat::voice::VoiceClient::new(
                 open.scope,
                 &open.env,
