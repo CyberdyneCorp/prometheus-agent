@@ -158,7 +158,9 @@ is removed and a removal is restored.
 | `prometheus memory log [--since <rev\|duration>] [--origin]` | Lists revisions, oldest first. |
 | `prometheus memory diff [--since <rev\|duration>\|--session <id>]` | Shows the changes as a unified diff per entry. |
 | `prometheus memory revert <rev>` | Undoes a revision as a new `origin = user` revision. |
-| `prometheus memory search <query> [--explain]` | Ranks archival entries as recall would, with their scores. |
+| `prometheus memory search <query> [--explain] [--all]` | Ranks archival entries as recall would, with their scores (salience included). Add `--all` to rank dormant ones too. |
+| `prometheus memory wake <id>` | Makes a dormant entry active again. |
+| `prometheus memory consolidate [--target memory\|user] [--apply]` | Asks the auxiliary memory model for merges, contradiction resolutions and tier moves and prints them as a diff. Nothing changes without `--apply`. |
 
 For example:
 
@@ -202,6 +204,44 @@ A Hermes file is split on its `§` separator lines. Its target comes from
 `--target` or from the file name (`MEMORY.md`, `USER.md`). Imported entries
 that match the threat scan are kept as `blocked`. Entries holding
 credentials are skipped.
+
+## Decay, expiry and dormancy
+
+Every entry that is not pinned has a salience that halves every
+`memory.decay.half_life_secs` (default 90 days) since its last use, which
+is its last edit or recall. Recall multiplies an entry's relevance by its
+salience, so a stale entry ranks below a fresh one that is just as
+relevant. `memory.recall.min_score` judges relevance alone.
+
+An entry becomes `dormant` when it passes its `expires_at`, or when it is
+archival and its salience falls below `memory.decay.dormant_below` (default
+0.1). A dormant entry is left out of the system prompt and of recall. It is
+never deleted: `memory list --all` and `memory search --all` still show it.
+`prometheus memory wake <id>`, editing it, or pinning it makes it active
+again. Pinned entries never decay.
+
+## Consolidation
+
+`prometheus memory consolidate` sends each store's entries to the
+`auxiliary.memory` model (default: the main model). The model proposes
+merges of duplicates, resolutions of contradictions and moves between the
+core and archival tiers. Prometheus applies its own rules to the
+proposal:
+
+- A pinned entry is never removed.
+- In a contradiction the newer entry wins, unless the older one is pinned.
+- A proposal naming unknown entries is skipped.
+- The result must fit the core budget.
+
+The proposal is printed as a diff of the Markdown view, and the store does
+not change. `--apply` commits it. Each change is journaled with
+`origin = consolidation` (see `memory log --origin consolidation`).
+
+With `memory.consolidation.enabled = true` the daemon (or
+`prometheus cron tick`) also runs a pass while the profile is idle, at most
+once per `memory.consolidation.interval_secs` (default one week). That
+pass stages its proposal as a pending change for `memory approve`, unless
+`memory.consolidation.auto_apply = true`.
 
 ## Memory notifications
 

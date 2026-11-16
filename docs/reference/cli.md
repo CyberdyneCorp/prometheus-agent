@@ -1909,6 +1909,7 @@ Commands:
   diff             Show how an ejected copy differs from the current bundled version
   reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  test             Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
   pending          Review skill writes staged by `skills.write_approval` (default: list them)
@@ -3354,6 +3355,66 @@ Options:
           Print help
 ```
 
+## `prometheus skills test`
+
+```text
+Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
+
+Usage: prometheus skills test [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          The skill
+
+Options:
+      --all
+          Every skill that has evals
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --provider <PROVIDER>
+          `mock` plays each case's mock script (deterministic, offline); `live` uses the profile's model
+
+          Possible values:
+          - mock: The mock provider playing each case's `mock_script`
+          - live: The profile's configured model
+
+          [default: mock]
+
+      --repeat <REPEAT>
+          Runs per case
+
+          [default: 1]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus skills reload`
 
 ```text
@@ -4250,6 +4311,7 @@ Commands:
   diff             Show how an ejected copy differs from the current bundled version
   reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  test             Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
   pending          Review skill writes staged by `skills.write_approval` (default: list them)
@@ -4507,6 +4569,14 @@ Usage: prometheus skills help reset
 Report skills that do not load (path, line, reason) and quarantined project skills
 
 Usage: prometheus skills help doctor
+```
+
+## `prometheus skills help test`
+
+```text
+Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
+
+Usage: prometheus skills help test
 ```
 
 ## `prometheus skills help reload`
@@ -5818,27 +5888,29 @@ Inspect, edit, export and import what the agent remembers (built-in memory)
 Usage: prometheus memory [OPTIONS] <COMMAND>
 
 Commands:
-  status   Show whether built-in memory is enabled, each store's usage and pending changes
-  list     List entries (dormant ones only with --all)
-  show     Show one entry in full (blocked entries show their raw text here)
-  add      Add an entry (from the next session's snapshot)
-  rm       Remove an entry
-  pin      Pin an entry
-  unpin    Unpin an entry
-  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
-  export   Print every entry as Markdown (the edit view) or JSONL
-  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
-  pending  List memory changes staged for approval
-  approve  Apply a staged change (`all` for every one)
-  reject   Drop a staged change (`all` for every one)
-  log      List memory revisions, oldest first
-  diff     Show memory changes as a unified diff per entry
-  revert   Undo a revision (recorded as a new revision with origin user)
-  search   Rank archival entries for a query as recall would
-  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
-  off      Use built-in memory only (memory.provider = "builtin")
-  reset    Delete every entry of a store
-  help     Print this message or the help of the given subcommand(s)
+  status       Show whether built-in memory is enabled, each store's usage and pending changes
+  list         List entries (dormant ones only with --all)
+  show         Show one entry in full (blocked entries show their raw text here)
+  add          Add an entry (from the next session's snapshot)
+  rm           Remove an entry
+  pin          Pin an entry
+  unpin        Unpin an entry
+  edit         Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export       Print every entry as Markdown (the edit view) or JSONL
+  import       Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending      List memory changes staged for approval
+  approve      Apply a staged change (`all` for every one)
+  reject       Drop a staged change (`all` for every one)
+  log          List memory revisions, oldest first
+  diff         Show memory changes as a unified diff per entry
+  revert       Undo a revision (recorded as a new revision with origin user)
+  search       Rank archival entries for a query as recall would
+  wake         Make a dormant entry active again
+  consolidate  Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+  setup        Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off          Use built-in memory only (memory.provider = "builtin")
+  reset        Delete every entry of a store
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -6671,6 +6743,9 @@ Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
+      --all
+          Include dormant entries
+
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
@@ -6697,6 +6772,98 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus memory wake`
+
+```text
+Make a dormant entry active again
+
+Usage: prometheus memory wake [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory consolidate`
+
+```text
+Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+
+Usage: prometheus memory consolidate [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+      --apply
+          Commit the proposal (journaled with origin consolidation)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
 ```
 
 ## `prometheus memory setup`
@@ -6841,27 +7008,29 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus memory help [COMMAND]
 
 Commands:
-  status   Show whether built-in memory is enabled, each store's usage and pending changes
-  list     List entries (dormant ones only with --all)
-  show     Show one entry in full (blocked entries show their raw text here)
-  add      Add an entry (from the next session's snapshot)
-  rm       Remove an entry
-  pin      Pin an entry
-  unpin    Unpin an entry
-  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
-  export   Print every entry as Markdown (the edit view) or JSONL
-  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
-  pending  List memory changes staged for approval
-  approve  Apply a staged change (`all` for every one)
-  reject   Drop a staged change (`all` for every one)
-  log      List memory revisions, oldest first
-  diff     Show memory changes as a unified diff per entry
-  revert   Undo a revision (recorded as a new revision with origin user)
-  search   Rank archival entries for a query as recall would
-  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
-  off      Use built-in memory only (memory.provider = "builtin")
-  reset    Delete every entry of a store
-  help     Print this message or the help of the given subcommand(s)
+  status       Show whether built-in memory is enabled, each store's usage and pending changes
+  list         List entries (dormant ones only with --all)
+  show         Show one entry in full (blocked entries show their raw text here)
+  add          Add an entry (from the next session's snapshot)
+  rm           Remove an entry
+  pin          Pin an entry
+  unpin        Unpin an entry
+  edit         Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export       Print every entry as Markdown (the edit view) or JSONL
+  import       Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending      List memory changes staged for approval
+  approve      Apply a staged change (`all` for every one)
+  reject       Drop a staged change (`all` for every one)
+  log          List memory revisions, oldest first
+  diff         Show memory changes as a unified diff per entry
+  revert       Undo a revision (recorded as a new revision with origin user)
+  search       Rank archival entries for a query as recall would
+  wake         Make a dormant entry active again
+  consolidate  Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+  setup        Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off          Use built-in memory only (memory.provider = "builtin")
+  reset        Delete every entry of a store
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus memory help status`
@@ -6998,6 +7167,22 @@ Usage: prometheus memory help revert
 Rank archival entries for a query as recall would
 
 Usage: prometheus memory help search
+```
+
+## `prometheus memory help wake`
+
+```text
+Make a dormant entry active again
+
+Usage: prometheus memory help wake
+```
+
+## `prometheus memory help consolidate`
+
+```text
+Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+
+Usage: prometheus memory help consolidate
 ```
 
 ## `prometheus memory help setup`
@@ -34592,6 +34777,7 @@ Commands:
   diff             Show how an ejected copy differs from the current bundled version
   reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  test             Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
   pending          Review skill writes staged by `skills.write_approval` (default: list them)
@@ -34848,6 +35034,14 @@ Usage: prometheus help skills reset
 Report skills that do not load (path, line, reason) and quarantined project skills
 
 Usage: prometheus help skills doctor
+```
+
+## `prometheus help skills test`
+
+```text
+Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
+
+Usage: prometheus help skills test
 ```
 
 ## `prometheus help skills reload`
@@ -35199,26 +35393,28 @@ Inspect, edit, export and import what the agent remembers (built-in memory)
 Usage: prometheus help memory [COMMAND]
 
 Commands:
-  status   Show whether built-in memory is enabled, each store's usage and pending changes
-  list     List entries (dormant ones only with --all)
-  show     Show one entry in full (blocked entries show their raw text here)
-  add      Add an entry (from the next session's snapshot)
-  rm       Remove an entry
-  pin      Pin an entry
-  unpin    Unpin an entry
-  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
-  export   Print every entry as Markdown (the edit view) or JSONL
-  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
-  pending  List memory changes staged for approval
-  approve  Apply a staged change (`all` for every one)
-  reject   Drop a staged change (`all` for every one)
-  log      List memory revisions, oldest first
-  diff     Show memory changes as a unified diff per entry
-  revert   Undo a revision (recorded as a new revision with origin user)
-  search   Rank archival entries for a query as recall would
-  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
-  off      Use built-in memory only (memory.provider = "builtin")
-  reset    Delete every entry of a store
+  status       Show whether built-in memory is enabled, each store's usage and pending changes
+  list         List entries (dormant ones only with --all)
+  show         Show one entry in full (blocked entries show their raw text here)
+  add          Add an entry (from the next session's snapshot)
+  rm           Remove an entry
+  pin          Pin an entry
+  unpin        Unpin an entry
+  edit         Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export       Print every entry as Markdown (the edit view) or JSONL
+  import       Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending      List memory changes staged for approval
+  approve      Apply a staged change (`all` for every one)
+  reject       Drop a staged change (`all` for every one)
+  log          List memory revisions, oldest first
+  diff         Show memory changes as a unified diff per entry
+  revert       Undo a revision (recorded as a new revision with origin user)
+  search       Rank archival entries for a query as recall would
+  wake         Make a dormant entry active again
+  consolidate  Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+  setup        Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off          Use built-in memory only (memory.provider = "builtin")
+  reset        Delete every entry of a store
 ```
 
 ## `prometheus help memory status`
@@ -35355,6 +35551,22 @@ Usage: prometheus help memory revert
 Rank archival entries for a query as recall would
 
 Usage: prometheus help memory search
+```
+
+## `prometheus help memory wake`
+
+```text
+Make a dormant entry active again
+
+Usage: prometheus help memory wake
+```
+
+## `prometheus help memory consolidate`
+
+```text
+Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+
+Usage: prometheus help memory consolidate
 ```
 
 ## `prometheus help memory setup`

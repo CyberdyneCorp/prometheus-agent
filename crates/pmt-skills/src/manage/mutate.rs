@@ -50,13 +50,30 @@ pub fn lock(skills_dir: &Path, name: &str) -> Result<fs::File, String> {
 ///
 /// The refusal or I/O failure text for the model.
 pub fn commit(dir: &Path, changes: &[Change], scanner: &dyn Scanner) -> Result<Report, String> {
+    commit_checked(dir, changes, scanner, &|_| Ok(()))
+}
+
+/// [`commit`] with one more condition on the written result: `check`
+/// runs after the scan passed, and its refusal undoes the write too.
+///
+/// # Errors
+///
+/// As [`commit`], or `check`'s refusal.
+pub fn commit_checked(
+    dir: &Path,
+    changes: &[Change],
+    scanner: &dyn Scanner,
+    check: &dyn Fn(&Path) -> Result<(), String>,
+) -> Result<Report, String> {
     let existed = dir.exists();
     let before: Vec<(String, Option<Vec<u8>>)> = changes
         .iter()
         .map(|c| (c.rel().to_owned(), fs::read(dir.join(c.rel())).ok()))
         .collect();
     let applied = apply(dir, changes);
-    let verdict = applied.and_then(|()| scan(dir, scanner));
+    let verdict = applied
+        .and_then(|()| scan(dir, scanner))
+        .and_then(|report| check(dir).map(|()| report));
     match verdict {
         Ok(report) => Ok(report),
         Err(why) => {

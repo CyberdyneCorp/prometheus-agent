@@ -2,6 +2,7 @@
 
 mod catalog_content;
 mod curator;
+mod eval_gate;
 mod format;
 mod index;
 mod invoke;

@@ -186,6 +186,66 @@ impl Ctx<'_> {
     }
 }
 
+/// The eval gate around one edit (spec: skills, Eval-gated skill edits):
+/// with `skills.eval_gate` on and evals in the skill, the pass rate before
+/// the edit is measured first; a lower rate after it rejects a background
+/// review's edit (the write is undone) and only warns on any other.
+struct EvalGate<'a> {
+    gate: &'a dyn crate::evals::Gate,
+    name: &'a str,
+    repeat: u32,
+    before: crate::evals::Rate,
+    review: bool,
+}
+
+impl<'a> EvalGate<'a> {
+    fn of(ctx: &'a Ctx<'_>, skill: &'a Skill, dir: &Path) -> Result<Option<Self>, String> {
+        let setup = ctx.session.setup();
+        let Some(gate) = setup.eval_gate.as_deref() else {
+            return Ok(None);
+        };
+        if !ctx.config.skills.eval_gate || !crate::evals::has_evals(dir) {
+            return Ok(None);
+        }
+        let repeat = ctx.config.skills.eval_gate_repeat.max(1);
+        let Some(before) = gate
+            .rate(dir, &skill.name, repeat)
+            .map_err(|e| format!("the skill's evals did not run: {e}; nothing was changed"))?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            gate,
+            name: &skill.name,
+            repeat,
+            before,
+            review: setup.review,
+        }))
+    }
+
+    fn after(
+        &self,
+        written: &Path,
+        warned: &std::cell::RefCell<Option<String>>,
+    ) -> Result<(), String> {
+        let after = self
+            .gate
+            .rate(written, self.name, self.repeat)?
+            .unwrap_or_default();
+        if !after.fell_from(self.before) {
+            return Ok(());
+        }
+        let refusal = crate::evals::rejected(self.before, after);
+        if self.review {
+            tracing::warn!(skill = %self.name, "{refusal}");
+            return Err(refusal);
+        }
+        let warning = refusal.replacen("edit rejected", "the edit lowered the evals", 1);
+        *warned.borrow_mut() = Some(warning);
+        Ok(())
+    }
+}
+
 fn read_only(skill: &Skill) -> String {
     match skill.tier {
         Tier::Bundled => format!(
@@ -414,7 +474,14 @@ fn finish(
     let ledger = ctx.ledger();
     let rel = ctx.rel(dir);
     let captured = ledger.capture(changes.iter().map(|c| format!("{rel}/{}", c.rel())));
-    let report = mutate::commit(dir, changes, ctx.session.setup().scanner.as_ref())?;
+    let gate = EvalGate::of(ctx, skill, dir)?;
+    let warned = std::cell::RefCell::new(None);
+    let check = |written: &Path| match &gate {
+        Some(gate) => gate.after(written, &warned),
+        None => Ok(()),
+    };
+    let report =
+        mutate::commit_checked(dir, changes, ctx.session.setup().scanner.as_ref(), &check)?;
     ledger.record(
         Actor::Agent,
         action,
@@ -427,8 +494,12 @@ fn finish(
         &ctx.lint(before, &skill.dir_name),
         &ctx.lint(after, &skill.dir_name),
     );
+    let message = match warned.into_inner() {
+        Some(warning) => format!("Updated skill '{}'. Warning: {warning}.", skill.name),
+        None => format!("Updated skill '{}'.", skill.name),
+    };
     Ok(Outcome {
-        message: format!("Updated skill '{}'.", skill.name),
+        message,
         path: Some(ctx.display(dir)),
         lint_warnings: warnings,
         verdict: Some(report.verdict),

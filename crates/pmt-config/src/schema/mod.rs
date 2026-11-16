@@ -146,9 +146,9 @@ pub use provider_routing::{
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use replay::{CacheMode, DEFAULT_NAMESPACE, ModelCallCacheConfig, ReplayConfig};
 pub use state::{
-    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryNotifications,
-    MemoryReviewConfig, MemoryReviewMode, RecallConfig, ReviewDefer, SessionsConfig, SkillsConfig,
-    SnapshotsConfig, StorageConfig,
+    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryConsolidationConfig,
+    MemoryDecayConfig, MemoryNotifications, MemoryReviewConfig, MemoryReviewMode, RecallConfig,
+    ReviewDefer, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
 };
 pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
 pub use tools::{

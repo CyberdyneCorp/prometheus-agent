@@ -633,6 +633,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `mcp_server.allow_remote` | boolean | `false` | any | `restart` | Let `--http` bind an address that is not loopback. |
 | `mcp_server.expose_toolsets` | array of string | `["skills"]` | any | `restart` | Toolsets exposed as MCP tools; `skills` exposes only the read-only skill tools. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
+| `memory.consolidation.auto_apply` | boolean | `false` | any | `next_session` | Commit a pass's proposal without approval (otherwise it is staged for `memory approve`). |
+| `memory.consolidation.enabled` | boolean | `false` | any | `next_session` | Run an idle-time consolidation pass. |
+| `memory.consolidation.interval_secs` | integer | `604800` | ≥ 1 | `next_session` | Seconds between idle-time passes. |
+| `memory.decay.dormant_below` | number | `0.1` | 0.0 to 1.0 | `next_session` | An archival entry whose salience falls below this becomes dormant. |
+| `memory.decay.half_life_secs` | integer | `7776000` | ≥ 1 | `next_session` | Seconds for an unused entry's salience to halve. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
 | `memory.notifications` | one of "off", "on", "verbose" | `"on"` | `"off"`, `"on"`, `"verbose"` | `next_session` | Notices after a memory change commits: `off`, `on` or `verbose`. |
@@ -827,6 +832,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.config` | table | `{}` | any | `next_session` | Non-secret per-skill settings: skill to key to value. |
 | `skills.creation_nudge_interval` | integer | `10` | ≥ 0 | `next_session` | Tool-calling iterations before a skill-creation nudge. |
 | `skills.disabled` | array of string | `[]` | any | `next_session` | Disabled skill names. |
+| `skills.eval_gate` | boolean | `false` | any | `next_session` | Run a skill's evals before a background review or curator consolidation commits a change to it, and reject a change that lowers the pass rate (other edits are only warned). |
+| `skills.eval_gate_repeat` | integer | `3` | ≥ 1 | `next_session` | Runs per case of a gated edit's evals. |
 | `skills.external_dirs` | array of string | `[]` | any | `next_session` | Extra skill directories (`~` expanded; missing ones skipped). |
 | `skills.include_bundled` | boolean | `true` | any | `next_session` | Show the bundled skills tier. |
 | `skills.index_description_chars` | integer | `60` | ≥ 0 | `next_session` | Description length in the skills index. |

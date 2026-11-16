@@ -30,6 +30,7 @@ pub mod curator;
 pub mod digest;
 pub mod dispatch;
 pub mod eject;
+pub mod evals;
 pub mod frontmatter;
 pub mod gates;
 pub mod hints;

@@ -1169,6 +1169,11 @@ impl Factory {
             );
         }));
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
+        setup.eval_gate = Some(Arc::new(crate::skills_cmd::evals::ProfileGate {
+            scope: self.scope.clone(),
+            store: Arc::clone(&self.store),
+            launch: self.launch.clone(),
+        }));
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))
             .or_else(|| self.secret_prompt.clone());

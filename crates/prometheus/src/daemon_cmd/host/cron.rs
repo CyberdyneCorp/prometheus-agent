@@ -112,6 +112,8 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
             tick(&runner, &permits, &sender).await;
             // A due automatic curator pass runs on its own thread.
             let _ = crate::curator_cmd::auto::check(&scope, &profile.store, &host.launch);
+            // So does a due idle-time memory consolidation pass.
+            let _ = crate::memory_cmd::consolidate::check(&scope, &profile.store, &host.launch);
         }
         // A webhook's queued run wakes the loop early.
         tokio::select! {

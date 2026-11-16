@@ -4,6 +4,15 @@ use std::path::PathBuf;
 
 use clap::Subcommand;
 
+/// The model a skill eval runs on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum EvalProviderArg {
+    /// The mock provider playing each case's `mock_script`.
+    Mock,
+    /// The profile's configured model.
+    Live,
+}
+
 /// `prometheus skills` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum SkillsCommand {
@@ -163,6 +172,21 @@ pub enum SkillsCommand {
     },
     /// Report skills that do not load (path, line, reason) and quarantined project skills.
     Doctor,
+    /// Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes.
+    Test {
+        /// The skill.
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        name: Option<String>,
+        /// Every skill that has evals.
+        #[arg(long)]
+        all: bool,
+        /// `mock` plays each case's mock script (deterministic, offline); `live` uses the profile's model.
+        #[arg(long, value_enum, default_value = "mock")]
+        provider: EvalProviderArg,
+        /// Runs per case.
+        #[arg(long, default_value_t = 1, value_parser = clap::value_parser!(u32).range(1..=100))]
+        repeat: u32,
+    },
     /// Rescan every skill root and bundle; report added, removed and changed skills since the last reload.
     Reload,
     /// Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`).

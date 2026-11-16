@@ -157,12 +157,16 @@ fn merge(
         &scope.skills_dir(),
         scope.config.skills.ledger_max_bytes,
     );
+    let gate = scope
+        .eval_gate
+        .filter(|_| scope.config.skills.eval_gate)
+        .map(|gate| (gate, scope.config.skills.eval_gate_repeat.max(1)));
     let applied = consolidate::apply(
         &ledger,
         scope.store,
         &remaining,
         &merges,
-        scanner,
+        (scanner, gate),
         &mut report.errors,
     );
     for a in &applied {

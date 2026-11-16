@@ -85,12 +85,14 @@ capabilities = [
     "desktop-app",
     "kanban",
     "distribution-and-update",
+    "memory",
     "experience-library",
     "harness-evolution",
     "messaging-gateway",
     "plugin-system",
     "projects",
     "replay-and-evaluation",
+    "skills",
     "web-dashboard",
 ]
 
@@ -4870,3 +4872,17 @@ capabilities = [
 [replay-and-evaluation."Trajectory compressor"]
 "Head and tail preserved" = ["crates/pmt-eval/src/compress.rs::head_and_tail_survive_and_one_summary_replaces_the_middle", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
 "Short trajectory untouched" = ["crates/pmt-eval/src/compress.rs::a_short_record_is_copied_without_a_model_call", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
+
+# Group 72.1: memory decay, expiry, dormancy and consolidation proposals.
+[memory."Decay, expiry and dormancy (upgrade)"]
+"Expired event leaves the prompt" = ["crates/pmt-memory/tests/memory/decay.rs::an_expired_event_leaves_the_prompt_and_stays_listed_as_dormant", "crates/prometheus/tests/memory_consolidate.rs::an_expired_entry_is_listed_as_dormant_and_wakes_on_request"]
+
+[memory."Consolidation proposals (upgrade)"]
+"Contradiction is proposed, not silently applied" = ["crates/prometheus/tests/memory_consolidate.rs::a_contradiction_is_proposed_as_a_diff_and_applied_only_on_request", "crates/pmt-memory/tests/memory/decay.rs::a_contradiction_is_previewed_then_committed_as_consolidation_and_pins_survive"]
+
+# Group 72.4: skill evals and eval-gated skill edits.
+[skills."Skill evals (upgrade)"]
+"Skill eval detects a non-triggering description" = ["crates/prometheus/tests/skills_evals.rs::a_non_triggering_description_fails_with_skill_not_loaded_on_the_live_model"]
+
+[skills."Eval-gated skill edits (upgrade)"]
+"Regressing agent edit is rolled back" = ["crates/prometheus/tests/skills_evals.rs::a_regressing_background_review_patch_is_rolled_back", "crates/pmt-skills/tests/skills/eval_gate.rs::a_regressing_background_review_edit_is_rejected_and_the_skill_kept"]

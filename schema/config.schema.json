@@ -5885,6 +5885,23 @@
           "minimum": 0,
           "type": "integer"
         },
+        "consolidation": {
+          "$ref": "#/$defs/MemoryConsolidationConfig",
+          "default": {
+            "auto_apply": false,
+            "enabled": false,
+            "interval_secs": 604800
+          },
+          "description": "Consolidation proposals."
+        },
+        "decay": {
+          "$ref": "#/$defs/MemoryDecayConfig",
+          "default": {
+            "dormant_below": 0.1,
+            "half_life_secs": 7776000
+          },
+          "description": "Salience decay and dormancy."
+        },
         "memory_char_limit": {
           "default": 2200,
           "description": "Character budget of core memory entries.",
@@ -5991,6 +6008,52 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "MemoryConsolidationConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.consolidation]` section.",
+      "properties": {
+        "auto_apply": {
+          "default": false,
+          "description": "Commit a pass's proposal without approval (otherwise it is staged\nfor `memory approve`).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Run an idle-time consolidation pass.",
+          "type": "boolean"
+        },
+        "interval_secs": {
+          "default": 604800,
+          "description": "Seconds between idle-time passes.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "MemoryDecayConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.decay]` section: an unpinned entry's salience halves\nevery `half_life_secs` since its last use.",
+      "properties": {
+        "dormant_below": {
+          "default": 0.1,
+          "description": "An archival entry whose salience falls below this becomes dormant.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "half_life_secs": {
+          "default": 7776000,
+          "description": "Seconds for an unused entry's salience to halve.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "MemoryNotifications": {
       "description": "`memory.notifications`.",
@@ -9334,6 +9397,18 @@
           },
           "type": "array"
         },
+        "eval_gate": {
+          "default": false,
+          "description": "Run a skill's evals before a background review or curator\nconsolidation commits a change to it, and reject a change that\nlowers the pass rate (other edits are only warned).",
+          "type": "boolean"
+        },
+        "eval_gate_repeat": {
+          "default": 3,
+          "description": "Runs per case of a gated edit's evals.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
         "external_dirs": {
           "default": [],
           "description": "Extra skill directories (`~` expanded; missing ones skipped).",
@@ -12613,6 +12688,15 @@
       "$ref": "#/$defs/MemoryConfig",
       "default": {
         "archival_max_entries": 10000,
+        "consolidation": {
+          "auto_apply": false,
+          "enabled": false,
+          "interval_secs": 604800
+        },
+        "decay": {
+          "dormant_below": 0.1,
+          "half_life_secs": 7776000
+        },
         "memory_char_limit": 2200,
         "memory_enabled": true,
         "notifications": "on",
@@ -12910,6 +12994,8 @@
         "config": {},
         "creation_nudge_interval": 10,
         "disabled": [],
+        "eval_gate": false,
+        "eval_gate_repeat": 3,
         "external_dirs": [],
         "include_bundled": true,
         "index_description_chars": 60,
