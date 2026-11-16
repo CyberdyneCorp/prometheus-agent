@@ -30,8 +30,9 @@ harness layer of every new session's system prompt. It opens the
 model guidance) and before skills, project context and memory, so adopting
 a version keeps the cached `static` block (see
 [System prompt layers](../reference/system-prompt.md)).
-Harness skills and subagents are registered for the sessions that start
-on that version. Your memory, `config.toml`, secrets and installed skills
+Harness skills, subagents and hooks are registered for the sessions that
+start on that version: a session keeps its version's hooks for life (a
+resumed one too), and `eval run --harness <version>` runs that version's. Your memory, `config.toml`, secrets and installed skills
 are never part of a harness.
 
 `hooks.toml` holds `[[hooks]]` entries with exactly `event` (a name of the
@@ -122,8 +123,10 @@ and never adds work to the turn), by a scheduled job created with
 the profile directory), by a kanban task of kind `evolve`, and, with
 `evolve.auto.enabled = true`, after a session that ended in error or
 interruption after a tool call or ran at least `evolve.auto.min_iterations`
-iterations (at most `evolve.auto.max_jobs_per_day` a day; sessions of a
-job itself never qualify). An automatic job is announced where the session
+iterations (at most `evolve.auto.max_jobs_per_day` a day). Only your own
+top-level sessions qualify: never the sessions of a job itself, eval task
+sessions (`eval run`, `eval batch`, kanban eval tasks, `evolve review
+--eval`), hidden sessions or delegated subagents. An automatic job is announced where the session
 ended: `harness evolution job <id> queued after this session` on stderr or
 in the line chat, in the messaging chat, or to the TUI, desktop or
 dashboard still attached to it. A daemon session that ends after its last
@@ -140,9 +143,10 @@ again the jobs a stopped process left running). A job:
 
 1. **Rolls out** the active harness `k` times (`base1..basek`): each
    rollout is a hidden, headless `source = "harness"` session on a fresh
-   copy of the task's workspace (a detached checkout of the recorded
-   commit from a `--shared` clone, the patch applied, `excluded` paths
-   deleted; or a copy of `task/source/`), on `evolve.rollout.backend`
+   copy of the task's workspace (the recorded commit checked out from a
+   `--shared` clone with its `excluded` paths deleted, re-committed as a
+   self-contained one-commit history so no excluded file can be brought
+   back from git, then the patch applied; or a copy of `task/source/`), on `evolve.rollout.backend`
    (`local-sandbox` by default; the unsandboxed host is refused), with
    every approval denied, no memory, egress limited to the configured
    model providers (the endpoint host, configured `base_url` or built-in,
@@ -212,7 +216,10 @@ directory, a name under `<profile>/evals/`, the bundled `smoke` or
 and on the proposed harness, judges both runs and shows you the scores
 and the delta with its confidence interval. The proposed tree is not a
 version: it is materialised as a temporary harness for that run only, so
-the review writes no version. The verdict goes to
+the review writes no version. Its hooks and scripts were never approved,
+so both runs go under the confinement of rollouts (`evolve.rollout.backend`,
+the unsandboxed host refused, and egress limited to the model providers
+under `evolve.rollout.network = "providers"`). The verdict goes to
 `<profile>/eval-results/` and never into a proposal, a version or an
 improver's evidence; the two runs stay under `<profile>/evals/runs/`
 (`prometheus eval report <base> <proposed>` shows them again).

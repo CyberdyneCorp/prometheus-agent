@@ -205,3 +205,49 @@ fn the_daemon_resumes_an_interrupted_job_at_start() {
         assert_eq!(status["data"]["summary"]["status"], "ok", "{status}");
     });
 }
+
+/// Ids are checked before they reach a path: a connection granted one
+/// profile cannot read another's job or harness version through `../`.
+#[test]
+fn ids_that_leave_the_profile_are_not_found() {
+    let home = setup();
+    ok(&run(home.path(), &["profile", "create", "other"]));
+    let out = run(
+        home.path(),
+        &[
+            "evolve",
+            "run",
+            "--task",
+            home.path().join("task.toml").to_str().unwrap(),
+            "--detach",
+        ],
+    );
+    let id = ok(&out).split_whitespace().nth(1).unwrap().to_owned();
+    // The job now belongs to the other profile.
+    let profiles = home.path().join("profiles");
+    let theirs = profiles.join("other/evolve/jobs");
+    std::fs::create_dir_all(&theirs).unwrap();
+    std::fs::rename(
+        profiles.join("default/evolve/jobs").join(&id),
+        theirs.join(&id),
+    )
+    .unwrap();
+    let version = std::fs::read_to_string(profiles.join("other/harness/ACTIVE")).unwrap();
+    let _daemon = daemon::start(home.path(), &[]);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let (client, _inbox) = daemon::connect(home.path(), "default").await;
+        let job = format!("../../../other/evolve/jobs/{id}");
+        let err = client
+            .call("evolve.status", json!({"job_id": job}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.data.unwrap().code, "evolve.job_not_found");
+        let version = format!("../../../other/harness/versions/{}", version.trim());
+        let err = client
+            .call("harness.diff", json!({"version": version}))
+            .await
+            .unwrap_err();
+        assert_eq!(err.data.unwrap().code, "harness.version_not_found");
+    });
+}

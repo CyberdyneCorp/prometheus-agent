@@ -9,10 +9,9 @@ away from the agent, harness evolution and the experience library.
 $ prometheus eval validate smoke
 suite smoke 1 is valid (13 tasks)
 $ prometheus eval run smoke --provider mock --run-id docs
-run docs: 12 executed, 0 failed, 1 skipped, 0 resumed (<path>)
-$ prometheus eval judge docs  # exits 5
-ungraded: memory_write#1: not executed: skipped: needs memory
-judged 12 of 13 rows (<path>)
+run docs: 13 executed, 0 failed, 0 skipped, 0 resumed (<path>)
+$ prometheus eval judge docs
+judged 13 of 13 rows (<path>)
 $ prometheus eval report docs
 score: 100.00
 ```
@@ -37,10 +36,22 @@ its model plays when the run's provider is `mock`) and a `run.toml`: `set`
 `then` (follow-up prompts on the same session),
 `interrupt_after_turn_start` and `requires` (a capability; tasks needing
 one this run lacks are skipped and listed). The bundled `smoke` suite uses
-all of them. Eval task sessions never read or write the profile's memory,
-so the smoke suite's memory-writing task (`requires = "memory"`) is
-skipped by `eval run`; `prometheus smoke-suite`, which gives every task a
-scratch home, runs it.
+all of them. Eval task sessions never read or write the profile's memory:
+a task with `requires = "memory"` gets a scratch memory store under its
+unit directory (`tasks/<task>/<repeat>/memory/`).
+
+A `run.toml` may only override settings that shape the agent's behaviour
+for the task: `agent.max_verify_nudges`, `agent.reasoning_effort`,
+`agent.tool_concurrency`, `approvals.deny`, `approvals.mode` (`manual` or
+`smart` only), `auxiliary.<task>.{provider,model,timeout_secs}`, the turn
+and session `budgets`, `compression.*`, `context.*`,
+`models.<name>.{context_window,max_output_tokens,supports_*}` and
+`tools.*`. Anything else (security, egress, sandbox, terminal backend,
+memory, the run budget, provider endpoints and credentials) fails
+validation with exit 65, and the run's isolation is applied again after
+the overrides. A task's `capabilities` must lie within the profile's
+grant: a suite names what its tasks need and never widens it, so a task
+asking for more is not run and its result names the missing capability.
 
 `prometheus eval validate <suite>` checks everything and exits 65 naming
 the first invalid file and problem (`tasks/t1/task.toml: missing key
@@ -56,8 +67,8 @@ list` shows them.
 every selected task and repeat in its own hidden session (`source = eval`,
 tagged with the run id, a child of the run's hidden root session), at most
 `--parallel` (4) at once. Each session gets a workspace built from the
-task's files only; its sandbox reads nothing else, memory is off and
-approvals fail closed. The model-call cache defaults to `read_write`.
+task's files only; its sandbox reads nothing else, memory is off,
+approvals fail closed and no automatic evolution job is queued. The model-call cache defaults to `read_write`.
 
 `<profile>/evals/runs/<run_id>/` then holds `run.json` (suite and version,
 provider, model, harness ref and hash, build, cache mode, toolsets,
@@ -84,9 +95,10 @@ model or harness hash is refused with exit 2.
 Grader directories never reach a workspace and are outside the session's
 sandbox. A task whose trajectory shows an attempt on a path inside a
 `grader/` directory, or on a path matching the suite's `leak_globs`, is
-marked `contaminated` in `result.json` and is excluded from scoring. What
-harness evolution and selection may see of a result is `ok`, `delivered`,
-`cost_usd`, `wall_secs` and `error` (`TaskResult::for_evolution`).
+marked `contaminated` in `result.json` and is excluded from scoring. No
+run result reaches harness evolution: `evolve review --eval` shows its
+comparison to you only, and evaluation task sessions never queue an
+automatic evolution job.
 
 ## Judging
 

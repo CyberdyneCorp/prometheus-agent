@@ -17,6 +17,7 @@ pub mod compress;
 pub mod distribution;
 pub mod grader;
 pub mod judge;
+pub mod overrides;
 pub mod recording;
 pub mod report;
 pub mod rng;

@@ -99,7 +99,7 @@ impl Jobs {
         }
     }
 
-    /// The directory of job `id`.
+    /// The directory of job `id` (an id [`Jobs::get`] accepted).
     #[must_use]
     pub fn dir(&self, id: &str) -> PathBuf {
         self.root.join(id)
@@ -145,12 +145,18 @@ impl Jobs {
     ///
     /// `evolve.job_not_found`; `harness.io`.
     pub fn get(&self, id: &str) -> Result<JobRecord, Error> {
-        let path = self.dir(id).join(JOB_FILE);
-        let text = std::fs::read_to_string(&path).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Error::new(
+        let not_found = || {
+            Error::new(
                 &codes::EVOLVE_JOB_NOT_FOUND,
                 format!("no evolution job '{id}'"),
-            ),
+            )
+        };
+        if !crate::is_minted_id(id, "evo_") {
+            return Err(not_found());
+        }
+        let path = self.dir(id).join(JOB_FILE);
+        let text = std::fs::read_to_string(&path).map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => not_found(),
             _ => io(&path, &e),
         })?;
         toml::from_str(&text).map_err(|e| {
@@ -302,7 +308,7 @@ impl Jobs {
         let mut ids: Vec<String> = entries
             .filter_map(Result::ok)
             .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| n.starts_with("evo_"))
+            .filter(|n| crate::is_minted_id(n, "evo_"))
             .collect();
         ids.sort();
         ids.iter().map(|id| self.get(id)).collect()

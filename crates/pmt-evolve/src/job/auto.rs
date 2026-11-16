@@ -3,7 +3,7 @@
 
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
-use pmt_store::{EndReason, Role, Source, Store, Visibility};
+use pmt_store::{EndReason, LineageKind, Role, Source, Store, Visibility};
 
 use super::{JobRecord, Jobs, Profile, Request, TaskInput, Trigger};
 
@@ -18,6 +18,8 @@ pub struct Ended {
     pub tool_calls: u64,
     /// Agent iterations (model replies) it took.
     pub iterations: u64,
+    /// A user's own session: not hidden and not a delegated child.
+    pub user_task: bool,
 }
 
 /// Whether a finished session queues a job.
@@ -39,9 +41,15 @@ pub fn decide(config: &pmt_config::Config, ended: &Ended, queued_today: usize) -
     if !config.evolve.enabled || !auto.enabled {
         return Decision::Skip("automatic evolution is off");
     }
-    // A rollout never evolves itself.
+    // Only a user's finished task evolves the harness: a rollout never
+    // evolves itself, and an eval task (or a hidden or delegated session)
+    // is not the user's task; evolving on benchmark prompts would tune
+    // the harness to the very suite that measures it.
     if ended.source == Source::Harness {
         return Decision::Skip("evolution session");
+    }
+    if ended.source == Source::Eval || !ended.user_task {
+        return Decision::Skip("not a user task");
     }
     let failed =
         matches!(ended.reason, EndReason::Error | EndReason::Interrupted) && ended.tool_calls >= 1;
@@ -100,6 +108,7 @@ pub fn after_session(
         reason,
         tool_calls: session.tool_call_count,
         iterations: u64::try_from(iterations).unwrap_or(u64::MAX),
+        user_task: !session.hidden && session.lineage_kind != Some(LineageKind::Delegate),
     };
     let jobs = Jobs::of(profile.dir);
     match decide(profile.config, &ended, queued_today(&jobs)?) {
@@ -137,6 +146,7 @@ mod tests {
             reason,
             tool_calls,
             iterations,
+            user_task: true,
         }
     }
 
@@ -161,6 +171,21 @@ mod tests {
             decide(&config, &rollout, 0),
             Decision::Skip("evolution session")
         );
+        for not_a_task in [
+            Ended {
+                source: Source::Eval,
+                ..failed
+            },
+            Ended {
+                user_task: false,
+                ..failed
+            },
+        ] {
+            assert_eq!(
+                decide(&config, &not_a_task, 0),
+                Decision::Skip("not a user task")
+            );
+        }
         assert!(matches!(
             decide(&pmt_config::Config::default(), &failed, 0),
             Decision::Skip(_)

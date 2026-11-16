@@ -100,12 +100,13 @@ impl Store {
         Self::open_location(scope, StoreLocation::of(scope), migrations)
     }
 
-    /// A new store of `scope`'s profile at `database` (offline recovery).
+    /// A store of `scope`'s profile at `database` instead of its own
+    /// (offline recovery; an eval task's scratch memory).
     ///
     /// # Errors
     ///
     /// As [`Store::open`].
-    pub(crate) fn open_at(scope: &ProfileScope, database: &Path) -> Result<Self, Error> {
+    pub fn open_at(scope: &ProfileScope, database: &Path) -> Result<Self, Error> {
         let location = StoreLocation::of(scope).with_database(database);
         Self::open_location(scope, location, migrate::MIGRATIONS)
     }

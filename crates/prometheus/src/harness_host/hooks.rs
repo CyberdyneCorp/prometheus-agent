@@ -7,10 +7,12 @@
 //! hooks is only ever activated by the user (an edit, a rollback, or an
 //! adoption, which always asks when hooks change).
 //!
-//! A harness-evolution rollout runs with its candidate's hooks instead
-//! (spec: Isolated rollouts): [`Rollout`] is a hook source over the
-//! profile's set with the active version's hooks swapped for the
-//! candidate's, so a candidate's hook edits are what its rollouts test.
+//! A session runs with the hooks of the tree it runs on (spec: Harness
+//! loaded once per session; Isolated rollouts): [`Rollout`] is a hook
+//! source over the profile's set with the active version's hooks swapped
+//! for those of the session's recorded version, a rollout's candidate or
+//! a temporary tree, so an adoption never changes an open session's hooks
+//! and a candidate's hook edits are what its rollouts test.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};

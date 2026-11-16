@@ -78,19 +78,22 @@ fn provider_hosts(config: &pmt_config::Config) -> Vec<String> {
     hosts
 }
 
-/// The profile as a rollout sees it.
-fn rollout_scope(scope: &ProfileScope) -> Result<ProfileScope, Error> {
+/// The confinement of sessions that run a harness nobody approved yet:
+/// the sandboxed backend `evolve.rollout.backend` names (the local one
+/// strict, never degraded) and, under `network = "providers"`, egress
+/// limited to the model providers' hosts. Rollouts run under it, and so
+/// does `evolve review --eval`, whose proposed side runs a pending
+/// proposal's hooks and scripts.
+///
+/// # Errors
+///
+/// `config.invalid` for the unsandboxed host backend.
+pub fn confined(scope: &ProfileScope) -> Result<ProfileScope, Error> {
     let rollout = scope.config().evolve.rollout.clone();
     let terminal = backend(&rollout.backend)?.to_owned();
     let strict = rollout.backend == LOCAL_SANDBOX;
     let hosts = provider_hosts(scope.config());
     Ok(scope.patched(move |config| {
-        config.memory.nudge_interval = 0;
-        config.memory.memory_enabled = false;
-        config.memory.user_profile_enabled = false;
-        config.agent.max_iterations = rollout.max_iterations;
-        config.approvals.mode = ApprovalMode::Manual;
-        config.approvals.single_query_mode = UnattendedApproval::Deny;
         config.terminal.backend = terminal;
         if strict {
             config.security.sandbox.allow_degraded.clear();
@@ -99,6 +102,20 @@ fn rollout_scope(scope: &ProfileScope) -> Result<ProfileScope, Error> {
             config.security.egress.mode = EgressMode::Allowlist;
             config.security.egress.allow = hosts;
         }
+    }))
+}
+
+/// The profile as a rollout sees it: [`confined`], without memory, with
+/// approvals failing closed, bounded by `evolve.rollout.max_iterations`.
+fn rollout_scope(scope: &ProfileScope) -> Result<ProfileScope, Error> {
+    let max_iterations = scope.config().evolve.rollout.max_iterations;
+    Ok(confined(scope)?.patched(move |config| {
+        config.memory.nudge_interval = 0;
+        config.memory.memory_enabled = false;
+        config.memory.user_profile_enabled = false;
+        config.agent.max_iterations = max_iterations;
+        config.approvals.mode = ApprovalMode::Manual;
+        config.approvals.single_query_mode = UnattendedApproval::Deny;
     }))
 }
 

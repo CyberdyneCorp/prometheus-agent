@@ -1,5 +1,5 @@
-# The memory tool writes the profile's memory: `prometheus smoke-suite`
-# runs each task in a scratch home of its own and has it, while `prometheus
-# eval run` keeps task sessions away from the profile's memory and skips
-# (and lists) this task.
+# The memory tool writes memory: `prometheus smoke-suite` runs each task in
+# a scratch home of its own, and `prometheus eval run` gives this task's
+# session a scratch memory store under its unit directory, so neither
+# touches the profile's memory.
 requires = "memory"

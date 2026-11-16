@@ -251,7 +251,7 @@ fn a_dot_file_leak_glob_is_excluded_from_the_snapshot() {
 /// Leak globs (spec: Leak globs and verdict tripwire, "SHALL exclude from
 /// task sources"): a rubric already committed at HEAD is listed under
 /// `excluded` in `repo.toml`, left out of the patch, and gone from the
-/// workspace rebuilt at the recorded commit.
+/// workspace rebuilt at the recorded commit and from its git history.
 #[test]
 fn a_tracked_leak_file_is_excluded_from_a_git_snapshot() {
     let fixture = Fixture::enabled();
@@ -288,6 +288,24 @@ fn a_tracked_leak_file_is_excluded_from_a_git_snapshot() {
         std::fs::read_to_string(rebuilt.join("ledger.txt")).unwrap(),
         "10\n20\n"
     );
+    // Nothing in the workspace's own history brings the rubric back: no
+    // alternates into the user's objects, no blob of it at HEAD.
+    assert!(!rebuilt.join(".git/objects/info/alternates").exists());
+    let shown = Command::new("git")
+        .arg("-C")
+        .arg(&rebuilt)
+        .args(["cat-file", "-e", "HEAD:grader/rubric.md"])
+        .output()
+        .unwrap();
+    assert!(!shown.status.success(), "the rubric is reachable from HEAD");
+    let log = git(&rebuilt, &["log", "--all", "--format=%H"]);
+    assert!(
+        !log.contains(&head),
+        "the user's history is not there: {log}"
+    );
+    // The uncommitted change shows up as one in the workspace.
+    let status = git(&rebuilt, &["status", "--porcelain"]);
+    assert_eq!(status.trim(), "M ledger.txt", "{status}");
 }
 
 /// Scenario: Eval verdict in source (the capture half; evidence trees are

@@ -8,7 +8,11 @@
 //! never deleted, so writing one per review would pollute the history),
 //! so the proposed run materialises the tree as a temporary harness under
 //! the review's results directory and its task sessions read their
-//! prompt layer, skills, subagents and hooks from there. The verdict is
+//! prompt layer, skills, subagents and hooks from there. A pending
+//! proposal's hooks and scripts were never approved, so both sides run
+//! under the confinement of rollouts (the sandboxed rollout backend,
+//! egress limited to the model providers), the base too so the two runs
+//! differ only by their harness. The verdict is
 //! written outside `<profile>/evolve/` (`<profile>/eval-results/`) with
 //! the verdict canary, so the tripwire rejects it wherever it might turn
 //! up, and it is never stored in a proposal, a harness version or an
@@ -130,6 +134,7 @@ pub(super) fn run(
     sides: &Sides<'_>,
     suite: &str,
 ) -> Result<Report, Error> {
+    let confined = crate::evolve_host::rollout::confined(scope)?;
     let stamp = jiff::Timestamp::now().as_second();
     let out = scope
         .dir()
@@ -146,15 +151,21 @@ pub(super) fn run(
         .map_err(|e| Error::io(&codes::HARNESS_IO, &temp.dir, &e))?;
     let quiet = |_: &str| {};
     let ran = execute_run(
-        scope,
+        &confined,
         launch,
         &run_args(suite, Some(sides.base_version)),
         None,
         &quiet,
     )
     .and_then(|base| {
-        execute_run(scope, launch, &run_args(suite, None), Some(&temp), &quiet)
-            .map(|proposed| (base, proposed))
+        execute_run(
+            &confined,
+            launch,
+            &run_args(suite, None),
+            Some(&temp),
+            &quiet,
+        )
+        .map(|proposed| (base, proposed))
     });
     // The temporary harness goes whatever happened; the verdict stays.
     let _ = std::fs::remove_dir_all(&temp.dir);

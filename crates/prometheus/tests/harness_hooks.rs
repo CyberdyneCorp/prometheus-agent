@@ -28,6 +28,11 @@ text = "the tool ran"
 "#;
 
 fn run_terminal_turn(home: &Path) -> String {
+    run_terminal_turn_with(home, &[])
+}
+
+/// One `run it` turn with `extra` flags (`--resume <id>`).
+fn run_terminal_turn_with(home: &Path, extra: &[&str]) -> String {
     let rules = home.join("rules.toml");
     std::fs::write(&rules, TERMINAL_RULES).unwrap();
     let work = home.join("work");
@@ -40,6 +45,7 @@ fn run_terminal_turn(home: &Path) -> String {
             "--mock-script",
             rules.to_str().unwrap(),
         ])
+        .args(extra)
         .current_dir(work)
         .stdin(Stdio::null())
         .output()
@@ -83,6 +89,80 @@ fn a_harness_hook_runs_sandboxed_on_its_event_and_stops_with_a_rollback() {
     assert_eq!(tool_rows, ["blocked by the harness"]);
     ok(&run(home.path(), &["harness", "rollback", "h1"]));
     assert_eq!(run_terminal_turn(home.path()), "the tool ran\n");
+}
+
+/// Scenario: Adoption mid-session (its hooks): a session keeps the hooks
+/// of the version it recorded, whatever is active now; a resumed session
+/// started on h1 runs h1's hooks after h2 with a blocking hook was
+/// applied without `--now`, and a new session runs h2's.
+#[test]
+fn a_session_runs_the_hooks_of_its_recorded_version() {
+    let home = mock_home();
+    assert_eq!(run_terminal_turn(home.path()), "the tool ran\n");
+    let started_on_h1 = newest_session(home.path());
+    let dir = guarded_tree(home.path());
+    ok(&run(
+        home.path(),
+        &["harness", "apply", dir.to_str().unwrap()],
+    ));
+    assert_eq!(
+        run_terminal_turn_with(home.path(), &["--resume", &started_on_h1]),
+        "the tool ran\n",
+        "h1's session keeps h1's hooks"
+    );
+    assert_eq!(run_terminal_turn(home.path()), "the harness blocked it\n");
+}
+
+/// `eval run --harness <version>` runs that version's hooks, not the
+/// active version's: with h2 (a blocking hook) active, the task runs on
+/// h1 unblocked, and on h2 blocked.
+#[cfg(feature = "eval")]
+#[test]
+fn an_eval_on_a_named_version_runs_that_versions_hooks() {
+    let home = mock_home();
+    let dir = guarded_tree(home.path());
+    ok(&run(
+        home.path(),
+        &["harness", "apply", dir.to_str().unwrap()],
+    ));
+    let suite = home.path().join("suite");
+    let task = suite.join("tasks/t1");
+    std::fs::create_dir_all(task.join("grader")).unwrap();
+    std::fs::write(
+        suite.join("suite.toml"),
+        "name = \"hooks\"\nversion = \"1\"\ndomain = \"ops\"\n",
+    )
+    .unwrap();
+    std::fs::write(task.join("task.toml"), "prompt = \"run it\"\n").unwrap();
+    std::fs::write(task.join("mock.toml"), TERMINAL_RULES).unwrap();
+    std::fs::write(
+        task.join("grader/grader.toml"),
+        "type = \"exact\"\nexpect = \"the tool ran\"\n",
+    )
+    .unwrap();
+    let answer = |harness: &str| {
+        let run_id = format!("on-{harness}");
+        let args = [
+            "eval",
+            "run",
+            suite.to_str().unwrap(),
+            "--provider",
+            "mock",
+            "--harness",
+            harness,
+            "--run-id",
+            &run_id,
+        ];
+        ok(&run(home.path(), &args));
+        let unit = home
+            .path()
+            .join("profiles/default/evals/runs")
+            .join(&run_id)
+            .join("tasks/t1/1/deliverables/answer.md");
+        std::fs::read_to_string(unit).unwrap()
+    };
+    assert_eq!(answer("h1"), "the tool ran");
+    assert_eq!(answer("h2"), "the harness blocked it");
 }
 
 #[test]

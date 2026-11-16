@@ -24,8 +24,6 @@ pub mod files;
 pub mod stdio;
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use pmt_core::error::{Error, codes};
@@ -54,12 +52,11 @@ pub struct RpcError {
 }
 
 /// The host side of an adapter: what it answers to the requests the
-/// adapter sends, and how many score pushes it refused.
+/// adapter sends.
 #[derive(Debug, Clone)]
 pub struct Host {
     name: String,
     phase: Phase,
-    refused: Arc<AtomicU32>,
 }
 
 impl Host {
@@ -69,7 +66,6 @@ impl Host {
         Self {
             name: name.to_owned(),
             phase,
-            refused: Arc::default(),
         }
     }
 
@@ -79,7 +75,6 @@ impl Host {
     #[must_use]
     pub fn answer(&self, method: &str) -> RpcError {
         if method.contains("score") && self.phase == Phase::Execute {
-            self.refused.fetch_add(1, Ordering::SeqCst);
             tracing::warn!(adapter = %self.name, method, "score pushed during execution refused");
             return RpcError {
                 code: SCORE_REFUSED,
@@ -90,12 +85,6 @@ impl Host {
             code: METHOD_NOT_FOUND,
             message: format!("method not found: {method}"),
         }
-    }
-
-    /// Score pushes refused so far.
-    #[must_use]
-    pub fn refused(&self) -> u32 {
-        self.refused.load(Ordering::SeqCst)
     }
 }
 
@@ -244,12 +233,6 @@ impl Adapter {
     #[must_use]
     pub fn dir(&self) -> &Path {
         &self.dir
-    }
-
-    /// Scores the adapter pushed during execution (each refused).
-    #[must_use]
-    pub fn refused_pushes(&self) -> u32 {
-        self.host.refused()
     }
 
     /// Calls `method`; the call's directory is `files`.

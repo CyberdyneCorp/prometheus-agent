@@ -335,6 +335,7 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
         replay: None,
         rollout: None,
         harness_tree: None,
+        memory_store: None,
         domain: args
             .domain
             .as_deref()

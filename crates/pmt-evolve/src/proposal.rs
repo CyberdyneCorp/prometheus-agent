@@ -177,6 +177,21 @@ fn io(path: &Path, err: &std::io::Error) -> Error {
     Error::io(&codes::HARNESS_IO, path, err)
 }
 
+fn not_found(id: &str) -> Error {
+    Error::new(
+        &codes::EVOLVE_PROPOSAL_NOT_FOUND,
+        format!("no harness proposal '{id}'"),
+    )
+}
+
+fn checked(id: &str) -> Result<&str, Error> {
+    if crate::is_minted_id(id, "prop_") {
+        Ok(id)
+    } else {
+        Err(not_found(id))
+    }
+}
+
 fn refused(message: impl Into<String>) -> Error {
     Error::new(&codes::EVOLVE_PROPOSAL_REFUSED, message)
 }
@@ -190,12 +205,14 @@ impl Proposals {
         }
     }
 
-    fn file(&self, id: &str) -> PathBuf {
-        self.root.join(format!("{id}.toml"))
+    /// `<id>.toml`; ids come from clients and are joined into paths, so
+    /// one not minted here is not found.
+    fn file(&self, id: &str) -> Result<PathBuf, Error> {
+        checked(id).map(|id| self.root.join(format!("{id}.toml")))
     }
 
-    fn tree_dir(&self, id: &str) -> PathBuf {
-        self.root.join(format!("{id}.tree"))
+    fn tree_dir(&self, id: &str) -> Result<PathBuf, Error> {
+        checked(id).map(|id| self.root.join(format!("{id}.tree")))
     }
 
     /// Writes a proposal (`pending`, or `no-change` when the tree equals
@@ -234,7 +251,7 @@ impl Proposals {
             edits: new.distilled.edits.clone(),
         };
         pmt_core::private_fs::create_dir(&self.root).map_err(|e| io(&self.root, &e))?;
-        let dir = self.tree_dir(&proposal.id);
+        let dir = self.tree_dir(&proposal.id)?;
         new.tree.write(&dir).map_err(|e| io(&dir, &e))?;
         self.save(&proposal)?;
         Ok(proposal)
@@ -246,7 +263,7 @@ impl Proposals {
     ///
     /// `harness.io`.
     pub fn save(&self, proposal: &Proposal) -> Result<(), Error> {
-        let path = self.file(&proposal.id);
+        let path = self.file(&proposal.id)?;
         let text =
             toml::to_string(proposal).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
         pmt_core::private_fs::write_atomic(&path, text.as_bytes()).map_err(|e| io(&path, &e))
@@ -258,12 +275,9 @@ impl Proposals {
     ///
     /// `evolve.proposal_not_found`; `harness.io`.
     pub fn get(&self, id: &str) -> Result<Proposal, Error> {
-        let path = self.file(id);
+        let path = self.file(id)?;
         let text = std::fs::read_to_string(&path).map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => Error::new(
-                &codes::EVOLVE_PROPOSAL_NOT_FOUND,
-                format!("no harness proposal '{id}'"),
-            ),
+            std::io::ErrorKind::NotFound => not_found(id),
             _ => io(&path, &e),
         })?;
         toml::from_str(&text).map_err(|e| {
@@ -280,7 +294,7 @@ impl Proposals {
     ///
     /// `harness.io`.
     pub fn tree(&self, id: &str) -> Result<Tree, Error> {
-        let dir = self.tree_dir(id);
+        let dir = self.tree_dir(id)?;
         Tree::read(&dir).map(|(t, _)| t).map_err(|e| io(&dir, &e))
     }
 
@@ -301,7 +315,7 @@ impl Proposals {
                     .strip_suffix(".toml")
                     .map(str::to_owned)
             })
-            .filter(|n| n.starts_with("prop_"))
+            .filter(|n| crate::is_minted_id(n, "prop_"))
             .collect();
         ids.sort();
         ids.iter().map(|id| self.get(id)).collect()

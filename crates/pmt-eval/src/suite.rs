@@ -93,6 +93,19 @@ pub struct RunSpec {
     pub requires: Option<String>,
 }
 
+impl RunSpec {
+    /// The overrides as configuration fragments: each `set` line, then
+    /// `config`.
+    #[must_use]
+    pub fn fragments(&self) -> Vec<String> {
+        let mut out = self.set.clone();
+        if !self.config.trim().is_empty() {
+            out.push(self.config.clone());
+        }
+        out
+    }
+}
+
 /// One task of a suite.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Task {
@@ -268,11 +281,14 @@ fn load_task(suite: &Path, id: &str) -> Result<Task, Error> {
         }
     }
     let run_file = format!("tasks/{id}/run.toml");
-    let run = if suite.join(&run_file).is_file() {
+    let run: RunSpec = if suite.join(&run_file).is_file() {
         parse(&run_file, &read(suite, &run_file)?, &[])?
     } else {
         RunSpec::default()
     };
+    crate::overrides::check(&run.fragments()).map_err(|p| invalid(&run_file, p))?;
+    pmt_core::capability::CapabilitySet::parse(&meta.capabilities)
+        .map_err(|e| invalid(&task_file, e.message()))?;
     let mock = dir.join("mock.toml");
     let grader_file = format!("tasks/{id}/grader/grader.toml");
     let grader = if dir.join("grader").is_dir() {

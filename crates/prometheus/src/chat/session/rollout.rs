@@ -104,9 +104,10 @@ impl ToolReplay for Recorder {
     }
 }
 
-/// The plugin view of a session: a rollout (or a session on a temporary
-/// harness tree) reads its hooks from that tree instead of the active
-/// version (spec: harness-evolution, Isolated rollouts).
+/// The plugin view of a session on harness `tree`: a rollout, a session
+/// on a temporary tree, or one on its recorded version reads its harness
+/// hooks from that tree instead of the active version (spec:
+/// harness-evolution, Isolated rollouts; Harness loaded once per session).
 pub(super) fn plugins(
     scope: &pmt_config::ProfileScope,
     plugins: crate::plugins_host::ProfilePlugins,
@@ -123,6 +124,33 @@ pub(super) fn plugins(
 }
 
 impl super::Factory {
+    /// The plugin view of session `id`, whose harness hooks are those of
+    /// the tree it runs on: a rollout's candidate or a temporary tree
+    /// (already in the factory's view), else the version recorded on its
+    /// row, never whatever is ACTIVE now (spec: harness-evolution, Harness
+    /// loaded once per session). The profile's live set swaps ACTIVE's
+    /// hooks in after an adoption, so an open session started on an older
+    /// version, a resumed one, or an eval of a named version would
+    /// otherwise run another version's hooks. One view per tree, shared
+    /// by the factory's sessions on it.
+    pub(super) fn plugins_for(
+        &self,
+        id: pmt_core::id::SessionId,
+    ) -> crate::plugins_host::ProfilePlugins {
+        if self.options.rollout.is_some() || self.options.harness_tree.is_some() {
+            return self.plugins.clone();
+        }
+        let Some(tree) = self.harness_dir(id) else {
+            return self.plugins.clone();
+        };
+        self.harness_plugins
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(tree)
+            .or_insert_with_key(|tree| plugins(&self.scope, self.plugins.clone(), Some(tree)))
+            .clone()
+    }
+
     /// The harness tree session `id` runs with: a rollout's candidate,
     /// else the tree of the version recorded on its row.
     pub(super) fn harness_dir(&self, id: pmt_core::id::SessionId) -> Option<PathBuf> {

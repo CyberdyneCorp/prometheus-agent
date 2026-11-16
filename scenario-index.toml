@@ -4672,7 +4672,7 @@ capabilities = [
 "Unknown hook event" = ["crates/pmt-evolve/tests/validate.rs::an_unknown_hook_event_is_refused"]
 
 [harness-evolution."Harness loaded once per session"]
-"Adoption mid-session" = { tests = ["crates/prometheus/tests/harness_cli.rs::an_open_session_keeps_its_harness_until_an_explicit_now", "crates/prometheus/tests/harness_cli.rs::a_now_activation_rebuilds_an_open_session_at_its_next_turn"], note = "the new version is activated with `harness apply`; `evolve adopt [--now]` writes and activates the adopted version through the same activation and `--now` path (crates/prometheus/src/evolve_cmd/proposals.rs)" }
+"Adoption mid-session" = { tests = ["crates/prometheus/tests/harness_cli.rs::an_open_session_keeps_its_harness_until_an_explicit_now", "crates/prometheus/tests/harness_hooks.rs::a_session_runs_the_hooks_of_its_recorded_version", "crates/prometheus/tests/harness_cli.rs::a_now_activation_rebuilds_an_open_session_at_its_next_turn"], note = "the new version is activated with `harness apply`; `evolve adopt [--now]` writes and activates the adopted version through the same activation and `--now` path (crates/prometheus/src/evolve_cmd/proposals.rs)" }
 "Harness layer placement" = ["crates/pmt-agent/tests/turn/prompt.rs::the_harness_opens_the_profile_tier_after_the_identity"]
 
 [harness-evolution."Harness execution confinement"]
@@ -4691,6 +4691,7 @@ capabilities = [
 [harness-evolution."Automatic triggers after failed or long tasks"]
 "Daily cap" = ["crates/pmt-evolve/tests/jobs.rs::the_fourth_automatic_job_of_a_day_is_not_queued", "crates/pmt-evolve/src/job/auto.rs::a_fourth_qualifying_session_is_stopped_by_the_daily_cap", "crates/prometheus/tests/evolve_auto.rs::the_daily_cap_stops_a_second_job_and_its_notice"]
 "Queued job is announced" = ["crates/prometheus/tests/evolve_auto.rs::a_session_that_fails_after_a_tool_call_queues_a_job_and_says_so", "crates/prometheus/tests/evolve_auto.rs::the_line_interface_says_so_as_the_user_leaves", "crates/prometheus/tests/evolve_auto.rs::a_chat_is_told_when_new_ends_a_session_that_queues_a_job"]
+"Evaluation tasks never evolve the harness" = ["crates/prometheus/tests/evolve_auto.rs::a_failing_eval_task_queues_no_job", "crates/pmt-evolve/src/job/auto.rs::failed_and_long_sessions_qualify_and_others_do_not"]
 
 [harness-evolution."Evolution task capture"]
 "Git workspace" = ["crates/pmt-evolve/tests/jobs.rs::a_git_session_freezes_head_and_a_patch_that_reproduces_it"]
@@ -4763,6 +4764,7 @@ capabilities = [
 "Demo resume" = ["crates/prometheus/tests/evolve_demo.rs::evolve_demo_reports_no_model_calls_when_run_again"]
 
 [harness-evolution."Human-only evaluation of proposals (upgrade)"]
+"Review runs confined" = ["crates/prometheus/tests/evolve_engine.rs::a_review_eval_runs_only_under_the_rollout_confinement"]
 "Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only", "crates/prometheus/tests/evolve_engine.rs::a_user_suite_compares_the_base_and_the_proposed_harness"], note = "a_user_suite_compares_the_base_and_the_proposed_harness runs a user suite through the eval engine on the base version and on the proposal materialised as a temporary harness (scores 0 vs 100, no version written); the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
 
 [experience-library."Library layout"]
@@ -4827,6 +4829,8 @@ capabilities = [
 
 [replay-and-evaluation."Eval suite format"]
 "Missing prompt" = ["crates/prometheus/tests/eval_cli.rs::a_task_without_a_prompt_fails_validation_naming_its_file"]
+"Override that loosens isolation" = ["crates/prometheus/tests/eval_cli.rs::a_run_toml_that_loosens_isolation_is_refused", "crates/pmt-eval/src/overrides.rs::isolation_settings_are_refused", "crates/prometheus/src/eval_cmd/exec.rs::isolation_is_applied_again_after_a_tasks_overrides"]
+"Task capability beyond the profile" = ["crates/prometheus/tests/eval_cli.rs::a_task_asking_for_more_than_the_profile_grants_does_not_run"]
 
 [replay-and-evaluation."Eval run"]
 "Budget stops a run" = { tests = ["crates/prometheus/tests/eval_cli.rs::the_budget_refuses_the_third_task_and_skips_the_rest"], note = "a fake chat-completions provider reports usage and a probe run fixes the price so each task costs 0.20 USD; the run budget is the eval root's budgets.root_usd, refused on the call's worst case" }
@@ -4835,7 +4839,7 @@ capabilities = [
 "Tampered deliverable" = ["crates/prometheus/tests/eval_cli.rs::a_resumed_run_reruns_only_tasks_whose_deliverables_changed"]
 
 [replay-and-evaluation."Answer-free boundary"]
-"Agent searches for the answer" = ["crates/prometheus/tests/eval_cli.rs::a_task_reaching_for_grader_material_is_contaminated", "crates/pmt-eval/src/boundary.rs::grader_paths_and_leak_globs_are_attempts", "crates/pmt-eval/src/run.rs::evolution_sees_only_the_five_fields"]
+"Agent searches for the answer" = ["crates/prometheus/tests/eval_cli.rs::a_task_reaching_for_grader_material_is_contaminated", "crates/pmt-eval/src/boundary.rs::grader_paths_and_leak_globs_are_attempts"]
 
 [replay-and-evaluation."Post-hoc judging"]
 "Judge failure is not a zero" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/prometheus/tests/eval_judge.rs::script_graders_score_deliverables_and_unexecuted_tasks_stay_ungraded"]

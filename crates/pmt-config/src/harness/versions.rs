@@ -78,6 +78,17 @@ fn sequence_of(id: &str) -> Option<u64> {
     digits.parse().ok()
 }
 
+/// Whether `id` has the shape of a version id, `h<n>-<fingerprint>`.
+/// References come from clients (RPC, CLI) and are joined into paths, so
+/// anything else (`../`, separators) is not found before it reaches the
+/// filesystem.
+fn is_version_id(id: &str) -> bool {
+    sequence_of(id).is_some()
+        && id.split_once('-').is_some_and(|(_, rest)| {
+            !rest.is_empty() && rest.chars().all(|c| c.is_ascii_alphanumeric())
+        })
+}
+
 /// One profile's harness directory.
 #[derive(Debug, Clone)]
 pub struct HarnessDir {
@@ -182,6 +193,9 @@ impl HarnessDir {
     ///
     /// `harness.version_not_found`; `harness.io`.
     pub fn version(&self, id: &str) -> Result<VersionInfo, Error> {
+        if !is_version_id(id) {
+            return Err(not_found(id));
+        }
         let path = self.root.join(VERSIONS).join(id).join(VERSION_FILE);
         let text = match private_fs::read_no_follow(&path) {
             Ok(text) => text,
@@ -218,8 +232,12 @@ impl HarnessDir {
     ///
     /// # Errors
     ///
-    /// `harness.io`, also for a tree holding a symlink or non-UTF-8 file.
+    /// `harness.version_not_found` for a malformed id; `harness.io`, also
+    /// for a tree holding a symlink or non-UTF-8 file.
     pub fn tree(&self, id: &str) -> Result<Tree, Error> {
+        if !is_version_id(id) {
+            return Err(not_found(id));
+        }
         let dir = self.tree_dir(id);
         let (tree, problems) = Tree::read(&dir).map_err(|e| io_error(&dir, &e))?;
         match problems.first() {
@@ -354,5 +372,25 @@ mod tests {
             harness.resolve("h9").unwrap_err().code().code,
             "harness.version_not_found"
         );
+    }
+
+    /// A reference that would leave the versions directory is not found.
+    #[test]
+    fn references_that_leave_the_versions_directory_are_not_found() {
+        let dir = tempfile::tempdir().unwrap();
+        let harness = HarnessDir::of(dir.path());
+        let active = harness.active_id().unwrap();
+        for reference in [
+            "../../../other/harness/versions/h1-abc".to_owned(),
+            format!("h1-x/../../{active}"),
+            "h1-".to_owned(),
+        ] {
+            for err in [
+                harness.resolve(&reference).unwrap_err(),
+                harness.tree(&reference).unwrap_err(),
+            ] {
+                assert_eq!(err.code().code, "harness.version_not_found", "{reference}");
+            }
+        }
     }
 }

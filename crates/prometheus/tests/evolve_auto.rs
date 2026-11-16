@@ -116,6 +116,50 @@ fn the_daily_cap_stops_a_second_job_and_its_notice() {
     assert_eq!(jobs(home.path()).len(), 1);
 }
 
+/// Scenario: Evaluation tasks never evolve the harness: an `eval run`
+/// task session that fails after a tool call queues no job (benchmark
+/// prompts would otherwise tune the harness to the suite measuring it).
+#[cfg(feature = "eval")]
+#[test]
+fn a_failing_eval_task_queues_no_job() {
+    let home = mock_home();
+    common::append_config(home.path(), &auto_config(40));
+    let suite = home.path().join("suite");
+    let task = suite.join("tasks/t1");
+    std::fs::create_dir_all(&task).unwrap();
+    std::fs::write(
+        suite.join("suite.toml"),
+        "name = \"auto\"\nversion = \"1\"\ndomain = \"accounting\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        task.join("task.toml"),
+        "prompt = \"reconcile the ledger\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        task.join("mock.toml"),
+        "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = { command = \"echo hi\" }\n\n\
+         [[rule]]\nstep = 1\nrepeat = true\nfault = \"auth_error\"\n",
+    )
+    .unwrap();
+    let out = run(
+        home.path(),
+        &["eval", "run", suite.to_str().unwrap(), "--provider", "mock"],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", stderr(&out));
+    let result = std::fs::read_dir(home.path().join("profiles/default/evals/runs"))
+        .unwrap()
+        .flatten()
+        .map(|run| run.path().join("tasks/t1/1/result.json"))
+        .find(|p| p.is_file())
+        .expect("the task ran");
+    let result: Value = serde_json::from_str(&std::fs::read_to_string(result).unwrap()).unwrap();
+    assert_eq!(result["ok"], false, "the task failed: {result}");
+    assert!(jobs(home.path()).is_empty(), "{:?}", jobs(home.path()));
+    assert!(!stderr(&out).contains(QUEUED), "{}", stderr(&out));
+}
+
 /// The line interface says it as the user leaves.
 #[cfg(unix)]
 #[test]

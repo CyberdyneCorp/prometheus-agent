@@ -144,19 +144,6 @@ pub struct TaskResult {
 }
 
 impl TaskResult {
-    /// What harness evolution and selection may see of a run result:
-    /// `ok`, `delivered`, `cost_usd`, `wall_secs` and `error` only.
-    #[must_use]
-    pub fn for_evolution(&self) -> serde_json::Value {
-        serde_json::json!({
-            "ok": self.ok,
-            "delivered": self.delivered,
-            "cost_usd": self.cost_usd,
-            "wall_secs": self.wall_secs,
-            "error": self.error,
-        })
-    }
-
     /// The task executed (it can be judged).
     #[must_use]
     pub fn executed(&self) -> bool {
@@ -369,22 +356,4 @@ pub fn write_json(path: &Path, value: &impl Serialize) -> Result<(), Error> {
     }
     let text = serde_json::to_string_pretty(value).unwrap_or_default();
     std::fs::write(path, text + "\n").map_err(|e| Error::io(&codes::EVAL_IO, path, &e))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn evolution_sees_only_the_five_fields() {
-        let result = TaskResult {
-            task_id: "t1".into(),
-            contaminated: true,
-            exit_status: Some(0),
-            ..TaskResult::default()
-        };
-        let view = result.for_evolution();
-        let keys: Vec<&String> = view.as_object().unwrap().keys().collect();
-        assert_eq!(keys, ["cost_usd", "delivered", "error", "ok", "wall_secs"]);
-    }
 }

@@ -28,8 +28,9 @@ fn a_task_without_a_prompt_fails_validation_naming_its_file() {
 }
 
 /// Scenario: Regression in tool dispatch, scored by `eval`: the bundled
-/// smoke suite runs on the mock provider and every task it can run here
-/// scores 100%; results hold no score.
+/// smoke suite runs on the mock provider, every task executes (the memory
+/// task on a scratch memory store) and `eval judge` scores it 100%;
+/// results hold no score.
 #[test]
 fn the_bundled_smoke_suite_runs_and_judges_at_full_score() {
     let home = mock_home();
@@ -85,25 +86,25 @@ fn the_bundled_smoke_suite_runs_and_judges_at_full_score() {
         runs.join("tasks/file_edit/1/deliverables/files/README.md")
             .is_file()
     );
-    // The memory task is kept away from the profile's memory: skipped.
-    let skipped = read_json(&runs.join("tasks/memory_write/1/result.json"));
-    assert_eq!(skipped["skipped"], "needs memory");
+    // The memory task writes a scratch store of its own, never the
+    // profile's memory.
+    let memory = read_json(&runs.join("tasks/memory_write/1/result.json"));
+    assert_eq!(memory["ok"], true, "{memory}");
+    assert!(memory["skipped"].is_null(), "{memory}");
+    assert!(runs.join("tasks/memory_write/1/memory/memory.db").is_file());
+    let profile_memory = ok(&run(home.path(), &["memory", "list"]));
+    assert!(
+        !profile_memory.contains("Prefers CSV"),
+        "the profile's memory is untouched: {profile_memory}"
+    );
 
     let judged = run(home.path(), &["eval", "judge", "smoke1"]);
-    assert_eq!(
-        judged.status.code(),
-        Some(5),
-        "the skipped task is ungraded: {}",
-        stdout(&judged)
-    );
+    assert_eq!(judged.status.code(), Some(0), "{}", stdout(&judged));
     let rows = read_json(&runs.join("judged.json"));
-    for row in rows["rows"].as_array().unwrap() {
-        if row["task_id"] == "memory_write" {
-            assert_eq!(row["graded"], false);
-            assert!(row["frac"].is_null());
-        } else {
-            assert_eq!(row["frac"], 1.0, "{row}");
-        }
+    let rows = rows["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 13);
+    for row in rows {
+        assert_eq!(row["frac"], 1.0, "{row}");
     }
     let report = json(home.path(), &["eval", "report", "smoke1"]);
     assert_eq!(report["runs"][0]["score"], 100.0, "{report}");
@@ -350,4 +351,87 @@ fn a_task_reaching_for_grader_material_is_contaminated() {
         "{rows:?}"
     );
     assert_eq!(rows[2]["frac"], 1.0);
+}
+
+/// Scenario: Override that loosens isolation: a suite's `run.toml` cannot
+/// turn approvals off or memory on; validation and the run refuse it
+/// naming the file and the key.
+#[test]
+fn a_run_toml_that_loosens_isolation_is_refused() {
+    let home = mock_home();
+    let dir = home.path().join("suite");
+    suite(&dir, "", &[Task::new("t1", "hi", "ok", "ok")]);
+    for (set, key) in [
+        (r#"approvals.mode="off""#, "approvals.mode"),
+        ("memory.memory_enabled=true", "memory.memory_enabled"),
+    ] {
+        std::fs::write(
+            dir.join("tasks/t1/run.toml"),
+            format!("set = [{}]\n", toml::Value::String(set.to_owned())),
+        )
+        .unwrap();
+        for args in [
+            vec!["eval", "validate", dir.to_str().unwrap()],
+            vec!["eval", "run", dir.to_str().unwrap(), "--provider", "mock"],
+        ] {
+            let out = run(home.path(), &args);
+            assert_eq!(out.status.code(), Some(65), "{args:?}");
+            let err = common::stderr(&out);
+            assert!(
+                err.contains("tasks/t1/run.toml") && err.contains(key),
+                "{err}"
+            );
+        }
+    }
+}
+
+/// Scenario: Task capability beyond the profile: the task does not run
+/// and its result names the capability; one within the grant runs.
+#[test]
+fn a_task_asking_for_more_than_the_profile_grants_does_not_run() {
+    let home = mock_home();
+    let dir = home.path().join("suite");
+    suite(
+        &dir,
+        "",
+        &[
+            Task::new("beyond", "hi", "ok", "ok"),
+            Task::new("within", "hi", "ok", "ok"),
+        ],
+    );
+    std::fs::write(
+        dir.join("tasks/beyond/task.toml"),
+        "prompt = \"hi\"\ncapabilities = [\"fs.write:/srv/answers/**\"]\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tasks/within/task.toml"),
+        "prompt = \"hi\"\ncapabilities = [\"llm.call\"]\n",
+    )
+    .unwrap();
+    let out = run(
+        home.path(),
+        &[
+            "eval",
+            "run",
+            dir.to_str().unwrap(),
+            "--provider",
+            "mock",
+            "--run-id",
+            "caps",
+        ],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", stdout(&out));
+    let runs = home.path().join("profiles/default/evals/runs/caps/tasks");
+    let beyond = read_json(&runs.join("beyond/1/result.json"));
+    assert_eq!(beyond["ok"], false);
+    assert!(beyond["session_id"].is_null(), "no session: {beyond}");
+    assert!(
+        beyond["error"]
+            .as_str()
+            .unwrap()
+            .contains("fs.write:/srv/answers/**"),
+        "{beyond}"
+    );
+    assert_eq!(read_json(&runs.join("within/1/result.json"))["ok"], true);
 }

@@ -112,8 +112,18 @@ Mock script rules SHALL be able to inject the faults `rate_limit` (with `retry_a
 - **THEN** `demo.json` SHALL report zero new executions and zero new editor calls
 
 ### Requirement: Eval suite format
-An eval suite SHALL be a directory containing `suite.toml` (`name`, `version`, `domain`, `default_timeout_secs` default 600, `default_toolsets`, optional `budget_usd`) and `tasks/<task_id>/` each with `task.toml` (`prompt`, optional `domain`, `timeout_secs`, `toolsets`, `capabilities`, `files` copied into the task workspace) and an optional `grader/` directory; `prometheus eval validate <suite>` SHALL check the format and exit 65 naming the first invalid file. Suites SHALL be discovered from `<profile home>/evals/` and paths given on the command line.
+An eval suite SHALL be a directory containing `suite.toml` (`name`, `version`, `domain`, `default_timeout_secs` default 600, `default_toolsets`, optional `budget_usd`) and `tasks/<task_id>/` each with `task.toml` (`prompt`, optional `domain`, `timeout_secs`, `toolsets`, `capabilities`, `files` copied into the task workspace) and an optional `grader/` directory; `prometheus eval validate <suite>` SHALL check the format and exit 65 naming the first invalid file. Suites SHALL be discovered from `<profile home>/evals/` and paths given on the command line. A task's `capabilities` SHALL lie within the profile's capability grant: a suite names what its tasks need and SHALL NOT widen the grant, so a task asking for more SHALL NOT run and its result SHALL name the missing capability. The configuration overrides of an offline task's `run.toml` SHALL NOT change the isolation of eval task sessions: validation SHALL refuse any override outside the settings that shape the agent's behaviour for the task (security, egress, sandbox, terminal backend, memory, approvals other than a mode that still asks, the run budget, provider endpoints and credentials are refused), and the run SHALL apply the isolation again after the overrides.
 **Milestone:** M3
+
+#### Scenario: Override that loosens isolation
+- **GIVEN** a task whose `run.toml` sets `approvals.mode = "off"` or `memory.memory_enabled = true`
+- **WHEN** the user runs `prometheus eval validate ./suite` or `prometheus eval run ./suite`
+- **THEN** the system SHALL exit 65 naming `tasks/<id>/run.toml` and the refused key
+
+#### Scenario: Task capability beyond the profile
+- **GIVEN** a task whose `task.toml` lists a capability the profile does not grant
+- **WHEN** the suite runs
+- **THEN** the task SHALL NOT execute and its result SHALL name the missing capability
 
 #### Scenario: Missing prompt
 - **GIVEN** a task directory whose `task.toml` lacks `prompt`

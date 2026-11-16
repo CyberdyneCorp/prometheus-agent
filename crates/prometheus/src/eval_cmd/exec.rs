@@ -2,9 +2,12 @@
 //! boundary): a fresh hidden `source = eval` child of the run's root
 //! session, tagged with the run id, in a workspace of its own built from
 //! the task's files only — grader material is never copied in, and the
-//! session's sandbox reads nothing but its workspace. Memory is off and
-//! approvals fail closed, so tasks neither read nor change the user's
-//! state; the run's budget is the root lineage's `budgets.root_usd`.
+//! session's sandbox reads nothing but its workspace. Memory is off (a
+//! task that needs it gets a scratch memory store of its own), approvals
+//! fail closed and no automatic evolution job is queued, so tasks neither
+//! read nor change the user's state; the run's budget is the root
+//! lineage's `budgets.root_usd`. A task's `run.toml` overrides are merged
+//! over that and the isolation is applied again after them.
 //!
 //! Afterwards the unit directory holds `trajectory.jsonl`,
 //! `deliverables/` (`answer.md` and the workspace as `files/`) and
@@ -19,7 +22,7 @@ use pmt_agent::turn::{
     EventSink, ExitReason, Interrupt, Issuer, TurnInput, TurnOptions, TurnResult,
 };
 use pmt_config::ProfileScope;
-use pmt_config::schema::{ApprovalMode, UnattendedApproval};
+use pmt_config::schema::{ApprovalMode, MemoryReviewMode, UnattendedApproval};
 use pmt_core::cancel::CancelToken;
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::{Error, codes};
@@ -91,6 +94,10 @@ pub struct Unit {
     pub interrupt: bool,
     /// The container image of its terminal backend.
     pub image: Option<String>,
+    /// Capabilities it needs; they must lie within the profile's grant.
+    pub capabilities: Vec<String>,
+    /// It uses memory: its session gets a scratch memory store.
+    pub memory: bool,
 }
 
 /// Fills or reads a task's directories around its session (a benchmark
@@ -119,12 +126,8 @@ pub fn isolated(
     max_turns: Option<u32>,
 ) -> ProfileScope {
     scope.patched(move |config| {
-        config.memory.nudge_interval = 0;
-        config.memory.memory_enabled = false;
-        config.memory.user_profile_enabled = false;
+        isolate(config);
         config.approvals.mode = ApprovalMode::Manual;
-        config.approvals.single_query_mode = UnattendedApproval::Deny;
-        config.lsp.enabled = false;
         config.replay.cache.mode = cache;
         if let Some(usd) = budget {
             config.budgets.root_usd = usd;
@@ -133,6 +136,22 @@ pub fn isolated(
             config.agent.max_iterations = turns;
         }
     })
+}
+
+/// What every task session keeps whatever its overrides say: no memory
+/// (its own or an external provider's), approvals that fail closed, no
+/// automatic evolution job and no language servers.
+fn isolate(config: &mut pmt_config::Config) {
+    config.memory.nudge_interval = 0;
+    config.memory.memory_enabled = false;
+    config.memory.user_profile_enabled = false;
+    "builtin".clone_into(&mut config.memory.provider);
+    if config.approvals.mode == ApprovalMode::Off {
+        config.approvals.mode = ApprovalMode::Manual;
+    }
+    config.approvals.single_query_mode = UnattendedApproval::Deny;
+    config.evolve.auto.enabled = false;
+    config.lsp.enabled = false;
 }
 
 /// `config` with `fragments` (TOML documents, or `key=value` lines)
@@ -239,21 +258,33 @@ fn ensure_image(scope: &ProfileScope, image: &str) -> Result<(), String> {
     pulled.then_some(()).ok_or_else(unavailable)
 }
 
-/// The scope of `unit`: the run's, its toolsets, image and fragments.
+/// The configuration of `unit`: the run's `base` with its fragments,
+/// isolated again after them, then its toolsets and image; a task that
+/// uses memory has it on (its session writes a scratch store), without
+/// write approvals nobody could answer.
+fn unit_config(base: &pmt_config::Config, unit: &Unit) -> Result<pmt_config::Config, String> {
+    let mut c = merged(base, &unit.config)?;
+    isolate(&mut c);
+    if unit.memory {
+        c.memory.memory_enabled = true;
+        c.memory.user_profile_enabled = true;
+        c.memory.write_approval = false;
+        c.memory.review_mode = MemoryReviewMode::Off;
+    }
+    if !unit.toolsets.is_empty() {
+        c.tools.enabled_toolsets.clone_from(&unit.toolsets);
+    }
+    if let Some(image) = &unit.image {
+        "container".clone_into(&mut c.terminal.backend);
+        c.terminal.container.image.clone_from(image);
+    }
+    Ok(c)
+}
+
+/// The scope of `unit` ([`unit_config`]).
 fn unit_scope(runner: &Runner, unit: &Unit) -> Result<ProfileScope, String> {
-    let config = merged(runner.scope.config(), &unit.config)?;
-    let toolsets = unit.toolsets.clone();
-    let image = unit.image.clone();
-    Ok(runner.scope.patched(move |c| {
-        *c = config;
-        if !toolsets.is_empty() {
-            c.tools.enabled_toolsets = toolsets;
-        }
-        if let Some(image) = image {
-            "container".clone_into(&mut c.terminal.backend);
-            c.terminal.container.image = image;
-        }
-    }))
+    let config = unit_config(runner.scope.config(), unit)?;
+    Ok(runner.scope.patched(move |c| *c = config))
 }
 
 /// What the session left.
@@ -262,11 +293,49 @@ struct Ran {
     turn: Result<TurnResult, Error>,
 }
 
+/// The scratch memory store of a task that uses memory, under its unit
+/// directory: the profile's memory is never read or written.
+fn scratch_memory(
+    scope: &ProfileScope,
+    unit: &Unit,
+    dir: &Path,
+) -> Result<Option<Arc<Store>>, Error> {
+    if !unit.memory {
+        return Ok(None);
+    }
+    let memory = dir.join("memory");
+    pmt_core::private_fs::create_dir(&memory).map_err(|e| io(&memory, &e))?;
+    Store::open_at(scope, &memory.join("memory.db")).map(|s| Some(Arc::new(s)))
+}
+
+/// Refuses a task whose capabilities exceed the profile's grant: a suite
+/// can name what its tasks need, never widen what the profile allows.
+fn check_capabilities(scope: &ProfileScope, unit: &Unit) -> Result<(), String> {
+    if unit.capabilities.is_empty() {
+        return Ok(());
+    }
+    let wanted = pmt_core::capability::CapabilitySet::parse(&unit.capabilities)
+        .map_err(|e| e.message().to_owned())?;
+    let grants = pmt_config::grants::SessionGrants::new(
+        pmt_config::grants::baseline(&scope.config().security),
+        pmt_config::grants::GrantsFile::of(scope.profile()),
+    );
+    let held = grants
+        .capabilities(&pmt_config::grants::Subject::Profile)
+        .map_err(|e| e.message().to_owned())?;
+    held.narrow(&wanted).map(|_| ()).map_err(|e| {
+        format!(
+            "needs a capability the profile does not grant: {}",
+            e.message()
+        )
+    })
+}
+
 async fn session(
     runner: &Runner,
     unit: &Unit,
     scope: ProfileScope,
-    ws: &Path,
+    (ws, dir): (&Path, &Path),
 ) -> Result<Ran, Error> {
     let flags = RouteFlags {
         provider: runner.provider.as_deref(),
@@ -279,6 +348,7 @@ async fn session(
         no_context_files: true,
         source_tag: Some(runner.run_id.clone()),
         harness_tree: runner.harness_tree.clone(),
+        memory_store: scratch_memory(&scope, unit, dir)?,
         ..Options::default()
     };
     let factory = Factory::with_store(
@@ -433,10 +503,11 @@ async fn run_in(
         hooks.prepare(unit, &ws)?;
     }
     let scope = unit_scope(runner, unit)?;
+    check_capabilities(&scope, unit)?;
     if let Some(image) = &unit.image {
         ensure_image(&scope, image)?;
     }
-    let ran = Box::pin(session(runner, unit, scope.clone(), &ws))
+    let ran = Box::pin(session(runner, unit, scope.clone(), (&ws, dir)))
         .await
         .map_err(|e| e.message().to_owned())?;
     result.session_id = Some(ran.id.to_string());
@@ -519,6 +590,41 @@ pub fn root(store: &Store, run: &RunDir, run_id: &str) -> Result<SessionId, Erro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Scenario: Override that loosens isolation (the run's half: even an
+    /// override that got past validation cannot loosen the session).
+    #[test]
+    fn isolation_is_applied_again_after_a_tasks_overrides() {
+        let mut base = pmt_config::Config::default();
+        base.evolve.auto.enabled = true;
+        let unit = Unit {
+            config: vec![
+                r#"approvals.mode="off""#.to_owned(),
+                r#"approvals.single_query_mode="approve""#.to_owned(),
+                "memory.memory_enabled=true\nmemory.user_profile_enabled=true".to_owned(),
+                "[evolve.auto]\nenabled = true\n".to_owned(),
+            ],
+            ..Unit::default()
+        };
+        let config = unit_config(&base, &unit).unwrap();
+        assert_eq!(config.approvals.mode, ApprovalMode::Manual);
+        assert_eq!(config.approvals.single_query_mode, UnattendedApproval::Deny);
+        assert!(!config.memory.memory_enabled && !config.memory.user_profile_enabled);
+        assert!(!config.evolve.auto.enabled);
+        let memory = unit_config(
+            &base,
+            &Unit {
+                memory: true,
+                ..unit
+            },
+        )
+        .unwrap();
+        assert!(
+            memory.memory.memory_enabled,
+            "a memory task gets its scratch memory"
+        );
+        assert_eq!(memory.approvals.single_query_mode, UnattendedApproval::Deny);
+    }
 
     #[test]
     fn fragments_merge_over_the_config() {

@@ -122,6 +122,9 @@ pub struct Options {
     /// session's version (an eval task of `evolve review --eval` on the
     /// proposed harness).
     pub harness_tree: Option<PathBuf>,
+    /// A store the session's built-in memory uses instead of the
+    /// profile's (an eval task's scratch memory).
+    pub memory_store: Option<Arc<Store>>,
     /// `--domain`, or the scheduled job's or kanban task's `domain`: the
     /// session's experience-library domain (spec: experience-library).
     pub domain: Option<String>,
@@ -186,6 +189,8 @@ pub struct Factory {
     current: SharedScope,
     /// The profile's live plugin set.
     plugins: crate::plugins_host::ProfilePlugins,
+    /// That set per harness tree a session runs on ([`Factory::plugins_for`]).
+    harness_plugins: Mutex<std::collections::HashMap<PathBuf, crate::plugins_host::ProfilePlugins>>,
     /// The configuration the plugin set is loaded from: `scope` until a
     /// one-process `/plugins reload` re-reads `config.toml`.
     plugin_scope: SharedScope,
@@ -368,6 +373,7 @@ impl Factory {
             desktop: None,
             daemon: None,
             plugins,
+            harness_plugins: Mutex::default(),
             reread: None,
             route_flags: delegation::OwnedFlags::of(flags),
             delegation_inbox: None,
@@ -687,7 +693,7 @@ impl Factory {
             skill_nudge: Mutex::new(Nudge::new(&self.scope.config().skills, session.source)),
             tool_state,
             session_surface,
-            plugins: self.plugins.clone(),
+            plugins: self.plugins_for(id),
             surface: session.source.as_str(),
             plugin_sections,
             notices,
@@ -718,7 +724,7 @@ impl Factory {
     fn observe_model(&self, model: &SwitchableModel, id: SessionId, notices: progress::Notices) {
         model.watch_credentials(borrowed_watch(notices));
         model.observe_api(api_hooks::ApiHooks::new(
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
         ));
     }
@@ -736,7 +742,7 @@ impl Factory {
         }
         Arc::new(lifecycle::LifecycleHooks::new(
             events,
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
         ))
     }
@@ -783,7 +789,7 @@ impl Factory {
         setup.redactor = self.redactor.clone();
         setup.interactive = self.options.interactive;
         setup.unattended = !self.options.interactive;
-        setup.turn_hooks = Some(self.plugins.turn_hooks(self.plugin_call(id)));
+        setup.turn_hooks = Some(self.plugins_for(id).turn_hooks(self.plugin_call(id)));
     }
 
     /// What plugin host calls of session `id` report as their session:
@@ -809,7 +815,7 @@ impl Factory {
         let terminal = environment.and_then(|e| e.terminal.as_ref());
         let guardian = model.map(|model| self.models.guardian(model, id));
         let hooks = crate::plugins_host::approvals::PluginApprovals::new(
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
             self.redactor.clone(),
             &self.scope.config().plugins,
@@ -951,7 +957,7 @@ impl Factory {
                 .or_else(|| self.notices.clone()),
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
-            plugins: &self.plugins,
+            plugins: &self.plugins_for(id),
             egress: &self.egress(id, &denials, at.hosts.clone()),
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
@@ -1012,7 +1018,7 @@ impl Factory {
             (Clarifier::unattended(), None)
         };
         let clarifier = clarifier.with_observer(crate::plugins_host::approvals::input_observer(
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
         ));
         let tools = AgentTools::new(
@@ -1152,7 +1158,7 @@ impl Factory {
             .harness_dir(id)
             .map(|dir| dir.join("skills"))
             .filter(|dir| dir.is_dir());
-        let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
+        let (plugins, call) = (self.plugins_for(id), self.plugin_call(id));
         let announce = announce.clone();
         setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
             announce.skill(skill, action);
@@ -1191,7 +1197,7 @@ impl Factory {
             agent: Arc::clone(agent),
             redactor: self.redactor.clone(),
             hooks: self
-                .plugins
+                .plugins_for(id)
                 .tool_hooks_with_guidance(self.plugin_call(id), &self.scope.config().plugins),
             model: Arc::clone(model),
         };
@@ -1330,7 +1336,7 @@ impl Factory {
             redactor: &self.redactor,
             context_window: None,
             hooks: self
-                .plugins
+                .plugins_for(child)
                 .tool_hooks_with_guidance(self.plugin_call(child), &self.scope.config().plugins),
             route: &route,
         })

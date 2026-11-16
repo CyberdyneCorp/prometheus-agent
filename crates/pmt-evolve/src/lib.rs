@@ -11,3 +11,13 @@ pub mod gate;
 pub mod harness;
 pub mod job;
 pub mod proposal;
+
+/// Whether `id` is `<prefix><ULID>`: the shape of every job and proposal
+/// id this crate mints. Ids come from clients (RPC, CLI) and are joined
+/// into paths, so anything else (`../`, separators) is refused as
+/// not found before it reaches the filesystem.
+#[must_use]
+pub fn is_minted_id(id: &str, prefix: &str) -> bool {
+    id.strip_prefix(prefix)
+        .is_some_and(|rest| ulid::Ulid::from_string(rest).is_ok())
+}

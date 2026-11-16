@@ -1,9 +1,10 @@
 //! Rollout workspaces (spec: harness-evolution, Isolated rollouts;
 //! Evolution task capture). A rollout runs in a fresh directory built from
-//! the frozen task: for a git task, a detached checkout of the recorded
-//! commit from a `--shared` clone (which only reads the user's
-//! repository), with `uncommitted.patch` applied and every leak-glob path
-//! tracked at that commit deleted; otherwise a copy of `task/source/`. The
+//! the frozen task: for a git task, a checkout of the recorded commit
+//! from a `--shared` clone (which only reads the user's repository) with
+//! every leak-glob path tracked at that commit deleted, re-committed as a
+//! self-contained one-commit history (no alternates, no excluded blob),
+//! then `uncommitted.patch` applied; otherwise a copy of `task/source/`. The
 //! user's own workspace is never touched. A pristine copy taken before the
 //! rollout gives the workspace diff it delivers.
 
@@ -67,11 +68,57 @@ pub fn materialize(task: &Path, target: &Path) -> Result<(), Error> {
             &repo.commit,
         ],
     )?;
+    repo.remove_excluded(target)?;
+    fresh_history(target)?;
     let patch = source.join("uncommitted.patch");
     if std::fs::metadata(&patch).is_ok_and(|m| m.len() > 0) {
-        git(target, &["apply", "--binary", &patch.to_string_lossy()])?;
+        let patch = patch.to_string_lossy();
+        let mut args = vec!["apply", "--binary"];
+        let excludes: Vec<String> = repo
+            .excluded
+            .iter()
+            .map(|p| format!("--exclude={p}"))
+            .collect();
+        args.extend(excludes.iter().map(String::as_str));
+        args.push(&patch);
+        git(target, &args)?;
     }
     repo.remove_excluded(target)
+}
+
+/// Replaces the clone's history with one commit of the workspace as it is
+/// now (the recorded commit without its excluded paths). The clone's own
+/// history still holds the excluded files' blobs, reachable from HEAD
+/// through the alternates file into the user's object store, so a
+/// rollout could otherwise get every answer back with `git show
+/// HEAD:<path>`; and under the strict local sandbox those alternates are
+/// unreadable, which would break `git status` inside the rollout. The
+/// user's hooks, templates and signing settings are kept out.
+fn fresh_history(target: &Path) -> Result<(), Error> {
+    let dot_git = target.join(".git");
+    std::fs::remove_dir_all(&dot_git).map_err(|e| io(&dot_git, &e))?;
+    let hooks = format!("core.hooksPath={}", dot_git.join("no-hooks").display());
+    git(target, &["init", "--quiet", "--template="])?;
+    git(target, &["-c", &hooks, "add", "--all"])?;
+    git(
+        target,
+        &[
+            "-c",
+            &hooks,
+            "-c",
+            "user.name=Prometheus",
+            "-c",
+            "user.email=prometheus@localhost",
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--quiet",
+            "--no-verify",
+            "--allow-empty",
+            "-m",
+            "task workspace",
+        ],
+    )
 }
 
 fn git(dir: &Path, args: &[&str]) -> Result<(), Error> {

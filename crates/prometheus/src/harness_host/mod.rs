@@ -7,12 +7,11 @@
 //! its skills and subagents include that version's. Only an explicit
 //! `--now` activation ([`now`]) reaches an open session, at its next
 //! prompt rebuild. Harness hooks join the profile's hook set ([`hooks`]),
-//! sandboxed under the session's grants.
+//! sandboxed under the session's grants; each session's view swaps in the
+//! hooks of its own version.
 
 pub mod hooks;
 pub mod now;
-
-use std::path::PathBuf;
 
 use pmt_config::ProfileScope;
 use pmt_config::harness::{ALWAYS_ON, HarnessDir, Tree};
@@ -72,24 +71,6 @@ pub fn layer(scope: &ProfileScope, version: &str) -> Option<String> {
 pub fn active_layer(scope: &ProfileScope) -> Option<String> {
     let version = HarnessDir::of(scope.dir()).active_id().ok()?;
     layer(scope, &version)
-}
-
-/// `<version>/tree/<sub>` when it exists.
-fn tree_sub(scope: &ProfileScope, version: &str, sub: &str) -> Option<PathBuf> {
-    let dir = HarnessDir::of(scope.dir()).tree_dir(version).join(sub);
-    dir.is_dir().then_some(dir)
-}
-
-/// The `skills/` of `version`.
-#[must_use]
-pub fn skills_dir(scope: &ProfileScope, version: &str) -> Option<PathBuf> {
-    tree_sub(scope, version, "skills")
-}
-
-/// The `agents/` of `version`.
-#[must_use]
-pub fn agents_dir(scope: &ProfileScope, version: &str) -> Option<PathBuf> {
-    tree_sub(scope, version, "agents")
 }
 
 /// The validation rules of the profile: its cap, installed skills,

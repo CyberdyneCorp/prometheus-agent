@@ -640,6 +640,30 @@ fn a_user_suite_compares_the_base_and_the_proposed_harness() {
     assert!(text.contains("proposed: score 100.00"), "{text}");
 }
 
+/// A pending proposal's hooks and scripts never ran past an approval, so
+/// `evolve review --eval` runs under the confinement of rollouts: with
+/// `evolve.rollout.backend` naming the unsandboxed host backend it runs
+/// nothing at all.
+#[test]
+fn a_review_eval_runs_only_under_the_rollout_confinement() {
+    let s = Setup::new("", &[]);
+    let out = s.evolve(&s.task("TASK-SUM the ledger", ""), &["--k", "1"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    let id = s.proposals()[0]["id"].as_str().unwrap().to_owned();
+    append_config(s.path(), "\n[evolve.rollout]\nbackend = \"local\"\n");
+    let review = run(s.path(), &["evolve", "review", &id, "--eval", "smoke"]);
+    assert!(!review.status.success(), "{}", stdout(&review));
+    assert!(
+        stderr(&review).contains("never run on the unsandboxed host backend"),
+        "{}",
+        stderr(&review)
+    );
+    assert!(
+        !s.path().join("profiles/default/evals/runs").exists(),
+        "no task ran"
+    );
+}
+
 fn walk(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Ok(entries) = std::fs::read_dir(dir) {

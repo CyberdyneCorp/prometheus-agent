@@ -19,7 +19,7 @@ use pmt_eval::bench::{Adapter, Describe, Phase};
 use pmt_eval::boundary::Scanner;
 use pmt_eval::distribution::Distribution;
 use pmt_eval::run::{Resume, RunDir, RunInfo, TaskResult};
-use pmt_eval::suite::{RunSpec, Suite};
+use pmt_eval::suite::Suite;
 use pmt_store::Store;
 use serde_json::json;
 
@@ -231,8 +231,10 @@ fn suite_units(
                         .unwrap_or(suite.meta.default_timeout_secs),
                 ),
                 mock_script: task.mock_script.clone().filter(|_| mock),
-                config: fragments(&task.run),
+                config: task.run.fragments(),
                 interrupt: task.run.interrupt_after_turn_start,
+                capabilities: task.meta.capabilities.clone(),
+                memory: task.run.requires.as_deref() == Some("memory"),
                 ..Unit::default()
             };
             match task.run.requires.as_deref().filter(|c| !available(c)) {
@@ -254,19 +256,10 @@ fn suite_units(
 }
 
 /// The harness capabilities eval task sessions have: `interrupt` where
-/// the platform can, never `memory` (task sessions are kept away from the
-/// profile's memory).
+/// the platform can, and `memory` (a scratch store of the task's own,
+/// never the profile's memory).
 fn available(capability: &str) -> bool {
-    crate::smoke_suite::runner::interrupts(capability)
-}
-
-/// `run.toml`'s overrides as configuration fragments.
-fn fragments(run: &RunSpec) -> Vec<String> {
-    let mut out = run.set.clone();
-    if !run.config.trim().is_empty() {
-        out.push(run.config.clone());
-    }
-    out
+    capability == "memory" || crate::smoke_suite::runner::interrupts(capability)
 }
 
 fn bench_units(
