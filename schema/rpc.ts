@@ -1318,6 +1318,20 @@ export interface LineageNode {
   title?: string | null;
 }
 
+/** `local_model.context_grown` payload: a session's local model was relaunched at a larger window instead of compressing (spec: local-models, Context window and memory placement). */
+export interface LocalModelContextGrown {
+  /** The window before, tokens. */
+  from: number;
+  /** The library model. */
+  model: string;
+  /** `llamacpp`. */
+  provider: string;
+  /** The session. */
+  session_id: string;
+  /** The window now, tokens. */
+  to: number;
+}
+
 /** Params of every `local.*` method; each uses the fields its command takes (`model` for pull, rm and use; `job` for pause and resume; `query` for search; `path` for add). */
 export interface LocalParams {
   /** A download job id. */
@@ -2965,6 +2979,7 @@ export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "local_model.context_grown": LocalModelContextGrown;
   "message.delivery": MessageDeliveryPayload;
   "message.reaction": MessageReaction;
   "pty.detached": PtyRef;
@@ -2999,6 +3014,5 @@ export const UNDECLARED = [
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",
-  "local_model.context_grown",
   "wake.detected",
 ] as const;

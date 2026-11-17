@@ -310,6 +310,29 @@ impl Tui<'_> {
         self.show_question();
     }
 
+    /// `session.context_usage` answered: the context gauge, cost, billing,
+    /// quota and local resource items of the status line.
+    fn usage_shown(&mut self, usage: &pmt_rpc::contracts::ContextUsage) {
+        self.app.status.context_tokens = Some(usage.tokens);
+        if usage.context_window.is_some() {
+            self.app.status.context_window = usage.context_window;
+        }
+        self.app.status.cost_usd = usage.cost_usd;
+        self.app.status.billing.clone_from(&usage.billing_source);
+        self.app.status.quota = usage.subscription.as_ref().map(|s| s.quota.text.clone());
+        self.app.status.resources =
+            usage
+                .local_resources
+                .as_ref()
+                .map(|r| pmt_tui::status::LocalResources {
+                    gpu_percent: r.gpu_utilization_percent,
+                    gpu_used: r.gpu_memory_used,
+                    gpu_total: r.gpu_memory_total,
+                    ram_used: r.ram_used,
+                    ram_total: r.ram_total,
+                });
+    }
+
     /// A background request finished.
     pub(super) async fn on_done(&mut self, done: Done) {
         match done {
@@ -334,15 +357,7 @@ impl Tui<'_> {
                 self.error(&err);
             }
             Done::Dispatched(Ok(dispatched)) => self.dispatched(dispatched),
-            Done::Usage(usage) => {
-                self.app.status.context_tokens = Some(usage.tokens);
-                if usage.context_window.is_some() {
-                    self.app.status.context_window = usage.context_window;
-                }
-                self.app.status.cost_usd = usage.cost_usd;
-                self.app.status.billing.clone_from(&usage.billing_source);
-                self.app.status.quota = usage.subscription.as_ref().map(|s| s.quota.text.clone());
-            }
+            Done::Usage(usage) => self.usage_shown(&usage),
             Done::Models(models) => {
                 if !models.models.is_empty() {
                     self.models = models.models.iter().map(|m| m.id.clone()).collect();

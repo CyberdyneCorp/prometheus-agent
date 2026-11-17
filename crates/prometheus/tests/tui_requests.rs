@@ -7,7 +7,9 @@
 //! an empty input declines; a request that times out withdraws its card.
 //! The gateway reports another build than the TUI's, so the same harness
 //! covers the stale-build notice (workspace-architecture, Stale daemon
-//! build detection); any other prompt is answered `pong`.
+//! build detection) and the local runtime's GPU and RAM use on the status
+//! line (local-models, Local resource telemetry); any other prompt is
+//! answered `pong`.
 
 #![cfg(all(unix, feature = "gateway", feature = "tui"))]
 
@@ -19,17 +21,17 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use common::mock_home;
-use common::tui::{enter, finish, opened, see, tui};
+use common::tui::{enter, finish, opened, see, see_repainted, tui};
 use expectrl::{ControlCode, Expect as _};
 use pmt_core::error::{Error, codes};
 use pmt_core::runtime::{Role, WriterLock};
 use pmt_gateway::{Author, Exit, Host, HostFuture, Identity, Link, Server, ServerOptions};
 use pmt_rpc::contracts::{
     Admission, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
-    ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveParams,
-    SecretAsk, SecretRequestParams, SessionCreateParams, SessionList, SessionListParams,
-    SessionRef, SessionSetup, SubmitParams, Submitted, SudoAsk, SudoRequestParams, Transcript,
-    TurnEnded, TurnFinished,
+    ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, LocalResources,
+    ModelOptions, ResolveParams, SecretAsk, SecretRequestParams, SessionCreateParams, SessionList,
+    SessionListParams, SessionRef, SessionSetup, SubmitParams, Submitted, SudoAsk,
+    SudoRequestParams, Transcript, TurnEnded, TurnFinished,
 };
 use pmt_rpc::discovery::{Discovery, discover};
 use tokio::sync::oneshot;
@@ -44,6 +46,8 @@ struct AskingHost {
 }
 
 const SESSION: &str = "ses_01JB7Z3Q5X8V2K4M6N8P0R2T00";
+
+const GIB: u64 = 1 << 30;
 
 async fn ask(text: String, link: Link, turn: String, answers: Answers) {
     let session_id = link.session_id().to_owned();
@@ -126,7 +130,13 @@ impl Host for AskingHost {
             billing_source: None,
             subscription: None,
             categories: Vec::new(),
-            local_resources: None,
+            local_resources: Some(LocalResources {
+                gpu_utilization_percent: Some(37.0),
+                gpu_memory_used: 2 * GIB,
+                gpu_memory_total: 24 * GIB,
+                ram_used: 16 * GIB,
+                ram_total: 32 * GIB,
+            }),
         })
     }
 
@@ -377,6 +387,22 @@ fn a_daemon_of_another_build_is_reported_and_the_tui_still_attaches() {
     );
     enter(&mut p, "ping");
     see(&mut p, "pong");
+    p.send(ControlCode::EndOfTransmission).unwrap();
+    let (rest, code) = finish(p);
+    assert_eq!(code, Some(0), "{rest}");
+}
+
+/// Local resource telemetry: the GPU utilisation, GPU memory and RAM the
+/// session status reports show on the TUI's status line.
+#[test]
+fn the_status_line_shows_the_local_runtime_resources() {
+    let home = mock_home();
+    let _gateway = Gateway::start(home.path(), 600);
+    let mut p = tui(home.path(), &["tui"], &[]);
+    opened(&mut p);
+    enter(&mut p, "ping");
+    see(&mut p, "pong");
+    see_repainted(&mut p, "GPU 37% 2.0/24.0 GiB │ RAM 16.0/32.0 GiB");
     p.send(ControlCode::EndOfTransmission).unwrap();
     let (rest, code) = finish(p);
     assert_eq!(code, Some(0), "{rest}");

@@ -228,7 +228,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
-| `local_model.context_grown` | `local-models` | 1.0 | not served yet |
+| `local_model.context_grown` | `local-models` | 1.0 | [`LocalModelContextGrown`](#localmodelcontextgrown) |
 | `message.delivery` | `messaging-gateway` | 1.0 | [`MessageDeliveryPayload`](#messagedeliverypayload) |
 | `message.reaction` | `desktop-app` | 1.0 | [`MessageReaction`](#messagereaction) |
 | `pty.detached` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) |
@@ -1512,6 +1512,18 @@ One related session in `session.tree` / `session.siblings`.
 | `parent_session_id` | string | yes | Its parent. |
 | `session_id` | string | yes | The session. |
 | `title` | string or null | no | Its title. |
+
+### `LocalModelContextGrown`
+
+`local_model.context_grown` payload: a session's local model was relaunched at a larger window instead of compressing (spec: local-models, Context window and memory placement).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `from` | integer | yes | The window before, tokens. |
+| `model` | string | yes | The library model. |
+| `provider` | string | yes | `llamacpp`. |
+| `session_id` | string | yes | The session. |
+| `to` | integer | yes | The window now, tokens. |
 
 ### `LocalParams`
 

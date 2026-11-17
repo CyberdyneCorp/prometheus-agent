@@ -2,10 +2,12 @@
 // per-session approval bypass equivalent to `/yolo` (confirmed when
 // turned on, never kept past the session), the context meter whose
 // popover breaks the tokens down by category, and the cache-hit rate and
-// output speed readouts (off by default). Items are chosen from the bar's
+// output speed readouts (off by default) and, while a local model is
+// resident, the local runtime's GPU utilisation, GPU memory and RAM use
+// (spec: local-models, Local resource telemetry). Items are chosen from the bar's
 // context menu; `CommandOrControl+Shift+S` hides or shows the bar.
 
-import type { ContextUsage, Dispatched, Envelope } from "../../../schema/rpc";
+import type { ContextUsage, Dispatched, Envelope, LocalResources } from "../../../schema/rpc";
 import { h } from "../../../web/src/lib/dom";
 import type { DesktopClient } from "./client";
 import { confirmIn } from "./confirm";
@@ -14,10 +16,12 @@ const ITEMS_KEY = "prometheus.statusbar.items";
 const HIDDEN_KEY = "prometheus.statusbar.hidden";
 /** Output speed averages the last this many model calls. */
 const SPEED_CALLS = 10;
+const GIB = 1024 ** 3;
 
-type Item = "bypass" | "context" | "cache" | "speed";
-const DEFAULT_ITEMS: Item[] = ["bypass", "context"];
-const LABELS: Record<Item, string> = { bypass: "Approval bypass", context: "Context", cache: "Cache hits", speed: "Output speed" };
+type Item = "bypass" | "context" | "cache" | "speed" | "resources";
+const ALL_ITEMS: Item[] = ["bypass", "context", "cache", "speed", "resources"];
+const DEFAULT_ITEMS: Item[] = ["bypass", "context", "resources"];
+const LABELS: Record<Item, string> = { bypass: "Approval bypass", context: "Context", cache: "Cache hits", speed: "Output speed", resources: "Local resources" };
 
 const CATEGORY_LABELS: Record<string, string> = {
   system_prompt: "System prompt",
@@ -29,6 +33,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   subagent_definitions: "Subagent definitions",
   conversation: "Conversation",
 };
+
+/** `used/total GiB` with one decimal. */
+function gib(used: number, total: number): string {
+  return `${(used / GIB).toFixed(1)}/${(total / GIB).toFixed(1)} GiB`;
+}
+
+/** The GPU readout (`GPU 37% 2.0/24.0 GiB`), empty without a GPU. */
+function gpuText(r: LocalResources): string {
+  if (r.gpu_memory_total <= 0) return "";
+  const busy = r.gpu_utilization_percent == null ? "" : `${Math.round(r.gpu_utilization_percent)}% `;
+  return `GPU ${busy}${gib(r.gpu_memory_used, r.gpu_memory_total)}`;
+}
 
 interface Call {
   output: number;
@@ -61,6 +77,9 @@ export class StatusBar {
   private readonly popover = h("div", { class: "context-popover", role: "dialog", "aria-label": "Context use", hidden: true });
   private readonly cache = h("span", { class: "readout", "data-item": "cache" }, "Cache —");
   private readonly speed = h("span", { class: "readout", "data-item": "speed" }, "— tok/s");
+  /** Shown only while the session's local model is resident. */
+  private readonly gpu = h("span", { class: "readout", name: "local-gpu", hidden: true });
+  private readonly ram = h("span", { class: "readout", name: "local-ram", hidden: true });
   private readonly menu = h("div", { class: "status-menu", role: "menu", hidden: true });
   /** Sessions whose bypass this window turned on (never stored). */
   private readonly bypassed = new Set<string>();
@@ -76,7 +95,8 @@ export class StatusBar {
   ) {
     const bypassLabel = h("label", { "data-item": "bypass" }, this.bypass, " Bypass approvals", this.bypassNote);
     const context = h("span", { class: "context", "data-item": "context" }, this.meter, this.popover);
-    this.el.append(bypassLabel, context, this.cache, this.speed, this.menu);
+    const resources = h("span", { class: "local-resources", "data-item": "resources" }, this.gpu, this.ram);
+    this.el.append(bypassLabel, context, this.cache, this.speed, resources, this.menu);
     this.el.hidden = stored(HIDDEN_KEY, false);
     this.bypass.addEventListener("change", () => void this.toggleBypass());
     this.meter.addEventListener("click", () => {
@@ -150,6 +170,7 @@ export class StatusBar {
       this.meter.textContent = "Context —";
       this.meter.dataset.tokens = "";
       this.popover.replaceChildren();
+      this.showResources(null);
       return;
     }
     try {
@@ -170,6 +191,15 @@ export class StatusBar {
       h("ul", {}, ...rows),
       h("p", { class: "total" }, `Total ${usage.tokens} tokens${usage.context_window ? ` of ${usage.context_window}` : ""}`),
     );
+    this.showResources(usage.local_resources ?? null);
+  }
+
+  private showResources(resources: LocalResources | null): void {
+    const gpu = resources ? gpuText(resources) : "";
+    this.gpu.textContent = gpu;
+    this.gpu.hidden = gpu === "";
+    this.ram.textContent = resources ? `RAM ${gib(resources.ram_used, resources.ram_total)}` : "";
+    this.ram.hidden = resources === null;
   }
 
   /** Model calls of the shown session feed the readouts. */
@@ -192,9 +222,8 @@ export class StatusBar {
   }
 
   private openMenu(): void {
-    const all: Item[] = ["bypass", "context", "cache", "speed"];
     this.menu.replaceChildren(
-      ...all.map((item) => {
+      ...ALL_ITEMS.map((item) => {
         const box = h("input", { type: "checkbox", name: `item-${item}`, checked: this.items.includes(item) });
         box.addEventListener("change", () => {
           this.items = box.checked ? [...this.items, item] : this.items.filter((i) => i !== item);

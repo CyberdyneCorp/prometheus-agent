@@ -3,8 +3,10 @@
 //! battery when it is shown, profile, model, context-window use as a
 //! percentage, the session's cost in the ledger currency, its billing
 //! source and subscription quota, the pending
-//! approvals and the live sessions, led by the busy indicator while a turn
-//! runs. Items that do not fit a narrow terminal are dropped from the end.
+//! approvals and the live sessions, the local runtime's GPU and RAM use
+//! while a local model is resident (spec: local-models, Local resource
+//! telemetry), led by the busy indicator while a turn runs. Items that do
+//! not fit a narrow terminal are dropped from the end.
 
 use std::time::Duration;
 
@@ -22,6 +24,49 @@ use pmt_core::battery::Battery;
 
 /// Between two items.
 const SEPARATOR: &str = " │ ";
+
+/// Bytes in a GiB (the unit of the resource items).
+const GIB: f64 = 1_073_741_824.0;
+
+/// The local runtime's resource use, from `session.context_usage`.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct LocalResources {
+    /// How busy the GPU is, percent, when the driver reports it.
+    pub gpu_percent: Option<f64>,
+    /// GPU memory in use, bytes.
+    pub gpu_used: u64,
+    /// GPU memory, bytes (0: no GPU).
+    pub gpu_total: u64,
+    /// System RAM in use, bytes.
+    pub ram_used: u64,
+    /// System RAM, bytes.
+    pub ram_total: u64,
+}
+
+impl LocalResources {
+    /// The GPU item's value (`37% 2.0/24.0 GiB`), when there is a GPU.
+    fn gpu(&self) -> Option<String> {
+        if self.gpu_total == 0 {
+            return None;
+        }
+        let memory = gib_pair(self.gpu_used, self.gpu_total);
+        Some(match self.gpu_percent {
+            Some(percent) => format!("{percent:.0}% {memory}"),
+            None => memory,
+        })
+    }
+
+    /// The RAM item's value (`16.0/32.0 GiB`).
+    fn ram(&self) -> String {
+        gib_pair(self.ram_used, self.ram_total)
+    }
+}
+
+/// `used/total GiB` with one decimal.
+#[allow(clippy::cast_precision_loss)] // display only
+fn gib_pair(used: u64, total: u64) -> String {
+    format!("{:.1}/{:.1} GiB", used as f64 / GIB, total as f64 / GIB)
+}
 
 /// What the status line shows.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -59,6 +104,9 @@ pub struct Status {
     pub reduced_motion: bool,
     /// A connection note (`reconnecting`, `gateway restarting`).
     pub note: Option<String>,
+    /// The local runtime's GPU and RAM use while a local model is
+    /// resident.
+    pub resources: Option<LocalResources>,
     /// The session's live automation rows by kind (`loop · every 5m · 2
     /// runs · next in 4m`), from `automation.state`.
     pub automation: std::collections::BTreeMap<String, String>,
@@ -113,6 +161,12 @@ impl Status {
         }
         if let Some(note) = &self.note {
             items.push(note.clone());
+        }
+        if let Some(resources) = &self.resources {
+            if let Some(gpu) = resources.gpu() {
+                items.push(t!(strings, "tui.gpu", 0 = gpu));
+            }
+            items.push(t!(strings, "tui.ram", 0 = resources.ram()));
         }
         items.extend(self.automation.values().cloned());
         items
@@ -241,7 +295,7 @@ mod tests {
 
     use pmt_config::schema::{BusyIndicator, TuiTheme};
 
-    use super::{Status, Strings};
+    use super::{LocalResources, Status, Strings};
     use crate::theme::Theme;
     use pmt_core::battery::Battery;
 
@@ -331,6 +385,44 @@ mod tests {
             .take(columns.len())
             .collect();
         assert_eq!(picked, "2 live");
+    }
+
+    /// Local resource telemetry: GPU utilisation, GPU memory and RAM of
+    /// the local runtime show while a local model is resident.
+    #[test]
+    fn local_resources_show_gpu_and_ram_use() {
+        const GIB: u64 = 1 << 30;
+        let mut status = full();
+        status.approvals = 0;
+        status.resources = Some(LocalResources {
+            gpu_percent: Some(37.0),
+            gpu_used: 2 * GIB,
+            gpu_total: 24 * GIB,
+            ram_used: 16 * GIB,
+            ram_total: 32 * GIB,
+        });
+        assert_eq!(
+            text(&status, 100).trim_end(),
+            "  work │ mock/m1 │ ctx 18% │ $0.0123 │ GPU 37% 2.0/24.0 GiB │ RAM 16.0/32.0 GiB"
+        );
+        // No GPU: RAM alone; no utilisation reading: memory alone.
+        status.resources = Some(LocalResources {
+            gpu_total: 0,
+            ..status.resources.unwrap()
+        });
+        assert!(
+            text(&status, 100)
+                .trim_end()
+                .ends_with("$0.0123 │ RAM 16.0/32.0 GiB")
+        );
+        status.resources = Some(LocalResources {
+            gpu_percent: None,
+            gpu_used: GIB,
+            gpu_total: 8 * GIB,
+            ram_used: 0,
+            ram_total: 0,
+        });
+        assert!(text(&status, 100).contains("│ GPU 1.0/8.0 GiB │"));
     }
 
     /// Scenario: Static UI string catalogs (the status line in a bundled

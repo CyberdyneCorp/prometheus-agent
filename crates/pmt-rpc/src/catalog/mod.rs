@@ -145,6 +145,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::LocalUse>()
         .method::<c::LocalStart>()
         .method::<c::LocalStop>()
+        .event::<c::LocalModelContextGrownEvent>()
         .method::<c::FilesUndo>()
         .method::<c::FilesRollback>()
         .method::<c::LspStatusCall>()

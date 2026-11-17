@@ -3774,6 +3774,44 @@
       ],
       "type": "object"
     },
+    "LocalModelContextGrown": {
+      "additionalProperties": false,
+      "description": "`local_model.context_grown` payload: a session's local model was\nrelaunched at a larger window instead of compressing (spec:\nlocal-models, Context window and memory placement).",
+      "properties": {
+        "from": {
+          "description": "The window before, tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "description": "The library model.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "`llamacpp`.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "to": {
+          "description": "The window now, tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "provider",
+        "model",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
     "LocalParams": {
       "additionalProperties": false,
       "description": "Params of every `local.*` method; each uses the fields its command\ntakes (`model` for pull, rm and use; `job` for pause and resume;\n`query` for search; `path` for add).",
@@ -8068,8 +8106,10 @@
       "since": "1.0"
     },
     "local_model.context_grown": {
-      "declared": false,
       "owner": "local-models",
+      "payload": {
+        "$ref": "#/$defs/LocalModelContextGrown"
+      },
       "since": "1.0"
     },
     "message.delivery": {
