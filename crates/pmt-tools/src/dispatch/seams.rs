@@ -130,6 +130,10 @@ pub struct GateRequest<'a> {
     pub escalation: Option<&'a Escalation>,
     /// The tool's own per-call rule ([`crate::RegisteredTool::guard`]).
     pub guarded: Option<&'a Escalation>,
+    /// Where the untrusted content of a tainted turn came from (`web`,
+    /// `mcp:<server>`...); `None` when the call's turn is not tainted
+    /// (spec: tool-system, Taint-aware escalation).
+    pub tainted: Option<&'a str>,
 }
 
 /// The approval gate's answer.
@@ -156,6 +160,12 @@ pub enum GateVerdict {
 pub trait ApprovalGate: Send + Sync {
     /// Decides whether the call may run.
     fn check<'a>(&'a self, request: GateRequest<'a>) -> SeamFuture<'a, GateVerdict>;
+
+    /// `approvals.taint_policy` as of now; the dispatcher tracks tainted
+    /// turns unless it is `off` (the default of gates without approvals).
+    fn taint_policy(&self) -> pmt_config::schema::TaintPolicy {
+        pmt_config::schema::TaintPolicy::Off
+    }
 }
 
 /// Allows every call, escalations included (tests and tools-only setups;

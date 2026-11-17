@@ -129,6 +129,7 @@ mod tests {
                 code: None,
                 message: "no such file: notes.txt".to_owned(),
             }),
+            taint: None,
         };
         let value = serde_json::to_value(&result).unwrap();
         assert_eq!(value["ok"], false);

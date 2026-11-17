@@ -19,6 +19,7 @@
 //! needs no async context; dropping the [`Proxy`] stops it.
 
 mod denylist;
+pub mod inject;
 mod policy;
 
 use std::io;
@@ -71,6 +72,8 @@ pub struct Rules {
     pub lookup: Arc<dyn Lookup>,
     /// Told about every refusal.
     pub observer: Option<Observer>,
+    /// The session's credential injection, when it has mapped secrets.
+    pub injection: Option<Arc<inject::Injection>>,
 }
 
 impl Rules {
@@ -85,7 +88,15 @@ impl Rules {
             requester: requester.to_owned(),
             lookup: Arc::new(SystemLookup),
             observer: None,
+            injection: None,
         }
+    }
+
+    /// Injecting the credentials of `injection`.
+    #[must_use]
+    pub fn injecting(mut self, injection: Arc<inject::Injection>) -> Self {
+        self.injection = Some(injection);
+        self
     }
 
     /// Narrowed to the hosts `granted` names as well.
@@ -301,6 +312,10 @@ async fn serve(mut client: TcpStream, rules: &Rules) -> Result<(), Option<Denial
             .await;
         return Err(None);
     };
+    if let Some(injection) = &rules.injection {
+        // A plain request bound for the wrong host never connects.
+        inject::screen(&mut client, &target, &rest, rules, injection).await?;
+    }
     let upstream = match open(rules, &target.host, target.port).await {
         Ok(upstream) => upstream,
         Err((reason, why)) => {
@@ -325,6 +340,9 @@ async fn serve(mut client: TcpStream, rules: &Rules) -> Result<(), Option<Denial
             }));
         }
     };
+    if let Some(injection) = &rules.injection {
+        return inject::serve(client, upstream, &target, &rest, rules, injection).await;
+    }
     relay(client, upstream, &target, &rest)
         .await
         .map_err(|_| None)
@@ -350,7 +368,9 @@ async fn relay(
 
 /// Reads up to the end of the request head; returns it and any bytes read
 /// past it.
-async fn read_head(client: &mut TcpStream) -> Result<(Vec<u8>, Vec<u8>), ()> {
+async fn read_head<R: tokio::io::AsyncRead + Unpin>(
+    client: &mut R,
+) -> Result<(Vec<u8>, Vec<u8>), ()> {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 4096];
     loop {

@@ -24,6 +24,7 @@ mod pools;
 mod portals;
 mod refresh;
 mod request_controls;
+mod route_policy;
 mod routing;
 mod server_compaction;
 mod session;

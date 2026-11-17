@@ -96,8 +96,9 @@ fn stdio(
     ));
     let requester = format!("mcp:{name}");
     let observer = crate::egress::attributed(scope, Arc::clone(caller));
-    let proxy = crate::egress::child_proxy(scope, &capabilities, hosts, &requester, observer)
-        .map_err(|e| e.message().to_owned())?;
+    let proxy =
+        crate::egress::child_proxy(scope, &capabilities, (hosts, None), &requester, observer)
+            .map_err(|e| e.message().to_owned())?;
     let mut policy = Policy::from_set(&capabilities, &paths);
     if let Some(proxy) = &proxy {
         policy = crate::egress::through(policy, proxy);

@@ -187,6 +187,33 @@ A profile resolves a secret from, in order:
    `override_existing = true` its values come before the store and the
    environment. `prometheus secrets list` shows them as `command`. Windows
    has no command source.
+4. Bitwarden Secrets Manager and 1Password, both off by default (their CLIs,
+   `bws` and `op`, are never run, nor installed, while off):
+
+   ```toml
+   [secrets.bitwarden]
+   enabled = true
+   access_token_secret = "BWS_ACCESS_TOKEN"   # a secret in the store
+   project_id = "e1b2..."                     # optional; server_url too
+   cache_ttl_secs = 300
+
+   [secrets.onepassword]
+   enabled = true
+   access_token_secret = "OP_SERVICE_ACCOUNT_TOKEN"
+   map = { GITHUB_TOKEN = "op://Dev/GitHub/token" }
+   ```
+
+   The CLI is the newest managed install under `<home>/runtimes/<name>/`,
+   else the one on `PATH`. Its bootstrap token is read only from the stored
+   secret `access_token_secret` names (never from the environment) and
+   handed to it through `BWS_ACCESS_TOKEN` / `OP_SERVICE_ACCOUNT_TOKEN`,
+   never as an argument. A name the store and the environment do not have
+   comes from a mapped 1Password entry first, then from the Bitwarden
+   project (every secret by its key; the first entry of a key wins), then
+   from the helper command. Resolved values stay in memory for at most
+   `cache_ttl_secs` and are never written to disk. A failing source (missing
+   CLI or token, a refused token, unreadable output) fails the lookup with
+   `secret.source_failed` instead of reusing an older value.
 
 A gateway serving several profiles never hands one profile's launch
 environment to another. The environment is read for secrets only: any other

@@ -58,6 +58,8 @@ pub fn semantic(config: &Config, profile_dir: &std::path::Path) -> Result<(), Er
     crate::mcp_check::check(config)?;
     crate::lsp_check::check(config)?;
     crate::delegation_check::check(config)?;
+    crate::egress_check::check(config)?;
+    crate::secrets::external::check(config)?;
     crate::automation_check::check(config)?;
     crate::moa_check::check(config)?;
     crate::media_check::check(config)?;

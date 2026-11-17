@@ -24,8 +24,7 @@ impl PanesHost for DaemonHost {
         link: Link,
     ) -> HostFuture<'a, c::GitReview> {
         Box::pin(async move {
-            self.git_review_of(&self.profile(profile)?, params, &link)
-                .await
+            Box::pin(self.git_review_of(&self.profile(profile)?, params, &link)).await
         })
     }
 
@@ -37,8 +36,7 @@ impl PanesHost for DaemonHost {
         link: Link,
     ) -> HostFuture<'a, c::GitRan> {
         Box::pin(async move {
-            self.git_change_of(&self.profile(profile)?, session_id, change, &link)
-                .await
+            Box::pin(self.git_change_of(&self.profile(profile)?, session_id, change, &link)).await
         })
     }
 
@@ -49,8 +47,7 @@ impl PanesHost for DaemonHost {
         link: Link,
     ) -> HostFuture<'a, c::GitMessage> {
         Box::pin(async move {
-            self.git_message_of(&self.profile(profile)?, session_id, &link)
-                .await
+            Box::pin(self.git_message_of(&self.profile(profile)?, session_id, &link)).await
         })
     }
 

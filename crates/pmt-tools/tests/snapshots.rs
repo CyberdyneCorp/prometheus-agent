@@ -32,6 +32,7 @@ fn settings() -> Settings {
     Settings {
         enabled: true,
         terminal: true,
+        workspace_bytes: None,
         max_file_bytes: 1024,
         max_checkpoints: 20,
         retention: Duration::from_hours(24 * 7),

@@ -445,6 +445,7 @@ fn trace_events(m: &Message) -> Vec<(&'static str, Value)> {
                 duration_ms: None,
                 output: m.content.clone(),
                 error: None,
+                taint: None,
             };
             events.push(("tool.result", Event::ToolResult(result).payload()));
         }

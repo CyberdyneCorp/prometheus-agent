@@ -20,6 +20,15 @@ pub const ONBOARDING: &str = "onboarding";
 /// The project toolset.
 pub const PROJECT: &str = "project";
 
+/// The surface-gated toolset of agent-initiated catalog installs (spec:
+/// plugin-system, Catalog tool for agent-initiated installs); folded only
+/// into desktop and TUI sessions once registered.
+pub const CATALOG: &str = "catalog";
+
+/// Every surface-gated toolset a session's surface folds in (spec:
+/// tool-system, Surface toolsets come from the session).
+pub const SURFACE_GATED: [&str; 4] = [DESKTOP_UI, ONBOARDING, PROJECT, CATALOG];
+
 /// The members of `desktop_ui`, in order.
 pub const DESKTOP_UI_TOOLS: &[&str] = &[
     "react_to_message",

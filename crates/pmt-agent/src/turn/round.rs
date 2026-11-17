@@ -175,5 +175,11 @@ fn result_event(call: &RequestedCall, outcome: &ToolOutcome) -> ToolResultEvent 
             code: Some(format!("tool.{}", outcome.result.status.as_str())),
             message: text,
         }),
+        taint: outcome
+            .result
+            .metadata
+            .get(pmt_tools::dispatch::TAINT_KEY)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
     }
 }

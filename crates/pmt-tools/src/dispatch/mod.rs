@@ -31,12 +31,19 @@ pub use self::seams::{
     AgentLoopCalls, AllowAll, ApprovalGate, Capabilities, DispatchObserver, Escalation,
     GateRequest, GateVerdict, HookCall, NoHooks, NoObserver, PreDecision, SeamFuture, ToolHooks,
 };
+use pmt_config::schema::TaintPolicy;
+use pmt_core::provenance::Trust;
+
+use crate::approval::taint::{self, Taint};
 use crate::args;
 use crate::budget::ResultBudget;
 use crate::descriptor::{CallContext, Executor, RegisteredTool, ToolFailure};
 use crate::result::{Content, Status, ToolResult};
 use crate::sanitize;
 use crate::surface::ToolSurface;
+
+/// The result metadata key of a taint annotation.
+pub const TAINT_KEY: &str = "taint";
 
 /// One tool call as the model made it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +107,8 @@ pub struct DispatchSetup {
 #[derive(Clone)]
 pub struct Dispatcher {
     setup: Arc<DispatchSetup>,
+    /// Whether the running turn read untrusted content.
+    taint: Arc<Taint>,
 }
 
 impl std::fmt::Debug for Dispatcher {
@@ -123,6 +132,7 @@ impl Dispatcher {
     pub fn new(setup: DispatchSetup) -> Self {
         Self {
             setup: Arc::new(setup),
+            taint: Arc::default(),
         }
     }
 
@@ -218,6 +228,12 @@ impl Dispatcher {
             }
             None => pmt_core::provenance::Provenance::trusted("prometheus"),
         };
+        if provenance.trust == Trust::Untrusted
+            && let Some(turn) = &call.turn_id
+            && setup.gate.taint_policy() != TaintPolicy::Off
+        {
+            self.taint.mark(turn, &provenance.source);
+        }
         result
             .metadata
             .insert("provenance".to_owned(), provenance.to_value());
@@ -247,6 +263,7 @@ impl Dispatcher {
             Ok(arguments) => arguments,
             Err(result) => return (raw(call), result),
         };
+        let flagged = self.flagged(call, tool, &arguments);
         let result = match self.admit(call, tool, &mut arguments).await {
             Ok(note) => {
                 let mut result = match (&tool.executor, agent) {
@@ -263,11 +280,34 @@ impl Dispatcher {
                 {
                     result.content.push(Content::Text { text });
                 }
+                if let Some(note) = flagged {
+                    result
+                        .metadata
+                        .insert(TAINT_KEY.to_owned(), Value::String(note));
+                }
                 result
             }
             Err(result) => result,
         };
         (arguments, result)
+    }
+
+    /// Where the untrusted content of `call`'s turn came from, when that
+    /// turn is tainted and taint is tracked.
+    fn tainted(&self, call: &ToolCall) -> Option<String> {
+        if self.setup.gate.taint_policy() == TaintPolicy::Off {
+            return None;
+        }
+        self.taint.source(call.turn_id.as_deref()?)
+    }
+
+    /// The annotation of a call that sends data out of a tainted turn
+    /// (spec: tool-system, Taint-aware escalation): recorded with its
+    /// result, so the trajectory shows it under every policy but `off`.
+    fn flagged(&self, call: &ToolCall, tool: &RegisteredTool, arguments: &Value) -> Option<String> {
+        let source = self.tainted(call)?;
+        let targets = taint::targets(tool, arguments);
+        (!targets.is_empty()).then(|| taint::note(&source, tool.name(), &targets.join(", ")))
     }
 
     /// `pre_tool_call` hooks (which may rewrite `arguments`), capability
@@ -314,6 +354,7 @@ impl Dispatcher {
             .guard
             .as_ref()
             .and_then(|guard| guard(&setup.session_id, current));
+        let tainted = self.tainted(call);
         let request = GateRequest {
             session_id: &setup.session_id,
             call_id: &call.call_id,
@@ -321,6 +362,7 @@ impl Dispatcher {
             arguments: current,
             escalation: escalation.as_ref(),
             guarded: guarded.as_ref(),
+            tainted: tainted.as_deref(),
         };
         match setup.gate.check(request).await {
             GateVerdict::Allow => Ok(None),

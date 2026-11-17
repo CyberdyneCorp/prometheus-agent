@@ -84,6 +84,21 @@ impl SnapshotStore {
     ///
     /// The object cannot be written.
     pub fn put(&self, bytes: &[u8]) -> io::Result<String> {
+        self.store(bytes, true)
+    }
+
+    /// [`SnapshotStore::put`] without waiting for the disk: for the many
+    /// prior contents a workspace checkpoint keeps in case a command
+    /// changes them (losing one to a crash only loses that undo).
+    ///
+    /// # Errors
+    ///
+    /// The object cannot be written.
+    pub fn put_relaxed(&self, bytes: &[u8]) -> io::Result<String> {
+        self.store(bytes, false)
+    }
+
+    fn store(&self, bytes: &[u8], sync: bool) -> io::Result<String> {
         let hash = digest(bytes);
         let path = self.object_path(&hash);
         if path.exists() {
@@ -93,9 +108,17 @@ impl SnapshotStore {
         let temp = dir.join(format!(".{hash}.{}", ulid::Ulid::generate()));
         let mut file = pmt_core::private_fs::new_file_options().open(&temp)?;
         file.write_all(bytes)?;
-        file.sync_all()?;
+        if sync {
+            file.sync_all()?;
+        }
         fs::rename(&temp, &path)?;
         Ok(hash)
+    }
+
+    /// Whether object `hash` is stored.
+    #[must_use]
+    pub fn contains(&self, hash: &str) -> bool {
+        hash.len() == 64 && self.object_path(hash).is_file()
     }
 
     /// The content of object `hash`.

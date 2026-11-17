@@ -68,6 +68,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
 | `approvals.mode` | one of "manual", "smart", "off" | `"manual"` | `"manual"`, `"smart"`, `"off"` | `live` | Approval mode of interactive sessions. |
 | `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |
+| `approvals.taint_policy` | one of "off", "warn", "ask" | `"warn"` | `"off"`, `"warn"`, `"ask"` | `live` | After untrusted content entered a turn: `ask` requires a human approval for each later call of that turn that sends data to a target not yet approved in the session, `warn` only annotates such calls, `off` does not track. |
 | `approvals.timeout_secs` | integer | `300` | ≥ 0 | `live` | Unanswered approvals are denied after this long. |
 | `approvals.unattended_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in other unattended sessions. |
 | `attachments.storage` | one of "blobs", "workspace" | `"blobs"` | `"blobs"`, `"workspace"` | `next_session` | Where received attachments are kept. |
@@ -364,9 +365,10 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `files.snapshot.max_bytes` | integer | `1073741824` | ≥ 0 | `live` | The profile's snapshot store is pruned, oldest first, above this. |
 | `files.snapshot.max_checkpoints` | integer | `20` | ≥ 0 | `live` | Checkpoints kept per workspace. |
 | `files.snapshot.max_file_bytes` | integer | `10485760` | ≥ 0 | `live` | Larger files are listed as skipped instead of stored. |
+| `files.snapshot.max_workspace_bytes` | integer | `536870912` | ≥ 0 | `live` | Under `terminal = "workspace"`, larger workspaces are not checkpointed (a one-time notice says so). |
 | `files.snapshot.prune_interval_secs` | integer | `86400` | ≥ 0 | `live` | Least time between automatic prunes. |
 | `files.snapshot.retention_secs` | integer | `604800` | ≥ 0 | `live` | Snapshots unused this long are pruned. |
-| `files.snapshot.terminal` | one of "off", "destructive" | `"off"` | `"off"`, `"destructive"` | `live` | Also checkpoint before destructive terminal commands (`rm`, `mv`, `sed -i`, `>`, `git reset`...). |
+| `files.snapshot.terminal` | one of "off", "destructive", "workspace" | `"off"` | `"off"`, `"destructive"`, `"workspace"` | `live` | Terminal commands: `off`, `destructive` (checkpoint before `rm`, `mv`, `sed -i`, `>`, `git reset`...) or `workspace` (also journal every command's workspace changes, so `/undo` reverts them). |
 | `gateway.accept_routes_from` | array of string | `[]` | any | `live` | Profiles whose `profile_routes` may route events to this one. |
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
@@ -801,21 +803,35 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `replay.cache.max_bytes` | integer | `4294967296` | ≥ 1 | `next_session` | Least-recently-used entries are evicted above this size. |
 | `replay.cache.mode` | one of "off", "read", "write", "read_write" | `"off"` | `"off"`, `"read"`, `"write"`, `"read_write"` | `next_session` | `off`, `read` (serve stored responses), `write` (store new ones) or `read_write`. Off for interactive sessions; the offline demo (and eval runs) use `read_write`. |
 | `replay.cache.namespace` | string | `"default"` | any | `next_session` | Entries of different namespaces never serve each other. |
+| `routing.candidates` | array of table | `[]` | any | `next_session` | The routes a policy chooses among (`[[routing.candidates]]`, as fallback entries); empty: the requested route plus the fallback chain. |
+| `routing.cost_weight` | number | `0.5` | 0.0 to 1.0 | `next_session` | The weight of cost against latency under `balanced`. |
 | `routing.health_half_life_secs` | integer | `1800` | ≥ 1 | `next_session` | Half-life (seconds) of the decay of an idle route's health score toward 1.0. |
 | `routing.health_window` | integer | `50` | 1 to 500 | `next_session` | Calls per (provider, model, credential) a health score is computed over. |
+| `routing.policy` | one of "pinned", "cheapest", "fastest", "balanced" | `"pinned"` | `"pinned"`, `"cheapest"`, `"fastest"`, `"balanced"` | `next_session` | How a session's route is chosen at its start: `pinned` (the requested route), `cheapest`, `fastest` or `balanced`. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
+| `secrets.bitwarden.access_token_secret` | string | `"BWS_ACCESS_TOKEN"` | a secret name | `restart` | The stored secret holding the machine account's access token (the only place the token is read from). |
+| `secrets.bitwarden.cache_ttl_secs` | integer | `300` | 0 to 86400 | `restart` | Resolved values stay in memory at most this long (never on disk). |
+| `secrets.bitwarden.enabled` | boolean | `false` | any | `restart` | Read secrets from Bitwarden (off by default: `bws` is then never run). |
+| `secrets.bitwarden.project_id` | string | unset | any | `restart` | The project whose secrets are read (unset: every project the token sees). |
+| `secrets.bitwarden.server_url` | string | unset | any | `restart` | A self-hosted server's URL. |
 | `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |
 | `secrets.command.enabled` | boolean | `false` | any | `restart` | Run the helper (off by default; unsupported on Windows). |
 | `secrets.command.override_existing` | boolean | `false` | any | `restart` | Let helper values win over the secrets store and the environment. |
 | `secrets.command.timeout_secs` | integer | `3` | 1 to 300 | `restart` | Seconds before the helper's process group is killed. |
+| `secrets.onepassword.access_token_secret` | string | `"OP_SERVICE_ACCOUNT_TOKEN"` | a secret name | `restart` | The stored secret holding the service-account token (the only place the token is read from). |
+| `secrets.onepassword.cache_ttl_secs` | integer | `300` | 0 to 86400 | `restart` | Resolved values stay in memory at most this long (never on disk). |
+| `secrets.onepassword.enabled` | boolean | `false` | any | `restart` | Read secrets from 1Password (off by default: `op` is then never run). |
+| `secrets.onepassword.map` | table | `{}` | any | `restart` | Secret name to its `op://vault/item/field` reference. |
 | `security.acked_advisories` | array of string | `[]` | any | `next_session` | Supply-chain advisory ids whose startup warning is silenced (`prometheus doctor --ack <id>`); `doctor security` still shows them. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
 | `security.egress.allow` | array of string | `[]` | any | `next_session` | Host patterns `allowlist` admits: `host`, `host:port` or `*.suffix` (subdomains of `suffix`). |
 | `security.egress.allow_private` | boolean | `false` | any | `next_session` | Allow private destinations without a session grant. |
+| `security.egress.credential_injection` | boolean | `false` | any | `next_session` | Sandboxed children of a session hold a per-session placeholder instead of each secret mapped in `inject`; the egress proxy puts the real value in only on TLS requests to the mapped hosts and refuses the placeholder anywhere else (`credential_misdirected`). |
 | `security.egress.deny` | array of string | `[]` | any | `next_session` | Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g. `*.casino.example`); a session can add to them, never remove. |
 | `security.egress.deny_files` | array of string | `[]` | any | `next_session` | Absolute paths of shared blocklist files: one pattern per line, `#` comments; re-read when a file changes. |
 | `security.egress.fake_ip_ranges` | array of string | `[]` | any | `next_session` | CIDR ranges a local TUN proxy answers with (treated as public). |
+| `security.egress.inject` | table | `{}` | any | `next_session` | Secret name to the host patterns (`host`, `host:port`, `*.suffix`) its value may be sent to, under `credential_injection`. |
 | `security.egress.mode` | one of "public", "allowlist", "none" | `"public"` | `"public"`, `"allowlist"`, `"none"` | `next_session` | Which hosts tools, sandboxed children, plugins and browsers may reach: any public address (`public`), only the `allow` patterns (`allowlist`) or nothing (`none`). A session can narrow or extend it (`chat --egress`, `/egress`, `egress.set`). |
 | `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
 | `security.protected_instruction_files` | boolean | `true` | any | `next_session` | Require human approval for agent writes to instruction files. |
@@ -971,6 +987,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `toolsets.surfaces.api` | array | unset | any | `next_session` | The OpenAI-compatible API server (default `api_server`). |
 | `toolsets.surfaces.cli` | array | unset | any | `next_session` | Line-mode chat and one-shot runs (default `core`). |
 | `toolsets.surfaces.cron` | array | unset | any | `next_session` | Scheduled jobs without per-job toolsets (default `core`). |
+| `toolsets.surfaces.dashboard` | array | unset | any | `next_session` | The web dashboard's chat (default `core`). |
 | `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
 | `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
 | `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |

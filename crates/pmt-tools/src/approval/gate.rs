@@ -172,6 +172,9 @@ pub struct CommandGate {
     turn_unattended: Mutex<Option<UnattendedApproval>>,
     /// How file edits are approved, in an editor (ACP) session.
     edit_policy: Mutex<Option<EditPolicy>>,
+    /// The taint note of each call being checked in a tainted turn, added
+    /// to any prompt it raises (spec: tool-system, Taint-aware escalation).
+    taint_notes: Mutex<std::collections::BTreeMap<String, String>>,
 }
 
 impl CommandGate {
@@ -192,6 +195,7 @@ impl CommandGate {
             hosted: None,
             turn_unattended: Mutex::new(None),
             edit_policy: Mutex::new(None),
+            taint_notes: Mutex::default(),
         }
     }
 
@@ -393,7 +397,8 @@ impl CommandGate {
 
     /// [`CommandGate::decide`], with what a human's answer said about the
     /// edit's content (nothing for any other decider).
-    async fn decide_reviewed(&self, request: ApprovalRequest) -> (GateVerdict, EditReview) {
+    async fn decide_reviewed(&self, mut request: ApprovalRequest) -> (GateVerdict, EditReview) {
+        self.add_taint_note(&mut request);
         let hooks = self.setup.hooks.clone();
         if let Some(hooks) = &hooks {
             hooks.before(&request).await;
@@ -523,7 +528,10 @@ impl CommandGate {
         request: &ApprovalRequest,
     ) -> Option<(GateVerdict, &'static str, &'static str)> {
         let guardian = self.guardian.as_ref()?;
-        if self.approvals().mode != ApprovalMode::Smart || request.remember.is_none() {
+        if self.approvals().mode != ApprovalMode::Smart
+            || request.remember.is_none()
+            || tainted::needs_a_human(request)
+        {
             return None;
         }
         match guardian.judge(request).await {
@@ -721,8 +729,13 @@ impl CommandGate {
 }
 
 impl ApprovalGate for CommandGate {
+    fn taint_policy(&self) -> pmt_config::schema::TaintPolicy {
+        self.approvals().taint_policy
+    }
+
     fn check<'a>(&'a self, request: GateRequest<'a>) -> SeamFuture<'a, GateVerdict> {
         Box::pin(async move {
+            let _noted = self.note_taint(&request);
             if let Some(line) = command_line(request.tool, request.arguments) {
                 let verdict = self
                     .check_command(request.tool.name(), request.call_id, line)
@@ -731,16 +744,9 @@ impl ApprovalGate for CommandGate {
                     return verdict;
                 }
             }
-            let rules = request
-                .escalation
-                .into_iter()
-                .chain(request.guarded)
-                .chain(request.tool.descriptor.approval.as_ref());
-            for escalation in rules {
-                let verdict = self.check_escalation(&request, escalation).await;
-                if verdict != GateVerdict::Allow {
-                    return verdict;
-                }
+            let verdict = self.check_rules(&request).await;
+            if verdict != GateVerdict::Allow {
+                return verdict;
             }
             let mut reviewed = Reviewed::new(request.arguments);
             let verdict = self.check_protected(&request, &mut reviewed).await;
@@ -753,6 +759,25 @@ impl ApprovalGate for CommandGate {
             }
             reviewed.verdict()
         })
+    }
+}
+
+impl CommandGate {
+    /// The call's escalations (a hook's, the tool's own rules), then the
+    /// taint of its turn.
+    async fn check_rules(&self, request: &GateRequest<'_>) -> GateVerdict {
+        let rules = request
+            .escalation
+            .into_iter()
+            .chain(request.guarded)
+            .chain(request.tool.descriptor.approval.as_ref());
+        for escalation in rules {
+            let verdict = self.check_escalation(request, escalation).await;
+            if verdict != GateVerdict::Allow {
+                return verdict;
+            }
+        }
+        self.check_taint(request).await
     }
 }
 
@@ -803,6 +828,7 @@ fn written_paths(tool: &RegisteredTool, arguments: &Value) -> Vec<String> {
 }
 
 mod reviewed;
+mod tainted;
 
 use reviewed::Reviewed;
 

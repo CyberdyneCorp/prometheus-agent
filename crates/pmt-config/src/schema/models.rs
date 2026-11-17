@@ -618,12 +618,51 @@ pub struct FallbackEntry {
     pub credential: Option<SecretName>,
 }
 
+/// `routing.policy` (spec: model-providers, Cost and latency aware
+/// routing policy).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingPolicy {
+    /// The requested provider and model.
+    #[default]
+    Pinned,
+    /// The lowest estimated cost per turn.
+    Cheapest,
+    /// The lowest median time to first token.
+    Fastest,
+    /// The lowest weighted sum of normalised cost and latency.
+    Balanced,
+}
+
+impl RoutingPolicy {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pinned => "pinned",
+            Self::Cheapest => "cheapest",
+            Self::Fastest => "fastest",
+            Self::Balanced => "balanced",
+        }
+    }
+}
+
 /// The `[routing]` section (spec: model-providers, Provider health
-/// scoring).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// scoring; Cost and latency aware routing policy).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct RoutingConfig {
+    /// How a session's route is chosen at its start: `pinned` (the
+    /// requested route), `cheapest`, `fastest` or `balanced`.
+    pub policy: RoutingPolicy,
+    /// The weight of cost against latency under `balanced`.
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub cost_weight: f64,
+    /// The routes a policy chooses among (`[[routing.candidates]]`, as
+    /// fallback entries); empty: the requested route plus the fallback
+    /// chain.
+    pub candidates: Vec<FallbackEntry>,
     /// Calls per (provider, model, credential) a health score is computed
     /// over.
     #[schemars(range(min = 1, max = 500))]
@@ -637,6 +676,9 @@ pub struct RoutingConfig {
 impl Default for RoutingConfig {
     fn default() -> Self {
         Self {
+            policy: RoutingPolicy::Pinned,
+            cost_weight: 0.5,
+            candidates: Vec::new(),
             health_window: 50,
             health_half_life_secs: 1800,
         }

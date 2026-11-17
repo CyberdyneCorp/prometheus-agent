@@ -54,3 +54,61 @@ text = "edited both"
     assert_eq!(read("created.txt"), None);
     exit(p);
 }
+
+/// Scenario: Undo a sed edit (spec: execution-environments, Terminal
+/// workspace checkpoints): with `files.snapshot.terminal = "workspace"`,
+/// `/undo` also reverts what a terminal command changed in the workspace.
+#[test]
+fn undo_reverts_a_sed_edit_made_by_a_terminal_command() {
+    let home = mock_home();
+    append_config(
+        home.path(),
+        "\n[cli]\nconfirm_destructive = false\n\n[files.snapshot]\nterminal = \"workspace\"\n",
+    );
+    let work = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    std::fs::write(work.path().join("notes.txt"), "alpha\n").unwrap();
+    std::fs::write(work.path().join("other.txt"), "untouched\n").unwrap();
+    // BSD sed takes the backup suffix as its own argument.
+    let sed = if cfg!(target_os = "macos") {
+        "sed -i '' s/a/b/ notes.txt && echo made > created.txt"
+    } else {
+        "sed -i s/a/b/ notes.txt && echo made > created.txt"
+    };
+    let script = home.path().join("sed.toml");
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+[[rule]]
+user = "edit"
+[[rule.tool_calls]]
+name = "terminal"
+arguments = {{ command = "{sed}" }}
+
+[[rule]]
+repeat = true
+text = "edited by sed"
+"#
+        ),
+    )
+    .unwrap();
+    let cwd = work.path().to_str().unwrap();
+    let mut p = spawn(
+        home.path(),
+        &["--mock-script", script.to_str().unwrap(), "--cwd", cwd],
+    );
+    prompt(&mut p);
+    p.send_line("edit").unwrap();
+    p.expect("edited by sed").unwrap();
+    prompt(&mut p);
+    let read = |name: &str| std::fs::read_to_string(work.path().join(name)).ok();
+    assert_eq!(read("notes.txt").as_deref(), Some("blpha\n"));
+    assert_eq!(read("created.txt").as_deref(), Some("made\n"));
+    p.send_line("/undo").unwrap();
+    p.expect("undid the last exchange").unwrap();
+    prompt(&mut p);
+    assert_eq!(read("notes.txt").as_deref(), Some("alpha\n"));
+    assert_eq!(read("created.txt"), None);
+    assert_eq!(read("other.txt").as_deref(), Some("untouched\n"));
+    exit(p);
+}

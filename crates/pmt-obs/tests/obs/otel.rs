@@ -158,6 +158,7 @@ fn turn(trace: &SessionTrace, prompt: &str) {
             duration_ms: Some(3),
             output: Some(format!("the file says: {prompt}")),
             error: None,
+            taint: None,
         }),
         "turn_1",
     ));
@@ -349,6 +350,7 @@ fn subagent_spans_join_the_parent_trace() {
             duration_ms: Some(10),
             output: None,
             error: None,
+            taint: None,
         }),
         "turn_p",
     ));
@@ -389,6 +391,7 @@ fn tool_failures_count_by_tool_outcome_and_kind() {
                 code: None,
                 message: "slow".to_owned(),
             }),
+            taint: None,
         }),
         "t",
     ));

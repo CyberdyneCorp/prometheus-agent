@@ -39,7 +39,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
 | `coding` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `clarify`, `execute_code`, `delegate_task`, `manage_connections` |  | posture | Software work: core without media generation, speech, scheduling or computer use |
-| `project` | `project` |  | default-off | Switch or create the session's project (on by default for desktop and tui) |
+| `project` | `project` |  |  | Switch or create the session's project (desktop, tui and dashboard sessions) |
 | `desktop_ui` | `react_to_message`, `read_terminal`, `close_terminal`, `desktop_preview`, `drive_preview`, `annotate_preview`, `read_window_below`, `focus_pane`, `gui_tour`, `show_tip`, `set_theme` |  |  | The desktop window: reactions, terminal and preview panes, tours, tips, appearance |
 | `onboarding` | `setup_beat` |  |  | The first-run onboarding chat's setup cards |
 | `acp` |  | `coding` |  | The coding tools for ACP editor sessions |

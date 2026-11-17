@@ -92,6 +92,9 @@ error_codes! {
     /// A secret owned by a surface was requested by a tool, child, skill or plugin.
     SECRET_SURFACE_ONLY = ("secret.surface_only", PermissionDenied,
         "The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own.");
+    /// An enabled external secret source could not be read.
+    SECRET_SOURCE_FAILED = ("secret.source_failed", Config,
+        "An enabled external secret source (`secrets.bitwarden`, `secrets.onepassword`) failed: its CLI is missing, its access token is not set or was refused, or it answered something unreadable. Cached values are not used instead; fix the source or disable it.");
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");

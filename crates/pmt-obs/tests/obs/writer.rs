@@ -30,6 +30,7 @@ fn tool_result(output: &str) -> Event {
         duration_ms: Some(5),
         output: Some(output.to_owned()),
         error: None,
+        taint: None,
     })
 }
 

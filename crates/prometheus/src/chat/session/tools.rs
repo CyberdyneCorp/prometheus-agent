@@ -271,6 +271,7 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
             SessionSurface::Onboarding
         }
         Source::Desktop => SessionSurface::Desktop,
+        Source::Dashboard => SessionSurface::Dashboard,
         Source::Cron => SessionSurface::Cron,
         Source::Api if session.source_tag.as_deref() == Some(A2A_TAG) => SessionSurface::A2a,
         Source::Api => SessionSurface::Api,

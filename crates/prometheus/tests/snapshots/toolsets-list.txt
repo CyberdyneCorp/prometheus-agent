@@ -90,8 +90,8 @@
   process  (1 tool)
     Background process management
     tools: process
-  project  (1 tool)  [default-off]
-    Switch or create the session's project (on by default for desktop and tui)
+  project  (1 tool)
+    Switch or create the session's project (desktop, tui and dashboard sessions)
     tools: project
   safe  (4 tools)
     Web, vision and image generation; nothing that executes

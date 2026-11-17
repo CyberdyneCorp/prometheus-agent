@@ -302,18 +302,18 @@ pub fn builtin() -> Vec<Toolset> {
     sets
 }
 
-/// The GUI surfaces' toolsets (spec: desktop-app, Desktop UI toolset
-/// contract; First-run onboarding chat; projects, Project tool for GUI
-/// sessions): `project` (default on for desktop and tui only), and the
-/// surface-gated `desktop_ui` and `onboarding`.
+/// The GUI surfaces' toolsets (spec: tool-system, Surface toolsets come
+/// from the session; desktop-app, Desktop UI toolset contract; First-run
+/// onboarding chat; projects, Project tool for GUI sessions), all
+/// surface-gated: `project` (desktop, tui and dashboard), `desktop_ui`
+/// and `onboarding`.
 fn gui_toolsets() -> Vec<Toolset> {
     vec![
-        Toolset::new(
+        surface_gated(Toolset::new(
             crate::agent_level_desktop::PROJECT,
-            "Switch or create the session's project (on by default for desktop and tui)",
+            "Switch or create the session's project (desktop, tui and dashboard sessions)",
             &["project"],
-        )
-        .default_off(),
+        )),
         surface_gated(Toolset::new(
             crate::agent_level_desktop::DESKTOP_UI,
             "The desktop window: reactions, terminal and preview panes, tours, tips, appearance",

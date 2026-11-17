@@ -96,6 +96,10 @@ capabilities = [
     "skills",
     "tui",
     "web-dashboard",
+    "model-providers",
+    "tool-system",
+    "execution-environments",
+    "security-boundaries",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -4913,3 +4917,27 @@ capabilities = [
 [tui."Shared live sessions (upgrade)"]
 "Observer cannot submit" = ["crates/prometheus/tests/tui_live.rs::a_tui_observing_a_session_shows_it_read_only_and_cannot_submit", "crates/pmt-gateway/tests/live_sessions.rs::an_observer_is_listed_as_one_and_cannot_submit"]
 "Desktop joins a TUI session" = ["crates/prometheus/tests/tui_live.rs::a_desktop_joining_the_tuis_session_is_shown_and_its_input_labelled", "crates/pmt-gateway/tests/live_sessions.rs::a_desktop_joining_a_tui_session_is_listed_to_both_and_gets_the_same_turn_seqs", "crates/pmt-tui/tests/upgrades.rs::a_shared_session_names_the_other_clients_in_the_status_line"]
+
+# Group 72.5: cost- and latency-aware routing policy.
+[model-providers."Cost and latency aware routing policy (upgrade)"]
+"Cheapest healthy capable candidate wins" = ["crates/pmt-providers/tests/providers/route_policy.rs::cheapest_healthy_capable_candidate_wins", "crates/pmt-providers/src/routing.rs::each_policy_picks_its_candidate"]
+"Route is stable within a session" = ["crates/prometheus/tests/routing_policy.rs::a_route_chosen_at_start_stays_for_every_turn"]
+
+# Group 72.6: surface toolsets from the session and taint-aware escalation.
+[tool-system."Surface toolsets come from the session"]
+"CLI session cannot obtain desktop tools" = ["crates/pmt-tools/tests/toolsets.rs::a_cli_session_cannot_obtain_desktop_tools"]
+
+[tool-system."Taint-aware escalation (upgrade)"]
+"Exfiltration attempt after browsing" = ["crates/pmt-tools/tests/taint.rs::an_exfiltration_attempt_after_browsing_asks_before_the_request_is_sent", "crates/pmt-tools/tests/taint.rs::a_target_approved_for_the_session_and_untainted_turns_do_not_ask", "crates/pmt-tools/src/approval/taint.rs::outbound_targets_are_hosts_commands_or_query_carrying_reads"]
+
+# Group 72.7: terminal workspace checkpoints.
+[execution-environments."Terminal workspace checkpoints (upgrade)"]
+"Undo a sed edit" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_sed_edit_made_by_a_terminal_command", "crates/pmt-tools/src/snapshots/workspace.rs::a_command_s_edits_creations_and_removals_are_found_with_their_prior_content", "crates/pmt-tools/src/snapshots/workspace.rs::an_oversized_workspace_is_skipped_with_one_notice"]
+
+# Group 72.8: credential injection at the egress proxy and opt-in external
+# secret sources.
+[security-boundaries."Credential injection at the egress proxy (upgrade)"]
+"Placeholder sent elsewhere" = ["crates/pmt-net/tests/egress_inject.rs::the_placeholder_becomes_the_token_only_for_the_mapped_host", "crates/prometheus/tests/egress_injection.rs::injected_credentials_never_reach_the_child_process", "crates/pmt-net/src/egress/inject.rs::a_placeholder_split_across_reads_is_never_forwarded"]
+
+[security-boundaries."External secret sources are opt-in"]
+"Default install" = ["crates/prometheus/tests/egress_injection.rs::a_default_install_never_runs_the_external_source_clis", "crates/pmt-config/src/secrets/external_tests.rs::a_default_config_builds_no_source"]

@@ -154,6 +154,9 @@ pub struct SurfaceToolsets {
     /// The desktop app (default `core`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub desktop: Option<Vec<String>>,
+    /// The web dashboard's chat (default `core`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dashboard: Option<Vec<String>>,
     /// Scheduled jobs without per-job toolsets (default `core`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cron: Option<Vec<String>>,
@@ -179,6 +182,7 @@ impl SurfaceToolsets {
         "cli",
         "tui",
         "desktop",
+        "dashboard",
         "cron",
         "api",
         "acp",
@@ -195,6 +199,7 @@ impl SurfaceToolsets {
             "cli" => self.cli.as_ref(),
             "tui" => self.tui.as_ref(),
             "desktop" => self.desktop.as_ref(),
+            "dashboard" => self.dashboard.as_ref(),
             "cron" => self.cron.as_ref(),
             "api" => self.api.as_ref(),
             "acp" => self.acp.as_ref(),
@@ -240,6 +245,24 @@ pub struct ApprovalsConfig {
     /// approval guardian the denial tells the model to stop trying
     /// variations (`0` disables); a human approval resets the count.
     pub denial_breaker_threshold: u32,
+    /// After untrusted content entered a turn: `ask` requires a human
+    /// approval for each later call of that turn that sends data to a
+    /// target not yet approved in the session, `warn` only annotates such
+    /// calls, `off` does not track.
+    pub taint_policy: TaintPolicy,
+}
+
+/// `approvals.taint_policy` (spec: tool-system, Taint-aware escalation).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TaintPolicy {
+    /// No tracking.
+    Off,
+    /// Annotate outbound calls of a tainted turn.
+    #[default]
+    Warn,
+    /// Ask a human before each such call.
+    Ask,
 }
 
 impl Default for ApprovalsConfig {
@@ -252,6 +275,7 @@ impl Default for ApprovalsConfig {
             timeout_secs: 300,
             deny: Vec::new(),
             denial_breaker_threshold: 3,
+            taint_policy: TaintPolicy::Warn,
         }
     }
 }
@@ -322,9 +346,13 @@ pub struct SnapshotConfig {
     /// Record file-tool changes (`/undo`) and checkpoints (`/rollback`);
     /// `chat --checkpoints` / `--no-checkpoints` override it per run.
     pub enabled: bool,
-    /// Also checkpoint before destructive terminal commands (`rm`, `mv`,
-    /// `sed -i`, `>`, `git reset`...).
+    /// Terminal commands: `off`, `destructive` (checkpoint before `rm`,
+    /// `mv`, `sed -i`, `>`, `git reset`...) or `workspace` (also journal
+    /// every command's workspace changes, so `/undo` reverts them).
     pub terminal: SnapshotTerminal,
+    /// Under `terminal = "workspace"`, larger workspaces are not
+    /// checkpointed (a one-time notice says so).
+    pub max_workspace_bytes: u64,
     /// Larger files are listed as skipped instead of stored.
     pub max_file_bytes: u64,
     /// Checkpoints kept per workspace.
@@ -342,6 +370,7 @@ impl Default for SnapshotConfig {
         Self {
             enabled: true,
             terminal: SnapshotTerminal::Off,
+            max_workspace_bytes: 536_870_912,
             max_file_bytes: 10_485_760,
             max_checkpoints: 20,
             retention_secs: 604_800,
@@ -360,6 +389,10 @@ pub enum SnapshotTerminal {
     Off,
     /// Checkpoint the command's project before a destructive command.
     Destructive,
+    /// As `destructive`, and record the workspace before every command and
+    /// journal what it changed (spec: execution-environments, Terminal
+    /// workspace checkpoints).
+    Workspace,
 }
 
 /// The `[terminal]` section.

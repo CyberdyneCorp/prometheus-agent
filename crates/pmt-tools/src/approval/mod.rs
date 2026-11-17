@@ -44,6 +44,7 @@ pub mod rules;
 pub mod selfterm;
 pub mod shell;
 pub mod suggest;
+pub mod taint;
 
 use std::fmt;
 use std::path::Path;

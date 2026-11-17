@@ -1098,10 +1098,9 @@ impl Host for DaemonHost {
         params: pmt_rpc::contracts::FsReadParams,
         link: Link,
     ) -> HostFuture<'a, pmt_rpc::contracts::FsFile> {
-        Box::pin(async move {
-            self.fs_read_of(&self.profile(profile)?, params, &link)
-                .await
-        })
+        Box::pin(
+            async move { Box::pin(self.fs_read_of(&self.profile(profile)?, params, &link)).await },
+        )
     }
 
     fn artifacts<'a>(

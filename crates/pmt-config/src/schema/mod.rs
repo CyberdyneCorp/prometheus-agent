@@ -47,6 +47,7 @@ mod projects;
 mod provider_routing;
 mod python_bridge;
 mod replay;
+mod secret_sources;
 mod state;
 mod tool_gateway;
 mod tools;
@@ -124,7 +125,8 @@ pub use moa::{
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
     LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
-    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
+    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, RoutingPolicy,
+    WireFormat,
 };
 pub use operations::{
     BudgetsConfig, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig, EgressMode,
@@ -145,6 +147,7 @@ pub use provider_routing::{
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use replay::{CacheMode, DEFAULT_NAMESPACE, ModelCallCacheConfig, ReplayConfig};
+pub use secret_sources::{BitwardenSourceConfig, OnePasswordSourceConfig, SOURCE_CACHE_TTL_SECS};
 pub use state::{
     AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryConsolidationConfig,
     MemoryDecayConfig, MemoryNotifications, MemoryReviewConfig, MemoryReviewMode, RecallConfig,
@@ -156,7 +159,7 @@ pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
     FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ProviderTier,
     ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig,
-    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
+    SurfaceToolsets, TaintPolicy, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
     ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WebXaiConfig,
     WindowsShell,
 };

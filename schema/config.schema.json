@@ -681,6 +681,11 @@
           "default": "deny",
           "description": "Decision for approvals in single-query (`-q`) runs."
         },
+        "taint_policy": {
+          "$ref": "#/$defs/TaintPolicy",
+          "default": "warn",
+          "description": "After untrusted content entered a turn: `ask` requires a human\napproval for each later call of that turn that sends data to a\ntarget not yet approved in the session, `warn` only annotates such\ncalls, `off` does not track."
+        },
         "timeout_secs": {
           "default": 300,
           "description": "Unanswered approvals are denied after this long.",
@@ -1080,6 +1085,45 @@
           "maximum": 4000,
           "minimum": 0,
           "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "BitwardenSourceConfig": {
+      "additionalProperties": false,
+      "description": "`[secrets.bitwarden]`: every secret of a Bitwarden Secrets Manager\nproject, by its key (a bulk source), read with the `bws` CLI.",
+      "properties": {
+        "access_token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "BWS_ACCESS_TOKEN",
+          "description": "The stored secret holding the machine account's access token (the\nonly place the token is read from)."
+        },
+        "cache_ttl_secs": {
+          "default": 300,
+          "description": "Resolved values stay in memory at most this long (never on disk).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Read secrets from Bitwarden (off by default: `bws` is then never\nrun).",
+          "type": "boolean"
+        },
+        "project_id": {
+          "description": "The project whose secrets are read (unset: every project the token\nsees).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server_url": {
+          "description": "A self-hosted server's URL.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -2971,6 +3015,11 @@
           "description": "Allow private destinations without a session grant.",
           "type": "boolean"
         },
+        "credential_injection": {
+          "default": false,
+          "description": "Sandboxed children of a session hold a per-session placeholder\ninstead of each secret mapped in `inject`; the egress proxy puts the\nreal value in only on TLS requests to the mapped hosts and refuses\nthe placeholder anywhere else (`credential_misdirected`).",
+          "type": "boolean"
+        },
         "deny": {
           "default": [],
           "description": "Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g.\n`*.casino.example`); a session can add to them, never remove.",
@@ -2994,6 +3043,17 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "inject": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "description": "Secret name to the host patterns (`host`, `host:port`,\n`*.suffix`) its value may be sent to, under `credential_injection`.",
+          "type": "object"
         },
         "mode": {
           "$ref": "#/$defs/EgressMode",
@@ -3567,6 +3627,7 @@
             "max_bytes": 1073741824,
             "max_checkpoints": 20,
             "max_file_bytes": 10485760,
+            "max_workspace_bytes": 536870912,
             "prune_interval_secs": 86400,
             "retention_secs": 604800,
             "terminal": "off"
@@ -6836,6 +6897,39 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OnePasswordSourceConfig": {
+      "additionalProperties": false,
+      "description": "`[secrets.onepassword]`: secrets mapped by name to 1Password\nreferences (a mapped source), read with the `op` CLI.",
+      "properties": {
+        "access_token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "OP_SERVICE_ACCOUNT_TOKEN",
+          "description": "The stored secret holding the service-account token (the only\nplace the token is read from)."
+        },
+        "cache_ttl_secs": {
+          "default": 300,
+          "description": "Resolved values stay in memory at most this long (never on disk).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Read secrets from 1Password (off by default: `op` is then never\nrun).",
+          "type": "boolean"
+        },
+        "map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Secret name to its `op://vault/item/field` reference.",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "OpenAiTtsConfig": {
       "additionalProperties": false,
       "description": "`[tts.openai]`.",
@@ -8880,8 +8974,24 @@
     },
     "RoutingConfig": {
       "additionalProperties": false,
-      "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring).",
+      "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring; Cost and latency aware routing policy).",
       "properties": {
+        "candidates": {
+          "default": [],
+          "description": "The routes a policy chooses among (`[[routing.candidates]]`, as\nfallback entries); empty: the requested route plus the fallback\nchain.",
+          "items": {
+            "$ref": "#/$defs/FallbackEntry"
+          },
+          "type": "array"
+        },
+        "cost_weight": {
+          "default": 0.5,
+          "description": "The weight of cost against latency under `balanced`.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
         "health_half_life_secs": {
           "default": 1800,
           "description": "Half-life (seconds) of the decay of an idle route's health score\ntoward 1.0.",
@@ -8896,10 +9006,40 @@
           "maximum": 500,
           "minimum": 1,
           "type": "integer"
+        },
+        "policy": {
+          "$ref": "#/$defs/RoutingPolicy",
+          "default": "pinned",
+          "description": "How a session's route is chosen at its start: `pinned` (the\nrequested route), `cheapest`, `fastest` or `balanced`."
         }
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "RoutingPolicy": {
+      "description": "`routing.policy` (spec: model-providers, Cost and latency aware\nrouting policy).",
+      "oneOf": [
+        {
+          "const": "pinned",
+          "description": "The requested provider and model.",
+          "type": "string"
+        },
+        {
+          "const": "cheapest",
+          "description": "The lowest estimated cost per turn.",
+          "type": "string"
+        },
+        {
+          "const": "fastest",
+          "description": "The lowest median time to first token.",
+          "type": "string"
+        },
+        {
+          "const": "balanced",
+          "description": "The lowest weighted sum of normalised cost and latency.",
+          "type": "string"
+        }
+      ]
     },
     "RoutingPrefs": {
       "additionalProperties": false,
@@ -9122,6 +9262,15 @@
           "default": "file",
           "description": "Where this profile's secrets are stored."
         },
+        "bitwarden": {
+          "$ref": "#/$defs/BitwardenSourceConfig",
+          "default": {
+            "access_token_secret": "BWS_ACCESS_TOKEN",
+            "cache_ttl_secs": 300,
+            "enabled": false
+          },
+          "description": "Bitwarden Secrets Manager (off by default)."
+        },
         "command": {
           "$ref": "#/$defs/SecretCommandConfig",
           "default": {
@@ -9131,6 +9280,16 @@
             "timeout_secs": 3
           },
           "description": "A helper command printing `NAME=VALUE` lines (POSIX only)."
+        },
+        "onepassword": {
+          "$ref": "#/$defs/OnePasswordSourceConfig",
+          "default": {
+            "access_token_secret": "OP_SERVICE_ACCOUNT_TOKEN",
+            "cache_ttl_secs": 300,
+            "enabled": false,
+            "map": {}
+          },
+          "description": "1Password (off by default)."
         }
       },
       "type": "object",
@@ -9163,9 +9322,11 @@
           "default": {
             "allow": [],
             "allow_private": false,
+            "credential_injection": false,
             "deny": [],
             "deny_files": [],
             "fake_ip_ranges": [],
+            "inject": {},
             "mode": "public"
           },
           "description": "Outbound network policy."
@@ -9571,6 +9732,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "max_workspace_bytes": {
+          "default": 536870912,
+          "description": "Under `terminal = \"workspace\"`, larger workspaces are not\ncheckpointed (a one-time notice says so).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "prune_interval_secs": {
           "default": 86400,
           "description": "Least time between automatic prunes.",
@@ -9588,7 +9756,7 @@
         "terminal": {
           "$ref": "#/$defs/SnapshotTerminal",
           "default": "off",
-          "description": "Also checkpoint before destructive terminal commands (`rm`, `mv`,\n`sed -i`, `>`, `git reset`...)."
+          "description": "Terminal commands: `off`, `destructive` (checkpoint before `rm`,\n`mv`, `sed -i`, `>`, `git reset`...) or `workspace` (also journal\nevery command's workspace changes, so `/undo` reverts them)."
         }
       },
       "type": "object"
@@ -9604,6 +9772,11 @@
         {
           "const": "destructive",
           "description": "Checkpoint the command's project before a destructive command.",
+          "type": "string"
+        },
+        {
+          "const": "workspace",
+          "description": "As `destructive`, and record the workspace before every command and\njournal what it changed (spec: execution-environments, Terminal\nworkspace checkpoints).",
           "type": "string"
         }
       ]
@@ -9984,6 +10157,16 @@
             "null"
           ]
         },
+        "dashboard": {
+          "description": "The web dashboard's chat (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "desktop": {
           "description": "The desktop app (default `core`).",
           "items": {
@@ -10028,6 +10211,26 @@
         {
           "const": "ratio",
           "description": "Keep a tail sized by `target_ratio`.",
+          "type": "string"
+        }
+      ]
+    },
+    "TaintPolicy": {
+      "description": "`approvals.taint_policy` (spec: tool-system, Taint-aware escalation).",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "No tracking.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Annotate outbound calls of a tainted turn.",
+          "type": "string"
+        },
+        {
+          "const": "ask",
+          "description": "Ask a human before each such call.",
           "type": "string"
         }
       ]
@@ -12211,6 +12414,7 @@
         "deny": [],
         "mode": "manual",
         "single_query_mode": "deny",
+        "taint_policy": "warn",
         "timeout_secs": 300,
         "unattended_mode": "deny"
       },
@@ -12566,6 +12770,7 @@
           "max_bytes": 1073741824,
           "max_checkpoints": 20,
           "max_file_bytes": 10485760,
+          "max_workspace_bytes": 536870912,
           "prune_interval_secs": 86400,
           "retention_secs": 604800,
           "terminal": "off"
@@ -13020,8 +13225,11 @@
     "routing": {
       "$ref": "#/$defs/RoutingConfig",
       "default": {
+        "candidates": [],
+        "cost_weight": 0.5,
         "health_half_life_secs": 1800,
-        "health_window": 50
+        "health_window": 50,
+        "policy": "pinned"
       },
       "description": "Provider health scoring."
     },
@@ -13037,11 +13245,22 @@
       "$ref": "#/$defs/SecretsConfig",
       "default": {
         "backend": "file",
+        "bitwarden": {
+          "access_token_secret": "BWS_ACCESS_TOKEN",
+          "cache_ttl_secs": 300,
+          "enabled": false
+        },
         "command": {
           "argv": [],
           "enabled": false,
           "override_existing": false,
           "timeout_secs": 3
+        },
+        "onepassword": {
+          "access_token_secret": "OP_SERVICE_ACCOUNT_TOKEN",
+          "cache_ttl_secs": 300,
+          "enabled": false,
+          "map": {}
         }
       },
       "description": "Secrets store backend."
@@ -13053,9 +13272,11 @@
         "egress": {
           "allow": [],
           "allow_private": false,
+          "credential_injection": false,
           "deny": [],
           "deny_files": [],
           "fake_ip_ranges": [],
+          "inject": {},
           "mode": "public"
         },
         "protected_instruction_extra_patterns": [],

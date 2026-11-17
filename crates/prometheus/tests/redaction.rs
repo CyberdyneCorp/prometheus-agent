@@ -241,6 +241,7 @@ fn store_log_and_trajectory_hold_the_marker() {
             duration_ms: None,
             output: Some(leaked()),
             error: None,
+            taint: None,
         })))
         .unwrap();
     let path = writer.close().unwrap();

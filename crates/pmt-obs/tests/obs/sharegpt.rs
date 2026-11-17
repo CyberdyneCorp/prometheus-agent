@@ -70,6 +70,7 @@ fn session(end: &str) -> Vec<Line> {
                 duration_ms: Some(2),
                 output: Some("buy milk".to_owned()),
                 error: None,
+                taint: None,
             }),
         ),
         line(

@@ -357,6 +357,10 @@ pub struct SecretsConfig {
     pub backend: SecretsBackend,
     /// A helper command printing `NAME=VALUE` lines (POSIX only).
     pub command: SecretCommandConfig,
+    /// Bitwarden Secrets Manager (off by default).
+    pub bitwarden: super::BitwardenSourceConfig,
+    /// 1Password (off by default).
+    pub onepassword: super::OnePasswordSourceConfig,
 }
 
 /// The `[secrets.command]` section: a helper run once per process start,
@@ -563,6 +567,14 @@ pub struct EgressConfig {
     /// Absolute paths of shared blocklist files: one pattern per line, `#`
     /// comments; re-read when a file changes.
     pub deny_files: Vec<String>,
+    /// Sandboxed children of a session hold a per-session placeholder
+    /// instead of each secret mapped in `inject`; the egress proxy puts the
+    /// real value in only on TLS requests to the mapped hosts and refuses
+    /// the placeholder anywhere else (`credential_misdirected`).
+    pub credential_injection: bool,
+    /// Secret name to the host patterns (`host`, `host:port`,
+    /// `*.suffix`) its value may be sent to, under `credential_injection`.
+    pub inject: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 /// The `[network]` section.

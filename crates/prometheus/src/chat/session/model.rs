@@ -517,6 +517,60 @@ impl Models {
         Ok(target_of(&route))
     }
 
+    /// The route a new session asking for `target` runs on (spec:
+    /// model-providers, Cost and latency aware routing policy): the one
+    /// `routing.policy` picks among `[[routing.candidates]]` (else `target`
+    /// and the fallback chain), with the `provider.route_selected` event
+    /// recording it; `target` itself under `pinned` or when no candidate
+    /// is eligible.
+    ///
+    /// # Errors
+    ///
+    /// A candidate or chain entry naming an unknown provider.
+    pub async fn routed(
+        &self,
+        target: &Target,
+    ) -> Result<(Target, Option<pmt_obs::trajectory::payload::RouteSelected>), Error> {
+        let parts = &self.setup;
+        let routing = &parts.config.routing;
+        if routing.policy == pmt_config::schema::RoutingPolicy::Pinned {
+            return Ok((target.clone(), None));
+        }
+        let candidates = if routing.candidates.is_empty() {
+            let chain = pmt_providers::fallback::chain(&parts.config, &parts.registry)?;
+            std::iter::once(target.clone()).chain(chain).collect()
+        } else {
+            pmt_providers::fallback::targets(
+                &routing.candidates,
+                "routing.candidates",
+                &parts.registry,
+            )?
+        };
+        let resolver = parts.resolver();
+        let ctx = pmt_providers::routing::Context {
+            resolver: &resolver,
+            health: &*parts.health,
+            catalog: &parts.catalog,
+            min_health: parts.config.fallback.min_health,
+        };
+        let selected =
+            pmt_providers::routing::select(routing.policy, routing.cost_weight, &candidates, &ctx)
+                .await;
+        Ok(match selected {
+            // The resolved provider and model, with the candidate's own
+            // endpoint and credential.
+            Some(selection) => (
+                Target {
+                    provider: selection.route.provider.clone(),
+                    model: Some(selection.route.model.clone()),
+                    ..selection.target
+                },
+                Some(selection.event),
+            ),
+            None => (target.clone(), None),
+        })
+    }
+
     /// The port of `target` whose chain is scoped by `owners`, outermost
     /// first (a scheduled run, then a delegated child of it): each owner
     /// keeps the chain it inherits unless it pinned its route (none) or

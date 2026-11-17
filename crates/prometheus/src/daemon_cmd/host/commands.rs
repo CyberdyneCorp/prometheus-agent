@@ -102,7 +102,7 @@ impl DaemonHost {
             caller: session.live.surface(),
             chat: None,
         };
-        let dispatched = run.line(line_of(&params), 0).await;
+        let dispatched = Box::pin(run.line(line_of(&params), 0)).await;
         // Every surface shows the session's model, effort and mode: a
         // command that may have changed them is announced.
         if SETTINGS.contains(&params.name.trim_start_matches('/'))
@@ -137,7 +137,7 @@ impl DaemonHost {
             caller: "gateway",
             chat: Some(&self.gateway),
         };
-        Ok(run.line(input.to_owned(), 0).await)
+        Ok(Box::pin(run.line(input.to_owned(), 0)).await)
     }
 }
 
@@ -228,7 +228,7 @@ impl Run<'_> {
                 refused(format!("quick command '{name}' nests too deeply"))
             }
             pmt_config::schema::QuickCommandKind::Alias => {
-                self.line(alias_line(&command, args), depth + 1).await
+                Box::pin(self.line(alias_line(&command, args), depth + 1)).await
             }
             pmt_config::schema::QuickCommandKind::Exec => {
                 let mut command = command;

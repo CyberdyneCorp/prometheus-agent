@@ -86,6 +86,10 @@ pub struct EnvRequest<'a> {
 pub struct ChildEnv {
     vars: BTreeMap<String, OsString>,
     secret_names: Vec<String>,
+    /// Secrets the egress proxy injects: the child holds these
+    /// placeholders instead of their values (spec: security-boundaries,
+    /// Credential injection at the egress proxy).
+    placeholders: std::sync::Arc<BTreeMap<String, String>>,
 }
 
 impl std::fmt::Debug for ChildEnv {
@@ -94,6 +98,10 @@ impl std::fmt::Debug for ChildEnv {
         f.debug_struct("ChildEnv")
             .field("names", &self.vars.keys().collect::<Vec<_>>())
             .field("secret_names", &self.secret_names)
+            .field(
+                "placeholders",
+                &self.placeholders.keys().collect::<Vec<_>>(),
+            )
             .finish()
     }
 }
@@ -123,17 +131,33 @@ impl ChildEnv {
         env
     }
 
-    /// A copy with `secrets` added (names recorded as secret names).
+    /// A copy with `secrets` added (names recorded as secret names); a
+    /// secret the egress proxy injects is added as its placeholder.
     #[must_use]
     pub fn with_secrets(&self, secrets: Vec<(String, SecretString)>) -> Self {
         let mut env = self.clone();
         for (name, value) in secrets {
-            env.set(&name, value.expose());
+            match env.placeholders.get(&name).cloned() {
+                Some(placeholder) => env.set(&name, placeholder),
+                None => env.set(&name, value.expose()),
+            }
             if !env.secret_names.contains(&name) {
                 env.secret_names.push(name);
             }
         }
         env
+    }
+
+    /// From now on holds `placeholders` (secret name to placeholder)
+    /// instead of those secrets' values, here and in every
+    /// [`ChildEnv::with_secrets`] copy.
+    pub fn inject(&mut self, placeholders: BTreeMap<String, String>) {
+        for (name, placeholder) in &placeholders {
+            if self.secret_names.contains(name) {
+                self.set(name, placeholder);
+            }
+        }
+        self.placeholders = std::sync::Arc::new(placeholders);
     }
 
     /// Puts `dirs` first on `PATH`.

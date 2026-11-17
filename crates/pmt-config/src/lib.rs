@@ -28,6 +28,7 @@ pub mod daemon_remote;
 pub mod delegation_check;
 pub mod delegation_requests;
 mod edit;
+pub mod egress_check;
 pub mod essential;
 pub mod gateway_check;
 mod gateway_check_display;

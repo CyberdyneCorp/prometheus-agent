@@ -216,6 +216,10 @@ pub struct ToolResult {
     /// The failure, when not `ok`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Failure>,
+    /// Why the call was flagged: it sent data out of a turn that had read
+    /// untrusted content (tool-system, Taint-aware escalation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub taint: Option<String>,
 }
 
 /// One dependency edge of a planned batch: `call` waits for `after`.
@@ -425,7 +429,7 @@ pub struct ProviderFallback {
 }
 
 /// `provider.route_selected`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RouteSelected {
     /// The routing policy.
     pub policy: String,
@@ -433,6 +437,22 @@ pub struct RouteSelected {
     pub selected: String,
     /// Rejected candidates with their reason.
     pub rejected: Vec<RejectedRoute>,
+    /// What the policy weighed about each eligible candidate.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub candidates: Vec<RouteInputs>,
+}
+
+/// The inputs of one eligible candidate of `provider.route_selected`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RouteInputs {
+    /// The route.
+    pub route: String,
+    /// Estimated cost of a typical turn in USD (`null`: unpriced).
+    pub cost_usd: Option<f64>,
+    /// Median time to first token (`null`: never measured).
+    pub ttft_p50_ms: Option<u64>,
+    /// Health score in [0, 1].
+    pub health: f64,
 }
 
 /// A candidate route `provider.route_selected` did not choose.

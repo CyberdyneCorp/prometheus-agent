@@ -44,6 +44,7 @@ pub mod registry;
 pub mod request;
 pub mod resolve;
 pub mod retirement;
+pub mod routing;
 pub mod spend;
 mod sse;
 pub mod status;

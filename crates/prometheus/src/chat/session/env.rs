@@ -180,10 +180,14 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let user_home = inputs.launch.user_home().cloned();
     let (places, paths) = places(inputs, user_home.as_deref(), &scratch);
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
+    let injection = crate::egress::injection::for_session(inputs.scope)?;
     let proxy = crate::egress::child_proxy(
         inputs.scope,
         inputs.capabilities,
-        Arc::clone(&inputs.egress.hosts),
+        (
+            Arc::clone(&inputs.egress.hosts),
+            injection.as_ref().map(|i| Arc::clone(&i.injection)),
+        ),
         "terminal",
         Arc::clone(&inputs.egress.observer),
     )?;
@@ -191,7 +195,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         Some(proxy) => crate::egress::through(policy.as_ref().clone(), proxy),
         None => policy.as_ref().clone(),
     };
-    let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())
+    let process = processes(inputs, &scratch, &child_policy, (proxy.as_ref(), injection))
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
     let browser = process
@@ -485,7 +489,10 @@ fn processes(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
     policy: &Policy,
-    proxy: Option<&Proxy>,
+    (proxy, injection): (
+        Option<&Proxy>,
+        Option<crate::egress::injection::SessionInjection>,
+    ),
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
@@ -510,9 +517,23 @@ fn processes(
         env.set_proxy(&url);
     }
     let bundle = scratch.join("ca-bundle.pem");
-    let extra_ca = config.network.extra_ca_file.as_deref().map(Path::new);
-    if pmt_net::tls::write_child_bundle(&bundle, extra_ca).is_ok() {
-        env.set_ca_bundle(&bundle);
+    let mut extra_ca: Vec<&Path> = config
+        .network
+        .extra_ca_file
+        .as_deref()
+        .map(Path::new)
+        .into_iter()
+        .collect();
+    // Credential injection: the children hold placeholders and trust the
+    // proxy's CA, which signs the hosts it injects for.
+    if let Some(injection) = &injection {
+        env.inject(injection.placeholders.clone());
+        extra_ca.push(&injection.ca_cert);
+    }
+    match pmt_net::tls::write_child_bundle(&bundle, &extra_ca) {
+        Ok(()) => env.set_ca_bundle(&bundle),
+        Err(err) if injection.is_some() => return Err(err),
+        Err(_) => {}
     }
     Ok((sandbox, env))
 }
@@ -566,6 +587,12 @@ fn terminal(
             &pmt_core::error::codes::HOME_IO,
             format!("cannot set up the terminal: {e}"),
         )
+    })
+    .inspect(|terminal| {
+        // Terminal workspace checkpoints journal each command's changes.
+        if let Some(snapshots) = snapshots.cloned() {
+            terminal.add_after_command(Arc::new(move || snapshots.after_command()));
+        }
     })
 }
 

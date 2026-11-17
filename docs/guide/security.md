@@ -162,6 +162,40 @@ reason, and a record in the security audit log; a refusal of a child shared
 by sessions (an MCP stdio server, a python sidecar) belongs to the session
 whose call was in flight.
 
+### Credential injection
+
+With credential injection, a session's children never hold the secrets
+they use against an API:
+
+```toml
+[security.egress]
+credential_injection = true
+
+[security.egress.inject]
+GITHUB_TOKEN = ["api.github.com"]
+OPENAI_API_KEY = ["api.openai.com"]
+```
+
+Each mapped secret the profile holds gets a fresh placeholder
+(`pmt-egress-<32 hex>`) per session, and the processes started from the
+session's environment (terminal commands, with the secrets their loaded
+skills declare) receive the placeholder wherever they would receive the
+secret. Their CA bundle (`SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`) also trusts
+the profile's egress CA, `<profile>/egress/ca.crt` (its key `ca.key` is
+0600 and never leaves the host). The session's proxy terminates their TLS
+with a certificate that CA signs for the host, verifies the real server
+itself (platform roots plus `network.extra_ca_file`), and replaces a
+placeholder in the request head with the real value only when the host
+matches that secret's patterns. A placeholder bound for any other host, in
+the head or later in the stream, ends the request before it is forwarded:
+the child gets `403` (`credential misdirected`) and the session an
+`egress.denied` event with reason `credential_misdirected`. Plain HTTP never
+carries a real value, and a tunnel that is not TLS is only scanned. Each
+intercepted request is sent with `Connection: close`. A client that pins
+certificates or ignores the CA bundle cannot reach injected hosts. MCP
+servers and plugin sidecars keep their own credentials.
+
 ### Website blocklist
 
 Hosts you never want reached are refused in every mode, by the web tools,

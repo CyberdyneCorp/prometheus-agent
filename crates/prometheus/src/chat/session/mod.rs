@@ -612,9 +612,9 @@ impl Factory {
         clients: Option<Clients>,
         child: Option<&delegation::ChildSpec>,
     ) -> Result<Live, Error> {
-        let model = self.model_for(target, child).await?;
+        let (target, routed, model) = Box::pin(self.routed_model(id, target, child)).await?;
         self.maintain();
-        let session = self.session_row(id, target)?;
+        let session = self.session_row(id, &target)?;
         let conversation = self.models.bind_conversation(&session);
         let discovery = self.discover_mcp_for(id, child.is_some()).await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
@@ -625,11 +625,11 @@ impl Factory {
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities_for(id, &skills, child)?;
         let current = SharedScope::new(self.scope_for(child));
-        let vision = self.vision_plan(id, target, child.is_some()).await;
+        let vision = self.vision_plan(id, &target, child.is_some()).await;
         let at = place::At::open(&self.options.cwd, clients.as_ref());
         let at = place::At { vision, ..at };
         let environment =
-            self.environment(&session, target, &capabilities, &current, &skills, &at)?;
+            self.environment(&session, &target, &capabilities, &current, &skills, &at)?;
         media::prime(&id.to_string()).await;
         let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
@@ -657,7 +657,7 @@ impl Factory {
             .await;
         let (agent, progress, mcp) = self.agent_of(opening::AgentInputs {
             id,
-            target,
+            target: &target,
             session: &session,
             child,
             clients: clients.as_ref().map(|c| Arc::clone(&c.events)),
@@ -708,7 +708,7 @@ impl Factory {
             _skills: attached,
             _conversation: conversation,
         };
-        Box::pin(live.emit_start(&session, target, &lessons)).await;
+        Box::pin(live.emit_start(&session, &target, &lessons, routed)).await;
         Ok(live)
     }
 

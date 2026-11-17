@@ -17,6 +17,7 @@ use super::destructive::is_destructive;
 use super::journal::{self, Edit};
 use super::store::{SnapshotStore, now_ms};
 use super::tree::Tree;
+use super::workspace;
 use crate::files::edits::{EditCall, EditRecorder};
 
 /// The session's current turn number (it only grows).
@@ -31,6 +32,10 @@ pub struct Settings {
     /// Checkpoint before destructive terminal commands
     /// (`files.snapshot.terminal` not `off`).
     pub terminal: bool,
+    /// Journal every terminal command's changes to the workspace, up to
+    /// this many workspace bytes (`files.snapshot.terminal = "workspace"`:
+    /// `files.snapshot.max_workspace_bytes`).
+    pub workspace_bytes: Option<u64>,
     /// Larger files are listed as skipped.
     pub max_file_bytes: u64,
     /// Checkpoints kept per workspace.
@@ -56,6 +61,8 @@ pub struct SessionSnapshots {
     excluded: Vec<PathBuf>,
     /// The turn and the projects checkpointed in it.
     taken: Mutex<(u64, HashSet<PathBuf>)>,
+    /// The manifests of terminal workspace checkpoints.
+    commands: workspace::Checkpoints,
 }
 
 impl std::fmt::Debug for SessionSnapshots {
@@ -89,6 +96,7 @@ impl SessionSnapshots {
             settings,
             turn,
             taken: Mutex::new((0, HashSet::new())),
+            commands: workspace::Checkpoints::default(),
         }
     }
 
@@ -130,10 +138,54 @@ impl SessionSnapshots {
     }
 
     /// Before a terminal command in `cwd`: a checkpoint of its project
-    /// when the command is destructive.
+    /// when the command is destructive, and the workspace manifest under
+    /// terminal workspace checkpoints.
     pub fn before_command(&self, command: &str, cwd: &Path) {
-        if self.settings.enabled && self.settings.terminal && is_destructive(command) {
+        if !self.settings.enabled {
+            return;
+        }
+        if self.settings.terminal && is_destructive(command) {
             self.checkpoint(cwd, "terminal");
+        }
+        if let Some(max_bytes) = self.settings.workspace_bytes {
+            self.commands.before(&self.workspace_of(max_bytes));
+        }
+    }
+
+    /// After a terminal command, under terminal workspace checkpoints:
+    /// journals each workspace file it changed (so `/undo` reverts it) and
+    /// answers the one-time notice of a workspace too large to checkpoint.
+    pub fn after_command(&self) -> Option<String> {
+        let max_bytes = self
+            .settings
+            .workspace_bytes
+            .filter(|_| self.settings.enabled)?;
+        let (changes, notice) = self.commands.after(&self.workspace_of(max_bytes));
+        for change in changes {
+            let edit = Edit {
+                turn: self.turn(),
+                call_id: String::new(),
+                tool: "terminal".to_owned(),
+                path: change.path,
+                backend: self.tree.backend().map(str::to_owned),
+                before: change.before,
+                after: change.after,
+                at_ms: now_ms(),
+            };
+            if let Err(err) = journal::append(&self.store, &self.session, edit) {
+                tracing::warn!("terminal change not journaled: {err}");
+            }
+        }
+        notice
+    }
+
+    fn workspace_of(&self, max_bytes: u64) -> workspace::Workspace<'_> {
+        workspace::Workspace {
+            store: &self.store,
+            tree: &*self.tree,
+            root: &self.workspace,
+            excluded: &self.excluded,
+            max_bytes,
         }
     }
 

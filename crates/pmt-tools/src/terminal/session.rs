@@ -172,6 +172,7 @@ pub struct Terminal {
     secret_source: std::sync::RwLock<Option<SecretSource>>,
     path_source: std::sync::RwLock<Option<PathSource>>,
     before_hooks: std::sync::RwLock<Vec<BeforeCommand>>,
+    after_hooks: std::sync::RwLock<Vec<AfterCommand>>,
     sudo: std::sync::RwLock<Option<Arc<Sudo>>>,
     inputs: std::sync::RwLock<Option<Arc<Inputs>>>,
     /// The session whose terminal delegate may run foreground commands
@@ -192,6 +193,11 @@ pub type PathSource = Arc<dyn Fn(&str) -> Vec<PathBuf> + Send + Sync>;
 /// the command and its directory on the backend; it must never fail the
 /// command.
 pub type BeforeCommand = Arc<dyn Fn(&str, &Path) + Send + Sync>;
+
+/// Runs on a blocking thread of this host once a command returned (a
+/// background one: once it started); it must never fail the command, and
+/// may answer a notice for the command's result.
+pub type AfterCommand = Arc<dyn Fn() -> Option<String> + Send + Sync>;
 
 /// Things the next result carries once.
 #[derive(Debug, Default)]
@@ -266,6 +272,7 @@ impl Terminal {
             secret_source: std::sync::RwLock::new(None),
             path_source: std::sync::RwLock::new(None),
             before_hooks: std::sync::RwLock::new(Vec::new()),
+            after_hooks: std::sync::RwLock::new(Vec::new()),
             sudo: std::sync::RwLock::new(None),
             inputs: std::sync::RwLock::new(None),
             delegate_for: std::sync::RwLock::new(None),
@@ -492,6 +499,7 @@ impl Terminal {
         let mut result = self
             .execute(exec, &args, &cwd, timeout_secs, password)
             .await;
+        result.notices.extend(self.after_command().await);
         if let Some(sudo) = &adapted.sudo {
             sudo.finish(&adapted.elevation, &mut result);
         }
@@ -643,6 +651,30 @@ impl Terminal {
             .write()
             .unwrap_or_else(PoisonError::into_inner)
             .push(hook);
+    }
+
+    /// Adds a hook run after every later command (terminal workspace
+    /// checkpoints, spec: execution-environments).
+    pub fn add_after_command(&self, hook: AfterCommand) {
+        self.after_hooks
+            .write()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(hook);
+    }
+
+    /// The [`AfterCommand`] hooks of a command that ran; their notices.
+    async fn after_command(&self) -> Vec<String> {
+        let hooks = self
+            .after_hooks
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if hooks.is_empty() {
+            return Vec::new();
+        }
+        pmt_core::spawn::blocking(move || hooks.iter().filter_map(|hook| hook()).collect())
+            .await
+            .unwrap_or_default()
     }
 
     /// A foreground command on a plugin backend.

@@ -14,14 +14,16 @@ use pmt_store::{EndReason, Store};
 use super::{Live, lifecycle};
 
 impl Live {
-    /// Records `session.start` for `session` on `target`'s route, then
-    /// one `security.downgrade` per allowed hardening downgrade and the
+    /// Records `session.start` for `session` on `target`'s route, the
+    /// routing policy's choice of it (`provider.route_selected`), then one
+    /// `security.downgrade` per allowed hardening downgrade and the
     /// experience lessons injected at this open.
     pub(super) async fn emit_start(
         &self,
         session: &pmt_store::Session,
         target: &pmt_providers::resolve::Target,
         lessons: &[String],
+        routed: Option<Box<pmt_obs::trajectory::payload::RouteSelected>>,
     ) {
         self.emit(Event::SessionStart(SessionStart {
             source: session.source.as_str().to_owned(),
@@ -31,6 +33,9 @@ impl Live {
             trace_id: None, // stamped from the session's trace
         }))
         .await;
+        if let Some(routed) = routed {
+            self.emit(Event::ProviderRouteSelected(*routed)).await;
+        }
         for event in self.downgrades.events() {
             self.emit(event).await;
         }
