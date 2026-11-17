@@ -657,7 +657,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 73. M3 Additional upgrades: configuration, egress, runtimes and providers
 
-- [x] 73.1 Implement the remote configuration backend (unreachable plane fails closed), profile descriptions, profile distributions (updates keep user config, credentials never installed), identity migration and purge (purge snapshotted) and external secret source commands; verify with fixtures (spec: configuration-and-profiles)
+- [ ] 73.1 Implement the remote configuration backend (unreachable plane fails closed), profile descriptions, profile distributions (updates keep user config, credentials never installed), identity migration and purge (purge snapshotted) and external secret source commands; verify with fixtures (spec: configuration-and-profiles)
 - [ ] 73.2 Implement egress proxy operation and status, egress proxy coverage of containers and remote sandboxes (CA inside the container), the egress credential source with placeholder rotation, password manager login sources and the dependency vulnerability scan CI gate; verify with proxy integration tests (spec: security-boundaries)
 - [ ] 73.3 Implement the Lightpanda browser engine, the bot screen (virtual display for the agent) and the bot screen takeover lease; verify that the agent waits during a user takeover (spec: execution-environments)
 - [ ] 73.4 Implement the Codex app-server runtime (switch deferred to the next session) and the Codex runtime migration (user text preserved); verify with a stub Codex binary (spec: model-providers)
