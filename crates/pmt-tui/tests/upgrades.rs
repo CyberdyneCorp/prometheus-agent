@@ -100,6 +100,7 @@ fn an_edit_approval_shows_numbered_hunks_and_the_review_choices() {
             format!("+{new}"),
             " keep".into(),
         ],
+        syntax: Vec::new(),
     };
     app.card = Some(Card {
         title: "approval needed: write_file AGENTS.md".into(),

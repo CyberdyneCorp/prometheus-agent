@@ -6,8 +6,12 @@
 //! The answer is `approval.respond`'s `{decision, accepted_hunks?,
 //! replacement?}`.
 
+use std::ops::Range;
+use std::path::Path;
+
 use pmt_i18n::t;
-use pmt_tui::diff::DiffHunk;
+use pmt_tools::files::syntax::{self, Class, LineClasses};
+use pmt_tui::diff::{DiffHunk, Syntax};
 use serde_json::{Value, json};
 
 use super::screen::Tui;
@@ -19,22 +23,86 @@ pub(super) fn has_diff(params: &Value) -> bool {
         .is_some_and(|hunks| !hunks.is_empty())
 }
 
-/// The numbered hunks of an `approval.request`'s edit.
+/// The numbered hunks of an `approval.request`'s edit, their code
+/// highlighted by the edited file's language.
 pub(super) fn hunks(params: &Value) -> Vec<DiffHunk> {
-    params["diff"]["hunks"]
+    let diff = &params["diff"];
+    let path = Path::new(diff["path"].as_str().unwrap_or_default());
+    let old = syntax::classes(path, diff["old_text"].as_str().unwrap_or_default());
+    let new = syntax::classes(path, diff["new_text"].as_str().unwrap_or_default());
+    diff["hunks"]
         .as_array()
         .into_iter()
         .flatten()
-        .map(|hunk| DiffHunk {
-            header: hunk["header"].as_str().unwrap_or_default().to_owned(),
-            lines: hunk["lines"]
+        .map(|hunk| {
+            let header = hunk["header"].as_str().unwrap_or_default().to_owned();
+            let lines: Vec<String> = hunk["lines"]
                 .as_array()
                 .into_iter()
                 .flatten()
                 .filter_map(|l| l.as_str().map(str::to_owned))
-                .collect(),
+                .collect();
+            let syntax = hunk_syntax(&header, &lines, (&old, &new));
+            DiffHunk {
+                header,
+                lines,
+                syntax,
+            }
         })
         .collect()
+}
+
+/// The syntax runs of a hunk's lines: a removed line's from the old
+/// text, the others' from the new one, found by the line numbers the
+/// header starts at (`@@ -<old>,<n> +<new>,<n> @@`).
+fn hunk_syntax(
+    header: &str,
+    lines: &[String],
+    (old, new): (&[LineClasses], &[LineClasses]),
+) -> Vec<Vec<(Range<usize>, Syntax)>> {
+    let Some((mut at_old, mut at_new)) = starts(header) else {
+        return Vec::new();
+    };
+    let runs_of = |classes: &[LineClasses], at: &mut usize| {
+        let runs = classes.get(*at).map_or_else(Vec::new, |runs| {
+            runs.iter().map(|(r, c)| (r.clone(), shown(*c))).collect()
+        });
+        *at += 1;
+        runs
+    };
+    lines
+        .iter()
+        .map(|line| match line.chars().next() {
+            Some('-') => runs_of(old, &mut at_old),
+            Some('+') => runs_of(new, &mut at_new),
+            _ => {
+                at_old += 1;
+                runs_of(new, &mut at_new)
+            }
+        })
+        .collect()
+}
+
+/// The 0-based first old and new lines of a hunk header.
+fn starts(header: &str) -> Option<(usize, usize)> {
+    let mut words = header.split_whitespace().skip(1);
+    let mut start = |sign: char| -> Option<usize> {
+        let word = words.next()?.strip_prefix(sign)?;
+        let line: usize = word.split(',').next()?.parse().ok()?;
+        // A hunk of no lines (`-0,0`, a new file) starts before line 1.
+        Some(line.saturating_sub(1))
+    };
+    Some((start('-')?, start('+')?))
+}
+
+const fn shown(class: Class) -> Syntax {
+    match class {
+        Class::Keyword => Syntax::Keyword,
+        Class::String => Syntax::String,
+        Class::Comment => Syntax::Comment,
+        Class::Constant => Syntax::Constant,
+        Class::Type => Syntax::Type,
+    }
 }
 
 /// The hunk numbers in `hunks 1,3`, `hunk 2` or `1 3`.
@@ -129,7 +197,44 @@ impl Tui<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::hunk_numbers;
+    use pmt_tui::diff::Syntax;
+    use serde_json::json;
+
+    use super::{hunk_numbers, hunks};
+
+    #[test]
+    fn removed_lines_take_the_old_files_syntax_and_others_the_new_ones() {
+        let params = json!({ "diff": {
+            "path": "/w/lib.rs",
+            "old_text": "// a\nfn f() {}\nlet x = 1;\n",
+            "new_text": "// a\nfn f() {}\nlet x = \"s\";\n",
+            "hunks": [{
+                "header": "@@ -2,2 +2,2 @@",
+                "lines": [" fn f() {}", "-let x = 1;", "+let x = \"s\";"],
+            }],
+        }});
+        let hunk = &hunks(&params)[0];
+        assert_eq!(hunk.syntax[0], [(0..2, Syntax::Keyword)]);
+        assert_eq!(
+            hunk.syntax[1],
+            [(0..3, Syntax::Keyword), (8..9, Syntax::Constant)]
+        );
+        assert_eq!(
+            hunk.syntax[2],
+            [(0..3, Syntax::Keyword), (8..11, Syntax::String)]
+        );
+    }
+
+    #[test]
+    fn a_file_in_an_unknown_language_shows_its_diff_uncoloured() {
+        let params = json!({ "diff": {
+            "path": "/w/notes.txt",
+            "old_text": "a\n",
+            "new_text": "b\n",
+            "hunks": [{ "header": "@@ -1,1 +1,1 @@", "lines": ["-a", "+b"] }],
+        }});
+        assert!(hunks(&params)[0].syntax.iter().all(Vec::is_empty));
+    }
 
     #[test]
     fn hunk_selections_read_in_every_form_and_junk_is_no_answer() {

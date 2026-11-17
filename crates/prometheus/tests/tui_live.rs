@@ -13,9 +13,10 @@ mod common;
 use std::path::Path;
 use std::time::Duration;
 
-use common::tui::{enter, finish, opened, see, see_repainted, tui, tui_at};
+use common::tui::{drain, enter, finish, opened, see, see_repainted, tui, tui_at};
 use common::{daemon, mock_home, ok, run, temp_home};
 use expectrl::Expect as _;
+use expectrl::session::OsSession;
 use serde_json::{Value, json};
 
 const UP: &str = "\u{1b}[A";
@@ -189,10 +190,11 @@ fn rewinding_a_12_turn_session_to_turn_7_shows_a_7_turn_branch_and_keeps_the_ori
     }
     // Each move previews the highlighted turn read-only (the screen
     // snapshots show it); the live session is untouched, as the store
-    // shows below.
-    std::thread::sleep(Duration::from_millis(500));
+    // shows below. Keys are handled in order, so Enter rewinds to the
+    // turn the moves highlighted.
     p.send("\r").unwrap();
-    let rewound = see(&mut p, "rewound to turn 7");
+    // Only a repaint writes the cells an earlier frame had drawn alike.
+    let rewound = see_repainted(&mut p, "rewound to turn 7");
     assert!(!rewound.contains("ERROR"), "{rewound}");
     see_repainted(&mut p, "2 live");
     enter(&mut p, "/quit");
@@ -247,35 +249,68 @@ fn a_rewind_offers_the_turns_checkpoint_and_yes_restores_its_files() {
         (100, 30),
     );
     opened(&mut p);
-    let file = work.path().join("a.txt");
     for n in 1..=3 {
         enter(&mut p, &format!("write v{n}"));
-        // "written" from an earlier turn may already be on screen: repaint
-        // until this turn's write is there.
-        let deadline = std::time::Instant::now() + Duration::from_secs(30);
-        loop {
-            see_repainted(&mut p, "written");
-            if std::fs::read_to_string(&file).ok() == Some(format!("v{n}\n")) {
-                break;
-            }
-            assert!(std::time::Instant::now() < deadline, "turn {n} never wrote");
-        }
+        // Every turn ends on the same "written": the store tells when this
+        // one has, so the timeline below lists exactly three turns.
+        wait_for_replies(&mut p, home.path(), "written", n);
     }
+    assert_eq!(read(&work.path().join("a.txt")), "v3\n");
     p.send(CTRL_T).unwrap();
+    // The overlay opens on the newest turn, turn 3 (the store has all
+    // three). Keys are handled in order: Enter rewinds to the turn the two
+    // moves highlighted, no pause needed (and none would show: previews
+    // share most of their cells, and only changed cells are written).
     see(&mut p, "timeline: ↑↓ preview");
     p.send(UP).unwrap();
     p.send(UP).unwrap();
-    std::thread::sleep(Duration::from_millis(500));
     p.send("\r").unwrap();
-    see(&mut p, "restore the workspace to turn 1's files?");
+    see_repainted(&mut p, "rewound to turn 1");
+    // Cells of the card that match what an earlier frame drew there are
+    // not rewritten, so only a repaint puts its whole title on the wire.
+    see_repainted(&mut p, "restore the workspace to turn 1's files?");
     enter(&mut p, "y");
     see(&mut p, "restored:");
     enter(&mut p, "/quit");
     assert_eq!(finish(p).1, Some(0));
-    assert_eq!(
-        std::fs::read_to_string(work.path().join("a.txt")).unwrap(),
-        "v1\n"
-    );
+    assert_eq!(read(&work.path().join("a.txt")), "v1\n");
+}
+
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap_or_default()
+}
+
+/// Waits until some session of `home` holds `count` active assistant
+/// replies `text` (30 s at most), reading what the TUI `p` draws
+/// meanwhile: a full terminal buffer would block its writes and so the
+/// TUI itself.
+fn wait_for_replies(p: &mut OsSession, home: &Path, text: &str, count: usize) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let stored = || {
+        let listed = ok(&run(home, &["--json", "sessions", "list", "--all"]));
+        let listed: Value = serde_json::from_str(&listed).unwrap();
+        listed["sessions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                common::session_messages(home, s["id"].as_str().unwrap())
+                    .iter()
+                    .filter(|m| {
+                        m["role"] == "assistant" && m["active"] == true && m["content"] == text
+                    })
+                    .count()
+            })
+            .max()
+            .unwrap_or(0)
+    };
+    while stored() < count {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{count} {text:?} replies never stored"
+        );
+        drain(p);
+    }
 }
 
 /// Scenario: Observer cannot submit.

@@ -4,6 +4,7 @@
 use pmt_config::schema::TuiTheme;
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::diff::Syntax;
 use crate::transcript::Kind;
 use pmt_core::battery::Level;
 
@@ -33,6 +34,8 @@ pub struct Theme {
     pub removed: Style,
     /// A diff's hunk headers.
     pub hunk: Style,
+    /// A diff's code by [`Syntax`] class, in its order.
+    syntax: [Style; 5],
     battery_high: Style,
     battery_medium: Style,
     battery_low: Style,
@@ -69,6 +72,15 @@ impl Theme {
             added: Style::new().fg(Color::Green),
             removed: Style::new().fg(Color::Red),
             hunk: Style::new().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+            syntax: [
+                Style::new().fg(Color::Magenta),
+                Style::new().fg(Color::LightYellow),
+                Style::new()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::ITALIC),
+                Style::new().fg(Color::LightCyan),
+                Style::new().fg(Color::LightBlue),
+            ],
             battery_high: Style::new().fg(Color::Green),
             battery_medium: Style::new().fg(Color::Yellow),
             battery_low: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
@@ -91,6 +103,13 @@ impl Theme {
             added: Style::new().fg(Color::Green),
             removed: Style::new().fg(Color::Red),
             hunk: Style::new().fg(Color::Blue).add_modifier(Modifier::BOLD),
+            syntax: [
+                Style::new().fg(Color::Magenta),
+                Style::new().fg(Color::Rgb(0x8a, 0x5a, 0x00)),
+                Style::new().fg(Color::Gray).add_modifier(Modifier::ITALIC),
+                Style::new().fg(Color::Cyan),
+                Style::new().fg(Color::Blue),
+            ],
             battery_high: Style::new().fg(Color::Green),
             battery_medium: Style::new().fg(Color::Yellow),
             battery_low: Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
@@ -114,6 +133,7 @@ impl Theme {
             added: plain,
             removed: plain,
             hunk: plain.add_modifier(Modifier::BOLD),
+            syntax: [plain; 5],
             battery_high: plain,
             battery_medium: plain,
             battery_low: plain.add_modifier(Modifier::BOLD),
@@ -140,6 +160,13 @@ impl Theme {
             Level::Medium => self.battery_medium,
             Level::Low => self.battery_low,
         }
+    }
+
+    /// The colour of code of class `class` in a diff; it overrides the
+    /// line's added/removed colour, which its `+`/`-` sign keeps.
+    #[must_use]
+    pub const fn syntax(&self, class: Syntax) -> Style {
+        self.syntax[class as usize]
     }
 
     /// Whether any colour is used.

@@ -142,6 +142,15 @@ pub fn see_repainted(p: &mut OsSession, text: &str) -> String {
     found
 }
 
+/// Reads what the TUI drew in the next 200 ms, if anything, and drops
+/// it: a test waiting on something other than the screen keeps the
+/// terminal buffer from filling up, which would block the TUI's writes.
+pub fn drain(p: &mut OsSession) {
+    p.set_expect_timeout(Some(Duration::from_millis(200)));
+    let _ = p.expect(expectrl::Regex("(?s).+"));
+    p.set_expect_timeout(Some(Duration::from_secs(30)));
+}
+
 /// Types `text` and Enter (a carriage return, as a terminal sends it).
 pub fn enter(p: &mut OsSession, text: &str) {
     p.send(format!("{text}\r")).unwrap();
