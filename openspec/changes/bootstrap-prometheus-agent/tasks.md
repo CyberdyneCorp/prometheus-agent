@@ -653,7 +653,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 72.9 Implement natural-language schedule translation and the managed scheduler contract; verify against a mock managed scheduler (spec: scheduled-jobs)
 - [x] 72.10 Implement cross-platform identity linking, delivery/read receipts and busy acknowledgement via reactions; verify with the mock platform (spec: messaging-gateway, spec: platform-adapters)
 - [x] 72.11 Implement fan-in join modes for delegation; verify with mock-provider tests (spec: subagent-delegation)
-- [x] 72.12 Implement migration rollback and the plugin development loop; verify rollback restores the pre-migration home (spec: hermes-migration, spec: plugin-system)
+- [ ] 72.12 Implement migration rollback and the plugin development loop; verify rollback restores the pre-migration home (spec: hermes-migration, spec: plugin-system)
 
 ## 73. M3 Additional upgrades: configuration, egress, runtimes and providers
 
