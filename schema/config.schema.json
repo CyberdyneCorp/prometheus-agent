@@ -3017,7 +3017,7 @@
         },
         "credential_injection": {
           "default": false,
-          "description": "Sandboxed children of a session hold a per-session placeholder\ninstead of each secret mapped in `inject`; the egress proxy puts the\nreal value in only on TLS requests to the mapped hosts and refuses\nthe placeholder anywhere else (`credential_misdirected`).",
+          "description": "Sandboxed children (a session's processes, stdio MCP servers,\nplugin sidecars) hold a placeholder, fresh per session or start,\ninstead of each secret mapped in `inject`; their egress proxy puts the\nreal value in only on TLS requests to the mapped hosts and refuses\nthe placeholder anywhere else (`credential_misdirected`).",
           "type": "boolean"
         },
         "deny": {

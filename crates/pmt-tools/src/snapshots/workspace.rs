@@ -6,7 +6,11 @@
 //! taken before every terminal command, and the prior content of every
 //! file is kept in the snapshot store; after the command a second manifest
 //! finds what it changed, created or removed, and each change is journaled
-//! like a file-tool edit, so `/undo` reverts it too. A file whose size and
+//! like a file-tool edit, so `/undo` reverts it too. A background command
+//! keeps changing the workspace after its call returned: while one runs,
+//! the next command's manifest first records what changed since the last
+//! one, and its exit records what it changed since then (a command
+//! running at that moment records it when it ends). A file whose size and
 //! modification time match the previous manifest is not read again. A
 //! workspace larger than `files.snapshot.max_workspace_bytes` (or with
 //! more files than a checkpoint records) is not checkpointed: the command
@@ -80,9 +84,14 @@ pub struct Checkpoints {
 
 #[derive(Debug, Default)]
 struct State {
-    /// Terminal commands running now (concurrent ones are diffed together
+    /// Terminal calls running now (concurrent ones are diffed together
     /// when the last ends).
     running: usize,
+    /// Background commands still running after their call returned.
+    background: usize,
+    /// `last` is the workspace as of the last recorded change: what a
+    /// background command changes since then is its own.
+    synced: bool,
     /// The manifest from before the first of them.
     before: Option<Manifest>,
     /// The newest manifest, whose unchanged files are not read again.
@@ -100,14 +109,24 @@ impl Checkpoints {
 
     /// Before a terminal command: the manifest of `workspace`, unless a
     /// command is already running (its manifest covers this one too).
-    pub fn before(&self, workspace: &Workspace<'_>) {
+    /// While a background command runs, answers what changed since the
+    /// last manifest (that command's doing).
+    pub fn before(&self, workspace: &Workspace<'_>) -> Vec<Change> {
         let mut state = self.lock();
         state.running += 1;
         if state.running > 1 {
-            return;
+            return Vec::new();
         }
         match manifest(workspace, &state.last) {
-            Ok(taken) => state.before = Some(taken),
+            Ok(taken) => {
+                let since = if state.background > 0 && state.synced {
+                    changes(&state.last, &taken)
+                } else {
+                    Vec::new()
+                };
+                state.before = Some(taken);
+                return since;
+            }
             Err(Skipped::TooLarge) => {
                 state.before = None;
                 if !state.noticed {
@@ -124,6 +143,32 @@ impl Checkpoints {
                 tracing::warn!(root = %workspace.root.display(), "workspace checkpoint failed: {err}");
             }
         }
+        state.synced = false;
+        Vec::new()
+    }
+
+    /// The call that just returned left its command running in the
+    /// background (call before [`Checkpoints::after`]).
+    pub fn went_background(&self) {
+        self.lock().background += 1;
+    }
+
+    /// A background command exited: what changed since the last manifest,
+    /// unless a running command will record it when it ends.
+    pub fn background_ended(&self, workspace: &Workspace<'_>) -> Vec<Change> {
+        let mut state = self.lock();
+        state.background = state.background.saturating_sub(1);
+        if state.running > 0 || !state.synced {
+            return Vec::new();
+        }
+        if let Ok(now) = manifest(workspace, &state.last) {
+            let changed = changes(&state.last, &now);
+            state.last = now;
+            return changed;
+        }
+        state.synced = false;
+        tracing::warn!(root = %workspace.root.display(), "background command changes not recorded: the workspace could not be read");
+        Vec::new()
     }
 
     /// After a terminal command: what the commands that ran since the
@@ -142,8 +187,10 @@ impl Checkpoints {
         if let Ok(after) = manifest(workspace, &before) {
             let changes = changes(&before, &after);
             state.last = after;
+            state.synced = true;
             return (changes, notice);
         }
+        state.synced = false;
         tracing::warn!(root = %workspace.root.display(), "workspace changes not recorded: the workspace could not be read again");
         (Vec::new(), notice)
     }
@@ -297,6 +344,51 @@ mod tests {
         assert!(notice.unwrap().contains("max_workspace_bytes"));
         checkpoints.before(&ws);
         assert_eq!(checkpoints.after(&ws), (Vec::new(), None));
+    }
+
+    #[test]
+    fn a_background_command_s_later_changes_are_found() {
+        let fx = Fixture::new();
+        std::fs::write(fx.root.join("a.txt"), "1").unwrap();
+        std::fs::write(fx.root.join("b.txt"), "1").unwrap();
+        let checkpoints = Checkpoints::default();
+        let ws = fx.workspace(1 << 20);
+        // The background call returns at once.
+        assert!(checkpoints.before(&ws).is_empty());
+        checkpoints.went_background();
+        assert!(checkpoints.after(&ws).0.is_empty());
+        // It writes a.txt between calls: the next call records it first.
+        std::fs::write(fx.root.join("a.txt"), "22").unwrap();
+        let since = checkpoints.before(&ws);
+        assert_eq!(since.len(), 1);
+        assert_eq!(
+            fx.store.get(since[0].before.as_ref().unwrap()).unwrap(),
+            b"1"
+        );
+        assert!(checkpoints.after(&ws).0.is_empty());
+        // Then b.txt, and exits.
+        std::fs::write(fx.root.join("b.txt"), "333").unwrap();
+        let ended = checkpoints.background_ended(&ws);
+        assert_eq!(ended.len(), 1);
+        assert!(ended[0].path.ends_with("b.txt"));
+        // Nothing runs any more: an edit by someone else is not recorded.
+        std::fs::write(fx.root.join("a.txt"), "4444").unwrap();
+        assert!(checkpoints.before(&ws).is_empty());
+    }
+
+    #[test]
+    fn a_background_exit_during_a_command_is_recorded_when_that_command_ends() {
+        let fx = Fixture::new();
+        std::fs::write(fx.root.join("a.txt"), "1").unwrap();
+        let checkpoints = Checkpoints::default();
+        let ws = fx.workspace(1 << 20);
+        checkpoints.before(&ws);
+        checkpoints.went_background();
+        checkpoints.after(&ws);
+        checkpoints.before(&ws);
+        std::fs::write(fx.root.join("a.txt"), "22").unwrap();
+        assert!(checkpoints.background_ended(&ws).is_empty());
+        assert_eq!(checkpoints.after(&ws).0.len(), 1);
     }
 
     #[test]

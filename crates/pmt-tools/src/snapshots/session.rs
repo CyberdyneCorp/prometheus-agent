@@ -19,6 +19,7 @@ use super::store::{SnapshotStore, now_ms};
 use super::tree::Tree;
 use super::workspace;
 use crate::files::edits::{EditCall, EditRecorder};
+use crate::terminal::CommandEnd;
 
 /// The session's current turn number (it only grows).
 pub type TurnSource = Arc<dyn Fn() -> u64 + Send + Sync>;
@@ -148,19 +149,36 @@ impl SessionSnapshots {
             self.checkpoint(cwd, "terminal");
         }
         if let Some(max_bytes) = self.settings.workspace_bytes {
-            self.commands.before(&self.workspace_of(max_bytes));
+            let since = self.commands.before(&self.workspace_of(max_bytes));
+            self.journal_changes(since);
         }
     }
 
-    /// After a terminal command, under terminal workspace checkpoints:
-    /// journals each workspace file it changed (so `/undo` reverts it) and
-    /// answers the one-time notice of a workspace too large to checkpoint.
-    pub fn after_command(&self) -> Option<String> {
+    /// After a terminal call, under terminal workspace checkpoints:
+    /// journals each workspace file the command changed (so `/undo`
+    /// reverts it) and answers the one-time notice of a workspace too
+    /// large to checkpoint. A background command is journaled again when
+    /// it exits ([`CommandEnd::Exited`]).
+    pub fn after_command(&self, end: CommandEnd) -> Option<String> {
         let max_bytes = self
             .settings
             .workspace_bytes
             .filter(|_| self.settings.enabled)?;
-        let (changes, notice) = self.commands.after(&self.workspace_of(max_bytes));
+        let workspace = self.workspace_of(max_bytes);
+        let (changes, notice) = match end {
+            CommandEnd::Returned => self.commands.after(&workspace),
+            CommandEnd::Started => {
+                self.commands.went_background();
+                self.commands.after(&workspace)
+            }
+            CommandEnd::Exited => (self.commands.background_ended(&workspace), None),
+        };
+        self.journal_changes(changes);
+        notice
+    }
+
+    /// Journals terminal changes as edits of the current turn.
+    fn journal_changes(&self, changes: Vec<workspace::Change>) {
         for change in changes {
             let edit = Edit {
                 turn: self.turn(),
@@ -176,7 +194,6 @@ impl SessionSnapshots {
                 tracing::warn!("terminal change not journaled: {err}");
             }
         }
-        notice
     }
 
     fn workspace_of(&self, max_bytes: u64) -> workspace::Workspace<'_> {

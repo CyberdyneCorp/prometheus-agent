@@ -164,8 +164,9 @@ whose call was in flight.
 
 ### Credential injection
 
-With credential injection, a session's children never hold the secrets
-they use against an API:
+With credential injection, sandboxed children (a session's processes,
+stdio MCP servers, python plugin sidecars) never hold the secrets they use
+against an API:
 
 ```toml
 [security.egress]
@@ -177,13 +178,15 @@ OPENAI_API_KEY = ["api.openai.com"]
 ```
 
 Each mapped secret the profile holds gets a fresh placeholder
-(`pmt-egress-<32 hex>`) per session, and the processes started from the
-session's environment (terminal commands, with the secrets their loaded
-skills declare) receive the placeholder wherever they would receive the
-secret. Their CA bundle (`SSL_CERT_FILE`,
+(`pmt-egress-<32 hex>`) per session (and per start of an MCP server or
+plugin sidecar), and the children receive the placeholder wherever they
+would receive the secret: the processes started from the session's
+environment (terminal commands, with the secrets their loaded skills
+declare), an MCP server's `env_secrets` and `${NAME}` entries, a sidecar's
+granted secrets. Their CA bundle (`SSL_CERT_FILE`,
 `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`) also trusts
 the profile's egress CA, `<profile>/egress/ca.crt` (its key `ca.key` is
-0600 and never leaves the host). The session's proxy terminates their TLS
+0600 and never leaves the host). Their own egress proxy terminates their TLS
 with a certificate that CA signs for the host, verifies the real server
 itself (platform roots plus `network.extra_ca_file`), and replaces a
 placeholder in the request head with the real value only when the host
@@ -193,8 +196,9 @@ the child gets `403` (`credential misdirected`) and the session an
 `egress.denied` event with reason `credential_misdirected`. Plain HTTP never
 carries a real value, and a tunnel that is not TLS is only scanned. Each
 intercepted request is sent with `Connection: close`. A client that pins
-certificates or ignores the CA bundle cannot reach injected hosts. MCP
-servers and plugin sidecars keep their own credentials.
+certificates or ignores the CA bundle cannot reach injected hosts. An
+MCP server reached over HTTP is called by Prometheus itself, with the real
+values.
 
 ### Website blocklist
 

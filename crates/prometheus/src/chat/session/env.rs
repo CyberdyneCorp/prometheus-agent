@@ -180,7 +180,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let user_home = inputs.launch.user_home().cloned();
     let (places, paths) = places(inputs, user_home.as_deref(), &scratch);
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
-    let injection = crate::egress::injection::for_session(inputs.scope)?;
+    let injection = crate::egress::injection::for_children(inputs.scope)?;
     let proxy = crate::egress::child_proxy(
         inputs.scope,
         inputs.capabilities,
@@ -491,7 +491,7 @@ fn processes(
     policy: &Policy,
     (proxy, injection): (
         Option<&Proxy>,
-        Option<crate::egress::injection::SessionInjection>,
+        Option<crate::egress::injection::ChildInjection>,
     ),
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
@@ -517,20 +517,12 @@ fn processes(
         env.set_proxy(&url);
     }
     let bundle = scratch.join("ca-bundle.pem");
-    let mut extra_ca: Vec<&Path> = config
-        .network
-        .extra_ca_file
-        .as_deref()
-        .map(Path::new)
-        .into_iter()
-        .collect();
     // Credential injection: the children hold placeholders and trust the
     // proxy's CA, which signs the hosts it injects for.
     if let Some(injection) = &injection {
         env.inject(injection.placeholders.clone());
-        extra_ca.push(&injection.ca_cert);
     }
-    match pmt_net::tls::write_child_bundle(&bundle, &extra_ca) {
+    match crate::egress::injection::write_child_bundle(inputs.scope, injection.as_ref(), &bundle) {
         Ok(()) => env.set_ca_bundle(&bundle),
         Err(err) if injection.is_some() => return Err(err),
         Err(_) => {}
@@ -591,7 +583,7 @@ fn terminal(
     .inspect(|terminal| {
         // Terminal workspace checkpoints journal each command's changes.
         if let Some(snapshots) = snapshots.cloned() {
-            terminal.add_after_command(Arc::new(move || snapshots.after_command()));
+            terminal.add_after_command(Arc::new(move |end| snapshots.after_command(end)));
         }
     })
 }

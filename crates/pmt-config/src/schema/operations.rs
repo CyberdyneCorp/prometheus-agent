@@ -567,8 +567,9 @@ pub struct EgressConfig {
     /// Absolute paths of shared blocklist files: one pattern per line, `#`
     /// comments; re-read when a file changes.
     pub deny_files: Vec<String>,
-    /// Sandboxed children of a session hold a per-session placeholder
-    /// instead of each secret mapped in `inject`; the egress proxy puts the
+    /// Sandboxed children (a session's processes, stdio MCP servers,
+    /// plugin sidecars) hold a placeholder, fresh per session or start,
+    /// instead of each secret mapped in `inject`; their egress proxy puts the
     /// real value in only on TLS requests to the mapped hosts and refuses
     /// the placeholder anywhere else (`credential_misdirected`).
     pub credential_injection: bool,

@@ -136,13 +136,18 @@ The system SHALL treat as private: loopback (IPv4/IPv6), link-local, RFC 1918, I
 - **THEN** the request SHALL be denied
 
 ### Requirement: Credential injection at the egress proxy (upgrade)
-When `security.egress.credential_injection = true` (default false) and a secret is mapped to host patterns in `security.egress.inject.<NAME>`, sandboxed children SHALL receive a per-session placeholder token instead of the secret, and the proxy SHALL replace the placeholder with the real value only on TLS requests to the mapped hosts, rejecting any request that carries the placeholder to an unmapped host with `egress.denied` reason `credential_misdirected`.
+When `security.egress.credential_injection = true` (default false) and a secret is mapped to host patterns in `security.egress.inject.<NAME>`, sandboxed children (a session's processes, stdio MCP servers, python plugin sidecars) SHALL receive a placeholder token, fresh per session or per launch of a shared child, instead of the secret wherever they would receive it, and the proxy SHALL replace the placeholder with the real value only on TLS requests to the mapped hosts, rejecting any request that carries the placeholder to an unmapped host with `egress.denied` reason `credential_misdirected`.
 **Milestone:** M3
 
 #### Scenario: Placeholder sent elsewhere
 - **GIVEN** `GITHUB_TOKEN` mapped to `api.github.com`
 - **WHEN** a child sends the placeholder to `evil.example`
 - **THEN** the proxy SHALL reject the request and the real token SHALL never leave the proxy
+
+#### Scenario: MCP server holds the placeholder
+- **GIVEN** `GITHUB_TOKEN` mapped to `api.github.com` and a stdio MCP server given `GITHUB_TOKEN` through `env_secrets`
+- **WHEN** the server starts and calls `api.github.com` with the value it holds
+- **THEN** the server SHALL hold only the placeholder and the request SHALL reach `api.github.com` with the real token
 
 ### Requirement: Secrets storage
 Secrets SHALL be stored only in `<profile>/secrets.toml` (mode 0600, created with no-follow, written atomically under a lock) or in the OS keychain when `secrets.backend = "keychain"`, SHALL never be stored in `config.toml`, and SHALL be read from the environment only for names matching `PMT_SECRET_*` or a registered provider-native name; credential values SHALL have non-ASCII characters stripped on load with one warning per key.

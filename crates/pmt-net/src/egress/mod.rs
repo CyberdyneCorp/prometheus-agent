@@ -464,13 +464,15 @@ async fn open(rules: &Rules, host: &str, port: u16) -> Result<TcpStream, (Reason
             last = refused(refusal);
             continue;
         }
-        // Connect to the address that was checked, never re-resolve.
+        // Connect to the address that was checked, never re-resolve; a
+        // name answering both `::1` and `127.0.0.1` may listen on one only,
+        // so an unreachable address falls through to the next.
         let addr = SocketAddr::new(ip, port);
-        return match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
-            Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err((Reason::Unreachable, e.to_string())),
-            Err(_) => Err((Reason::Unreachable, "connection timed out".to_owned())),
-        };
+        match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(e)) => last = (Reason::Unreachable, e.to_string()),
+            Err(_) => last = (Reason::Unreachable, "connection timed out".to_owned()),
+        }
     }
     Err(last)
 }
@@ -634,5 +636,35 @@ mod tests {
             &format!("GET http://rebind.example:{port}/path HTTP/1.1\r\nHost: x\r\n\r\n"),
         );
         assert!(again.starts_with("HTTP/1.1 403"), "{again}");
+    }
+
+    /// Answers `::1` before `127.0.0.1`, as `localhost` does on most hosts.
+    struct BothLoopbacks;
+
+    impl Lookup for BothLoopbacks {
+        fn lookup(&self, _host: &str) -> crate::resolve::LookupFuture {
+            let ips: Vec<IpAddr> = vec!["::1".parse().unwrap(), "127.0.0.1".parse().unwrap()];
+            Box::pin(async move { Ok(ips) })
+        }
+    }
+
+    /// A server listening on `127.0.0.1` only is reached under a name that
+    /// resolves to `::1` first: the refused address falls through to the
+    /// next one instead of failing the request with 502.
+    #[test]
+    fn an_unreachable_address_falls_through_to_the_next() {
+        let (listener, port) = server();
+        serve_once(listener);
+        let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()));
+        let policy = DestinationPolicy::new(false, &[])
+            .unwrap()
+            .with_grant(PrivateGrant::parse("localhost").unwrap());
+        let rules = Rules::new(hosts, policy, "terminal").with_lookup(Arc::new(BothLoopbacks));
+        let proxy = Proxy::start(rules).unwrap();
+        let answer = ask(
+            &proxy,
+            &format!("GET http://localhost:{port}/path HTTP/1.1\r\nHost: x\r\n\r\n"),
+        );
+        assert!(answer.contains("hello"), "{answer}");
     }
 }

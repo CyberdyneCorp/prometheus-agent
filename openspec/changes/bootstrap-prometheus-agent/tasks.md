@@ -649,7 +649,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 72.5 Implement cost- and latency-aware routing policy; verify with routing table tests (spec: model-providers)
 - [x] 72.6 Implement surface toolsets from the session and taint-aware escalation; verify that tainted content raises the approval floor (spec: tool-system)
 - [x] 72.7 Implement terminal workspace checkpoints; verify that a checkpoint restores the workspace (spec: execution-environments)
-- [ ] 72.8 Implement credential injection at the egress proxy and opt-in external secret sources; verify that injected credentials never reach the child process (spec: security-boundaries)
+- [x] 72.8 Implement credential injection at the egress proxy and opt-in external secret sources; verify that injected credentials never reach the child process (spec: security-boundaries)
 - [ ] 72.9 Implement natural-language schedule translation and the managed scheduler contract; verify against a mock managed scheduler (spec: scheduled-jobs)
 - [ ] 72.10 Implement cross-platform identity linking, delivery/read receipts and busy acknowledgement via reactions; verify with the mock platform (spec: messaging-gateway, spec: platform-adapters)
 - [ ] 72.11 Implement fan-in join modes for delegation; verify with mock-provider tests (spec: subagent-delegation)

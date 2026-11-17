@@ -194,10 +194,21 @@ pub type PathSource = Arc<dyn Fn(&str) -> Vec<PathBuf> + Send + Sync>;
 /// command.
 pub type BeforeCommand = Arc<dyn Fn(&str, &Path) + Send + Sync>;
 
-/// Runs on a blocking thread of this host once a command returned (a
-/// background one: once it started); it must never fail the command, and
-/// may answer a notice for the command's result.
-pub type AfterCommand = Arc<dyn Fn() -> Option<String> + Send + Sync>;
+/// Runs on a blocking thread of this host once a command's call returned,
+/// and again once a background command exited; it must never fail the
+/// command, and may answer a notice for the call's result.
+pub type AfterCommand = Arc<dyn Fn(CommandEnd) -> Option<String> + Send + Sync>;
+
+/// Why an [`AfterCommand`] hook runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandEnd {
+    /// The call returned and its command is done.
+    Returned,
+    /// The call returned leaving its command running in the background.
+    Started,
+    /// A background command started by an earlier call exited.
+    Exited,
+}
 
 /// Things the next result carries once.
 #[derive(Debug, Default)]
@@ -499,7 +510,14 @@ impl Terminal {
         let mut result = self
             .execute(exec, &args, &cwd, timeout_secs, password)
             .await;
-        result.notices.extend(self.after_command().await);
+        let end = match &result.process_id {
+            Some(_) if result.status == Status::Started => CommandEnd::Started,
+            _ => CommandEnd::Returned,
+        };
+        result.notices.extend(self.after_command(end).await);
+        if let (CommandEnd::Started, Some(id)) = (end, &result.process_id) {
+            self.after_exit(id);
+        }
         if let Some(sudo) = &adapted.sudo {
             sudo.finish(&adapted.elevation, &mut result);
         }
@@ -663,7 +681,7 @@ impl Terminal {
     }
 
     /// The [`AfterCommand`] hooks of a command that ran; their notices.
-    async fn after_command(&self) -> Vec<String> {
+    async fn after_command(&self, end: CommandEnd) -> Vec<String> {
         let hooks = self
             .after_hooks
             .read()
@@ -672,9 +690,34 @@ impl Terminal {
         if hooks.is_empty() {
             return Vec::new();
         }
-        pmt_core::spawn::blocking(move || hooks.iter().filter_map(|hook| hook()).collect())
+        pmt_core::spawn::blocking(move || hooks.iter().filter_map(|hook| hook(end)).collect())
             .await
             .unwrap_or_default()
+    }
+
+    /// Runs the [`AfterCommand`] hooks again once background process `id`
+    /// exits (it is killed at session end at the latest).
+    fn after_exit(&self, id: &str) {
+        let hooks = self
+            .after_hooks
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if hooks.is_empty() {
+            return;
+        }
+        let Some(exited) = self.processes.exited(id) else {
+            return;
+        };
+        drop(pmt_core::spawn::spawn(async move {
+            exited.await;
+            let _ = pmt_core::spawn::blocking(move || {
+                for hook in &hooks {
+                    hook(CommandEnd::Exited);
+                }
+            })
+            .await;
+        }));
     }
 
     /// A foreground command on a plugin backend.

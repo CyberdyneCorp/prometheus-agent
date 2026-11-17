@@ -970,3 +970,60 @@ text = "no recall"
     let status = ok(&run(home.path(), &["memory", "status"]));
     assert!(status.contains("provider: mempy"), "{status}");
 }
+
+/// Scenario: Placeholder sent elsewhere, for a python plugin sidecar (a
+/// sandboxed child behind its own egress proxy, spec: security-boundaries,
+/// Credential injection at the egress proxy): the granted secret it holds
+/// is the placeholder, and its HTTPS request through its proxy reaches the
+/// mapped host with the real token.
+#[cfg(unix)]
+#[test]
+fn a_sidecar_holds_only_the_placeholder_of_an_injected_secret() {
+    const TOKEN: &str = "svc_injected_real_value_0123456789";
+    let home = mock_home();
+    pmt_pybridge::testkit::seed(home.path());
+    let ca_file = home.path().join("upstream-ca.pem");
+    let (port, heads) = common::tls_upstream::upstream(&ca_file);
+    common::append_config(
+        home.path(),
+        &format!(
+            "\n[network]\nextra_ca_file = \"{}\"\n\n[security.egress]\ncredential_injection = true\n\
+             fake_ip_ranges = [\"127.0.0.1/32\"]\n\n[security.egress.inject]\nSERVICE_TOKEN = [\"localhost\"]\n",
+            ca_file.display()
+        ),
+    );
+    install(home.path(), "inject", "inject", "all");
+    ok(&common::run_with_stdin(
+        home.path(),
+        &["secrets", "set", "SERVICE_TOKEN"],
+        TOKEN,
+    ));
+    let root = pmt_config::Home::open(home.path()).unwrap();
+    let dir = root
+        .profile(&pmt_config::ProfileName::parse("default").unwrap())
+        .unwrap();
+    let scope = pmt_config::ProfileScope::open(
+        dir,
+        &pmt_config::Overrides::default(),
+        pmt_config::Launch::Other,
+    )
+    .unwrap();
+    let _plugins = prometheus::plugins_host::for_session(&scope, home.path());
+    let running = prometheus::plugins_host::bridge::running(&scope);
+    assert_eq!(running.len(), 1);
+    let answer = running[0]
+        .tool(
+            "call",
+            &serde_json::json!({ "port": port }),
+            &serde_json::json!({}),
+        )
+        .unwrap();
+    prometheus::plugins_host::bridge::shutdown_all();
+    let answer: serde_json::Value = serde_json::from_str(&answer).unwrap();
+    let text = |key: &str| answer[key].as_str().unwrap_or_default().to_owned();
+    common::tls_upstream::assert_injected(
+        (&text("seen"), &text("answer"), &text("elsewhere")),
+        &heads,
+        TOKEN,
+    );
+}

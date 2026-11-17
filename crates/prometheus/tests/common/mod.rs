@@ -341,5 +341,6 @@ pub mod desktop;
 #[cfg(feature = "dashboard")]
 pub mod oidc;
 pub mod plugin_catalog;
+pub mod tls_upstream;
 #[cfg(feature = "gateway")]
 pub mod ws;

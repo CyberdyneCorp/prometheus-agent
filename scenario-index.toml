@@ -4933,11 +4933,13 @@ capabilities = [
 # Group 72.7: terminal workspace checkpoints.
 [execution-environments."Terminal workspace checkpoints (upgrade)"]
 "Undo a sed edit" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_sed_edit_made_by_a_terminal_command", "crates/pmt-tools/src/snapshots/workspace.rs::a_command_s_edits_creations_and_removals_are_found_with_their_prior_content", "crates/pmt-tools/src/snapshots/workspace.rs::an_oversized_workspace_is_skipped_with_one_notice"]
+"Undo a background command's late write" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_file_a_background_command_wrote_after_it_finished", "crates/pmt-tools/src/snapshots/workspace.rs::a_background_command_s_later_changes_are_found", "crates/pmt-tools/src/snapshots/workspace.rs::a_background_exit_during_a_command_is_recorded_when_that_command_ends"]
 
 # Group 72.8: credential injection at the egress proxy and opt-in external
 # secret sources.
 [security-boundaries."Credential injection at the egress proxy (upgrade)"]
-"Placeholder sent elsewhere" = ["crates/pmt-net/tests/egress_inject.rs::the_placeholder_becomes_the_token_only_for_the_mapped_host", "crates/prometheus/tests/egress_injection.rs::injected_credentials_never_reach_the_child_process", "crates/pmt-net/src/egress/inject.rs::a_placeholder_split_across_reads_is_never_forwarded"]
+"Placeholder sent elsewhere" = ["crates/pmt-net/tests/egress_inject.rs::the_placeholder_becomes_the_token_only_for_the_mapped_host", "crates/prometheus/tests/egress_injection.rs::injected_credentials_never_reach_the_child_process", "crates/pmt-net/src/egress/inject.rs::a_placeholder_split_across_reads_is_never_forwarded", "crates/prometheus/tests/python_bridge.rs::a_sidecar_holds_only_the_placeholder_of_an_injected_secret"]
+"MCP server holds the placeholder" = ["crates/prometheus/tests/egress_injection.rs::a_stdio_mcp_server_holds_only_the_placeholder", "crates/pmt-net/src/egress/mod.rs::an_unreachable_address_falls_through_to_the_next"]
 
 [security-boundaries."External secret sources are opt-in"]
 "Default install" = ["crates/prometheus/tests/egress_injection.rs::a_default_install_never_runs_the_external_source_clis", "crates/pmt-config/src/secrets/external_tests.rs::a_default_config_builds_no_source"]
