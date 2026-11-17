@@ -15,7 +15,8 @@ use crate::schedule::next::resolve;
 const PERIODS: i64 = 10_000;
 
 /// The first instant of `rule` started at `start` strictly after `base`;
-/// `None` when no instant follows.
+/// `None` when no instant follows (none matches, or `COUNT` or `UNTIL`
+/// ended the rule).
 pub(crate) fn next_after(
     rule: &Rule,
     start: Timestamp,
@@ -25,18 +26,71 @@ pub(crate) fn next_after(
     let first = start.to_zoned(zone.clone()).datetime();
     let from = base.max(start).to_zoned(zone.clone()).datetime();
     let skip = periods_between(rule.freq, first, from, rule.week_start)? / i64::from(rule.interval);
-    for k in skip..skip + PERIODS {
+    // `COUNT` counts the instances after the start, so a counted rule is
+    // walked from its first period.
+    let begin = if rule.count.is_some() { 0 } else { skip };
+    let mut walk = Walk {
+        rule,
+        start,
+        base,
+        zone,
+        seen: 0,
+    };
+    for k in begin..skip + PERIODS {
         let Some(candidates) = period(rule, first, k * i64::from(rule.interval)) else {
             break;
         };
-        for dt in candidates {
-            let at = resolve(zone, dt)?;
-            if at > base && at >= start {
-                return Ok(Some(at));
-            }
+        match walk.scan(candidates)? {
+            Step::Found(at) => return Ok(Some(at)),
+            Step::Ended => return Ok(None),
+            Step::More => {}
         }
     }
     Ok(None)
+}
+
+/// What one period's candidates gave.
+enum Step {
+    Found(Timestamp),
+    Ended,
+    More,
+}
+
+/// The instances walked so far towards the first one after `base`.
+struct Walk<'a> {
+    rule: &'a Rule,
+    start: Timestamp,
+    base: Timestamp,
+    zone: &'a TimeZone,
+    /// Instances after the start seen so far (what `COUNT` bounds).
+    seen: u32,
+}
+
+impl Walk<'_> {
+    fn scan(&mut self, candidates: Vec<DateTime>) -> Result<Step, String> {
+        for dt in candidates {
+            let at = resolve(self.zone, dt)?;
+            // The start is the job's creation, never one of its runs.
+            if at <= self.start {
+                continue;
+            }
+            if ended(self.rule, self.seen, dt, at) {
+                return Ok(Step::Ended);
+            }
+            self.seen += 1;
+            if at > self.base {
+                return Ok(Step::Found(at));
+            }
+        }
+        Ok(Step::More)
+    }
+}
+
+/// Whether the instance at `dt` (`at`), after `seen` earlier ones, is
+/// past the rule's `COUNT` or `UNTIL`.
+fn ended(rule: &Rule, seen: u32, dt: DateTime, at: Timestamp) -> bool {
+    rule.count.is_some_and(|count| seen >= count)
+        || rule.until.is_some_and(|until| until.passed(dt, at))
 }
 
 /// Whole periods of `freq` from `first`'s period to `at`'s.

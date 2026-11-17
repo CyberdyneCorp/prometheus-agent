@@ -485,3 +485,44 @@ fn a_manual_run_of_a_paused_job_keeps_it_paused() {
     assert_eq!(job.state(), JobState::Paused);
     assert_eq!(job.row.completed, 0);
 }
+
+/// A translated rule that ends (`UNTIL`, `COUNT`; spec: scheduled-jobs,
+/// Natural-language schedule translation) completes its job after its
+/// last instance instead of erroring for want of a next one.
+#[test]
+fn a_rule_ending_with_until_or_count_completes_its_job() {
+    for rule in [
+        "FREQ=HOURLY;BYMINUTE=0;UNTIL=20261104T110000Z",
+        "FREQ=HOURLY;BYMINUTE=0;COUNT=2",
+    ] {
+        let profile = TestProfile::new();
+        let store = profile.store();
+        let job = job_with(&profile, &store, |spec| {
+            spec.schedule =
+                pmt_cron::schedule::Schedule::rrule(rule, at("2026-11-04T09:00:00Z")).unwrap();
+        });
+        let runner = Scripted::answering("ok");
+        for hour in ["10", "11"] {
+            fire(
+                &profile,
+                &store,
+                &runner,
+                &CronConfig::default(),
+                &format!("2026-11-04T{hour}:00:01Z"),
+            );
+        }
+        let job = ops::find(&store, job.id()).unwrap();
+        assert_eq!(job.state(), JobState::Completed, "{rule}");
+        assert_eq!(job.row.completed, 2, "{rule}");
+        assert!(!job.row.enabled, "{rule}");
+        let later = scheduler::tick(
+            &store,
+            &profile.home,
+            at("2026-11-04T12:00:01Z"),
+            &TimeZone::UTC,
+            &CronConfig::default(),
+        )
+        .unwrap();
+        assert!(later.is_empty(), "{rule}: nothing after the last instance");
+    }
+}

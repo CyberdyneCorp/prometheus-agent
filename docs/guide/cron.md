@@ -49,10 +49,14 @@ grammar or an RFC 5545 rule, and the answer is used only when it parses
 echo starts with `translated "<text>" to:` and is confirmed like any other.
 Rules may use `FREQ` (`HOURLY` to `YEARLY`), `INTERVAL`, `BYMONTH`,
 `BYMONTHDAY`, `BYDAY` (ordinals such as `1MO` or `-1FR` in monthly rules),
-`BYSETPOS`, `BYHOUR`, `BYMINUTE` and `WKST`; `COUNT` and `UNTIL` are refused
-(use `--repeat`). A rule starts when the job is created: intervals count
-from that week, month or year, and parts it leaves out take their value
-from that moment.
+`BYSETPOS`, `BYHOUR`, `BYMINUTE`, `WKST`, and one of `COUNT` (that many
+instances) or `UNTIL` (inclusive: a day `20271224` or a wall-clock time
+`20271224T170000` in the job's zone, or a UTC time `20271224T170000Z`) to
+end it, so `every weekday at 9 until Dec 24` works; a job whose rule ends
+is completed after its last instance. A rule starts when the job is
+created: intervals count from that week, month or year, parts it leaves
+out take their value from that moment, and its instances (the ones
+`COUNT` counts) come strictly after it.
 
 ```text
 $ prometheus cron add --nl "first business day of each month at 8" --prompt "close the books" --yes

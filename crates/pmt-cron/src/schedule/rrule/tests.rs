@@ -44,8 +44,12 @@ fn unsupported_or_invalid_rules_are_refused_with_a_reason() {
     for (text, why) in [
         ("BYDAY=MO", "needs FREQ"),
         ("FREQ=MINUTELY", "more often than once a minute"),
-        ("FREQ=DAILY;COUNT=5", "repeat"),
-        ("FREQ=DAILY;UNTIL=20270101T000000Z", "repeat"),
+        ("FREQ=DAILY;COUNT=5;UNTIL=20270101", "cannot both"),
+        ("FREQ=DAILY;COUNT=0", "out of range"),
+        ("FREQ=DAILY;UNTIL=2027-01-01", "not a date"),
+        ("FREQ=DAILY;UNTIL=20270231", "not a date"),
+        ("FREQ=DAILY;UNTIL=20270101T250000Z", "not a date"),
+        ("FREQ=DAILY;UNTIL=20270101T000000+01", "not a date"),
         ("FREQ=DAILY;BYHOUR=24", "out of range"),
         ("FREQ=WEEKLY;BYMONTHDAY=1", "WEEKLY"),
         ("FREQ=WEEKLY;BYDAY=1MO", "ordinals"),
@@ -171,6 +175,98 @@ fn a_rule_that_matches_no_date_never_fires() {
     let start = at("2026-01-01T00:00:00Z");
     assert_eq!(
         next_after(&rule, start, start, &TimeZone::UTC).unwrap(),
+        None
+    );
+}
+
+#[test]
+fn until_and_count_keep_their_form_in_the_canonical_rule() {
+    for (text, canonical) in [
+        (
+            "freq=daily;until=20271224;byhour=9",
+            "FREQ=DAILY;BYHOUR=9;UNTIL=20271224",
+        ),
+        (
+            "FREQ=DAILY;UNTIL=20271224T170000",
+            "FREQ=DAILY;UNTIL=20271224T170000",
+        ),
+        (
+            "FREQ=DAILY;UNTIL=20271224T170000Z",
+            "FREQ=DAILY;UNTIL=20271224T170000Z",
+        ),
+        (
+            "FREQ=WEEKLY;COUNT=3;BYDAY=MO",
+            "FREQ=WEEKLY;BYDAY=MO;COUNT=3",
+        ),
+    ] {
+        let rule = Rule::parse(text).unwrap();
+        assert_eq!(rule.canonical(), canonical);
+        assert_eq!(Rule::parse(canonical).unwrap(), rule, "round trip");
+    }
+}
+
+#[test]
+fn every_weekday_until_a_date_includes_that_whole_day() {
+    // Starts Monday 21 December 2026; the 24th is a Thursday.
+    assert_eq!(
+        instants(
+            "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=18;BYMINUTE=0;UNTIL=20261224",
+            "2026-12-21T10:00:00Z",
+            "Europe/Lisbon",
+            10,
+        ),
+        [
+            "Mon 2026-12-21 18:00 WET",
+            "Tue 2026-12-22 18:00 WET",
+            "Wed 2026-12-23 18:00 WET",
+            "Thu 2026-12-24 18:00 WET",
+        ]
+    );
+}
+
+#[test]
+fn a_local_until_is_wall_clock_and_a_utc_one_an_instant() {
+    // 09:00 in New York is 14:00 UTC in December.
+    let daily = |until: &str| {
+        instants(
+            &format!("FREQ=DAILY;BYHOUR=9;BYMINUTE=0;UNTIL={until}"),
+            "2026-12-01T00:00:00Z",
+            "America/New_York",
+            10,
+        )
+        .len()
+    };
+    assert_eq!(daily("20261203T090000"), 3, "inclusive wall-clock bound");
+    assert_eq!(daily("20261203T090000Z"), 2, "04:00 local on the 3rd");
+    assert_eq!(daily("20261203T140000Z"), 3, "exactly the third instance");
+}
+
+#[test]
+fn count_bounds_the_instances_from_the_start_whatever_the_base() {
+    let rule = Rule::parse("FREQ=DAILY;BYHOUR=8;BYMINUTE=0;COUNT=3").unwrap();
+    let start = at("2026-11-13T10:00:00Z");
+    assert_eq!(
+        instants(
+            "FREQ=DAILY;BYHOUR=8;BYMINUTE=0;COUNT=3",
+            "2026-11-13T10:00:00Z",
+            "UTC",
+            10,
+        ),
+        [
+            "Sat 2026-11-14 08:00 UTC",
+            "Sun 2026-11-15 08:00 UTC",
+            "Mon 2026-11-16 08:00 UTC",
+        ]
+    );
+    // Asked from later on (a restart, a missed run), the third is still
+    // the last.
+    let zone = TimeZone::UTC;
+    assert_eq!(
+        next_after(&rule, start, at("2026-11-15T12:00:00Z"), &zone).unwrap(),
+        Some(at("2026-11-16T08:00:00Z"))
+    );
+    assert_eq!(
+        next_after(&rule, start, at("2026-11-16T08:00:00Z"), &zone).unwrap(),
         None
     );
 }

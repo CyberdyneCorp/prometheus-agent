@@ -4978,7 +4978,7 @@ capabilities = [
 "Expired code" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_expired_code_links_nothing"]
 
 [messaging-gateway."Delivery receipts surfaced (upgrade)"]
-"Read receipt reaches the TUI" = { tests = ["crates/pmt-gateway/tests/messaging/identity.rs::a_read_receipt_moves_the_entry_to_read_and_reaches_attached_clients"], note = "an attached observer connection stands in for the TUI; WhatsApp's adapter does not report receipts yet, the fake platform declaring read_receipts does" }
+"Read receipt reaches the TUI" = ["crates/prometheus/tests/gateway_whatsapp_receipts.rs::a_read_whatsapp_reply_reaches_the_attached_client_and_the_outbox", "crates/pmt-adapters-whatsapp/tests/whatsapp.rs::delivery_statuses_of_a_send_are_reported_as_receipts"]
 
 [platform-adapters."Delivery and read receipts (upgrade)"]
 "Signal read receipt" = ["crates/pmt-adapters-signal/src/events.rs::a_read_receipt_names_the_ids_send_returned", "crates/pmt-gateway/tests/messaging/identity.rs::a_read_receipt_moves_the_entry_to_read_and_reaches_attached_clients"]

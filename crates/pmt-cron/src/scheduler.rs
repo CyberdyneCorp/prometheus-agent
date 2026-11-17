@@ -123,7 +123,7 @@ fn advance(row: &mut JobRow, job: &Job, plan: &Plan, next: Option<Timestamp>, no
         }
     }
     if next.is_none() {
-        if job.spec.schedule.recurring() {
+        if !job.spec.schedule.ends() {
             set_error(row, "the schedule has no next instant");
         } else if matches!(plan, Plan::Skip { .. }) {
             complete(row, now);

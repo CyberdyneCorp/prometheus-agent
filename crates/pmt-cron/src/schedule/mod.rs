@@ -203,6 +203,17 @@ impl Schedule {
         !matches!(self, Self::Once { .. })
     }
 
+    /// Whether running out of instants is its natural end (a one-shot, a
+    /// rule with `COUNT` or `UNTIL`) rather than a broken schedule.
+    #[must_use]
+    pub fn ends(&self) -> bool {
+        match self {
+            Self::Once { .. } => true,
+            Self::Rrule { rule, .. } => rrule::Rule::parse(rule).is_ok_and(|r| r.bounded()),
+            Self::Interval { .. } | Self::Cron { .. } => false,
+        }
+    }
+
     /// The first instant strictly after `base`; `anchor` is the previous
     /// scheduled instant an interval counts from (so runs do not drift).
     /// `None` when a one-shot instant has passed.

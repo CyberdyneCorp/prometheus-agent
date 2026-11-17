@@ -81,7 +81,7 @@ fn a_biweekly_phrase_is_echoed_as_an_rrule_and_saved_only_once_confirmed() {
 /// Scenario: Translation is never trusted silently.
 #[test]
 fn an_answer_that_is_neither_grammar_nor_a_valid_rrule_saves_nothing() {
-    for reply in ["whenever the moon is full", "RRULE:FREQ=DAILY;COUNT=3"] {
+    for reply in ["whenever the moon is full", "RRULE:FREQ=DAILY;BYHOUR=25"] {
         let home = home_translating(reply);
         let out = run(
             home.path(),

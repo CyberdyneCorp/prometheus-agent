@@ -28,7 +28,9 @@ pub const INSTRUCTIONS: &str = "You translate a schedule written in plain langua
     or an RFC 3339 time. Otherwise answer an RFC 5545 rule 'RRULE:FREQ=...' using only \
     FREQ (HOURLY, DAILY, WEEKLY, MONTHLY or YEARLY), INTERVAL, BYMONTH, BYMONTHDAY, BYDAY \
     (ordinals such as 1MO or -1FR only in MONTHLY rules), BYSETPOS, BYHOUR, BYMINUTE and \
-    WKST, always with BYHOUR and BYMINUTE, never COUNT or UNTIL. Examples: 'every other \
+    WKST, always with BYHOUR and BYMINUTE, and to end it either COUNT (the number of \
+    occurrences) or UNTIL (the last day as YYYYMMDD, or local date-time YYYYMMDDTHHMMSS, \
+    inclusive), never both. Examples: 'every other \
     thursday at noon' is RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;BYHOUR=12;BYMINUTE=0 and \
     'first business day of each month at 8' is \
     RRULE:FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1;BYHOUR=8;BYMINUTE=0. Times are wall \
@@ -158,6 +160,29 @@ mod tests {
     }
 
     #[test]
+    fn a_rule_ending_on_a_date_is_accepted_and_echoes_its_last_instants() {
+        let zone = TimeZone::get("Europe/Lisbon").unwrap();
+        let schedule = accept(
+            "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0;UNTIL=20261117",
+            "every weekday at 9 until the 17th",
+            now(),
+            &zone,
+        )
+        .unwrap();
+        let echo = Echo::of(&schedule, now(), now(), &zone);
+        assert!(
+            echo.headline().starts_with(
+                "rrule FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=9;BYMINUTE=0;UNTIL=20261117"
+            ),
+            "{}",
+            echo.headline()
+        );
+        let utc: Vec<&str> = echo.next.iter().map(|i| i.utc.as_str()).collect();
+        assert_eq!(utc, ["2026-11-16T09:00:00Z", "2026-11-17T09:00:00Z"]);
+        assert!(schedule.ends());
+    }
+
+    #[test]
     fn grammar_answers_are_accepted_and_anything_else_refused() {
         let zone = TimeZone::UTC;
         assert_eq!(
@@ -171,7 +196,7 @@ mod tests {
             "UNTRANSLATABLE",
             "",
             "RRULE:FREQ=MINUTELY",
-            "RRULE:FREQ=DAILY;COUNT=3",
+            "RRULE:FREQ=DAILY;COUNT=3;UNTIL=20270101",
             "FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30",
         ] {
             let err = accept(reply, "whenever", now(), &zone).unwrap_err();

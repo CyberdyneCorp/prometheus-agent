@@ -5,7 +5,8 @@ The gateway is the part of the daemon that answers on messaging platforms
 platforms in its `config.toml`; one daemon per home runs them all, routes
 every chat to a session, and delivers every reply through a durable
 outbox, so nothing is lost or sent twice across restarts. Adapters that
-report receipts (Signal: delivered and read) move a sent entry on to
+report receipts (Signal, WhatsApp: delivered and read; a played WhatsApp
+voice note counts as read) move a sent entry on to
 `delivered` or `read` (`prometheus gateway outbox list` shows it), and the
 session's attached clients (TUI, desktop) get a `message.delivery` event;
 an entry that ends `failed` is announced the same way and reported in the

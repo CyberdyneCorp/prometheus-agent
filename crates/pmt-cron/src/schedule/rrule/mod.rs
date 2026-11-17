@@ -4,17 +4,21 @@
 //! `DAILY`, `WEEKLY`, `MONTHLY`, `YEARLY`; nothing finer than the
 //! scheduler's minute), `INTERVAL`, `BYMONTH`, `BYMONTHDAY`, `BYDAY` (with
 //! ordinals in monthly rules and yearly rules with `BYMONTH`),
-//! `BYSETPOS`, `BYHOUR`, `BYMINUTE`, `BYSECOND=0` and `WKST`. `COUNT` and
-//! `UNTIL` are refused: a job's `repeat` bounds its runs. Parts a rule
-//! leaves out take their value from its start (`DTSTART`), as RFC 5545
-//! says; the start is the moment the job was created.
+//! `BYSETPOS`, `BYHOUR`, `BYMINUTE`, `BYSECOND=0`, `WKST`, and one of
+//! `COUNT` or `UNTIL` to end the rule. Parts a rule leaves out take their
+//! value from its start (`DTSTART`), as RFC 5545 says; the start is the
+//! moment the job was created. That moment is not a run, so unlike RFC
+//! 5545's `DTSTART` it is never an instance: instances, and the ones
+//! `COUNT` counts, come strictly after it.
 
 mod expand;
+mod until;
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 pub(crate) use expand::next_after;
+pub(crate) use until::Until;
 
 /// How often the rule repeats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -77,7 +81,14 @@ pub(crate) struct Rule {
     /// The first day of a week (Monday = 0): weekly intervals count
     /// whole weeks from it.
     pub week_start: i8,
+    /// How many instances the rule has (`COUNT`).
+    pub count: Option<u32>,
+    /// The last moment it may fire (`UNTIL`, inclusive).
+    pub until: Option<Until>,
 }
+
+/// The largest `COUNT`: each next instant walks the rule from its start.
+const MAX_COUNT: u32 = 10_000;
 
 fn numbers<T: std::str::FromStr + Ord>(
     name: &str,
@@ -147,6 +158,8 @@ impl Rule {
             by_hour: BTreeSet::new(),
             by_minute: BTreeSet::new(),
             week_start: 0,
+            count: None,
+            until: None,
         };
         for part in body.split(';').filter(|p| !p.is_empty()) {
             let (name, value) = part
@@ -189,11 +202,16 @@ impl Rule {
             "BYSECOND" if value == "0" => {}
             "BYSECOND" => return Err("BYSECOND other than 0 is finer than a minute".to_owned()),
             "WKST" => self.week_start = weekday(value)?,
-            "COUNT" | "UNTIL" => {
-                return Err(format!(
-                    "{name} is not supported: bound the job's runs with its repeat instead"
-                ));
+            "COUNT" => {
+                self.count = Some(
+                    value
+                        .parse::<u32>()
+                        .ok()
+                        .filter(|n| (1..=MAX_COUNT).contains(n))
+                        .ok_or_else(|| format!("COUNT '{value}' is out of range"))?,
+                );
             }
+            "UNTIL" => self.until = Some(Until::parse(value)?),
             other => return Err(format!("unsupported rule part '{other}'")),
         }
         Ok(())
@@ -203,6 +221,9 @@ impl Rule {
     /// support.
     fn check(&self) -> Result<(), String> {
         let ordinals = self.by_day.iter().any(|d| d.nth.is_some());
+        if self.count.is_some() && self.until.is_some() {
+            return Err("COUNT and UNTIL cannot both end a rule".to_owned());
+        }
         match self.freq {
             Freq::Weekly if !self.by_month_day.is_empty() => {
                 Err("BYMONTHDAY cannot be used with FREQ=WEEKLY".to_owned())
@@ -254,7 +275,18 @@ impl Rule {
                 DAYS[usize::try_from(self.week_start).unwrap_or(0)]
             );
         }
+        if let Some(count) = self.count {
+            let _ = write!(text, ";COUNT={count}");
+        }
+        if let Some(until) = &self.until {
+            let _ = write!(text, ";UNTIL={}", until.canonical());
+        }
         text
+    }
+
+    /// Whether the rule ends (`COUNT` or `UNTIL`).
+    pub(crate) const fn bounded(&self) -> bool {
+        self.count.is_some() || self.until.is_some()
     }
 }
 
