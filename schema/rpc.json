@@ -7574,7 +7574,7 @@
       "description": "One password-manager source.",
       "properties": {
         "available": {
-          "description": "Whether this build can read it.",
+          "description": "Whether its CLI (`op`, `bw`) is installed: the managed runtime or\nthe daemon's launch `PATH`.",
           "type": "boolean"
         },
         "enabled": {

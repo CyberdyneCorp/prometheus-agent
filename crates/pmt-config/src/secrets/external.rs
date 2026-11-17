@@ -375,6 +375,25 @@ pub fn program(home: &Path, name: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(exe))
 }
 
+/// The vault's password-manager login sources (`vault.<name>`) and the
+/// CLI each one runs.
+pub const LOGIN_SOURCES: [(&str, &str); 2] = [("onepassword", "op"), ("bitwarden", "bw")];
+
+/// Where the CLI `name` a session would run is: the managed install
+/// ([`program`]), else the first `name` on `path` (the launch `PATH`);
+/// `None` when neither exists. Sessions, `vault sources` and the
+/// `vault.sources` RPC all ask this, so they agree on availability.
+#[must_use]
+pub fn locate(home: &Path, name: &str, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let managed = program(home, name);
+    if managed.is_absolute() {
+        return Some(managed);
+    }
+    std::env::split_paths(path?)
+        .map(|dir| dir.join(&managed))
+        .find(|candidate| candidate.is_file())
+}
+
 /// Checks the sources' settings.
 ///
 /// # Errors

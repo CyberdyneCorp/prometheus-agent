@@ -156,7 +156,12 @@ changed, at the `profile` level, as
 refused with `config key '<key>' is locked by the <level> level`, and a
 document that changed since it was read fails with
 `config.remote_conflict` (exit 75). A credential is refused in remote
-values exactly as in `config.toml`.
+values exactly as in `config.toml`. `profile create --clone-from` (or
+`--clone-all`) clones the source's plane configuration the same way: the
+keys that differ are written at the new profile's level (without
+`gateway.platforms` unless `--clone-channels`), and the plane token is
+copied into the new profile's `secrets.toml` when no managed token applies,
+since the clone could not load its configuration without it.
 
 ## Secrets are not configuration
 

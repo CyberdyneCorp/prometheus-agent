@@ -65,3 +65,41 @@ fn vault_methods_manage_items_and_never_return_secrets() {
         assert_eq!(listed["items"], json!([]));
     });
 }
+
+/// `vault.sources` reports a source available exactly when its CLI is
+/// found where the daemon's sessions look for it (its launch `PATH`).
+#[test]
+fn sources_report_whether_their_cli_is_installed() {
+    let home = temp_home();
+    let home = home.path();
+    let bin = home.join("stub-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let bw = bin.join(format!("bw{}", std::env::consts::EXE_SUFFIX));
+    std::fs::write(&bw, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&bw, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = bin.to_str().unwrap();
+    let _daemon = daemon::start_env(home, &[("PATH", path)]);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        let (client, _inbox) = Client::connect(
+            &daemon::record(home).endpoint,
+            Purpose::Interactive,
+            vec!["default".into()],
+            &daemon::hello(false),
+        )
+        .await
+        .unwrap();
+        let listed = client.call("vault.sources", json!({})).await.unwrap();
+        assert_eq!(
+            listed["sources"],
+            json!([
+                {"name": "onepassword", "enabled": true, "available": false},
+                {"name": "bitwarden", "enabled": true, "available": true}
+            ])
+        );
+    });
+}

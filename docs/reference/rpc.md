@@ -2831,7 +2831,7 @@ One password-manager source.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `available` | boolean | yes | Whether this build can read it. |
+| `available` | boolean | yes | Whether its CLI (`op`, `bw`) is installed: the managed runtime or the daemon's launch `PATH`. |
 | `enabled` | boolean | yes | `vault.<name>.enabled`. |
 | `name` | string | yes | `onepassword` or `bitwarden`. |
 

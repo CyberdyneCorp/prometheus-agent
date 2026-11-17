@@ -375,18 +375,11 @@ fn password_managers(inputs: &EnvInputs<'_>) -> Vec<Arc<pmt_tools::browser::mana
 /// A password-manager CLI: the managed install, else the first on the
 /// launch `PATH`.
 fn cli(inputs: &EnvInputs<'_>, name: &str) -> Option<PathBuf> {
-    let managed = pmt_config::secrets::external::program(inputs.scope.home(), name);
-    if managed.is_absolute() {
-        return Some(managed);
-    }
-    let exe = if cfg!(windows) {
-        format!("{name}.exe")
-    } else {
-        name.to_owned()
-    };
-    std::env::split_paths(inputs.launch.inherited("PATH")?)
-        .map(|dir| dir.join(&exe))
-        .find(|candidate| candidate.is_file())
+    pmt_config::secrets::external::locate(
+        inputs.scope.home(),
+        name,
+        inputs.launch.inherited("PATH"),
+    )
 }
 
 /// The approval previewer: the session's shell (POSIX shells only: the

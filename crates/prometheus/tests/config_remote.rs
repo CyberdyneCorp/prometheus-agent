@@ -185,3 +185,79 @@ async fn plane_enabled_adapter_plugins_are_preregistered() {
     assert!(got.status.success(), "{}", stderr(&got));
     assert_eq!(String::from_utf8_lossy(&got.stdout).trim(), "true");
 }
+
+/// `profile create --clone-from` of a remote-backed profile clones the
+/// source's plane configuration onto the new profile's level, without its
+/// messaging adapters, and carries the plane token the clone needs; the
+/// source's local `config.toml` (which does not parse here) is never read.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_clone_gets_the_source_plane_configuration_without_channels() {
+    let plane = MockServer::start().await;
+    let source = json!({
+        "model": {"default": "src-model"},
+        "agent": {"max_iterations": 9},
+        "gateway": {"platforms": {"telegram": {"enabled": true, "token_secret": "TELEGRAM_BOT_TOKEN"}}}
+    });
+    let tenant = json!({"level": "tenant", "values": {"display": {"theme": "mono"}}});
+    Mock::given(method("GET"))
+        .and(path(DOC))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "version": "1",
+            "layers": [tenant, {"level": "profile", "values": source}]
+        })))
+        .mount(&plane)
+        .await;
+    let ops = "/v1/instances/inst-1/profiles/ops/config";
+    Mock::given(method("GET"))
+        .and(path(ops))
+        .and(header("authorization", "Bearer plane-token"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(json!({"version": "7", "layers": [tenant]})),
+        )
+        .mount(&plane)
+        .await;
+    Mock::given(method("PATCH"))
+        .and(path(ops))
+        .and(header("if-match", "7"))
+        .and(header("authorization", "Bearer plane-token"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(&plane)
+        .await;
+    let home = remote_home(&plane.uri());
+    let home_path = home.path().to_owned();
+    let out = pmt_core::spawn::blocking(move || {
+        run(
+            &home_path,
+            &[
+                "profile",
+                "create",
+                "ops",
+                "--clone-from",
+                "default",
+                "--no-alias",
+            ],
+        )
+    })
+    .await
+    .unwrap();
+    assert!(out.status.success(), "{}", stderr(&out));
+    let patches: Vec<serde_json::Value> = plane
+        .received_requests()
+        .await
+        .unwrap()
+        .iter()
+        .filter(|r| r.method.as_str() == "PATCH")
+        .map(|r| {
+            assert_eq!(r.url.path(), ops, "only the clone's level is written");
+            serde_json::from_slice(&r.body).unwrap()
+        })
+        .collect();
+    assert_eq!(
+        patches,
+        [json!({"set": {"agent.max_iterations": 9, "model.default": "src-model"}, "unset": []})]
+    );
+    // The clone's local file is still the template: nothing came from the
+    // source's unparsable local file.
+    let local = std::fs::read_to_string(home.path().join("profiles/ops/config.toml")).unwrap();
+    assert!(!local.contains("not toml"), "{local}");
+}

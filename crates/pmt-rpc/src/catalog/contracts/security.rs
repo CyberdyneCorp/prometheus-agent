@@ -182,7 +182,8 @@ pub struct VaultSource {
     pub name: String,
     /// `vault.<name>.enabled`.
     pub enabled: bool,
-    /// Whether this build can read it.
+    /// Whether its CLI (`op`, `bw`) is installed: the managed runtime or
+    /// the daemon's launch `PATH`.
     pub available: bool,
 }
 

@@ -323,8 +323,11 @@ code) with the input hidden, or read them one per line from stdin when it
 is not a terminal; a secret given as a flag exits 2. `vault rm <handle>`
 asks you to type the handle (or `--yes`). `vault sources [--enable|
 --disable onepassword|bitwarden]` shows and toggles the password-manager
-login sources (`vault.onepassword.enabled`, `vault.bitwarden.enabled`),
-which this build does not read yet.
+login sources (`vault.onepassword.enabled`, `vault.bitwarden.enabled`)
+and whether each one's CLI is installed (`available: <path>` or
+`unavailable`), found exactly where sessions look for it; the
+`vault.sources` RPC behind the desktop and dashboard settings reports the
+same `available` flag from the daemon's `PATH`.
 
 When a password-manager source is enabled and its CLI is installed (`op`
 from the runtime store or `PATH`, `bw` from `PATH`), [`browser_vault`](../reference/tools.md#browser_vault) lists

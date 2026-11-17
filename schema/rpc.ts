@@ -2650,7 +2650,7 @@ export interface VaultRemoveParams {
 
 /** One password-manager source. */
 export interface VaultSource {
-  /** Whether this build can read it. */
+  /** Whether its CLI (`op`, `bw`) is installed: the managed runtime or the daemon's launch `PATH`. */
   available: boolean;
   /** `vault.<name>.enabled`. */
   enabled: boolean;

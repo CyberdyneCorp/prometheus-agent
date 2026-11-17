@@ -394,6 +394,36 @@ impl Plane {
         Ok(())
     }
 
+    /// Stores the plane token of `source`'s secrets file in `target`'s
+    /// when `target` has none and no managed token applies. The token
+    /// is the installation's credential for this home's plane (one URL,
+    /// one instance), kept per profile only as a fallback location; a
+    /// clone without it could not load its own configuration.
+    ///
+    /// # Errors
+    ///
+    /// The secrets files' own errors.
+    pub(crate) fn carry_token(
+        &self,
+        source: &crate::layout::ProfileDir,
+        target: &crate::layout::ProfileDir,
+    ) -> Result<(), Error> {
+        use crate::schema::SecretsBackend;
+        use crate::secrets::SecretStore;
+        let name = &self.settings.token_secret.0;
+        if crate::managed::current()?.is_some_and(|m| m.secret(name).is_some()) {
+            return Ok(());
+        }
+        let to = SecretStore::open(target, SecretsBackend::File);
+        if to.get(name)?.is_some() {
+            return Ok(());
+        }
+        match SecretStore::open(source, SecretsBackend::File).get(name)? {
+            Some(token) => to.set(name, &token),
+            None => Ok(()),
+        }
+    }
+
     fn cached(&self, profile: &str) -> Option<Snapshot> {
         self.profiles
             .lock()

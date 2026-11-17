@@ -991,6 +991,7 @@ impl Host for DaemonHost {
         Ok(pmt_gateway::vault::VaultAccess {
             vault: crate::vault_cmd::open(&scope),
             scope,
+            launch_path: self.launch.inherited("PATH").map(ToOwned::to_owned),
         })
     }
 

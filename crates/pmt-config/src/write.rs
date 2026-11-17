@@ -445,6 +445,20 @@ impl ConfigFile {
         self.commit(old.as_deref(), text)
     }
 
+    /// Makes a freshly cloned profile's configuration `text` (the
+    /// source's, already adjusted): on the remote plane the keys that
+    /// differ are written at the profile level like every other writer;
+    /// a local file is replaced without a backup (it holds only the new
+    /// profile's template).
+    pub(crate) fn write_clone(&self, text: &str) -> Result<(), Error> {
+        if let Some((plane, profile)) = self.plane()? {
+            let old = plane.text(profile)?;
+            return plane.write(profile, &old, text);
+        }
+        private_fs::write_atomic(&self.path, text.as_bytes())
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &self.path, &e))
+    }
+
     /// Applies `change` to the parsed current file, validates and commits.
     fn modify(
         &self,

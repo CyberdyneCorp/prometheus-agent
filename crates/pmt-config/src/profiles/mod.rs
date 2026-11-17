@@ -287,10 +287,6 @@ fn copy_profile(
         copy_all(source.path(), target.path())?;
     } else {
         copy(
-            &source.path().join("config.toml"),
-            &target.path().join("config.toml"),
-        )?;
-        copy(
             &source.path().join(IDENTITY_FILE),
             &target.path().join(IDENTITY_FILE),
         )?;
@@ -305,8 +301,13 @@ fn copy_profile(
         remove_file_if_exists(&imports)?;
     }
     if !clone.channels {
-        drop_channels(target)?;
+        let pairing = target.path().join(PAIRING_DIR);
+        if pairing.exists() {
+            std::fs::remove_dir_all(&pairing)
+                .map_err(|e| Error::io(&codes::HOME_IO, &pairing, &e))?;
+        }
     }
+    clone_config(source, target, clone.channels)?;
     if clone.secrets {
         let target_store = profile_store(target)?;
         for name in source_store.names()? {
@@ -316,6 +317,40 @@ fn copy_profile(
         }
     }
     Ok(())
+}
+
+/// Gives `target` the configuration of `source`, without the messaging
+/// adapters unless `channels`. Under the remote backend both live on the
+/// plane: the keys that differ are written at the clone's profile level
+/// (the local `config.toml` is never read there), after carrying the
+/// plane token the clone needs to reach it.
+fn clone_config(source: &ProfileDir, target: &ProfileDir, channels: bool) -> Result<(), Error> {
+    let file = target.config_file();
+    if let Some(plane) = crate::remote::plane(target.home())? {
+        plane.carry_token(source, target)?;
+    }
+    let Some(text) = source.config_file().raw()? else {
+        return Ok(());
+    };
+    let text = if channels {
+        text
+    } else {
+        without_channels(text)
+    };
+    file.write_clone(&text)
+}
+
+/// `text` without `gateway.platforms`; a file that does not parse is
+/// copied as it is (loading the clone reports it).
+fn without_channels(text: String) -> String {
+    let Ok(mut doc) = text.parse::<toml_edit::DocumentMut>() else {
+        return text;
+    };
+    if crate::edit::remove(&mut doc, "gateway.platforms") {
+        doc.to_string()
+    } else {
+        text
+    }
 }
 
 fn copy(from: &Path, to: &Path) -> Result<(), Error> {
@@ -337,31 +372,11 @@ fn copy_all(from: &Path, to: &Path) -> Result<(), Error> {
     for entry in entries {
         let entry = entry.map_err(|e| Error::io(&codes::HOME_IO, from, &e))?;
         let name = entry.file_name();
-        if NEVER_CLONED.iter().any(|n| name == *n) {
+        // The configuration is cloned by `clone_config`.
+        if name == "config.toml" || NEVER_CLONED.iter().any(|n| name == *n) {
             continue;
         }
         copy(&entry.path(), &to.join(&name))?;
-    }
-    Ok(())
-}
-
-/// Removes the clone's messaging adapters and pairing data.
-fn drop_channels(target: &ProfileDir) -> Result<(), Error> {
-    let pairing = target.path().join(PAIRING_DIR);
-    if pairing.exists() {
-        std::fs::remove_dir_all(&pairing).map_err(|e| Error::io(&codes::HOME_IO, &pairing, &e))?;
-    }
-    let file = target.config_file();
-    let Some(text) = file.raw()? else {
-        return Ok(());
-    };
-    let mut doc: toml_edit::DocumentMut = match text.parse() {
-        Ok(doc) => doc,
-        Err(_) => return Ok(()),
-    };
-    if crate::edit::remove(&mut doc, "gateway.platforms") {
-        private_fs::write_atomic(file.path(), doc.to_string().as_bytes())
-            .map_err(|e| Error::io(&codes::HOME_IO, file.path(), &e))?;
     }
     Ok(())
 }
