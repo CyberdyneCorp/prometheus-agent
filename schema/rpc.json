@@ -4007,6 +4007,31 @@
       },
       "type": "object"
     },
+    "MessageDeliveryPayload": {
+      "additionalProperties": false,
+      "description": "`message.delivery` payload: an outbound message of the session moved\nto `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery\nreceipts surfaced).",
+      "properties": {
+        "outbox_id": {
+          "description": "Its outbox entry.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session the message belongs to.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`delivered`, `read` or `failed`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "outbox_id",
+        "state"
+      ],
+      "type": "object"
+    },
     "MessageReaction": {
       "additionalProperties": false,
       "description": "`message.reaction` payload.",
@@ -7991,8 +8016,10 @@
       "since": "1.0"
     },
     "message.delivery": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "payload": {
+        "$ref": "#/$defs/MessageDeliveryPayload"
+      },
       "since": "1.0"
     },
     "message.reaction": {

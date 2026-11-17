@@ -391,6 +391,12 @@ pub enum Command {
     /// Emergency pause: no new turns or scheduled jobs on any profile of
     /// this home until `pause off` (running turns finish).
     Pause(crate::pause_cmd::PauseArgs),
+    /// Messaging accounts linked across platforms with `/link`.
+    Identity {
+        /// The identity subcommand.
+        #[command(subcommand)]
+        command: crate::identity_cmd::IdentityCommand,
+    },
     /// The Nous Portal subscription and its tool gateway routing.
     Portal {
         /// The portal subcommand.

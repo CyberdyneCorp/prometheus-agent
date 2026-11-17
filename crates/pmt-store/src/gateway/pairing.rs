@@ -114,8 +114,9 @@ fn hash(salt: &str, code: &str) -> String {
     hex(&Sha256::digest(format!("{salt}:{code}").as_bytes()))
 }
 
-/// One stored pairing entry, verbatim (see [`Store::pairing_row`]).
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One stored pairing entry, verbatim (see [`Store::pairing_row`]); it
+/// serializes so a migration's rollback journal can keep it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct PairingRow {
     chat_id: String,
     sender_name: Option<String>,

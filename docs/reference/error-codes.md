@@ -132,6 +132,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `migrate.source_busy` | `conflict` | 75 | The other agent is running and holds the directory `migrate cleanup` would archive (exit 75); stop it and rerun. Nothing was renamed. |
 | `migrate.destination` | `io` | 74 | The Prometheus home or profile cannot be created or written (permissions, read-only file system); nothing of that profile was imported (exit 73). |
 | `migrate.component` | `invalid_input` | 65 | A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause. |
+| `migrate.run_not_found` | `not_found` | 66 | No profile of the home holds a rollback journal for that run id (see the `run_id` of the migration report; a rolled-back run has none left). |
+| `migrate.rollback_order` | `conflict` | 75 | A later migration run of the same source wrote into the profile after this one; roll that run back first. Nothing was changed. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |

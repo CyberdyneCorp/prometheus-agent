@@ -21,6 +21,7 @@ mod confirm;
 mod controls;
 mod history;
 mod hook_events;
+mod identity;
 mod input;
 mod lifecycle;
 mod models;

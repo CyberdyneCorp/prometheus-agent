@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use pmt_agent::turn::Interrupt;
+use pmt_agent::turn::{Interrupt, Issuer};
 use pmt_config::schema::BackgroundMode;
 use pmt_core::cancel::CancelToken;
 use pmt_core::error::codes;
@@ -17,7 +17,7 @@ use super::units::Unit;
 use super::{ApprovalPlan, ChildPlan, Delegator, Dispatch};
 use crate::Refusal;
 use crate::budget::{self, ChildBudget, Remaining};
-use crate::contract::{Call, Task};
+use crate::contract::{Call, Join, Task};
 use crate::grant::{self, Narrowing, ParentGrant};
 use crate::limiter::{Admission, Limiter};
 use crate::result::SubagentResult;
@@ -92,10 +92,16 @@ impl Delegator {
                     independent,
                 },
                 &sink,
-                None,
+                (None, call.join),
             )),
             Err(note) => Ok(self
-                .run_synchronously(&delegation_id, children, call.tasks.len(), &note, &live)
+                .run_synchronously(
+                    &delegation_id,
+                    children,
+                    (call.tasks.len(), call.join),
+                    &note,
+                    &live,
+                )
                 .await),
         }
     }
@@ -404,7 +410,7 @@ impl Delegator {
         delegation_id: &str,
         dispatched: Dispatched<'_>,
         sink: &Arc<dyn super::Completions>,
-        label: Option<&str>,
+        (label, join): (Option<&str>, Join),
     ) -> ToolResult {
         let Dispatched {
             units,
@@ -428,8 +434,8 @@ impl Delegator {
             let (id, sink, label) = (unit.id.clone(), Arc::clone(sink), label.map(str::to_owned));
             pmt_core::spawn::spawn(async move {
                 let tasks = unit_children.len();
-                let results = me.run_all(unit_children).await;
-                me.complete(&id, &results, tasks, &sink, label.as_deref())
+                let joined = me.run_all(unit_children, join).await;
+                me.complete(&id, &joined, tasks, &sink, label.as_deref())
                     .await;
             });
         }
@@ -451,41 +457,86 @@ impl Delegator {
         self: &Arc<Self>,
         delegation_id: &str,
         children: Vec<Child>,
-        tasks: usize,
+        (tasks, join): (usize, Join),
         note: &str,
         live: &[String],
     ) -> ToolResult {
-        let results = self.run_all(children).await;
-        let inserted = self.for_context(&results, tasks);
-        ToolResult::ok(
-            json!({
-                "status": "completed",
-                "delegation_id": delegation_id,
-                "results": inserted,
-                "live_transcripts": live,
-                "note": note,
-            })
-            .to_string(),
-        )
+        let joined = self.run_all(children, join).await;
+        let inserted = self.for_context(&joined.results, tasks);
+        let mut body = json!({
+            "status": "completed",
+            "delegation_id": delegation_id,
+            "results": inserted,
+            "live_transcripts": live,
+            "note": note,
+        });
+        joined.report(&mut body);
+        ToolResult::ok(body.to_string())
     }
 
-    /// Runs every child concurrently; results in task order.
-    pub(super) async fn run_all(self: &Arc<Self>, children: Vec<Child>) -> Vec<SubagentResult> {
-        let handles: Vec<_> = children
-            .into_iter()
-            .map(|child| {
-                let me = Arc::clone(self);
-                pmt_core::spawn::spawn(async move { me.run_child(child).await })
-            })
-            .collect();
-        let mut results = Vec::with_capacity(handles.len());
-        for handle in handles {
-            if let Ok(result) = handle.await {
-                results.push(result);
+    /// Runs every child concurrently under `join`: once it is satisfied
+    /// the children still running are stopped (they report
+    /// `interrupted`). Results come in task order.
+    pub(super) async fn run_all(self: &Arc<Self>, children: Vec<Child>, join: Join) -> Joined {
+        let count = children.len();
+        let needed = join.needed(count);
+        let entries: Vec<Arc<Entry>> = children.iter().map(|c| Arc::clone(&c.entry)).collect();
+        let (done, mut finished) = tokio::sync::mpsc::unbounded_channel();
+        for (position, child) in children.into_iter().enumerate() {
+            let (me, done) = (Arc::clone(self), done.clone());
+            pmt_core::spawn::spawn(async move {
+                let result = me.run_child(child).await;
+                let _ = done.send((position, result));
+            });
+        }
+        drop(done);
+        let mut slots: Vec<Option<SubagentResult>> = vec![None; count];
+        let mut successes = 0;
+        let mut stopped = false;
+        while let Some((position, result)) = finished.recv().await {
+            successes += usize::from(succeeded(&result));
+            slots[position] = Some(result);
+            if join != Join::All && !stopped && successes >= needed {
+                stopped = true;
+                let issuer = || Issuer::System(format!("join {} satisfied", join.as_str()));
+                for (entry, _) in entries.iter().zip(&slots).filter(|(_, s)| s.is_none()) {
+                    entry.interrupt.stop(issuer());
+                }
             }
         }
-        results
+        Joined {
+            join,
+            satisfied: successes >= needed,
+            results: slots.into_iter().flatten().collect(),
+        }
     }
+}
+
+/// What a call's children returned and whether its join was met.
+pub(super) struct Joined {
+    /// The call's mode.
+    pub join: Join,
+    /// Enough children succeeded.
+    pub satisfied: bool,
+    /// The results, in task order.
+    pub results: Vec<SubagentResult>,
+}
+
+impl Joined {
+    /// `join` and `join_satisfied` for a reply, under any mode but `all`
+    /// (whose replies stay as they were).
+    pub(super) fn report(&self, body: &mut Value) {
+        if self.join != Join::All {
+            body["join"] = self.join.as_str().into();
+            body["join_satisfied"] = self.satisfied.into();
+        }
+    }
+}
+
+/// A child counts towards a join when it completed and, under an
+/// `output_schema`, its answer matched.
+fn succeeded(result: &SubagentResult) -> bool {
+    result.status == crate::result::Status::Completed && result.schema_valid != Some(false)
 }
 
 /// The child's ephemeral system prompt: its role, the goal, the context,

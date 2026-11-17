@@ -605,6 +605,18 @@ impl Hub {
         true
     }
 
+    /// Sends a daemon-level event (not logged) to every connection
+    /// attached to `session_id`.
+    pub fn notify_session(&self, session_id: &str, event: &str, data: Value) {
+        let peers: Vec<Peer> = self
+            .state()
+            .sessions
+            .get(session_id)
+            .map(|log| log.attached.values().cloned().collect())
+            .unwrap_or_default();
+        self.notify(&peers, event, data);
+    }
+
     /// Sends a daemon-level event (no session, not logged) to `peers`.
     pub fn notify(&self, peers: &[Peer], event: &str, data: Value) {
         if let Err(violation) = self.catalog.check_outbound(event, &data, false) {

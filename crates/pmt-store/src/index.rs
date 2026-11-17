@@ -109,6 +109,22 @@ pub(crate) fn remove_session(tx: &Transaction<'_>, session: &str) -> Result<(), 
     })
 }
 
+/// Drops the index entries of `session`'s messages after `seq`.
+pub(crate) fn remove_after(tx: &Transaction<'_>, session: &str, seq: i64) -> Result<(), Error> {
+    guarded(tx, |tx| {
+        for table in [WORD_INDEX, TRIGRAM_INDEX] {
+            tx.execute(
+                &format!(
+                    "DELETE FROM {table} WHERE rowid IN \
+                     (SELECT rowid FROM messages WHERE session_id = ?1 AND seq > ?2)"
+                ),
+                params![session, seq],
+            )?;
+        }
+        Ok(())
+    })
+}
+
 /// Whether both index tables exist and answer a query (a read-only
 /// probe: FTS5's integrity-check command is a write).
 fn healthy(conn: &Connection) -> bool {

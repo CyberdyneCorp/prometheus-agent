@@ -39,6 +39,9 @@ pub enum Source {
     User,
     /// `<root>/.prometheus/plugins/<id>/` of a trusted project root.
     Project(PathBuf),
+    /// A local directory `prometheus plugins dev` serves (listed as
+    /// `dev:<id>`, never installed or signed).
+    Dev,
 }
 
 impl Source {
@@ -49,6 +52,7 @@ impl Source {
             Self::Embedded => "embedded",
             Self::User => "user",
             Self::Project(_) => "project",
+            Self::Dev => "dev",
         }
     }
 }
@@ -86,7 +90,13 @@ pub struct Inputs<'a> {
     pub embedded: &'a [EmbeddedPlugin],
     /// The running Prometheus version.
     pub running: &'a Version,
+    /// Directories served by `prometheus plugins dev` (empty outside the
+    /// processes dev plugins may load in).
+    pub dev: &'a [PathBuf],
 }
+
+/// The id prefix of a plugin `prometheus plugins dev` serves.
+pub const DEV_PREFIX: &str = "dev:";
 
 /// Discovers every plugin visible to a session, sorted by id.
 #[must_use]
@@ -111,8 +121,55 @@ pub fn discover(inputs: &Inputs<'_>) -> Vec<Discovered> {
             );
         }
     }
+    for dir in inputs.dev {
+        add_dev(&mut found, scan_dev(dir, inputs.running));
+    }
     found.sort_by(|a, b| a.id.cmp(&b.id));
     found
+}
+
+/// Reads a dev directory: its id is the manifest's, prefixed `dev:`.
+fn scan_dev(dir: &Path, running: &Version) -> Discovered {
+    let manifest = Manifest::read_any(dir, running);
+    let digest = digest::of_dir(dir);
+    let id = manifest.as_ref().map_or_else(
+        |_| {
+            dir.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        },
+        |m| m.id.clone(),
+    );
+    let (digest, manifest) = match (digest, manifest) {
+        (Ok(d), m) => (Some(d), m),
+        (Err(e), Ok(_)) | (Err(_), Err(e)) => (None, Err(e)),
+    };
+    Discovered {
+        id: format!("{DEV_PREFIX}{id}"),
+        source: Source::Dev,
+        dir: Some(dir.to_path_buf()),
+        digest,
+        manifest,
+        embedded: None,
+        shadowed: Vec::new(),
+    }
+}
+
+/// Adds a dev plugin, which hides an installed plugin of the same id for
+/// the session; a built-in id stays reserved.
+fn add_dev(found: &mut Vec<Discovered>, mut plugin: Discovered) {
+    let id = plugin.id.trim_start_matches(DEV_PREFIX).to_owned();
+    if let Some(at) = found.iter().position(|d| d.id == id) {
+        if found[at].source == Source::Embedded {
+            plugin.manifest = Err(Error::new(
+                &codes::PLUGINS_DISCOVERY,
+                format!("plugin id '{id}' is reserved by a built-in plugin"),
+            ));
+        } else if let Some(dir) = found.remove(at).dir {
+            plugin.shadowed.push(dir);
+        }
+    }
+    found.push(plugin);
 }
 
 /// The trusted project root holding `cwd`, if any.
@@ -234,6 +291,10 @@ impl Enablement {
     /// Resolves `id` against `plugins.enabled` and `plugins.disabled`.
     #[must_use]
     pub fn of(plugin: &Discovered, config: &PluginsConfig) -> Self {
+        // A dev plugin runs while `prometheus plugins dev` serves it.
+        if plugin.source == Source::Dev {
+            return Self::Enabled;
+        }
         let id = &plugin.id;
         let listed = |list: &[String]| list.iter().any(|x| x == id);
         let enabled =

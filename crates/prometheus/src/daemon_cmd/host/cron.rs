@@ -83,7 +83,8 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
     if let (_, Some(reason)) = pmt_cron::doctor::effective_provider(&first.config().cron) {
         tracing::warn!(profile = name.as_str(), "{reason}");
     }
-    let permits = cron_host::permits(&first.config().cron);
+    let permits = profile.cron_permits();
+    let mut managed = Managed::default();
     let sender = GatewaySender {
         host: Arc::clone(&host),
         profile: name.clone(),
@@ -109,7 +110,8 @@ async fn profile_loop(host: Arc<DaemonHost>, name: String, profile: Arc<Profile>
                 let _ = pmt_cron::scheduler::prune(&profile.store, Timestamp::now(), &config);
                 pruned = Some(std::time::Instant::now());
             }
-            tick(&runner, &permits, &sender).await;
+            let scheduled = !managed.signals(&scope, &profile.store, &name).await;
+            tick(&runner, &permits, &sender, scheduled).await;
             // A due automatic curator pass runs on its own thread.
             let _ = crate::curator_cmd::auto::check(&scope, &profile.store, &host.launch);
             // So does a due idle-time memory consolidation pass.
@@ -131,9 +133,10 @@ async fn tick(
     runner: &Arc<HostRunner>,
     permits: &Arc<tokio::sync::Semaphore>,
     sender: &GatewaySender,
+    scheduled: bool,
 ) {
     let now = Timestamp::now();
-    match cron_host::dispatch(runner, now, permits) {
+    match cron_host::dispatch_with(runner, now, permits, scheduled) {
         Ok(running) if !running.is_empty() => {
             pmt_core::spawn::spawn(finish(running));
         }
@@ -145,8 +148,43 @@ async fn tick(
     }
 }
 
+/// Whether the managed scheduler signals a profile's occurrences.
+#[derive(Default)]
+struct Managed {
+    /// The fallback was logged since the daemon started.
+    warned: bool,
+}
+
+impl Managed {
+    /// Arms the profile's occurrences when the managed trigger is in
+    /// effect; `true` when the scheduler took them, so the built-in
+    /// trigger leaves the occurrences to it. An unreachable scheduler
+    /// falls back to the built-in trigger, with one warning per daemon
+    /// start.
+    async fn signals(
+        &mut self,
+        scope: &pmt_config::ProfileScope,
+        store: &pmt_store::Store,
+        profile: &str,
+    ) -> bool {
+        if cron_host::managed::in_effect(scope).is_none() {
+            return false;
+        }
+        match cron_host::managed::sync(scope, store).await {
+            Ok(()) => true,
+            Err(err) => {
+                if !self.warned {
+                    self.warned = true;
+                    tracing::warn!(profile, "{}; using builtin until it answers", err.message());
+                }
+                false
+            }
+        }
+    }
+}
+
 /// Awaits the runs of one tick, logging what could not be recorded.
-async fn finish(mut running: cron_host::Running) {
+pub(super) async fn finish(mut running: cron_host::Running) {
     while let Some(done) = running.join_next().await {
         match done {
             Ok(Ok(_)) => {}

@@ -128,6 +128,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.schedule.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.schedule.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.schedule.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.schedule.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.schedule.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.schedule.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.side_question.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.side_question.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.side_question.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -243,6 +249,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `cron.delivery.threads` | table | `{}` | any | `live` | Per platform: the thread or topic id home-chat deliveries go to (explicit `<adapter>:<chat>:<thread>` targets win). |
 | `cron.failure_nudge_threshold` | integer | `3` | ≥ 0 | `live` | Consecutive failures of a recurring job after which its failure notice suggests fixing, pausing or removing it (`0` = never). |
 | `cron.failure_repeat_alert_secs` | integer | `21600` | ≥ 0 | `live` | Seconds after which a failure incident still alerted sends one reminder (`0` = alert on every failing run). |
+| `cron.managed.audience` | string | unset | any | `live` | The `aud` a fire token must carry. |
+| `cron.managed.callback_url` | string | unset | any | `live` | The public URL of this daemon's `POST /api/cron/fire`, sent with every arm request. |
+| `cron.managed.endpoint` | string | unset | any | `live` | Where one-shots are armed (`POST` of `job_id`, `profile`, `fire_at`, `dedup_key` and `callback_url`). |
+| `cron.managed.jwks_url` | string | unset | any | `live` | The JWKS fire tokens are verified against (asymmetric keys only). |
+| `cron.managed.token_secret` | string | unset | a secret name | `live` | The secret sent as a bearer token with arm requests (none when unset). |
 | `cron.max_parallel_jobs` | integer | `4` | 1 to 64 | `live` | Runs executing at once per profile (1 = serial). |
 | `cron.max_run_secs` | integer | `3600` | ≥ 0 | `live` | Seconds a run may take in all (`0` = unlimited); a job's `timeout.wall` wins. |
 | `cron.model` | string | unset | any | `live` | The model of unpinned jobs (unset: the profile's main model at fire time). |
@@ -370,6 +381,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `files.snapshot.retention_secs` | integer | `604800` | ≥ 0 | `live` | Snapshots unused this long are pruned. |
 | `files.snapshot.terminal` | one of "off", "destructive", "workspace" | `"off"` | `"off"`, `"destructive"`, `"workspace"` | `live` | Terminal commands: `off`, `destructive` (checkpoint before `rm`, `mv`, `sed -i`, `>`, `git reset`...) or `workspace` (also journal every command's workspace changes, so `/undo` reverts them). |
 | `gateway.accept_routes_from` | array of string | `[]` | any | `live` | Profiles whose `profile_routes` may route events to this one. |
+| `gateway.ack_reaction` | string | unset | any | `live` | A reaction added to every accepted inbound message (an emoji or a name such as `eyes` or `thumbsup`; unset: none) on adapters that support reactions. |
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
 | `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
@@ -431,6 +443,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.groups.platforms.<name>.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
 | `gateway.groups.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
 | `gateway.groups.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
+| `gateway.identity.dm_mode` | one of "per_platform", "shared" | `"per_platform"` | `"per_platform"`, `"shared"` | `live` | `per_platform` (default): each account's DMs are its own conversation; `shared`: DMs from all of a person's linked accounts continue one conversation, answered on the platform of the latest message (group conversations never merge). |
 | `gateway.mcp_events.enabled` | boolean | `false` | any | `live` | Admit notifications of configured MCP servers that declare an `events` webhook route as signed internal events on that route (same delivery and toolset rules as a webhook request). |
 | `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
 | `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
@@ -451,6 +464,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.busy.debounce_ms` | integer | unset | 0 to 10000 | `next_session` | Overrides `gateway.busy.debounce_ms`. |
 | `gateway.platforms.<name>.busy.input_mode` | one of "queue", "steer", "interrupt" | unset | `"queue"`, `"steer"`, `"interrupt"` | `next_session` | Overrides `busy.input_mode`. |
 | `gateway.platforms.<name>.busy.max_queued` | integer | unset | 1 to 1000 | `next_session` | Overrides `gateway.busy.max_queued`. |
+| `gateway.platforms.<name>.busy_reaction` | string | unset | any | `next_session` | The reaction that acknowledges a message arriving during a turn (with `gateway.busy.ack`, on adapters that support reactions) instead of a busy text: an emoji or a name such as `eyes` (default) or `hourglass`. |
 | `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
 | `gateway.platforms.<name>.group_admins` | array of string | `[]` | any | `next_session` | User ids with every command in groups. |
 | `gateway.platforms.<name>.home_channel.chat_id` | string | `""` | any | `next_session` | The chat id. |

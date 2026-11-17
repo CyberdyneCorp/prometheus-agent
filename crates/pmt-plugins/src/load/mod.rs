@@ -71,6 +71,9 @@ pub struct LoadInputs<'a> {
     /// withheld from every plugin but their owning adapter (`None`:
     /// nothing withheld).
     pub profile_config: Option<&'a pmt_config::Config>,
+    /// Directories `prometheus plugins dev` serves (`dev:<id>`); empty in
+    /// gateway, cron and other unattended processes.
+    pub dev: &'a [std::path::PathBuf],
 }
 
 /// The state `prometheus plugins list` shows.
@@ -472,6 +475,7 @@ fn discovery_inputs<'a>(inputs: &LoadInputs<'a>) -> Inputs<'a> {
         config: inputs.config,
         embedded: inputs.embedded,
         running: inputs.running,
+        dev: inputs.dev,
     }
 }
 

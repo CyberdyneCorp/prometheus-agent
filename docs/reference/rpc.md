@@ -229,7 +229,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
 | `local_model.context_grown` | `local-models` | 1.0 | not served yet |
-| `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
+| `message.delivery` | `messaging-gateway` | 1.0 | [`MessageDeliveryPayload`](#messagedeliverypayload) |
 | `message.reaction` | `desktop-app` | 1.0 | [`MessageReaction`](#messagereaction) |
 | `pty.detached` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) |
 | `pty.exited` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
@@ -1601,6 +1601,16 @@ One MCP server of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
+
+### `MessageDeliveryPayload`
+
+`message.delivery` payload: an outbound message of the session moved to `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery receipts surfaced).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `outbox_id` | integer | yes | Its outbox entry. |
+| `session_id` | string | yes | The session the message belongs to. |
+| `state` | string | yes | `delivered`, `read` or `failed`. |
 
 ### `MessageReaction`
 

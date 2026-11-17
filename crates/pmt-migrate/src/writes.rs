@@ -118,6 +118,11 @@ impl Writes {
         let pending = self.pending(&text, &current, entries, overwrite, ledger);
         if !pending.keys.is_empty() {
             dest.keep(file.path())?;
+            let doc: toml::Table = toml::from_str(&text).unwrap_or_default();
+            for (key, value) in &pending.keys {
+                let before = lookup_value(&doc, key).map(ToString::to_string);
+                dest.journal_key(key, before, toml_text(value));
+            }
             file.set_values(&pending.keys)?;
         }
         for s in pending.secrets {
@@ -237,7 +242,7 @@ pub(crate) fn unchanged(entry: &mut Entry) {
 }
 
 /// The value at dotted `key` of a parsed `config.toml`.
-fn lookup_value<'a>(doc: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
+pub(crate) fn lookup_value<'a>(doc: &'a toml::Table, key: &str) -> Option<&'a toml::Value> {
     let mut segments = key.split('.');
     let mut value = doc.get(segments.next()?)?;
     for segment in segments {
@@ -249,6 +254,12 @@ fn lookup_value<'a>(doc: &'a toml::Table, key: &str) -> Option<&'a toml::Value> 
 pub(crate) fn conflict(entry: &mut Entry, why: &str) {
     entry.disposition = Disposition::Conflict;
     entry.reason = format!("{why}; kept (use --overwrite to replace it)");
+}
+
+/// `v` as plain TOML text, so formatting differences compare equal.
+#[must_use]
+pub fn toml_text(v: &Value) -> String {
+    normalize(v).map_or_else(|| v.to_string(), |v| v.to_string())
 }
 
 /// `v` as a plain TOML value, so formatting differences compare equal.

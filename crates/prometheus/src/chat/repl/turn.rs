@@ -147,7 +147,7 @@ impl Repl {
             tokio::select! {
                 result = &mut turn => return result,
                 event = self.input.next() => {
-                    self.busy_event(event, live, interrupt).await;
+                    Box::pin(self.busy_event(event, live, interrupt)).await;
                     let prompt = self.prompt();
                     self.input.request(&prompt);
                 }
@@ -232,7 +232,7 @@ impl Repl {
                 } else if text.trim_start().starts_with('!') {
                     self.notice(self.strings().get("cli.shell_busy"));
                 } else if text.trim_start().starts_with('/') {
-                    self.busy_slash(text.trim(), session, interrupt).await;
+                    Box::pin(self.busy_slash(text.trim(), session, interrupt)).await;
                 } else if !text.trim().is_empty() {
                     self.busy_text(text, session, interrupt);
                 }

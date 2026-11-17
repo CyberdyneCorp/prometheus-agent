@@ -12,7 +12,9 @@
 //!   of external surfaces;
 //! - [`doctor`]: the `network` doctor group's IPv6 reachability check;
 //! - [`stream`]: raw TLS or plain byte streams (`WebSocket` connections), directly or
-//!   through a proxy tunnel.
+//!   through a proxy tunnel;
+//! - [`jwt`]: JSON Web Tokens verified against a JWKS (asymmetric keys
+//!   only).
 //!
 //! (specs: workspace-architecture, IPv6 reachability check and IPv4-only
 //! outbound; security-boundaries, Private and metadata destinations,
@@ -26,6 +28,7 @@ pub mod eyeballs;
 pub mod fetch;
 pub mod http;
 pub mod identity;
+pub mod jwt;
 pub mod lazy;
 pub mod listen;
 pub mod resolve;

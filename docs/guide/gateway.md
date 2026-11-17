@@ -4,7 +4,12 @@ The gateway is the part of the daemon that answers on messaging platforms
 (Telegram, Discord, Slack, ...). Each served profile enables its own
 platforms in its `config.toml`; one daemon per home runs them all, routes
 every chat to a session, and delivers every reply through a durable
-outbox, so nothing is lost or sent twice across restarts.
+outbox, so nothing is lost or sent twice across restarts. Adapters that
+report receipts (Signal: delivered and read) move a sent entry on to
+`delivered` or `read` (`prometheus gateway outbox list` shows it), and the
+session's attached clients (TUI, desktop) get a `message.delivery` event;
+an entry that ends `failed` is announced the same way and reported in the
+platform's home channel.
 
 ## Setup
 
@@ -426,8 +431,8 @@ $ prometheus --json pairing list
 
 With `admins` (direct messages) or `group_admins` (groups) set for a
 platform, only those users run every command; others keep `/help`,
-`/whoami`, `/stop`, `/new`, `/queue`, `/link` and the platform's
-`user_commands`. Admin-tier commands include `/pause`, `/sethome` and
+`/whoami`, `/stop`, `/new`, `/queue`, `/link`, `/unlink` and the
+platform's `user_commands`. Admin-tier commands include `/pause`, `/sethome` and
 `/policy`.
 
 ## Policies
@@ -492,6 +497,31 @@ sets the platform's mode from a chat with `/busy queue|steer|interrupt`
 (written to `gateway.platforms.<name>.busy.input_mode` in `config.toml`,
 effective from the next message); `/busy status` names the effective mode
 and its source, for example "steer (platform override)".
+
+With `gateway.busy.ack` on, a follow-up that arrives during a turn on a
+platform with reactions (Discord, Slack, Telegram, Matrix, Signal) gets
+the platform's `busy_reaction` (`gateway.platforms.<name>.busy_reaction`,
+default `eyes`; a name such as `thumbsup` or `hourglass`, or the emoji
+itself) instead of the "Still working" text; elsewhere the text is sent
+as before. `gateway.ack_reaction` (unset by default) adds a reaction to
+every accepted message.
+
+### One person on several platforms
+
+An authorized user can link their accounts: `/link` in a DM answers a
+6-digit code valid for 10 minutes, and `/link <code>` sent from an
+already authorized account on another platform links both to one person
+(`state.db`). Linking never authorizes an account: from an unauthorized
+account the message gets the platform's unauthorized-DM answer and links
+nothing; a late code gets "Link code expired". With
+`gateway.identity.dm_mode = "shared"` (default `per_platform`) the
+person's DMs on every linked platform continue one conversation, answered
+on the platform the latest message came from; group conversations never
+merge. Rate limits and a memory provider's long-term memory follow the
+person. `/unlink <platform>` takes that platform's account out;
+`prometheus identity list` and `prometheus identity unlink
+<platform>:<sender_id>` (or `<person_id> <platform>`) do the same from
+the CLI.
 
 ## Chat controls
 

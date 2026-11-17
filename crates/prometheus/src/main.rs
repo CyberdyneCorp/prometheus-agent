@@ -235,6 +235,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         }
         Some(Command::Uninstall(args)) => prometheus::uninstall_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
+        Some(Command::Identity { command }) => prometheus::identity_cmd::run(command, &ctx),
         Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),

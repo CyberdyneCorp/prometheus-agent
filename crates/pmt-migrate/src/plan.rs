@@ -13,6 +13,7 @@ use pmt_store::Store;
 use crate::component::Component;
 use crate::env::EnvEntry;
 use crate::host::Host;
+use crate::journal::Journal;
 use crate::ledger::Ledger;
 use crate::report::Entry;
 use crate::source::SourceProfile;
@@ -76,6 +77,9 @@ pub struct Dest<'a> {
     /// How to take back what the component wrote when it does not
     /// commit: every write records its undo here first.
     pub undo: &'a RefCell<Undo>,
+    /// The run's rollback journal: every write records what it replaced
+    /// here too, for `migrate rollback`.
+    pub journal: &'a RefCell<Journal>,
 }
 
 impl Dest<'_> {
@@ -85,7 +89,13 @@ impl Dest<'_> {
     ///
     /// As [`Undo::path`].
     pub fn keep(&self, path: &Path) -> Result<(), Error> {
-        self.undo.borrow_mut().path(path)
+        self.undo.borrow_mut().path(path)?;
+        // `config.toml` is journaled key by key ([`Dest::journal_key`]):
+        // a rollback must not take back later edits of other keys.
+        if path == self.scope.profile().config_file().path() {
+            return Ok(());
+        }
+        self.journal.borrow_mut().path(path)
     }
 
     /// Records the profile's secret `name` before it is set or removed.
@@ -94,9 +104,20 @@ impl Dest<'_> {
     ///
     /// As [`Undo::secret`].
     pub fn keep_secret(&self, name: &str) -> Result<(), Error> {
-        self.undo
-            .borrow_mut()
-            .secret(self.scope.secrets().store(), name)
+        let store = self.scope.secrets().store();
+        self.undo.borrow_mut().secret(store, name)?;
+        self.journal.borrow_mut().secret(store, name)
+    }
+
+    /// Records a config key about to be written: its TOML value now
+    /// (`None`: unset) and the one written.
+    pub fn journal_key(&self, key: &str, before: Option<String>, written: String) {
+        self.journal.borrow_mut().config(key, before, written);
+    }
+
+    /// Records a store item the component wrote.
+    pub fn journal(&self, item: crate::journal::Item) {
+        self.journal.borrow_mut().item(item);
     }
 
     /// Records how to revert a store change just made.

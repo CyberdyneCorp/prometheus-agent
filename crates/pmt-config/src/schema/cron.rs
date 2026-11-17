@@ -43,6 +43,8 @@ pub struct CronConfig {
     pub timezone: Option<String>,
     /// The trigger: `builtin` or `managed`.
     pub provider: CronProvider,
+    /// The managed scheduler (`cron.provider = "managed"`).
+    pub managed: CronManagedConfig,
     /// Seconds between the built-in trigger's evaluations of due jobs (it
     /// also wakes at the earliest next run).
     #[schemars(range(min = 10, max = 300))]
@@ -106,6 +108,48 @@ pub struct CronConfig {
     pub continuable_surface: BTreeMap<String, ContinuableSurface>,
 }
 
+/// The `[cron.managed]` table (spec: scheduled-jobs, Managed scheduler
+/// contract): where jobs are armed and how fires are verified. The
+/// managed trigger is in effect only when `endpoint`, `jwks_url` and
+/// `audience` are all set.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct CronManagedConfig {
+    /// Where one-shots are armed (`POST` of `job_id`, `profile`,
+    /// `fire_at`, `dedup_key` and `callback_url`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub endpoint: Option<String>,
+    /// The JWKS fire tokens are verified against (asymmetric keys only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jwks_url: Option<String>,
+    /// The `aud` a fire token must carry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audience: Option<String>,
+    /// The public URL of this daemon's `POST /api/cron/fire`, sent with
+    /// every arm request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub callback_url: Option<String>,
+    /// The secret sent as a bearer token with arm requests (none when
+    /// unset).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_secret: Option<super::SecretName>,
+}
+
+impl CronManagedConfig {
+    /// The first of `endpoint`, `jwks_url` and `audience` left unset.
+    #[must_use]
+    pub fn missing(&self) -> Option<&'static str> {
+        [
+            ("cron.managed.endpoint", &self.endpoint),
+            ("cron.managed.jwks_url", &self.jwks_url),
+            ("cron.managed.audience", &self.audience),
+        ]
+        .into_iter()
+        .find(|(_, value)| value.as_deref().is_none_or(str::is_empty))
+        .map(|(key, _)| key)
+    }
+}
+
 /// How a continuable delivery opens its conversation.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -143,6 +187,7 @@ impl Default for CronConfig {
         Self {
             timezone: None,
             provider: CronProvider::Builtin,
+            managed: CronManagedConfig::default(),
             tick_interval_secs: 30,
             catch_up_missed: true,
             max_parallel_jobs: 4,

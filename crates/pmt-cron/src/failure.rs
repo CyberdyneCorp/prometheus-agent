@@ -104,7 +104,7 @@ pub struct Hold {
 pub fn hold(job: &Job, until: i64, next: Option<i64>, zone: &TimeZone) -> Hold {
     let schedule = &job.spec.schedule;
     let at = crate::schedule::at_ms(until);
-    if let (Schedule::Cron { .. }, Some(next_ms)) = (schedule, next) {
+    if let (Schedule::Cron { .. } | Schedule::Rrule { .. }, Some(next_ms)) = (schedule, next) {
         let period = schedule.period_secs(at, zone).unwrap_or(0);
         let half = i64::try_from(period.saturating_mul(500)).unwrap_or(i64::MAX);
         if until.saturating_add(half) <= next_ms {

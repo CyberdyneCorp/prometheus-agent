@@ -51,6 +51,7 @@ pub mod grants_cmd;
 pub mod harness_cmd;
 pub mod harness_host;
 pub mod hooks_host;
+pub mod identity_cmd;
 pub mod init;
 pub mod insights_cmd;
 pub mod install_receipt_cmd;

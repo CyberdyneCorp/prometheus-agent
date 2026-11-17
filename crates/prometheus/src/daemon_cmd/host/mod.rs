@@ -42,6 +42,8 @@ mod cron;
 mod cron_admit;
 mod cron_continue;
 mod cron_fire;
+mod cron_managed;
+pub(super) use cron_managed::FireEndpoint;
 mod cron_send;
 #[cfg(feature = "dashboard")]
 mod dashboard;
@@ -164,6 +166,9 @@ struct Profile {
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
     /// Wakes the profile's scheduler loop (a webhook queued a run).
     cron_wake: tokio::sync::Notify,
+    /// The profile's concurrent scheduled runs (`cron.max_parallel_jobs`
+    /// when first used), shared by the scheduler loop and managed fires.
+    cron_permits: std::sync::OnceLock<Arc<tokio::sync::Semaphore>>,
     /// Wakes the profile's automation loop (a command set something).
     automation_wake: tokio::sync::Notify,
 }
@@ -242,6 +247,7 @@ impl Profile {
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),
             cron_wake: tokio::sync::Notify::new(),
+            cron_permits: std::sync::OnceLock::new(),
             automation_wake: tokio::sync::Notify::new(),
         }))
     }
@@ -249,6 +255,14 @@ impl Profile {
     /// The configuration new sessions start with.
     fn scope(&self) -> ProfileScope {
         self.current.get()
+    }
+
+    /// The permits of the profile's concurrent scheduled runs.
+    fn cron_permits(&self) -> Arc<tokio::sync::Semaphore> {
+        Arc::clone(
+            self.cron_permits
+                .get_or_init(|| crate::cron_host::permits(&self.scope().config().cron)),
+        )
     }
 }
 
@@ -1077,7 +1091,7 @@ impl Host for DaemonHost {
         op: pmt_gateway::host::QueueOp,
         link: Link,
     ) -> HostFuture<'a, pmt_rpc::contracts::QueueState> {
-        Box::pin(async move { self.queue_op(&self.profile(profile)?, op, &link).await })
+        Box::pin(async move { Box::pin(self.queue_op(&self.profile(profile)?, op, &link)).await })
     }
 
     fn fs_list<'a>(
@@ -1086,10 +1100,9 @@ impl Host for DaemonHost {
         params: pmt_rpc::contracts::FsListParams,
         link: Link,
     ) -> HostFuture<'a, pmt_rpc::contracts::FsListing> {
-        Box::pin(async move {
-            self.fs_list_of(&self.profile(profile)?, params, &link)
-                .await
-        })
+        Box::pin(
+            async move { Box::pin(self.fs_list_of(&self.profile(profile)?, params, &link)).await },
+        )
     }
 
     fn fs_read<'a>(

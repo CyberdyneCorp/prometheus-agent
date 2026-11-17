@@ -100,6 +100,10 @@ capabilities = [
     "tool-system",
     "execution-environments",
     "security-boundaries",
+    "subagent-delegation",
+    "scheduled-jobs",
+    "hermes-migration",
+    "platform-adapters",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -4943,3 +4947,41 @@ capabilities = [
 
 [security-boundaries."External secret sources are opt-in"]
 "Default install" = ["crates/prometheus/tests/egress_injection.rs::a_default_install_never_runs_the_external_source_clis", "crates/pmt-config/src/secrets/external_tests.rs::a_default_config_builds_no_source"]
+
+# Group 72.11: fan-in join modes for delegation.
+[subagent-delegation."Fan-in join modes (upgrade)"]
+"First success cancels the rest" = ["crates/pmt-delegation/tests/host.rs::first_success_returns_the_winner_and_stops_the_others", "crates/prometheus/tests/delegation_join.rs::first_success_returns_the_quick_child_and_interrupts_the_slow_ones", "crates/pmt-delegation/tests/host.rs::a_schema_invalid_answer_is_no_success"]
+"Quorum not reachable" = ["crates/pmt-delegation/tests/host.rs::an_unreachable_quorum_returns_every_result_unsatisfied"]
+
+# Group 72.9: natural-language schedule translation and the managed
+# scheduler contract.
+[scheduled-jobs."Natural-language schedule translation (upgrade)"]
+"Biweekly phrase becomes an RRULE" = ["crates/prometheus/tests/cron_translate.rs::a_biweekly_phrase_is_echoed_as_an_rrule_and_saved_only_once_confirmed", "crates/prometheus/tests/cron_translate.rs::the_tool_translates_once_and_saves_what_it_echoed", "crates/pmt-cron/src/schedule/translate.rs::a_biweekly_phrase_becomes_an_rrule_with_three_instants", "crates/pmt-cron/src/schedule/rrule/tests.rs::the_first_business_day_of_each_month"]
+"Translation is never trusted silently" = ["crates/prometheus/tests/cron_translate.rs::an_answer_that_is_neither_grammar_nor_a_valid_rrule_saves_nothing", "crates/pmt-cron/src/schedule/translate.rs::grammar_answers_are_accepted_and_anything_else_refused", "crates/pmt-cron/src/schedule/rrule/tests.rs::unsupported_or_invalid_rules_are_refused_with_a_reason"]
+
+[scheduled-jobs."Managed scheduler contract"]
+"Duplicate external fire" = ["crates/prometheus/tests/cron_managed.rs::managed_fires_are_verified_deduplicated_and_held_by_the_emergency_stop", "crates/pmt-cron/tests/managed.rs::a_fire_delivered_twice_claims_its_occurrence_once"]
+"Symmetric-key token rejected" = ["crates/prometheus/tests/cron_managed.rs::managed_fires_are_verified_deduplicated_and_held_by_the_emergency_stop", "crates/pmt-net/src/jwt.rs::symmetric_and_unsigned_tokens_never_verify", "crates/pmt-cron/src/managed.rs::fire_token_claims_are_checked_within_the_leeway"]
+
+# Group 72.12: migration rollback and the plugin development loop.
+[hermes-migration."Migration rollback (upgrade)"]
+"Rollback keeps a continued session" = ["crates/prometheus/tests/migrate_rollback.rs::rollback_removes_the_imported_sessions_but_keeps_a_continued_one", "crates/prometheus/tests/migrate_rollback.rs::rollback_restores_the_pre_migration_home", "crates/prometheus/tests/migrate_rollback.rs::a_rolled_back_rerun_takes_back_the_messages_it_appended", "crates/prometheus/tests/migrate_rollback.rs::an_earlier_run_waits_for_the_later_one"]
+
+[plugin-system."Plugin development loop (upgrade)"]
+"Edit-reload cycle" = ["crates/prometheus/tests/plugins_dev.rs::a_changed_hook_handles_the_next_event_without_a_restart", "crates/pmt-plugins/src/discovery/tests.rs::a_dev_directory_is_enabled_as_dev_id_and_hides_the_installed_copy"]
+
+# Group 72.10: cross-platform identity linking, delivery and read receipts,
+# busy acknowledgement via reactions.
+[messaging-gateway."Cross-platform identity linking (upgrade)"]
+"Continue on another platform" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_linked_person_continues_one_conversation_on_another_platform", "crates/pmt-gateway/tests/messaging/identity.rs::per_platform_mode_keeps_each_accounts_dms_apart"]
+"Linking cannot bypass authorization" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_unauthorized_account_cannot_link"]
+"Expired code" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_expired_code_links_nothing"]
+
+[messaging-gateway."Delivery receipts surfaced (upgrade)"]
+"Read receipt reaches the TUI" = { tests = ["crates/pmt-gateway/tests/messaging/identity.rs::a_read_receipt_moves_the_entry_to_read_and_reaches_attached_clients"], note = "an attached observer connection stands in for the TUI; WhatsApp's adapter does not report receipts yet, the fake platform declaring read_receipts does" }
+
+[platform-adapters."Delivery and read receipts (upgrade)"]
+"Signal read receipt" = ["crates/pmt-adapters-signal/src/events.rs::a_read_receipt_names_the_ids_send_returned", "crates/pmt-gateway/tests/messaging/identity.rs::a_read_receipt_moves_the_entry_to_read_and_reaches_attached_clients"]
+
+[platform-adapters."Busy acknowledgement via reactions (upgrade)"]
+"Reaction instead of noise" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_follow_up_during_a_turn_gets_a_reaction_instead_of_a_busy_text", "crates/pmt-gateway/tests/messaging/identity.rs::ack_reaction_marks_each_accepted_message"]

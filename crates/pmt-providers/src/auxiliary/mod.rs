@@ -75,6 +75,7 @@ tasks! {
     Kanban = "kanban", Some(Duration::from_mins(2));
     EvalJudge = "eval_judge", Some(Duration::from_mins(2));
     TrajectoryCompress = "trajectory_compress", Some(Duration::from_mins(2));
+    Schedule = "schedule", Some(Duration::from_secs(30));
 }
 
 impl AuxTask {
@@ -117,6 +118,7 @@ impl AuxTask {
             Self::Kanban => config.kanban.as_ref(),
             Self::EvalJudge => config.eval_judge.as_ref(),
             Self::TrajectoryCompress => config.trajectory_compress.as_ref(),
+            Self::Schedule => config.schedule.as_ref(),
         }
     }
 }

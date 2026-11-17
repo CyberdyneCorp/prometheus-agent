@@ -138,6 +138,38 @@ pub struct GatewayConfig {
     /// MCP server notifications as internal webhook events.
     #[schemars(extend("x-apply" = "live"))]
     pub mcp_events: McpEvents,
+    /// Sender accounts linked across platforms (`/link`).
+    #[schemars(extend("x-apply" = "live"))]
+    pub identity: GatewayIdentity,
+    /// A reaction added to every accepted inbound message (an emoji or a
+    /// name such as `eyes` or `thumbsup`; unset: none) on adapters that
+    /// support reactions.
+    #[schemars(extend("x-apply" = "live"))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ack_reaction: Option<String>,
+}
+
+/// `[gateway.identity]` (spec: messaging-gateway, Cross-platform identity
+/// linking).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayIdentity {
+    /// `per_platform` (default): each account's DMs are its own
+    /// conversation; `shared`: DMs from all of a person's linked accounts
+    /// continue one conversation, answered on the platform of the latest
+    /// message (group conversations never merge).
+    pub dm_mode: DmMode,
+}
+
+/// How a linked person's DMs map to conversations.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DmMode {
+    /// One conversation per account.
+    #[default]
+    PerPlatform,
+    /// One conversation per person.
+    Shared,
 }
 
 /// `[gateway.mcp_events]` (experimental).

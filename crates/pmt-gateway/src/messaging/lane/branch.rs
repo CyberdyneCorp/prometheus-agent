@@ -154,13 +154,10 @@ impl Lane {
                 "the profile is not served",
             )
         })?;
-        let (group_per_user, thread_per_user) = self.config().map_or((true, false), |s| {
-            s.config().gateway.sessions_for(&routing.platform)
+        let isolation = self.config().map_or_else(Isolation::default, |s| {
+            Isolation::of(&s.config().gateway, &routing.platform)
         });
-        let key = routing.key(Isolation {
-            group_per_user,
-            thread_per_user,
-        });
+        let key = routing.key(isolation);
         store.bind_route(
             &NewRoute {
                 key: key.as_str().to_owned(),

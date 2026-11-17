@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use jiff::Timestamp;
 use pmt_gateway::messaging::{
-    AdapterError, AdapterLink, AdapterState, Attachment, ChatType, Inbound, MediaKind,
+    AdapterError, AdapterLink, AdapterState, Attachment, ChatType, Inbound, MediaKind, Receipt,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -124,6 +124,35 @@ impl Reader {
                 .iter()
                 .any(|g| g == "*" || g == group || g.strip_prefix(GROUP) == Some(group))
         })
+    }
+
+    /// The receipts a `receive` notification carries (spec:
+    /// platform-adapters, Delivery and read receipts): signal-cli's
+    /// `receiptMessage` names the timestamps of the messages it covers;
+    /// with the account they are the ids `send` returned. Viewed receipts
+    /// count as read.
+    pub(crate) fn receipts(&self, data: &Value) -> Vec<Receipt> {
+        let envelope = if data["envelope"].is_object() {
+            &data["envelope"]
+        } else {
+            &data["params"]["envelope"]
+        };
+        let receipt = &envelope["receiptMessage"];
+        let read = receipt["isRead"].as_bool() == Some(true)
+            || receipt["isViewed"].as_bool() == Some(true);
+        if !read && receipt["isDelivery"].as_bool() != Some(true) {
+            return Vec::new();
+        }
+        receipt["timestamps"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_i64)
+            .map(|ts| Receipt {
+                message_id: format!("{}:{ts}", self.account),
+                read,
+            })
+            .collect()
     }
 
     /// A `receive` notification as an inbound event; `None` for receipts,
@@ -257,6 +286,9 @@ pub(crate) async fn stream(
                 .collect::<Vec<_>>()
                 .join("\n");
             let parsed: Value = serde_json::from_str(&data).unwrap_or(Value::Null);
+            for receipt in reader.receipts(&parsed) {
+                link.receipt(receipt);
+            }
             if let Some(inbound) = reader.envelope(&parsed) {
                 link.submit(inbound).await;
             }
@@ -400,5 +432,29 @@ mod tests {
     fn numbers_are_redacted_for_logs() {
         assert_eq!(redact("+15551234567"), "+155****4567");
         assert_eq!(redact("+1555"), "*****");
+    }
+
+    #[test]
+    fn a_read_receipt_names_the_ids_send_returned() {
+        // Spec scenario "Signal read receipt": the ids are the ones `send`
+        // returned (account and timestamp); a data message carries none.
+        let read = json!({"envelope": {"sourceNumber": "+1555", "receiptMessage":
+            {"isRead": true, "timestamps": [1_700_000_000_123_i64]}}});
+        let account = Reader {
+            account: "+15550000001".into(),
+            ..Reader::default()
+        };
+        assert_eq!(
+            account.receipts(&read),
+            [Receipt {
+                message_id: "+15550000001:1700000000123".into(),
+                read: true
+            }]
+        );
+        let delivered = json!({"params": {"envelope": {"receiptMessage":
+            {"isDelivery": true, "timestamps": [5]}}}});
+        assert!(!account.receipts(&delivered)[0].read);
+        let message = json!({"envelope": {"sourceNumber": "+1555", "dataMessage": {"timestamp": 7, "message": "hi"}}});
+        assert!(account.receipts(&message).is_empty());
     }
 }

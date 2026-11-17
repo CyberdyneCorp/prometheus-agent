@@ -62,3 +62,21 @@ pub struct AdapterStatePayload {
 event!(/// `adapter.state`: a messaging adapter of a profile the client is
     /// attached to changed state.
     AdapterStateChanged = "adapter.state" (AdapterStatePayload));
+
+/// `message.delivery` payload: an outbound message of the session moved
+/// to `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery
+/// receipts surfaced).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MessageDeliveryPayload {
+    /// The session the message belongs to.
+    pub session_id: String,
+    /// Its outbox entry.
+    pub outbox_id: i64,
+    /// `delivered`, `read` or `failed`.
+    pub state: String,
+}
+
+event!(/// `message.delivery`: the platform reported a message of the session
+    /// delivered or read, or it could not be delivered.
+    MessageDelivery = "message.delivery" (MessageDeliveryPayload));

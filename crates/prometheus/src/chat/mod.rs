@@ -125,6 +125,11 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface, quiet: bool)
 /// Usage, configuration, store and session errors (the caller prints and
 /// exits with their code); a finished run returns its own status.
 pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
+    // A developer's foreground session loads the plugins `plugins dev`
+    // serves (spec: plugin-system, Plugin development loop).
+    if !args.safe_mode {
+        crate::plugins_host::dev::allow();
+    }
     let ui = ui.with_format(args.output_format);
     let record = Arc::new(usage_file::RunRecord::default());
     let mut outcome = run_recorded(args, ctx, ui, &record);

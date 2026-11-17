@@ -50,8 +50,29 @@ pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let store = Arc::new(Store::open(&scope)?);
     let env = Env { ctx, scope, store };
     let now = Timestamp::now();
+    let code = dispatch(&env, command, now)?;
+    if mutates(command) {
+        // Spec: Managed scheduler contract (re-arm on every job mutation).
+        crate::cron_host::managed::sync_now(&env.scope, &env.store);
+    }
+    Ok(code)
+}
+
+/// Whether `command` can change when a job fires next.
+const fn mutates(command: &CronCommand) -> bool {
+    matches!(
+        command,
+        CronCommand::Add { .. }
+            | CronCommand::Edit { .. }
+            | CronCommand::Pause { .. }
+            | CronCommand::Resume { .. }
+            | CronCommand::Remove { .. }
+    )
+}
+
+fn dispatch(env: &Env<'_>, command: &CronCommand, now: Timestamp) -> Result<u8, Error> {
     match command {
-        CronCommand::List { all } => show::list(&env, *all, now),
+        CronCommand::List { all } => show::list(env, *all, now),
         CronCommand::Add {
             schedule,
             prompt_text,
@@ -69,30 +90,28 @@ pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
                 paused,
                 suggestion: from_suggestion.as_deref(),
             };
-            edit::add(&env, schedule.as_deref(), &flags, how, now)
+            edit::add(env, schedule.as_deref(), &flags, how, now)
         }
-        CronCommand::Suggestions { action } => suggestions::run(&env, action.as_ref(), now),
+        CronCommand::Suggestions { action } => suggestions::run(env, action.as_ref(), now),
         CronCommand::Edit {
             job,
             schedule,
             flags,
-        } => edit::edit(&env, job, schedule.as_deref(), flags, now),
-        CronCommand::Pause { job, reason } => edit::pause(&env, job, reason.as_deref(), now),
-        CronCommand::Resume { job } => edit::resume(&env, job, now),
-        CronCommand::Remove { job } => edit::remove(&env, job),
-        CronCommand::Run { job, queue } => tick::run_now(&env, job, *queue, now),
-        CronCommand::Runs { job, limit, status } => {
-            show::runs(&env, job, *limit, status.as_deref())
-        }
-        CronCommand::ShowRun { run } => show::show_run(&env, run),
-        CronCommand::Replay { run, live, deliver } => tick::replay(&env, run, *live, *deliver),
+        } => edit::edit(env, job, schedule.as_deref(), flags, now),
+        CronCommand::Pause { job, reason } => edit::pause(env, job, reason.as_deref(), now),
+        CronCommand::Resume { job } => edit::resume(env, job, now),
+        CronCommand::Remove { job } => edit::remove(env, job),
+        CronCommand::Run { job, queue } => tick::run_now(env, job, *queue, now),
+        CronCommand::Runs { job, limit, status } => show::runs(env, job, *limit, status.as_deref()),
+        CronCommand::ShowRun { run } => show::show_run(env, run),
+        CronCommand::Replay { run, live, deliver } => tick::replay(env, run, *live, *deliver),
         CronCommand::Incidents { action, state, job } => match action {
-            Some(IncidentAction::Ack { id }) => incidents::ack(&env, id, now),
-            None => incidents::list(&env, state.as_deref(), job.as_deref()),
+            Some(IncidentAction::Ack { id }) => incidents::ack(env, id, now),
+            None => incidents::list(env, state.as_deref(), job.as_deref()),
         },
-        CronCommand::Notepad { job, action } => notepad::notepad(&env, job, action.as_ref()),
-        CronCommand::Status => show::status(&env, now),
-        CronCommand::Doctor => show::doctor(&env, now),
-        CronCommand::Tick => tick::tick(&env),
+        CronCommand::Notepad { job, action } => notepad::notepad(env, job, action.as_ref()),
+        CronCommand::Status => show::status(env, now),
+        CronCommand::Doctor => show::doctor(env, now),
+        CronCommand::Tick => tick::tick(env),
     }
 }

@@ -319,7 +319,7 @@ pub fn due_jobs(store: &Store, now: Timestamp) -> Result<Vec<Job>, Error> {
 
 /// Claims the due occurrence of `job`; a skip may leave a fresh one due,
 /// so it looks once more.
-fn claim_due(
+pub(crate) fn claim_due(
     store: &Store,
     mut job: Job,
     now: Timestamp,
@@ -376,7 +376,31 @@ pub fn tick(
     for job in due_jobs(store, now)? {
         runs.extend(claim_due(store, job, now, profile_zone, config)?);
     }
-    runs.extend(retries(store, now)?);
+    runs.extend(unscheduled(store, now)?);
+    Ok(runs)
+}
+
+/// What a tick starts besides scheduled occurrences: automatic re-runs
+/// and queued manual runs. Under the managed trigger this is the whole
+/// tick, the occurrences being signalled by the managed scheduler
+/// ([`crate::managed`]); nothing while the emergency stop is on.
+///
+/// # Errors
+///
+/// Store errors.
+pub fn tick_unscheduled(
+    store: &Store,
+    home: &Path,
+    now: Timestamp,
+) -> Result<Vec<(Job, RunRow)>, Error> {
+    if pmt_core::pause::active(home).is_some() {
+        return Ok(Vec::new());
+    }
+    unscheduled(store, now)
+}
+
+fn unscheduled(store: &Store, now: Timestamp) -> Result<Vec<(Job, RunRow)>, Error> {
+    let mut runs = retries(store, now)?;
     for run in store.cron_runs_in(&["queued"])? {
         if let Some(row) = store.cron_job(&run.job_id)? {
             runs.push((Job::from_row(row)?, run));

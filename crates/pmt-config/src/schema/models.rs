@@ -524,6 +524,10 @@ pub struct AuxiliaryConfig {
     /// model; `--model` wins).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trajectory_compress: Option<AuxiliaryTask>,
+    /// Natural-language schedules of `cron add --nl` and the `cronjob`
+    /// tool's `schedule_text` (defaults to the main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<AuxiliaryTask>,
 }
 
 impl Default for AuxiliaryConfig {
@@ -547,6 +551,7 @@ impl Default for AuxiliaryConfig {
             kanban: None,
             eval_judge: None,
             trajectory_compress: None,
+            schedule: None,
         }
     }
 }

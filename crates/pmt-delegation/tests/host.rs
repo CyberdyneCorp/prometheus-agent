@@ -1248,3 +1248,98 @@ async fn a_labelled_completion_delivered_after_a_restart_keeps_its_label() {
         delivered[0].1
     );
 }
+
+fn statuses(body: &Value) -> Vec<(String, String)> {
+    body["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["status"].as_str().unwrap().to_owned(),
+                r["exit_reason"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
+
+/// Scenario: First success cancels the rest.
+#[tokio::test]
+async fn first_success_returns_the_winner_and_stops_the_others() {
+    let f = fixture();
+    let config = DelegationConfig {
+        max_concurrent_children: 3,
+        ..DelegationConfig::default()
+    };
+    let d = f.delegator(config, sync());
+    let started = std::time::Instant::now();
+    let result = call(
+        &d,
+        json!({"join": "first_success", "tasks": [{"goal": "slow survey"}, {"goal": "quick answer"}, {"goal": "slow audit"}]}),
+    )
+    .await;
+    let body = body(&result);
+    assert!(
+        started.elapsed() < Duration::from_millis(390),
+        "the call waited for the slow children"
+    );
+    let interrupted = ("interrupted".to_owned(), "interrupted".to_owned());
+    assert_eq!(
+        statuses(&body),
+        [
+            interrupted.clone(),
+            ("completed".to_owned(), "final_answer".to_owned()),
+            interrupted,
+        ]
+    );
+    assert_eq!(body["results"][1]["summary"], "done #0");
+    assert_eq!(body["join"], "first_success");
+    assert_eq!(body["join_satisfied"], true);
+}
+
+/// Scenario: Quorum not reachable.
+#[tokio::test]
+async fn an_unreachable_quorum_returns_every_result_unsatisfied() {
+    let f = fixture();
+    let config = DelegationConfig {
+        max_concurrent_children: 3,
+        ..DelegationConfig::default()
+    };
+    let d = f.delegator(config, f.background());
+    let result = call(
+        &d,
+        json!({"join": "quorum:2", "tasks": [{"goal": "must-fail one"}, {"goal": "fine"}, {"goal": "must-fail two"}]}),
+    )
+    .await;
+    assert_eq!(body(&result)["status"], "dispatched");
+    let delivered = f.completions.wait_for(1).await;
+    let text = &delivered[0].1;
+    let json = &text[text.find('{').unwrap()..];
+    let completion: Value = serde_json::from_str(json).unwrap();
+    let statuses: Vec<&str> = completion["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["status"].as_str().unwrap())
+        .collect();
+    assert_eq!(statuses, ["failed", "completed", "failed"]);
+    assert_eq!(completion["join"], "quorum:2");
+    assert_eq!(completion["join_satisfied"], false);
+}
+
+/// A child whose answer misses its `output_schema` does not satisfy a
+/// `first_success` join.
+#[tokio::test]
+async fn a_schema_invalid_answer_is_no_success() {
+    let f = fixture();
+    let d = f.delegator(DelegationConfig::default(), sync());
+    let schema = json!({"type": "object", "required": ["n"]});
+    let result = call(
+        &d,
+        json!({"join": "first_success", "tasks": [{"goal": "schema-bad", "output_schema": schema}]}),
+    )
+    .await;
+    let body = body(&result);
+    assert_eq!(body["results"][0]["schema_valid"], false);
+    assert_eq!(body["join_satisfied"], false);
+}

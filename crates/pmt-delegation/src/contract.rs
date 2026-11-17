@@ -161,6 +161,59 @@ pub struct Call {
     pub budget: Option<CallBudget>,
     /// The tasks (spawn).
     pub tasks: Vec<Task>,
+    /// How the call's children are joined.
+    pub join: Join,
+}
+
+/// The fan-in mode of a call (spec: subagent-delegation, Fan-in join
+/// modes).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Join {
+    /// Wait for every child.
+    #[default]
+    All,
+    /// Return at the first child that completes successfully; stop the
+    /// rest.
+    FirstSuccess,
+    /// Return once this many children completed successfully; stop the
+    /// rest.
+    Quorum(usize),
+}
+
+impl Join {
+    /// Parses `all`, `first_success` or `quorum:N` (N at least 1).
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "all" => Some(Self::All),
+            "first_success" => Some(Self::FirstSuccess),
+            _ => text
+                .strip_prefix("quorum:")
+                .and_then(|n| n.parse::<usize>().ok())
+                .filter(|n| *n >= 1)
+                .map(Self::Quorum),
+        }
+    }
+
+    /// Successful children that satisfy it, out of `children`.
+    #[must_use]
+    pub const fn needed(self, children: usize) -> usize {
+        match self {
+            Self::All => children,
+            Self::FirstSuccess => 1,
+            Self::Quorum(n) => n,
+        }
+    }
+
+    /// The wire spelling.
+    #[must_use]
+    pub fn as_str(self) -> String {
+        match self {
+            Self::All => "all".to_owned(),
+            Self::FirstSuccess => "first_success".to_owned(),
+            Self::Quorum(n) => format!("quorum:{n}"),
+        }
+    }
 }
 
 fn refuse(code: &'static ErrorCode, message: impl Into<String>) -> Refusal {
@@ -194,12 +247,21 @@ pub fn parse(
         })?,
         Some(_) => return Err(invalid("'action' must be a string.")),
     };
-    check_join(object.get("join"))?;
+    let join = parse_join(object.get("join"))?;
     let tasks = match action {
         Action::Spawn => parse_tasks(object.get("tasks"), max_tasks, router_params)?,
         _ => Vec::new(),
     };
+    if let Join::Quorum(n) = join
+        && n > tasks.len()
+    {
+        return Err(invalid(format!(
+            "join quorum:{n} needs at least {n} tasks; the call has {}.",
+            tasks.len()
+        )));
+    }
     Ok(Call {
+        join,
         action,
         subagent_id: string(object, "subagent_id")?,
         message: string(object, "message")?,
@@ -208,15 +270,16 @@ pub fn parse(
     })
 }
 
-/// `join`: only `all` runs in this release (the other fan-in modes are
-/// not offered yet, so they are refused rather than ignored).
-fn check_join(join: Option<&Value>) -> Result<(), Refusal> {
+/// `join`: `all` (default), `first_success` or `quorum:N`.
+fn parse_join(join: Option<&Value>) -> Result<Join, Refusal> {
     match join {
-        None | Some(Value::Null) => Ok(()),
-        Some(Value::String(mode)) if mode == "all" => Ok(()),
-        Some(other) => Err(invalid(format!(
-            "join {other} is not supported; children are always joined with \"all\"."
-        ))),
+        None | Some(Value::Null) => Ok(Join::All),
+        Some(Value::String(mode)) => Join::parse(mode).ok_or_else(|| {
+            invalid(format!(
+                "Unknown join '{mode}' (use all, first_success or quorum:N with N >= 1)."
+            ))
+        }),
+        Some(_) => Err(invalid("'join' must be a string.")),
     }
 }
 
@@ -400,17 +463,18 @@ mod tests {
     }
 
     #[test]
-    fn too_many_tasks_and_other_join_modes_are_refused() {
+    fn too_many_tasks_and_unknown_join_modes_are_refused() {
         let tasks: Vec<Value> = (0..3).map(|_| json!({"goal": "g"})).collect();
         assert!(parse(&json!({"tasks": tasks}), 2, &[]).is_err());
-        assert!(
-            parse(
-                &json!({"tasks": [{"goal": "g"}], "join": "first_success"}),
-                2,
-                &[]
-            )
-            .is_err()
-        );
+        let with = |join: &str, n: usize| {
+            let tasks: Vec<Value> = (0..n).map(|_| json!({"goal": "g"})).collect();
+            parse(&json!({"tasks": tasks, "join": join}), 8, &[]).map(|c| c.join)
+        };
+        assert_eq!(with("first_success", 1).unwrap(), super::Join::FirstSuccess);
+        assert_eq!(with("quorum:2", 3).unwrap(), super::Join::Quorum(2));
+        assert!(with("quorum:4", 3).is_err(), "more than the tasks");
+        assert!(with("quorum:0", 3).is_err());
+        assert!(with("any", 3).is_err());
         let control = parse(&json!({"action": "list"}), 2, &[]).unwrap();
         assert_eq!(control.action, Action::List);
     }

@@ -873,6 +873,12 @@ impl AdapterLink for Link {
         })
     }
 
+    fn receipt(&self, receipt: super::adapter::Receipt) {
+        if let Some(shared) = self.shared.upgrade() {
+            super::receipts::receipt(&shared, &self.profile, &self.platform, &receipt);
+        }
+    }
+
     fn report(&self, state: AdapterState, error: Option<AdapterError>) {
         let Some(slot) = self.slot.upgrade() else {
             return;

@@ -112,6 +112,12 @@ pub struct PlatformConfig {
     /// elsewhere.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reactions: Option<bool>,
+    /// The reaction that acknowledges a message arriving during a turn
+    /// (with `gateway.busy.ack`, on adapters that support reactions)
+    /// instead of a busy text: an emoji or a name such as `eyes`
+    /// (default) or `hourglass`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub busy_reaction: Option<String>,
     /// Role ids whose holders are authorized (Discord roles, Slack user
     /// groups, Matrix power levels), checked right after `allow_users` on
     /// adapters that expose roles; a failed role lookup denies.

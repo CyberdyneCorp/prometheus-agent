@@ -878,6 +878,17 @@
           ],
           "description": "Memory review."
         },
+        "schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Natural-language schedules of `cron add --nl` and the `cronjob`\ntool's `schedule_text` (defaults to the main model)."
+        },
         "side_question": {
           "anyOf": [
             {
@@ -2215,6 +2226,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "managed": {
+          "$ref": "#/$defs/CronManagedConfig",
+          "default": {},
+          "description": "The managed scheduler (`cron.provider = \"managed\"`)."
+        },
         "max_parallel_jobs": {
           "default": 4,
           "description": "Runs executing at once per profile (1 = serial).",
@@ -2314,6 +2330,52 @@
           "default": {},
           "description": "Per platform: the thread or topic id home-chat deliveries go to\n(explicit `<adapter>:<chat>:<thread>` targets win).",
           "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "CronManagedConfig": {
+      "additionalProperties": false,
+      "description": "The `[cron.managed]` table (spec: scheduled-jobs, Managed scheduler\ncontract): where jobs are armed and how fires are verified. The\nmanaged trigger is in effect only when `endpoint`, `jwks_url` and\n`audience` are all set.",
+      "properties": {
+        "audience": {
+          "description": "The `aud` a fire token must carry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "callback_url": {
+          "description": "The public URL of this daemon's `POST /api/cron/fire`, sent with\nevery arm request.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "Where one-shots are armed (`POST` of `job_id`, `profile`,\n`fire_at`, `dedup_key` and `callback_url`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jwks_url": {
+          "description": "The JWKS fire tokens are verified against (asymmetric keys only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret sent as a bearer token with arm requests (none when\nunset)."
         }
       },
       "type": "object"
@@ -2976,6 +3038,21 @@
       },
       "type": "object",
       "x-apply": "live"
+    },
+    "DmMode": {
+      "description": "How a linked person's DMs map to conversations.",
+      "oneOf": [
+        {
+          "const": "per_platform",
+          "description": "One conversation per account.",
+          "type": "string"
+        },
+        {
+          "const": "shared",
+          "description": "One conversation per person.",
+          "type": "string"
+        }
+      ]
     },
     "EdgeTtsConfig": {
       "additionalProperties": false,
@@ -3858,6 +3935,14 @@
           "type": "array",
           "x-apply": "live"
         },
+        "ack_reaction": {
+          "description": "A reaction added to every accepted inbound message (an emoji or a\nname such as `eyes` or `thumbsup`; unset: none) on adapters that\nsupport reactions.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "x-apply": "live"
+        },
         "agent_cache": {
           "$ref": "#/$defs/AgentCacheConfig",
           "default": {
@@ -3929,6 +4014,14 @@
           "$ref": "#/$defs/GatewayGroups",
           "default": {},
           "description": "When group, channel and thread messages start a turn, overridable\nper platform.",
+          "x-apply": "live"
+        },
+        "identity": {
+          "$ref": "#/$defs/GatewayIdentity",
+          "default": {
+            "dm_mode": "per_platform"
+          },
+          "description": "Sender accounts linked across platforms (`/link`).",
           "x-apply": "live"
         },
         "mcp_events": {
@@ -4328,6 +4421,18 @@
           "maximum": 3600,
           "minimum": 1,
           "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "GatewayIdentity": {
+      "additionalProperties": false,
+      "description": "`[gateway.identity]` (spec: messaging-gateway, Cross-platform identity\nlinking).",
+      "properties": {
+        "dm_mode": {
+          "$ref": "#/$defs/DmMode",
+          "default": "per_platform",
+          "description": "`per_platform` (default): each account's DMs are its own\nconversation; `shared`: DMs from all of a person's linked accounts\ncontinue one conversation, answered on the platform of the latest\nmessage (group conversations never merge)."
         }
       },
       "type": "object"
@@ -7317,6 +7422,13 @@
           "$ref": "#/$defs/PlatformBusy",
           "default": {},
           "description": "Busy handling on this platform (overrides `busy.input_mode` and\n`gateway.busy`)."
+        },
+        "busy_reaction": {
+          "description": "The reaction that acknowledges a message arriving during a turn\n(with `gateway.busy.ack`, on adapters that support reactions)\ninstead of a busy text: an emoji or a name such as `eyes`\n(default) or `hourglass`.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "enabled": {
           "default": false,
@@ -12578,6 +12690,7 @@
         },
         "failure_nudge_threshold": 3,
         "failure_repeat_alert_secs": 21600,
+        "managed": {},
         "max_parallel_jobs": 4,
         "max_run_secs": 3600,
         "preflight": true,
@@ -12808,6 +12921,9 @@
         },
         "display": {},
         "groups": {},
+        "identity": {
+          "dm_mode": "per_platform"
+        },
         "mcp_events": {
           "enabled": false
         },

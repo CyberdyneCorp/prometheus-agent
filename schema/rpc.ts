@@ -1406,6 +1406,16 @@ export interface MemorySummary {
   line?: string | null;
 }
 
+/** `message.delivery` payload: an outbound message of the session moved to `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery receipts surfaced). */
+export interface MessageDeliveryPayload {
+  /** Its outbox entry. */
+  outbox_id: number;
+  /** The session the message belongs to. */
+  session_id: string;
+  /** `delivered`, `read` or `failed`. */
+  state: string;
+}
+
 /** `message.reaction` payload. */
 export interface MessageReaction {
   /** The message. */
@@ -2939,6 +2949,7 @@ export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "message.delivery": MessageDeliveryPayload;
   "message.reaction": MessageReaction;
   "pty.detached": PtyRef;
   "pty.exited": PtyOutput;
@@ -2973,6 +2984,5 @@ export const UNDECLARED = [
   "wake.feed",
   "achievement.unlocked",
   "local_model.context_grown",
-  "message.delivery",
   "wake.detected",
 ] as const;

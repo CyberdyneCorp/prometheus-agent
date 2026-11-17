@@ -14,6 +14,7 @@ mod display;
 mod features;
 mod groups;
 mod health;
+mod identity;
 mod limits;
 mod media;
 mod native;

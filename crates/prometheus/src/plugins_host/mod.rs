@@ -18,6 +18,7 @@ pub mod bridge;
 pub mod catalog;
 pub mod dashboard;
 pub mod desktop;
+pub mod dev;
 #[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;
@@ -60,21 +61,57 @@ struct Generation {
     number: u64,
     fingerprint: String,
     loaded: Arc<Loaded>,
+    /// The dev registrations it was loaded with ([`dev::stamp`]).
+    dev_stamp: String,
 }
 
 /// A profile's live plugin set.
 struct Handle {
     current: Mutex<Arc<Generation>>,
+    /// The scope and working directory of the last load, for a reload a
+    /// dev plugin's rebuild triggers.
+    origin: Mutex<Option<(ProfileScope, PathBuf)>>,
+    /// When the dev registrations were last looked at.
+    dev_checked: Mutex<Option<std::time::Instant>>,
 }
 
 impl Handle {
     fn generation(&self) -> Arc<Generation> {
         Arc::clone(&self.current.lock().unwrap_or_else(PoisonError::into_inner))
     }
+
+    /// Reloads the set when a `plugins dev` registration changed (a
+    /// rebuild), looking at most every 250 ms (spec: Plugin development
+    /// loop: the new hook handles the next event without a restart).
+    fn follow_dev(&self) {
+        if !dev::allowed() {
+            return;
+        }
+        {
+            let mut checked = self
+                .dev_checked
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if !due(&mut checked, std::time::Duration::from_millis(250)) {
+                return;
+            }
+        }
+        let origin = self
+            .origin
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some((scope, cwd)) = origin
+            && dev::stamp(scope.dir()) != self.generation().dev_stamp
+        {
+            let _ = refresh(&scope, &cwd, false);
+        }
+    }
 }
 
 impl HookSource for Handle {
     fn hooks(&self) -> Arc<Hooks> {
+        self.follow_dev();
         Arc::clone(&self.generation().loaded.hooks)
     }
 }
@@ -388,9 +425,12 @@ pub fn reload(scope: &ProfileScope, cwd: &Path) -> ProfilePlugins {
 fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
     let version = running_version();
     let blocked = catalog::kill_list(scope);
-    let inputs = inputs(scope, cwd, &version, &blocked);
+    let dev_stamp = dev::stamp(scope.dir());
+    let dev_dirs = dev::live(scope.dir());
+    let mut inputs = inputs(scope, cwd, &version, &blocked);
+    inputs.dev = &dev_dirs;
     let statuses: Vec<Status> = survey(&inputs).into_iter().map(|(_, s)| s).collect();
-    let fingerprint = fingerprint(scope, &statuses);
+    let fingerprint = format!("{}|{dev_stamp}", fingerprint(scope, &statuses));
     let key = scope.dir().to_path_buf();
     let existing = handles()
         .lock()
@@ -409,9 +449,12 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
             number: 0,
             fingerprint: String::new(),
             loaded: Arc::clone(&loaded),
+            dev_stamp: String::new(),
         });
         let handle = Arc::new(Handle {
             current: Mutex::new(first),
+            origin: Mutex::new(None),
+            dev_checked: Mutex::new(None),
         });
         Arc::clone(
             handles()
@@ -430,8 +473,11 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
             number: current.number + 1,
             fingerprint,
             loaded: Arc::clone(&loaded),
+            dev_stamp,
         });
     }
+    *handle.origin.lock().unwrap_or_else(PoisonError::into_inner) =
+        Some((scope.clone(), cwd.to_path_buf()));
     outside::plugins_loaded(&loaded, cwd);
     ProfilePlugins::of(handle)
 }
@@ -557,5 +603,6 @@ pub fn inputs<'a>(
         running: version,
         blocked,
         profile_config: Some(scope.config()),
+        dev: &[],
     }
 }

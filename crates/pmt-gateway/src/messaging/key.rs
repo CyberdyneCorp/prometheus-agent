@@ -77,6 +77,22 @@ pub struct Isolation {
     pub group_per_user: bool,
     /// Participants of a thread each get a session.
     pub thread_per_user: bool,
+    /// A linked person's DMs on every platform share one conversation
+    /// (`gateway.identity.dm_mode = "shared"`).
+    pub shared_dm: bool,
+}
+
+impl Isolation {
+    /// The isolation `gateway` sets for `platform`.
+    #[must_use]
+    pub fn of(gateway: &pmt_config::schema::GatewayConfig, platform: &str) -> Self {
+        let (group_per_user, thread_per_user) = gateway.sessions_for(platform);
+        Self {
+            group_per_user,
+            thread_per_user,
+            shared_dm: gateway.identity.dm_mode == pmt_config::schema::DmMode::Shared,
+        }
+    }
 }
 
 impl Default for Isolation {
@@ -84,6 +100,7 @@ impl Default for Isolation {
         Self {
             group_per_user: true,
             thread_per_user: false,
+            shared_dm: false,
         }
     }
 }
@@ -150,8 +167,17 @@ impl Routing {
     /// (the sender when the platform has no chat id), group and channel
     /// members apart unless `group_per_user` is off, threads shared unless
     /// `thread_per_user` is on.
+    ///
+    /// A linked person's DM is `<profile>:person:<person_id>` under
+    /// `shared_dm` (spec: messaging-gateway, Cross-platform identity
+    /// linking); group conversations never merge.
     #[must_use]
     pub fn key(&self, isolation: Isolation) -> SessionKey {
+        if let (ChatType::Dm, Some(person), true) =
+            (self.chat_type, &self.person_id, isolation.shared_dm)
+        {
+            return SessionKey(format!("{}:person:{}", self.profile, escape(person)));
+        }
         let mut key = format!("{}:{}", self.profile, escape(&self.platform));
         if let Some(scope) = &self.scope_id {
             key.push('@');
@@ -312,6 +338,7 @@ mod tests {
                 isolation: Isolation {
                     group_per_user: false,
                     thread_per_user: false,
+                    shared_dm: false,
                 },
                 key: "default:discord:group:555",
             },

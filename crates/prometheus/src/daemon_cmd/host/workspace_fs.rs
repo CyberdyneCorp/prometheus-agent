@@ -54,9 +54,7 @@ impl DaemonHost {
         params: FsListParams,
         link: &Link,
     ) -> Result<FsListing, Error> {
-        let files = self
-            .session_files(profile, &params.session_id, link)
-            .await?;
+        let files = Box::pin(self.session_files(profile, &params.session_id, link)).await?;
         listing(&files, &params)
     }
 
@@ -66,9 +64,7 @@ impl DaemonHost {
         params: FsReadParams,
         link: &Link,
     ) -> Result<FsFile, Error> {
-        let files = self
-            .session_files(profile, &params.session_id, link)
-            .await?;
+        let files = Box::pin(self.session_files(profile, &params.session_id, link)).await?;
         read(&files, params)
     }
 }

@@ -236,6 +236,12 @@ error_codes! {
     /// A Hermes component could not be read or imported.
     MIGRATE_COMPONENT = ("migrate.component", InvalidInput,
         "A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause.");
+    /// `migrate rollback --run` named a run with no journal in the home.
+    MIGRATE_RUN_NOT_FOUND = ("migrate.run_not_found", NotFound,
+        "No profile of the home holds a rollback journal for that run id (see the `run_id` of the migration report; a rolled-back run has none left).");
+    /// `migrate rollback` of a run a later run of the same source followed.
+    MIGRATE_ROLLBACK_ORDER = ("migrate.rollback_order", Conflict,
+        "A later migration run of the same source wrote into the profile after this one; roll that run back first. Nothing was changed.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");

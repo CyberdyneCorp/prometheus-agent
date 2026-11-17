@@ -65,6 +65,7 @@ Commands:
   migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
   uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  identity     Messaging accounts linked across platforms with `/link`
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
@@ -25838,6 +25839,7 @@ Commands:
   sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
   cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
   sessions          Import one Claude Code or Codex CLI conversation as a session
+  rollback          Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
   help              Print this message or the help of the given subcommand(s)
 
 Options:
@@ -26368,6 +26370,51 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus migrate rollback`
+
+```text
+Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
+
+Usage: prometheus migrate rollback [OPTIONS] --run <RUN_ID>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --run <RUN_ID>
+          The run to take back (the `run_id` of its report)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Roll back without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus migrate help`
 
 ```text
@@ -26385,6 +26432,7 @@ Commands:
   sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
   cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
   sessions          Import one Claude Code or Codex CLI conversation as a session
+  rollback          Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
   help              Print this message or the help of the given subcommand(s)
 ```
 
@@ -26458,6 +26506,14 @@ Usage: prometheus migrate help cleanup
 Import one Claude Code or Codex CLI conversation as a session
 
 Usage: prometheus migrate help sessions
+```
+
+## `prometheus migrate help rollback`
+
+```text
+Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
+
+Usage: prometheus migrate help rollback
 ```
 
 ## `prometheus migrate help help`
@@ -26683,6 +26739,172 @@ Usage: prometheus pause help status
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus pause help help
+```
+
+## `prometheus identity`
+
+```text
+Messaging accounts linked across platforms with `/link`
+
+Usage: prometheus identity [OPTIONS] <COMMAND>
+
+Commands:
+  list    Every linked account, by person
+  unlink  Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus identity list`
+
+```text
+Every linked account, by person
+
+Usage: prometheus identity list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus identity unlink`
+
+```text
+Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+
+Usage: prometheus identity unlink [OPTIONS] <ACCOUNT> [PLATFORM]
+
+Arguments:
+  <ACCOUNT>
+          `<platform>:<sender_id>`, or a person id
+
+  [PLATFORM]
+          The platform, when `account` is a person id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus identity help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus identity help [COMMAND]
+
+Commands:
+  list    Every linked account, by person
+  unlink  Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus identity help list`
+
+```text
+Every linked account, by person
+
+Usage: prometheus identity help list
+```
+
+## `prometheus identity help unlink`
+
+```text
+Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+
+Usage: prometheus identity help unlink
+```
+
+## `prometheus identity help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus identity help help
 ```
 
 ## `prometheus portal`
@@ -31273,6 +31495,7 @@ Commands:
   run            Runs a command a plugin registered (`cli_commands`), or lists them
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
+  dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
   capabilities   Declared versus granted capabilities, per plugin
@@ -32147,6 +32370,55 @@ Options:
           Print help
 ```
 
+## `prometheus plugins dev`
+
+```text
+Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
+
+Usage: prometheus plugins dev [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --watch
+          Rebuild and reload on every source change
+
+      --grant <CAPS>
+          Approve `all` requested capabilities, or a comma list, without asking
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins remove`
 
 ```text
@@ -32870,6 +33142,7 @@ Commands:
   run            Runs a command a plugin registered (`cli_commands`), or lists them
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
+  dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
   capabilities   Declared versus granted capabilities, per plugin
@@ -33024,6 +33297,14 @@ Usage: prometheus plugins help hooks doctor
 The capabilities a staged update asks for beyond the current grant
 
 Usage: prometheus plugins help diff-grants
+```
+
+## `prometheus plugins help dev`
+
+```text
+Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
+
+Usage: prometheus plugins help dev
 ```
 
 ## `prometheus plugins help remove`
@@ -34593,6 +34874,7 @@ Commands:
   migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
   uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
   pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  identity     Messaging accounts linked across platforms with `/link`
   portal       The Nous Portal subscription and its tool gateway routing
   daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
   dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
@@ -38554,6 +38836,7 @@ Commands:
   sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
   cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
   sessions          Import one Claude Code or Codex CLI conversation as a session
+  rollback          Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
 ```
 
 ## `prometheus help migrate from-hermes`
@@ -38628,6 +38911,14 @@ Import one Claude Code or Codex CLI conversation as a session
 Usage: prometheus help migrate sessions
 ```
 
+## `prometheus help migrate rollback`
+
+```text
+Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
+
+Usage: prometheus help migrate rollback
+```
+
 ## `prometheus help uninstall`
 
 ```text
@@ -38662,6 +38953,34 @@ Usage: prometheus help pause off
 Print whether the home is paused, why, by whom and since when
 
 Usage: prometheus help pause status
+```
+
+## `prometheus help identity`
+
+```text
+Messaging accounts linked across platforms with `/link`
+
+Usage: prometheus help identity [COMMAND]
+
+Commands:
+  list    Every linked account, by person
+  unlink  Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+```
+
+## `prometheus help identity list`
+
+```text
+Every linked account, by person
+
+Usage: prometheus help identity list
+```
+
+## `prometheus help identity unlink`
+
+```text
+Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+
+Usage: prometheus help identity unlink
 ```
 
 ## `prometheus help portal`
@@ -39407,6 +39726,7 @@ Commands:
   run            Runs a command a plugin registered (`cli_commands`), or lists them
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
+  dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
   capabilities   Declared versus granted capabilities, per plugin
@@ -39560,6 +39880,14 @@ Usage: prometheus help plugins hooks doctor
 The capabilities a staged update asks for beyond the current grant
 
 Usage: prometheus help plugins diff-grants
+```
+
+## `prometheus help plugins dev`
+
+```text
+Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
+
+Usage: prometheus help plugins dev
 ```
 
 ## `prometheus help plugins remove`
