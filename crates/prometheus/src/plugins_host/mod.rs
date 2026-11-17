@@ -1,7 +1,10 @@
 //! The binary's side of the plugin host (spec: plugin-system): one wasmtime
 //! runtime per process, started only when some plugin is to be loaded, and
 //! one live set of plugin instances per profile, shared by every session
-//! of the profile in the process.
+//! of the profile in the process. A profile has a second set, with the
+//! plugins `prometheus plugins dev` serves, for the sessions a developer
+//! attends ([`for_attended`]); unattended ones (gateway, cron) never see
+//! dev plugins.
 //!
 //! The set is replaced as a whole: when its plugins, their files, their
 //! grants or `[plugins]` change (checked when a session starts) or on an
@@ -68,6 +71,8 @@ struct Generation {
 /// A profile's live plugin set.
 struct Handle {
     current: Mutex<Arc<Generation>>,
+    /// It holds the plugins `plugins dev` serves.
+    dev: bool,
     /// The scope and working directory of the last load, for a reload a
     /// dev plugin's rebuild triggers.
     origin: Mutex<Option<(ProfileScope, PathBuf)>>,
@@ -84,7 +89,7 @@ impl Handle {
     /// rebuild), looking at most every 250 ms (spec: Plugin development
     /// loop: the new hook handles the next event without a restart).
     fn follow_dev(&self) {
-        if !dev::allowed() {
+        if !self.dev {
             return;
         }
         {
@@ -104,7 +109,7 @@ impl Handle {
         if let Some((scope, cwd)) = origin
             && dev::stamp(scope.dir()) != self.generation().dev_stamp
         {
-            let _ = refresh(&scope, &cwd, false);
+            let _ = refresh(&scope, &cwd, false, true);
         }
     }
 }
@@ -357,9 +362,12 @@ fn object(value: Value) -> Map<String, Value> {
     }
 }
 
-/// Every profile's live set in this process, by profile directory.
-fn handles() -> &'static Mutex<HashMap<PathBuf, Arc<Handle>>> {
-    static HANDLES: OnceLock<Mutex<HashMap<PathBuf, Arc<Handle>>>> = OnceLock::new();
+/// Live sets by profile directory and whether the set holds dev plugins.
+type Sets = HashMap<(PathBuf, bool), Arc<Handle>>;
+
+/// Every profile's live sets in this process.
+fn handles() -> &'static Mutex<Sets> {
+    static HANDLES: OnceLock<Mutex<Sets>> = OnceLock::new();
     HANDLES.get_or_init(Mutex::default)
 }
 
@@ -378,7 +386,7 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
     let existing = handles()
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .get(&key)
+        .get(&(key.clone(), dev::allowed()))
         .cloned();
     let due = due(&mut last, every);
     if let Some(at) = last {
@@ -390,7 +398,7 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
     }
     match existing {
         Some(handle) if !due => ProfilePlugins::of(handle),
-        _ => refresh(scope, scope.dir(), false),
+        _ => refresh(scope, scope.dir(), false, dev::allowed()),
     }
 }
 
@@ -412,26 +420,48 @@ fn due(last: &mut Option<std::time::Instant>, every: std::time::Duration) -> boo
 /// list`.
 #[must_use]
 pub fn for_session(scope: &ProfileScope, cwd: &Path) -> ProfilePlugins {
-    refresh(scope, cwd, false)
+    refresh(scope, cwd, false, dev::allowed())
 }
 
-/// Replaces the profile's live set with a fresh load even when nothing
-/// changed (`plugins reload`).
+/// [`for_session`] for a daemon session: one a person `attended` at a
+/// client (TUI, desktop...) also loads the plugins `plugins dev` serves
+/// (spec: plugin-system, Plugin development loop).
+#[must_use]
+pub fn for_attended(scope: &ProfileScope, cwd: &Path, attended: bool) -> ProfilePlugins {
+    refresh(scope, cwd, false, attended || dev::allowed())
+}
+
+/// Replaces the profile's live sets with fresh loads even when nothing
+/// changed (`plugins reload`); the set with the dev plugins comes back
+/// when this process has one.
 #[must_use]
 pub fn reload(scope: &ProfileScope, cwd: &Path) -> ProfilePlugins {
-    refresh(scope, cwd, true)
+    let base = refresh(scope, cwd, true, dev::allowed());
+    let dev_set = (scope.dir().to_path_buf(), true);
+    if !dev::allowed()
+        && handles()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains_key(&dev_set)
+    {
+        return refresh(scope, cwd, true, true);
+    }
+    base
 }
 
-fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
+fn refresh(scope: &ProfileScope, cwd: &Path, force: bool, with_dev: bool) -> ProfilePlugins {
     let version = running_version();
     let blocked = catalog::kill_list(scope);
-    let dev_stamp = dev::stamp(scope.dir());
-    let dev_dirs = dev::live(scope.dir());
+    let (dev_stamp, dev_dirs) = if with_dev {
+        (dev::stamp(scope.dir()), dev::live(scope.dir()))
+    } else {
+        (String::new(), Vec::new())
+    };
     let mut inputs = inputs(scope, cwd, &version, &blocked);
     inputs.dev = &dev_dirs;
     let statuses: Vec<Status> = survey(&inputs).into_iter().map(|(_, s)| s).collect();
     let fingerprint = format!("{}|{dev_stamp}", fingerprint(scope, &statuses));
-    let key = scope.dir().to_path_buf();
+    let key = (scope.dir().to_path_buf(), with_dev);
     let existing = handles()
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -453,6 +483,7 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
         });
         let handle = Arc::new(Handle {
             current: Mutex::new(first),
+            dev: with_dev,
             origin: Mutex::new(None),
             dev_checked: Mutex::new(None),
         });

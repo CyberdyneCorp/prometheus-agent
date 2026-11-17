@@ -31,6 +31,19 @@ pub(super) fn flags(setup: &SessionSetup) -> RouteFlags<'_> {
     }
 }
 
+/// Whether a person attends the session at a client (TUI, desktop,
+/// dashboard, editor, CLI): its plugins include those `plugins dev`
+/// serves (spec: plugin-system, Plugin development loop). Gateway, cron,
+/// API, subagent and other automated sessions are never attended.
+pub(super) fn attended(source: pmt_store::Source, origin: &pmt_store::Origin) -> bool {
+    use pmt_store::Source;
+    matches!(origin, pmt_store::Origin::None)
+        && matches!(
+            source,
+            Source::Cli | Source::Tui | Source::Desktop | Source::Dashboard | Source::Acp
+        )
+}
+
 /// Whether a session with `setup` reads anything but the profile's
 /// snapshot.
 fn own_config(setup: &SessionSetup) -> bool {
@@ -47,15 +60,39 @@ impl DaemonHost {
         }
     }
 
-    /// The machinery of sessions of `profile` working in `cwd` with
-    /// `setup` (built once per pair, rebuilt after a reload).
+    /// The machinery of unattended sessions of `profile` (gateway, cron,
+    /// API...) working in `cwd` with `setup`.
     pub(super) fn factory(
         &self,
         profile: &Profile,
         cwd: PathBuf,
         setup: &SessionSetup,
     ) -> Result<Arc<Factory>, Error> {
-        let key = (cwd, setup.clone());
+        self.factory_for(profile, cwd, setup, false)
+    }
+
+    /// The machinery of the stored session `row`.
+    pub(super) fn factory_of(
+        &self,
+        profile: &Profile,
+        cwd: PathBuf,
+        setup: &SessionSetup,
+        row: &pmt_store::Session,
+    ) -> Result<Arc<Factory>, Error> {
+        self.factory_for(profile, cwd, setup, attended(row.source, &row.origin))
+    }
+
+    /// The machinery of sessions of `profile` working in `cwd` with
+    /// `setup`, `attended` by a person at a client or not (built once per
+    /// triple, rebuilt after a reload).
+    pub(super) fn factory_for(
+        &self,
+        profile: &Profile,
+        cwd: PathBuf,
+        setup: &SessionSetup,
+        attended: bool,
+    ) -> Result<Arc<Factory>, Error> {
+        let key = (cwd, setup.clone(), attended);
         let mut factories = profile.factories.lock().expect("factories poisoned");
         if let Some(factory) = factories.get(&key) {
             return Ok(Arc::clone(factory));
@@ -81,6 +118,7 @@ impl DaemonHost {
             harness_tree: None,
             memory_store: None,
             domain: setup.domain.clone(),
+            dev_plugins: attended,
         };
         let ad_hoc = setup
             .base_url

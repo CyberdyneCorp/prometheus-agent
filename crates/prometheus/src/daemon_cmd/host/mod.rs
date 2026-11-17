@@ -160,8 +160,9 @@ struct Profile {
     /// Held across a whole config re-read, so a plugin reload that finds
     /// the file unchanged waits for the poll that is still applying it.
     rereading: tokio::sync::Mutex<()>,
-    /// Session machinery per working directory and setup.
-    factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
+    /// Session machinery per working directory, setup and whether a
+    /// person attends its sessions ([`setup::attended`]).
+    factories: Mutex<HashMap<(PathBuf, SessionSetup, bool), Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, SessionSetup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
     /// Wakes the profile's scheduler loop (a webhook queued a run).
@@ -394,7 +395,7 @@ impl DaemonHost {
             .remove(&id)
             .or_else(|| frozen_policy(profile, &row))
             .unwrap_or_default();
-        let factory = self.factory(profile, cwd, &setup)?;
+        let factory = self.factory_of(profile, cwd, &setup, &row)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
         // A chat's session tells the chat when its background processes
         // end; an interactive client session tells its clients. Other
@@ -630,7 +631,8 @@ impl Host for DaemonHost {
             let cwd = Self::cwd_of(profile, given.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
             let setup = params.setup.clone();
-            let factory = self.factory(profile, cwd.clone(), &setup)?;
+            let attended = setup::attended(source, &pmt_store::Origin::None);
+            let factory = self.factory_for(profile, cwd.clone(), &setup, attended)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
             let mut new = NewSession::new(source);
             new.provider = Some(target.provider.clone());

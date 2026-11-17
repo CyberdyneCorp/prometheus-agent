@@ -1,11 +1,13 @@
 //! Plugins served by `prometheus plugins dev` (spec: plugin-system,
 //! Plugin development loop): the command registers a local directory in
-//! `<profile>/cache/plugin-dev/<id>.toml` while it runs; processes a
-//! developer works in (`prometheus chat` and the dev command itself:
-//! [`allow`]; TUI sessions run in the daemon) load it as `dev:<id>` beside the installed plugins,
-//! and pick up each rebuild at the next hook they fire.
-//! Gateway, cron and every other unattended process never call [`allow`],
-//! so dev plugins never load there.
+//! `<profile>/cache/plugin-dev/<id>.toml` while it runs, and the sessions a
+//! developer works in load it as `dev:<id>` beside the installed plugins,
+//! picking up each rebuild at the next hook they fire. Those are every
+//! session of a process that called [`allow`] (`prometheus chat` in line
+//! mode and the dev command itself) and, in the daemon, the sessions of
+//! attended clients (TUI, desktop, dashboard, editor: see
+//! `super::for_attended`). Gateway, cron and other unattended sessions
+//! read the profile's other plugin set, which never holds dev plugins.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,12 +17,12 @@ use serde::{Deserialize, Serialize};
 
 static ALLOWED: AtomicBool = AtomicBool::new(false);
 
-/// Lets this process load dev plugins.
+/// Lets every session of this process load dev plugins.
 pub fn allow() {
     ALLOWED.store(true, Ordering::Relaxed);
 }
 
-/// Whether this process loads dev plugins.
+/// Whether every session of this process loads dev plugins.
 #[must_use]
 pub fn allowed() -> bool {
     ALLOWED.load(Ordering::Relaxed)
@@ -88,12 +90,9 @@ pub fn unregister(profile_dir: &Path, id: &str) {
     let _ = std::fs::remove_file(file(profile_dir, id));
 }
 
-/// The directories served now, when this process loads dev plugins.
+/// The directories served now.
 #[must_use]
 pub fn live(profile_dir: &Path) -> Vec<PathBuf> {
-    if !allowed() {
-        return Vec::new();
-    }
     let Ok(entries) = std::fs::read_dir(dir(profile_dir)) else {
         return Vec::new();
     };
@@ -112,9 +111,6 @@ pub fn live(profile_dir: &Path) -> Vec<PathBuf> {
 /// times): a rebuild or a registration coming or going changes it.
 #[must_use]
 pub fn stamp(profile_dir: &Path) -> String {
-    if !allowed() {
-        return String::new();
-    }
     let Ok(entries) = std::fs::read_dir(dir(profile_dir)) else {
         return String::new();
     };

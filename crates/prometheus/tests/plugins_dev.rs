@@ -1,8 +1,9 @@
 //! `prometheus plugins dev <path> --watch` (spec: plugin-system, Plugin
 //! development loop): a local plugin directory is served as `dev:<id>`
 //! without installing it; a source change rebuilds it and a running
-//! `prometheus chat` handles its next event with the new hook, while cron
-//! runs never load it.
+//! `prometheus chat` (line mode in its own process, or the default TUI
+//! whose session the daemon serves) handles its next event with the new
+//! hook, while cron runs and gateway conversations never load it.
 
 #![cfg(unix)]
 
@@ -63,6 +64,20 @@ fn plugin(dir: &Path) {
         pmt_plugins::testkit::component("testing-hooks"),
     )
     .unwrap();
+}
+
+/// The settings the test hook reads: the context it adds.
+fn configure(home: &Path) {
+    for (key, value) in [
+        ("hooks", "pre_llm_call"),
+        ("mode", "context:NEW HOOK ACTIVE"),
+    ] {
+        let key = format!("plugins.entries.devhook.{key}");
+        ok(&run(
+            home,
+            &["config", "set", &key, &format!("\"{value}\"")],
+        ));
+    }
 }
 
 /// The dev command, its stdout lines collected as they come.
@@ -147,16 +162,7 @@ fn a_changed_hook_handles_the_next_event_without_a_restart() {
     let home = home.path();
     std::fs::write(home.join("profiles/default/mock.toml"), RULES).unwrap();
     common::append_config(home, "\n[providers.mock]\nscript = \"mock.toml\"\n");
-    for (key, value) in [
-        ("hooks", "pre_llm_call"),
-        ("mode", "context:NEW HOOK ACTIVE"),
-    ] {
-        let key = format!("plugins.entries.devhook.{key}");
-        ok(&run(
-            home,
-            &["config", "set", &key, &format!("\"{value}\"")],
-        ));
-    }
+    configure(home);
     let dir = home.join("devhook-src");
     plugin(&dir);
     let dev = Dev::start(home, &dir);
@@ -205,4 +211,47 @@ fn a_changed_hook_handles_the_next_event_without_a_restart() {
     let grants =
         std::fs::read_to_string(home.join("profiles/default/grants.toml")).unwrap_or_default();
     assert!(!grants.contains("devhook"), "{grants}");
+}
+
+/// Scenario: Edit-reload cycle, under the default interface: `prometheus
+/// chat` opens the TUI, whose session runs in the daemon; the daemon's
+/// gateway conversations in the same process never load the dev plugin.
+#[cfg(all(feature = "gateway", feature = "tui"))]
+#[test]
+fn the_tui_session_in_the_daemon_follows_the_rebuild_and_the_gateway_never_loads_it() {
+    use common::gateway::{self, wait_said};
+    use common::tui::{enter, finish, opened, see, tui};
+
+    let home = gateway::gateway_home_with(RULES, "");
+    let home = home.path();
+    configure(home);
+    let dir = home.join("devhook-src");
+    plugin(&dir);
+    let daemon = gateway::Daemon::start(home);
+    let dev = Dev::start(home, &dir);
+    dev.wait_for("dev:devhook loaded (build 1)");
+
+    let mut p = tui(home, &["chat"], &[]);
+    opened(&mut p);
+    enter(&mut p, "first");
+    see(&mut p, "old hook answered");
+    gateway::send(home, "default", "alice", "before the edit");
+    wait_said(home, "default", "no hook");
+
+    std::fs::write(dir.join("variant"), "b\n").unwrap();
+    dev.wait_for("dev:devhook loaded (build 2)");
+    enter(&mut p, "second");
+    see(&mut p, "new hook answered");
+    gateway::send(home, "default", "alice", "after the edit");
+    gateway::wait("the second gateway reply", Duration::from_mins(1), || {
+        gateway::texts(home, "default").len() >= 2
+    });
+    let said = gateway::texts(home, "default");
+    assert!(said.iter().all(|t| t.contains("no hook")), "{said:?}");
+
+    enter(&mut p, "/quit");
+    let (_, code) = finish(p);
+    assert_eq!(code, Some(0));
+    dev.interrupt();
+    daemon.stop(home);
 }

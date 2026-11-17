@@ -233,9 +233,10 @@ picks the new build up at its next hook, under the reload rules above
 (hooks and slash commands at once, tools and prompt sections next
 session). Build failures, load errors and capabilities the build asks for
 but was not granted (`capability denied: ...`) are printed as they happen.
-Dev plugins load only in `prometheus chat` (and in the dev command); the
-daemon (gateway chats, TUI and desktop sessions) and scheduled jobs never
-load them.
+Dev plugins load in the sessions you work in: `prometheus chat` (line
+mode or the TUI) and the daemon's other client sessions (desktop,
+dashboard, editors). Gateway chats, scheduled jobs, API requests and
+other automated sessions never load them, even in the same daemon.
 
 ## Other worlds
 

@@ -162,6 +162,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         harness_tree: None,
         memory_store: None,
         domain: None,
+        dev_plugins: false,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

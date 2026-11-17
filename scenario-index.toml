@@ -4968,7 +4968,7 @@ capabilities = [
 "Rollback keeps a continued session" = ["crates/prometheus/tests/migrate_rollback.rs::rollback_removes_the_imported_sessions_but_keeps_a_continued_one", "crates/prometheus/tests/migrate_rollback.rs::rollback_restores_the_pre_migration_home", "crates/prometheus/tests/migrate_rollback.rs::a_rolled_back_rerun_takes_back_the_messages_it_appended", "crates/prometheus/tests/migrate_rollback.rs::an_earlier_run_waits_for_the_later_one"]
 
 [plugin-system."Plugin development loop (upgrade)"]
-"Edit-reload cycle" = ["crates/prometheus/tests/plugins_dev.rs::a_changed_hook_handles_the_next_event_without_a_restart", "crates/pmt-plugins/src/discovery/tests.rs::a_dev_directory_is_enabled_as_dev_id_and_hides_the_installed_copy"]
+"Edit-reload cycle" = ["crates/prometheus/tests/plugins_dev.rs::a_changed_hook_handles_the_next_event_without_a_restart", "crates/prometheus/tests/plugins_dev.rs::the_tui_session_in_the_daemon_follows_the_rebuild_and_the_gateway_never_loads_it", "crates/pmt-plugins/src/discovery/tests.rs::a_dev_directory_is_enabled_as_dev_id_and_hides_the_installed_copy"]
 
 # Group 72.10: cross-platform identity linking, delivery and read receipts,
 # busy acknowledgement via reactions.

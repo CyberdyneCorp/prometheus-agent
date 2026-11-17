@@ -4,10 +4,12 @@
 //! The capabilities the developer approves at start are granted to each
 //! build (by its digest) and taken back when the command ends; with
 //! `--watch` every source change rebuilds it (the manifest's `build`
-//! command) and the processes a developer works in (`chat`, the TUI)
-//! reload it at their next hook, under the reload rules. Load errors and
-//! the capabilities it asks for but was not granted are printed after
-//! each build. Gateway and cron processes never load it.
+//! command) and the sessions a developer works in (a line-mode `chat` in
+//! its own process; in the daemon, the sessions of TUI, desktop,
+//! dashboard and editor clients) reload it at their next hook, under the
+//! reload rules. Load errors and the capabilities it asks for but was not
+//! granted are printed after each build. Gateway, cron and other
+//! automated sessions never load it (see `plugins_host::dev`).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

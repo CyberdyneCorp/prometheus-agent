@@ -128,6 +128,8 @@ pub struct Options {
     /// `--domain`, or the scheduled job's or kanban task's `domain`: the
     /// session's experience-library domain (spec: experience-library).
     pub domain: Option<String>,
+    /// A daemon session a person attends: it loads `plugins dev` plugins.
+    pub dev_plugins: bool,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -317,7 +319,7 @@ impl Factory {
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = rollout::plugins(
             &scope,
-            crate::plugins_host::for_session(&scope, &options.cwd),
+            crate::plugins_host::for_attended(&scope, &options.cwd, options.dev_plugins),
             options
                 .rollout
                 .as_ref()
@@ -339,6 +341,7 @@ impl Factory {
             plugin_scope.clone(),
             Arc::clone(&store),
             options.cwd.clone(),
+            options.dev_plugins,
             plugins::PluginTools::build(
                 &scope,
                 &plugins,

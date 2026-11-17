@@ -126,7 +126,8 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface, quiet: bool)
 /// exits with their code); a finished run returns its own status.
 pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
     // A developer's foreground session loads the plugins `plugins dev`
-    // serves (spec: plugin-system, Plugin development loop).
+    // serves (spec: plugin-system, Plugin development loop); the TUI's
+    // sessions run in the daemon, which loads them for attended clients.
     if !args.safe_mode {
         crate::plugins_host::dev::allow();
     }
@@ -346,6 +347,8 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
             .as_deref()
             .map(pmt_evolve::experience::domain::parse)
             .transpose()?,
+        // `dev::allow` in `run` already lets every session here load them.
+        dev_plugins: false,
     })
 }
 

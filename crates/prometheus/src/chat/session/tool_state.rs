@@ -44,6 +44,8 @@ pub(super) struct Registries {
     extensions: SharedScope,
     store: Arc<Store>,
     cwd: PathBuf,
+    /// Its sessions load the plugins `plugins dev` serves.
+    dev_plugins: bool,
     cache: Mutex<PluginTools>,
     /// Per editor (ACP) session with editor MCP servers: its registry,
     /// the profile registry and binding generation it was built from.
@@ -64,6 +66,7 @@ impl Registries {
         extensions: SharedScope,
         store: Arc<Store>,
         cwd: PathBuf,
+        dev_plugins: bool,
         built: PluginTools,
     ) -> Self {
         Self {
@@ -71,6 +74,7 @@ impl Registries {
             extensions,
             store,
             cwd,
+            dev_plugins,
             cache: Mutex::new(built),
             editors: Mutex::default(),
         }
@@ -87,7 +91,7 @@ impl Registries {
     /// The core registry could not be built.
     pub(super) fn current(&self) -> Result<(Arc<ToolRegistry>, Vec<String>), Error> {
         let scope = self.extensions.get();
-        let plugins = crate::plugins_host::for_session(&scope, &self.cwd);
+        let plugins = crate::plugins_host::for_attended(&scope, &self.cwd, self.dev_plugins);
         let mcp = crate::mcp_host::manager(&scope);
         let mut cache = lock(&self.cache);
         if !cache.is_of(&plugins, &mcp) {
@@ -122,7 +126,7 @@ impl Registries {
             return Ok((Arc::clone(&built.registry), built.toolsets.clone()));
         }
         let scope = self.extensions.get();
-        let plugins = crate::plugins_host::for_session(&scope, &self.cwd);
+        let plugins = crate::plugins_host::for_attended(&scope, &self.cwd, self.dev_plugins);
         let mcp = crate::mcp_host::manager(&scope);
         let calls = session_calls(&self.store, &self.cwd);
         let (mut registry, mut toolsets) =
