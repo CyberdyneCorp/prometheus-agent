@@ -71,6 +71,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `config.credential_in_file` | `config` | 78 | A profile `config.toml` holds a value that looks like a credential (API key, token, private key) in a non-secret key; move it into the secrets store with `prometheus secrets set <NAME>` and reference it by name. |
 | `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
 | `config.managed_key` | `permission_denied` | 77 | The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it. |
+| `config.remote_unreachable` | `config` | 78 | `config_backend.kind = "remote"` and the configuration plane could not be reached within 30 s, refused the token or answered something that is not a configuration document. Prometheus never falls back to `config.toml` or defaults; fix the plane, the URL or the token secret. |
+| `config.remote_locked` | `permission_denied` | 77 | A level of the remote configuration plane (global, tenant, group, owner or agent) locks the key; writes land on the profile level and may not change it. |
+| `config.remote_conflict` | `conflict` | 75 | The profile's configuration changed on the remote plane after it was read, so the write was refused (optimistic concurrency); run the command again. |
 | `config.managed_invalid` | `config` | 78 | `managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it. |
 | `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
 | `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
@@ -86,6 +89,10 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `secret.surface_only` | `permission_denied` | 77 | The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own. |
 | `secret.source_failed` | `config` | 78 | An enabled external secret source (`secrets.bitwarden`, `secrets.onepassword`) failed: its CLI is missing, its access token is not set or was refused, or it answered something unreadable. Cached values are not used instead; fix the source or disable it. |
 | `profile.reserved` | `usage` | 2 | A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`). |
+| `profile.distribution_invalid` | `invalid_input` | 65 | A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`. |
+| `profile.distribution_incompatible` | `config` | 78 | The distribution's `prometheus_requires` range does not include this Prometheus version; install a compatible version of the distribution or of Prometheus. |
+| `profile.distribution_fetch` | `unavailable` | 69 | The distribution's git repository could not be cloned (network, URL or credentials). |
+| `profile.not_distribution` | `not_found` | 66 | `profile update` and `profile info` need a profile installed with `profile install`. |
 | `profile.exists` | `usage` | 2 | `prometheus profile create` or `rename` names a profile that already exists. |
 | `profile.protected` | `usage` | 2 | The `default` profile cannot be deleted or renamed. |
 | `profile.alias_refused` | `usage` | 2 | `profile alias` refuses a launcher name that is reserved, is a `prometheus` subcommand, would shadow an existing executable on `PATH`, or is not a valid profile-style name. |

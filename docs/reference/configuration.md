@@ -128,6 +128,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.profile.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.profile.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.profile.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.profile.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.profile.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.profile.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.schedule.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.schedule.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.schedule.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -827,6 +833,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `secrets.bitwarden.access_token_secret` | string | `"BWS_ACCESS_TOKEN"` | a secret name | `restart` | The stored secret holding the machine account's access token (the only place the token is read from). |
 | `secrets.bitwarden.cache_ttl_secs` | integer | `300` | 0 to 86400 | `restart` | Resolved values stay in memory at most this long (never on disk). |
 | `secrets.bitwarden.enabled` | boolean | `false` | any | `restart` | Read secrets from Bitwarden (off by default: `bws` is then never run). |
+| `secrets.bitwarden.names` | array of string | unset | any | `restart` | The keys `prometheus secrets bitwarden sync --apply` accepted; the source supplies only these (empty: every key of the project). |
 | `secrets.bitwarden.project_id` | string | unset | any | `restart` | The project whose secrets are read (unset: every project the token sees). |
 | `secrets.bitwarden.server_url` | string | unset | any | `restart` | A self-hosted server's URL. |
 | `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |
@@ -837,6 +844,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `secrets.onepassword.cache_ttl_secs` | integer | `300` | 0 to 86400 | `restart` | Resolved values stay in memory at most this long (never on disk). |
 | `secrets.onepassword.enabled` | boolean | `false` | any | `restart` | Read secrets from 1Password (off by default: `op` is then never run). |
 | `secrets.onepassword.map` | table | `{}` | any | `restart` | Secret name to its `op://vault/item/field` reference. |
+| `secrets.onepassword.vault` | string | unset | any | `restart` | The vault `setup --vault` selected (what `sync` reads). |
 | `security.acked_advisories` | array of string | `[]` | any | `next_session` | Supply-chain advisory ids whose startup warning is silenced (`prometheus doctor --ack <id>`); `doctor security` still shows them. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
 | `security.egress.allow` | array of string | `[]` | any | `next_session` | Host patterns `allowlist` admits: `host`, `host:port` or `*.suffix` (subdomains of `suffix`). |

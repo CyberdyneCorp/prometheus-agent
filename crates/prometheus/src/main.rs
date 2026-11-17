@@ -90,6 +90,7 @@ fn main() -> ExitCode {
         ),
     };
     pmt_config::managed::init(&managed_dir, owner);
+    prometheus::config_plane::register();
     // A quick command never shadows a command of the shared registry
     // (spec: messaging-gateway, Gateway slash commands, quick commands and
     // hooks): the names are reserved before any config loads.

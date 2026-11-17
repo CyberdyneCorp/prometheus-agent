@@ -52,6 +52,15 @@ error_codes! {
     /// A writer tried to change a key the administrator locked.
     CONFIG_MANAGED_KEY = ("config.managed_key", PermissionDenied,
         "The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it.");
+    /// The remote configuration plane could not be reached or answered badly.
+    CONFIG_REMOTE_UNREACHABLE = ("config.remote_unreachable", Config,
+        "`config_backend.kind = \"remote\"` and the configuration plane could not be reached within 30 s, refused the token or answered something that is not a configuration document. Prometheus never falls back to `config.toml` or defaults; fix the plane, the URL or the token secret.");
+    /// A key is locked by a level of the remote configuration plane.
+    CONFIG_REMOTE_LOCKED = ("config.remote_locked", PermissionDenied,
+        "A level of the remote configuration plane (global, tenant, group, owner or agent) locks the key; writes land on the profile level and may not change it.");
+    /// The remote configuration changed between read and write.
+    CONFIG_REMOTE_CONFLICT = ("config.remote_conflict", Conflict,
+        "The profile's configuration changed on the remote plane after it was read, so the write was refused (optimistic concurrency); run the command again.");
     /// The administrator-managed configuration layer is invalid.
     CONFIG_MANAGED_INVALID = ("config.managed_invalid", Config,
         "`managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it.");
@@ -98,6 +107,18 @@ error_codes! {
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");
+    /// A profile distribution's manifest or content is invalid.
+    PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
+        "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");
+    /// A distribution needs another Prometheus version.
+    PROFILE_DISTRIBUTION_INCOMPATIBLE = ("profile.distribution_incompatible", Config,
+        "The distribution's `prometheus_requires` range does not include this Prometheus version; install a compatible version of the distribution or of Prometheus.");
+    /// A distribution could not be fetched.
+    PROFILE_DISTRIBUTION_FETCH = ("profile.distribution_fetch", Unavailable,
+        "The distribution's git repository could not be cloned (network, URL or credentials).");
+    /// The profile was not installed from a distribution.
+    PROFILE_NOT_DISTRIBUTION = ("profile.not_distribution", NotFound,
+        "`profile update` and `profile info` need a profile installed with `profile install`.");
     /// The profile to create already exists.
     PROFILE_EXISTS = ("profile.exists", Usage,
         "`prometheus profile create` or `rename` names a profile that already exists.");

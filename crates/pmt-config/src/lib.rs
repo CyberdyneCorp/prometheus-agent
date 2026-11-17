@@ -64,6 +64,7 @@ pub mod provider_urls;
 pub mod quick_commands;
 pub mod reference;
 pub mod reload;
+pub mod remote;
 pub mod schema;
 pub mod scope;
 pub mod secrets;

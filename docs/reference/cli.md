@@ -1557,12 +1557,14 @@ Store, list and remove the profile's secrets (values never on the command line)
 Usage: prometheus secrets [OPTIONS] <COMMAND>
 
 Commands:
-  set      Store a secret; the value is read from a hidden prompt or from stdin
-  list     List secret names, their source and whether they are shadowed (never values)
-  get      Show where a secret comes from; --reveal prints the value to a terminal only
-  unset    Remove a secret from the profile's store [alias: rm]
-  migrate  Move every secret to another backend and select it in config.toml
-  help     Print this message or the help of the given subcommand(s)
+  set          Store a secret; the value is read from a hidden prompt or from stdin
+  list         List secret names, their source and whether they are shadowed (never values)
+  get          Show where a secret comes from; --reveal prints the value to a terminal only
+  unset        Remove a secret from the profile's store [alias: rm]
+  migrate      Move every secret to another backend and select it in config.toml
+  bitwarden    The Bitwarden Secrets Manager source (`bws`)
+  onepassword  The 1Password source (`op`)
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -1813,6 +1815,751 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus secrets bitwarden`
+
+```text
+The Bitwarden Secrets Manager source (`bws`)
+
+Usage: prometheus secrets bitwarden [OPTIONS] <COMMAND>
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus secrets bitwarden setup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --project-id <ID>
+          The project whose secrets are read (default: every project the token sees)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --server-url <URL>
+          A self-hosted server's URL
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+  -y, --yes
+          Install the CLI without asking
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus secrets bitwarden status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus secrets bitwarden token [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus secrets bitwarden sync [OPTIONS]
+
+Options:
+      --apply
+          Record the previewed names as the ones the source supplies
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus secrets bitwarden install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -y, --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus secrets bitwarden disable [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets bitwarden help [COMMAND]
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus secrets bitwarden help setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus secrets bitwarden help setup
+```
+
+## `prometheus secrets bitwarden help status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus secrets bitwarden help status
+```
+
+## `prometheus secrets bitwarden help token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus secrets bitwarden help token
+```
+
+## `prometheus secrets bitwarden help sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus secrets bitwarden help sync
+```
+
+## `prometheus secrets bitwarden help install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus secrets bitwarden help install
+```
+
+## `prometheus secrets bitwarden help disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus secrets bitwarden help disable
+```
+
+## `prometheus secrets bitwarden help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets bitwarden help help
+```
+
+## `prometheus secrets onepassword`
+
+```text
+The 1Password source (`op`)
+
+Usage: prometheus secrets onepassword [OPTIONS] <COMMAND>
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus secrets onepassword setup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --vault <VAULT>
+          The vault `sync` reads
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+  -y, --yes
+          Install the CLI without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus secrets onepassword status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus secrets onepassword map [OPTIONS] <NAME> <REFERENCE>
+
+Arguments:
+  <NAME>
+          The secret name
+
+  <REFERENCE>
+          Its `op://` reference
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus secrets onepassword unmap [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The secret name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus secrets onepassword sync [OPTIONS]
+
+Options:
+      --apply
+          Write the previewed mappings
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus secrets onepassword disable [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets onepassword help [COMMAND]
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus secrets onepassword help setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus secrets onepassword help setup
+```
+
+## `prometheus secrets onepassword help status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus secrets onepassword help status
+```
+
+## `prometheus secrets onepassword help map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus secrets onepassword help map
+```
+
+## `prometheus secrets onepassword help unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus secrets onepassword help unmap
+```
+
+## `prometheus secrets onepassword help sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus secrets onepassword help sync
+```
+
+## `prometheus secrets onepassword help disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus secrets onepassword help disable
+```
+
+## `prometheus secrets onepassword help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets onepassword help help
+```
+
 ## `prometheus secrets help`
 
 ```text
@@ -1821,12 +2568,14 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus secrets help [COMMAND]
 
 Commands:
-  set      Store a secret; the value is read from a hidden prompt or from stdin
-  list     List secret names, their source and whether they are shadowed (never values)
-  get      Show where a secret comes from; --reveal prints the value to a terminal only
-  unset    Remove a secret from the profile's store
-  migrate  Move every secret to another backend and select it in config.toml
-  help     Print this message or the help of the given subcommand(s)
+  set          Store a secret; the value is read from a hidden prompt or from stdin
+  list         List secret names, their source and whether they are shadowed (never values)
+  get          Show where a secret comes from; --reveal prints the value to a terminal only
+  unset        Remove a secret from the profile's store
+  migrate      Move every secret to another backend and select it in config.toml
+  bitwarden    The Bitwarden Secrets Manager source (`bws`)
+  onepassword  The 1Password source (`op`)
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus secrets help set`
@@ -1867,6 +2616,134 @@ Usage: prometheus secrets help unset
 Move every secret to another backend and select it in config.toml
 
 Usage: prometheus secrets help migrate
+```
+
+## `prometheus secrets help bitwarden`
+
+```text
+The Bitwarden Secrets Manager source (`bws`)
+
+Usage: prometheus secrets help bitwarden [COMMAND]
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+```
+
+## `prometheus secrets help bitwarden setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus secrets help bitwarden setup
+```
+
+## `prometheus secrets help bitwarden status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus secrets help bitwarden status
+```
+
+## `prometheus secrets help bitwarden token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus secrets help bitwarden token
+```
+
+## `prometheus secrets help bitwarden sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus secrets help bitwarden sync
+```
+
+## `prometheus secrets help bitwarden install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus secrets help bitwarden install
+```
+
+## `prometheus secrets help bitwarden disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus secrets help bitwarden disable
+```
+
+## `prometheus secrets help onepassword`
+
+```text
+The 1Password source (`op`)
+
+Usage: prometheus secrets help onepassword [COMMAND]
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+```
+
+## `prometheus secrets help onepassword setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus secrets help onepassword setup
+```
+
+## `prometheus secrets help onepassword status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus secrets help onepassword status
+```
+
+## `prometheus secrets help onepassword map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus secrets help onepassword map
+```
+
+## `prometheus secrets help onepassword unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus secrets help onepassword unmap
+```
+
+## `prometheus secrets help onepassword sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus secrets help onepassword sync
+```
+
+## `prometheus secrets help onepassword disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus secrets help onepassword disable
 ```
 
 ## `prometheus secrets help help`
@@ -19408,16 +20285,21 @@ List, create, select, rename and delete profiles
 Usage: prometheus profile [OPTIONS] <COMMAND>
 
 Commands:
-  list    List the profiles; the active one is marked
-  create  Create a profile, optionally copying another one once
-  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
-  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
-  import  Create a profile from an archive `profile export` wrote
-  use     Make a profile the one used without -p (`use default` clears the choice)
-  show    Show a profile (default: the selected one)
-  rename  Rename a profile
-  delete  Delete a profile and everything in it (asks to type its name unless --yes)
-  help    Print this message or the help of the given subcommand(s)
+  list      List the profiles; the active one is marked
+  create    Create a profile, optionally copying another one once
+  alias     Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export    Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import    Create a profile from an archive `profile export` wrote
+  use       Make a profile the one used without -p (`use default` clears the choice)
+  show      Show a profile (default: the selected one)
+  rename    Rename a profile
+  delete    Delete a profile and everything in it (asks to type its name unless --yes)
+  describe  Set or generate a profile's description
+  install   Install a profile distribution from a git URL or a directory
+  update    Update a profile from the distribution it was installed from
+  info      Show where a profile's distribution came from
+  identity  Move or purge a profile's identity
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -19882,6 +20764,384 @@ Options:
           Print help
 ```
 
+## `prometheus profile describe`
+
+```text
+Set or generate a profile's description
+
+Usage: prometheus profile describe [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          Profile name (default: the selected one; ignored with --all)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --text <TEXT>
+          The description (at most 500 characters)
+
+      --auto
+          Write one with the auxiliary model from the profile's name, identity file, model and skills
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --overwrite
+          Replace an existing description
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --all
+          Describe every profile that has no description yet
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile install`
+
+```text
+Install a profile distribution from a git URL or a directory
+
+Usage: prometheus profile install [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          A git URL or a directory holding `distribution.toml`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The new profile's name (default: the manifest's `name`)
+
+      --alias
+          Also write the alias launcher `<name>`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --force
+          Install over an existing profile of that name
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -y, --yes
+          Do not ask for confirmation
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile update`
+
+```text
+Update a profile from the distribution it was installed from
+
+Usage: prometheus profile update [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The profile a distribution was installed into
+
+Options:
+      --force-config
+          Also replace `config.toml` with the distribution's
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+  -y, --yes
+          Do not ask for confirmation
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile info`
+
+```text
+Show where a profile's distribution came from
+
+Usage: prometheus profile info [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity`
+
+```text
+Move or purge a profile's identity
+
+Usage: prometheus profile identity [OPTIONS] <COMMAND>
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus profile identity move [OPTIONS] <FROM> <TO>
+
+Arguments:
+  <FROM>
+          The profile to copy from
+
+  <TO>
+          The profile to copy to
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus profile identity purge [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile identity help [COMMAND]
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus profile identity help move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus profile identity help move
+```
+
+## `prometheus profile identity help purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus profile identity help purge
+```
+
+## `prometheus profile identity help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile identity help help
+```
+
 ## `prometheus profile help`
 
 ```text
@@ -19890,16 +21150,21 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus profile help [COMMAND]
 
 Commands:
-  list    List the profiles; the active one is marked
-  create  Create a profile, optionally copying another one once
-  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
-  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
-  import  Create a profile from an archive `profile export` wrote
-  use     Make a profile the one used without -p (`use default` clears the choice)
-  show    Show a profile (default: the selected one)
-  rename  Rename a profile
-  delete  Delete a profile and everything in it (asks to type its name unless --yes)
-  help    Print this message or the help of the given subcommand(s)
+  list      List the profiles; the active one is marked
+  create    Create a profile, optionally copying another one once
+  alias     Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export    Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import    Create a profile from an archive `profile export` wrote
+  use       Make a profile the one used without -p (`use default` clears the choice)
+  show      Show a profile (default: the selected one)
+  rename    Rename a profile
+  delete    Delete a profile and everything in it (asks to type its name unless --yes)
+  describe  Set or generate a profile's description
+  install   Install a profile distribution from a git URL or a directory
+  update    Update a profile from the distribution it was installed from
+  info      Show where a profile's distribution came from
+  identity  Move or purge a profile's identity
+  help      Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus profile help list`
@@ -19972,6 +21237,66 @@ Usage: prometheus profile help rename
 Delete a profile and everything in it (asks to type its name unless --yes)
 
 Usage: prometheus profile help delete
+```
+
+## `prometheus profile help describe`
+
+```text
+Set or generate a profile's description
+
+Usage: prometheus profile help describe
+```
+
+## `prometheus profile help install`
+
+```text
+Install a profile distribution from a git URL or a directory
+
+Usage: prometheus profile help install
+```
+
+## `prometheus profile help update`
+
+```text
+Update a profile from the distribution it was installed from
+
+Usage: prometheus profile help update
+```
+
+## `prometheus profile help info`
+
+```text
+Show where a profile's distribution came from
+
+Usage: prometheus profile help info
+```
+
+## `prometheus profile help identity`
+
+```text
+Move or purge a profile's identity
+
+Usage: prometheus profile help identity [COMMAND]
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+```
+
+## `prometheus profile help identity move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus profile help identity move
+```
+
+## `prometheus profile help identity purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus profile help identity purge
 ```
 
 ## `prometheus profile help help`
@@ -35100,11 +36425,13 @@ Store, list and remove the profile's secrets (values never on the command line)
 Usage: prometheus help secrets [COMMAND]
 
 Commands:
-  set      Store a secret; the value is read from a hidden prompt or from stdin
-  list     List secret names, their source and whether they are shadowed (never values)
-  get      Show where a secret comes from; --reveal prints the value to a terminal only
-  unset    Remove a secret from the profile's store
-  migrate  Move every secret to another backend and select it in config.toml
+  set          Store a secret; the value is read from a hidden prompt or from stdin
+  list         List secret names, their source and whether they are shadowed (never values)
+  get          Show where a secret comes from; --reveal prints the value to a terminal only
+  unset        Remove a secret from the profile's store
+  migrate      Move every secret to another backend and select it in config.toml
+  bitwarden    The Bitwarden Secrets Manager source (`bws`)
+  onepassword  The 1Password source (`op`)
 ```
 
 ## `prometheus help secrets set`
@@ -35145,6 +36472,134 @@ Usage: prometheus help secrets unset
 Move every secret to another backend and select it in config.toml
 
 Usage: prometheus help secrets migrate
+```
+
+## `prometheus help secrets bitwarden`
+
+```text
+The Bitwarden Secrets Manager source (`bws`)
+
+Usage: prometheus help secrets bitwarden [COMMAND]
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+```
+
+## `prometheus help secrets bitwarden setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus help secrets bitwarden setup
+```
+
+## `prometheus help secrets bitwarden status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus help secrets bitwarden status
+```
+
+## `prometheus help secrets bitwarden token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus help secrets bitwarden token
+```
+
+## `prometheus help secrets bitwarden sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus help secrets bitwarden sync
+```
+
+## `prometheus help secrets bitwarden install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus help secrets bitwarden install
+```
+
+## `prometheus help secrets bitwarden disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus help secrets bitwarden disable
+```
+
+## `prometheus help secrets onepassword`
+
+```text
+The 1Password source (`op`)
+
+Usage: prometheus help secrets onepassword [COMMAND]
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+```
+
+## `prometheus help secrets onepassword setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus help secrets onepassword setup
+```
+
+## `prometheus help secrets onepassword status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus help secrets onepassword status
+```
+
+## `prometheus help secrets onepassword map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus help secrets onepassword map
+```
+
+## `prometheus help secrets onepassword unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus help secrets onepassword unmap
+```
+
+## `prometheus help secrets onepassword sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus help secrets onepassword sync
+```
+
+## `prometheus help secrets onepassword disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus help secrets onepassword disable
 ```
 
 ## `prometheus help skills`
@@ -37818,15 +39273,20 @@ List, create, select, rename and delete profiles
 Usage: prometheus help profile [COMMAND]
 
 Commands:
-  list    List the profiles; the active one is marked
-  create  Create a profile, optionally copying another one once
-  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
-  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
-  import  Create a profile from an archive `profile export` wrote
-  use     Make a profile the one used without -p (`use default` clears the choice)
-  show    Show a profile (default: the selected one)
-  rename  Rename a profile
-  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+  list      List the profiles; the active one is marked
+  create    Create a profile, optionally copying another one once
+  alias     Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export    Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import    Create a profile from an archive `profile export` wrote
+  use       Make a profile the one used without -p (`use default` clears the choice)
+  show      Show a profile (default: the selected one)
+  rename    Rename a profile
+  delete    Delete a profile and everything in it (asks to type its name unless --yes)
+  describe  Set or generate a profile's description
+  install   Install a profile distribution from a git URL or a directory
+  update    Update a profile from the distribution it was installed from
+  info      Show where a profile's distribution came from
+  identity  Move or purge a profile's identity
 ```
 
 ## `prometheus help profile list`
@@ -37899,6 +39359,66 @@ Usage: prometheus help profile rename
 Delete a profile and everything in it (asks to type its name unless --yes)
 
 Usage: prometheus help profile delete
+```
+
+## `prometheus help profile describe`
+
+```text
+Set or generate a profile's description
+
+Usage: prometheus help profile describe
+```
+
+## `prometheus help profile install`
+
+```text
+Install a profile distribution from a git URL or a directory
+
+Usage: prometheus help profile install
+```
+
+## `prometheus help profile update`
+
+```text
+Update a profile from the distribution it was installed from
+
+Usage: prometheus help profile update
+```
+
+## `prometheus help profile info`
+
+```text
+Show where a profile's distribution came from
+
+Usage: prometheus help profile info
+```
+
+## `prometheus help profile identity`
+
+```text
+Move or purge a profile's identity
+
+Usage: prometheus help profile identity [COMMAND]
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+```
+
+## `prometheus help profile identity move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus help profile identity move
+```
+
+## `prometheus help profile identity purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus help profile identity purge
 ```
 
 ## `prometheus help sessions`

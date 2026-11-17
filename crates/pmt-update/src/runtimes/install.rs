@@ -273,12 +273,14 @@ impl Installer {
         std::fs::create_dir_all(&staging)
             .map_err(|e| Error::io(&codes::RUNTIME_IO, &staging, &e))?;
         let result = (|| {
-            super::extract::unpack(archive, artifact.format, &staging).map_err(|reason| {
-                Error::new(
-                    &codes::RUNTIME_IO,
-                    format!("cannot unpack {}: {reason}", artifact.file_name()),
-                )
-            })?;
+            super::extract::unpack(archive, artifact.format, &staging, &artifact.exe).map_err(
+                |reason| {
+                    Error::new(
+                        &codes::RUNTIME_IO,
+                        format!("cannot unpack {}: {reason}", artifact.file_name()),
+                    )
+                },
+            )?;
             record.files =
                 digest_tree(&staging).map_err(|e| Error::io(&codes::RUNTIME_IO, &staging, &e))?;
             let text = serde_json::to_vec_pretty(&record).expect("a record serializes");

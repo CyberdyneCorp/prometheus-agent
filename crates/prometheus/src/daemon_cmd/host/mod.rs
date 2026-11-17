@@ -436,7 +436,8 @@ impl DaemonHost {
             completions,
             sudo,
         };
-        let mut live = factory.open_with(id, &target, Some(clients)).await?;
+        // Boxed: opening a session is the largest future of the daemon.
+        let mut live = Box::pin(factory.open_with(id, &target, Some(clients))).await?;
         live.memory.setup().notices.bind(notify::memory_sink(
             chat.clone(),
             profile.scope().name().to_string(),

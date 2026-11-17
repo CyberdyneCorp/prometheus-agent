@@ -257,7 +257,8 @@ fn task_timeouts_and_purposes() {
         AuxTask::Kanban.default_timeout(),
         Some(Duration::from_mins(2))
     );
-    assert_eq!(AuxTask::ALL.len(), 17);
+    assert_eq!(AuxTask::ALL.len(), 18);
+    assert_eq!(AuxTask::Profile.purpose(), "auxiliary.profile");
     assert_eq!(AuxTask::Schedule.purpose(), "auxiliary.schedule");
     // The replay-and-evaluation spec names these two purposes.
     assert_eq!(AuxTask::EvalJudge.purpose(), "eval.judge");

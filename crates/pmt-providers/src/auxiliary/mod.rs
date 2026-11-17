@@ -76,6 +76,7 @@ tasks! {
     EvalJudge = "eval_judge", Some(Duration::from_mins(2));
     TrajectoryCompress = "trajectory_compress", Some(Duration::from_mins(2));
     Schedule = "schedule", Some(Duration::from_secs(30));
+    Profile = "profile", Some(Duration::from_mins(1));
 }
 
 impl AuxTask {
@@ -119,6 +120,7 @@ impl AuxTask {
             Self::EvalJudge => config.eval_judge.as_ref(),
             Self::TrajectoryCompress => config.trajectory_compress.as_ref(),
             Self::Schedule => config.schedule.as_ref(),
+            Self::Profile => config.profile.as_ref(),
         }
     }
 }

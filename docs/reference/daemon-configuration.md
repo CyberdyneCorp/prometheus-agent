@@ -14,6 +14,11 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `api_server.listen` | string | `"127.0.0.1:8642"` | any | `restart` | Where the API server listens. |
 | `api_server.public` | boolean | `false` | any | `restart` | Allow a non-loopback `listen` address (logged at WARN on every start). |
 | `api_server.public_host` | string | unset | any | `restart` | A host name accepted in the `Host` header besides the loopback names (a reverse proxy's name for a loopback listener). |
+| `config_backend.instance_id` | string | unset | any | `restart` | This installation's id on the plane (required for `remote`). |
+| `config_backend.kind` | one of "file", "remote" | `"file"` | `"file"`, `"remote"` | `restart` | `file` (default) or `remote`. |
+| `config_backend.poll_secs` | integer | `300` | 5 to 86400 | `restart` | How often a long-running process re-fetches (seconds). |
+| `config_backend.token_secret` | string | `"CONFIG_PLANE_TOKEN"` | a secret name | `restart` | The secret holding the plane's bearer token (managed secrets first, then the profile's secrets file). |
+| `config_backend.url` | string | unset | any | `restart` | The plane's base URL (required for `remote`). |
 | `daemon.autostart` | boolean | `true` | any | `restart` | Interactive clients (`prometheus tui`, the ACP adapter) start the daemon detached when it is not running; `false` makes them exit 69 instead. |
 | `daemon.idle_session_close_secs` | integer | `3600` | ≥ 1 | `restart` | A session with no attached client, no running turn, no open request and no queued input is closed after this many seconds. |
 | `daemon.remote.enabled` | boolean | `false` | any | `restart` | Bind the remote attachment listener. |

@@ -27,6 +27,10 @@ pub enum Format {
     /// zip (deflate).
     #[serde(rename = "zip")]
     Zip,
+    /// A bare executable, saved as the artifact's `exe` (Lightpanda
+    /// publishes its builds this way).
+    #[serde(rename = "binary")]
+    Binary,
 }
 
 /// One pinned archive.
@@ -195,7 +199,7 @@ mod tests {
         let err = RuntimeIndex::embedded().pin("java").unwrap_err();
         assert_eq!(
             err.message(),
-            "unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter)"
+            "unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda)"
         );
         assert_eq!(err.exit_code(), 2);
     }

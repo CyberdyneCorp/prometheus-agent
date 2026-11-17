@@ -95,6 +95,60 @@
         }
       ]
     },
+    "BackendKind": {
+      "description": "Where profile configuration comes from.",
+      "oneOf": [
+        {
+          "const": "file",
+          "description": "Each profile's `config.toml`.",
+          "type": "string"
+        },
+        {
+          "const": "remote",
+          "description": "The remote configuration plane.",
+          "type": "string"
+        }
+      ]
+    },
+    "ConfigBackend": {
+      "additionalProperties": false,
+      "description": "`[config_backend]` of `managed.toml` or `daemon.toml`.",
+      "properties": {
+        "instance_id": {
+          "description": "This installation's id on the plane (required for `remote`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/BackendKind",
+          "default": "file",
+          "description": "`file` (default) or `remote`."
+        },
+        "poll_secs": {
+          "default": 300,
+          "description": "How often a long-running process re-fetches (seconds).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 5,
+          "type": "integer"
+        },
+        "token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "CONFIG_PLANE_TOKEN",
+          "description": "The secret holding the plane's bearer token (managed secrets first,\nthen the profile's secrets file)."
+        },
+        "url": {
+          "description": "The plane's base URL (required for `remote`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "DaemonGateway": {
       "additionalProperties": false,
       "description": "`daemon.toml [gateway]`: the messaging gateway keys every served\nprofile shares.",
@@ -827,6 +881,15 @@
         "public_host": null
       },
       "description": "The OpenAI-compatible API server's listener (spec: api-server)."
+    },
+    "config_backend": {
+      "$ref": "#/$defs/ConfigBackend",
+      "default": {
+        "kind": "file",
+        "poll_secs": 300,
+        "token_secret": "CONFIG_PLANE_TOKEN"
+      },
+      "description": "Where profile configuration comes from (spec:\nconfiguration-and-profiles, Remote configuration backend);\n`managed.toml`'s `[config_backend]` wins over this one. Boxed:\ndaemon futures hold this struct, and it is rarely set."
     },
     "daemon": {
       "$ref": "#/$defs/DaemonSection",

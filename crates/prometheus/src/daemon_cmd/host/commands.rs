@@ -189,7 +189,7 @@ impl Run<'_> {
             return done(commands::cron::confirm(&self.ctx(&scope), confirmation));
         }
         match self.registry.resolve(&line, self.surface) {
-            Resolution::Builtin { command, args } => self.builtin(command, &args).await,
+            Resolution::Builtin { command, args } => Box::pin(self.builtin(command, &args)).await,
             Resolution::External { command, args } => match command.source {
                 Source::Quick => Box::pin(self.quick(&command.name, &args, depth)).await,
                 Source::Plugin => {

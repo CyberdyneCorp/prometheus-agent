@@ -144,6 +144,7 @@ serde_json.workspace = true
 # `demo` runs in a fresh temporary directory.
 tempfile.workspace = true
 toml.workspace = true
+toml_edit.workspace = true
 # Input ids of the TUI's prompts and idempotency keys of its creates.
 ulid.workspace = true
 # `logs --follow` polls and stops on Ctrl-C.

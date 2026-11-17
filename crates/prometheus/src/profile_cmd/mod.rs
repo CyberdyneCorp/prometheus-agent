@@ -5,6 +5,10 @@
 
 mod alias;
 pub mod archive;
+pub mod args;
+pub mod describe;
+pub mod distribution;
+pub mod identity;
 
 use pmt_config::profiles::{CloneFrom, user_of};
 use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
@@ -25,62 +29,7 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let home = ctx.home()?;
     match command {
         ProfileCommand::List => list(&home, ctx.json),
-        ProfileCommand::Create {
-            name,
-            clone_from,
-            clone_all,
-            clone_secrets,
-            clone_channels,
-            sync_imports,
-            no_skills,
-            description,
-            no_alias,
-        } => {
-            let source = match (clone_from, clone_all) {
-                (Some(from), _) => Some(ProfileName::parse(from)?),
-                (None, true) => Some(home.select_profile(ctx.profile)?),
-                (None, false) => None,
-            };
-            let flags = [
-                ("--clone-secrets", *clone_secrets),
-                ("--clone-channels", *clone_channels),
-                ("--sync-imports", *sync_imports),
-            ];
-            if let (None, Some((flag, _))) = (&source, flags.iter().find(|(_, on)| *on)) {
-                return Err(Error::new(
-                    &pmt_core::error::codes::CLI_USAGE,
-                    format!("{flag} needs --clone-from or --clone-all"),
-                ));
-            }
-            let clone = source.as_ref().map(|source| CloneFrom {
-                secrets: *clone_secrets,
-                all: *clone_all,
-                channels: *clone_channels,
-                sync_imports: *sync_imports,
-                ..CloneFrom::of(source)
-            });
-            let profile = home.create_profile(name, clone)?;
-            if let Some(source) = &source {
-                clone_memory(&home, source, &profile)?;
-            }
-            if *no_skills {
-                pmt_skills::optout::set_included(&profile, false)?;
-            }
-            if let Some(text) = description {
-                let path = profile.path().join(pmt_config::profiles::DESCRIPTION_FILE);
-                pmt_core::private_fs::write_atomic(&path, text.trim().as_bytes())
-                    .map_err(|e| Error::io(&pmt_core::error::codes::HOME_IO, &path, &e))?;
-            }
-            eprintln!(
-                "created profile '{}' at {}",
-                profile.name(),
-                profile.path().display()
-            );
-            if !*no_alias {
-                default_alias(profile.name(), home.root(), ctx);
-            }
-            Ok(0)
-        }
+        ProfileCommand::Create { .. } => create(&home, ctx, command),
         ProfileCommand::Alias { name, alias } => {
             let name = ProfileName::parse(name)?;
             home.existing_profile(&name)?;
@@ -120,7 +69,74 @@ pub fn run(command: &ProfileCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             Ok(0)
         }
         ProfileCommand::Delete { name, yes } => delete(&home, name, *yes),
+        ProfileCommand::Describe(args) => describe::run(&home, ctx, args),
+        ProfileCommand::Install(args) => distribution::install(&home, ctx, args),
+        ProfileCommand::Update(args) => distribution::update(&home, ctx, args),
+        ProfileCommand::Info { name } => distribution::info(&home, name, ctx.json),
+        ProfileCommand::Identity { command } => identity::run(&home, command),
     }
+}
+
+/// `profile create`.
+fn create(home: &Home, ctx: &Context<'_>, command: &ProfileCommand) -> Result<u8, Error> {
+    let ProfileCommand::Create {
+        name,
+        clone_from,
+        clone_all,
+        clone_secrets,
+        clone_channels,
+        sync_imports,
+        no_skills,
+        description,
+        no_alias,
+    } = command
+    else {
+        unreachable!("create is dispatched with a create command")
+    };
+    let source = match (clone_from, clone_all) {
+        (Some(from), _) => Some(ProfileName::parse(from)?),
+        (None, true) => Some(home.select_profile(ctx.profile)?),
+        (None, false) => None,
+    };
+    let flags = [
+        ("--clone-secrets", *clone_secrets),
+        ("--clone-channels", *clone_channels),
+        ("--sync-imports", *sync_imports),
+    ];
+    if let (None, Some((flag, _))) = (&source, flags.iter().find(|(_, on)| *on)) {
+        return Err(Error::new(
+            &pmt_core::error::codes::CLI_USAGE,
+            format!("{flag} needs --clone-from or --clone-all"),
+        ));
+    }
+    let clone = source.as_ref().map(|source| CloneFrom {
+        secrets: *clone_secrets,
+        all: *clone_all,
+        channels: *clone_channels,
+        sync_imports: *sync_imports,
+        ..CloneFrom::of(source)
+    });
+    let profile = home.create_profile(name, clone)?;
+    if let Some(source) = &source {
+        clone_memory(home, source, &profile)?;
+    }
+    if *no_skills {
+        pmt_skills::optout::set_included(&profile, false)?;
+    }
+    if let Some(text) = description {
+        let path = profile.path().join(pmt_config::profiles::DESCRIPTION_FILE);
+        pmt_core::private_fs::write_atomic(&path, text.trim().as_bytes())
+            .map_err(|e| Error::io(&pmt_core::error::codes::HOME_IO, &path, &e))?;
+    }
+    eprintln!(
+        "created profile '{}' at {}",
+        profile.name(),
+        profile.path().display()
+    );
+    if !*no_alias {
+        default_alias(profile.name(), home.root(), ctx);
+    }
+    Ok(0)
 }
 
 #[derive(Serialize)]
@@ -260,7 +276,10 @@ fn show(home: &Home, ctx: &Context<'_>, name: Option<&str>) -> Result<u8, Error>
 fn delete(home: &Home, name: &str, yes: bool) -> Result<u8, Error> {
     let name = ProfileName::parse(name)?;
     // Refusals (default, unknown, in use) come before the question.
-    home.existing_profile(&name)?;
+    let dir = home.existing_profile(&name)?;
+    if let Some(record) = distribution::record(dir.path()) {
+        eprint!("{}", distribution::describe(&record));
+    }
     if !yes {
         let what = format!(
             "this deletes profile '{name}' and everything in {}",

@@ -25,6 +25,13 @@ CPYTHON_BUILD = "20261026"
 CHROMIUM = "156.0.8078.80"
 # doc-converter: the xberg CLI (github.com/xberg-io/xberg, MIT).
 XBERG = "1.3.10"
+# Bitwarden Secrets Manager CLI (github.com/bitwarden/sdk-sm).
+BWS = "2.1.0"
+# 1Password CLI (no published checksums: archives are hashed here).
+OP = "2.42.0"
+# Lightpanda headless browser (github.com/lightpanda-io/browser): bare
+# executables, no Windows build.
+LIGHTPANDA = "1.0.2"
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "crates/pmt-update/runtimes/index.json"
 
@@ -179,6 +186,65 @@ def doc_converter():
     return {"version": XBERG, "artifacts": artifacts}
 
 
+def github_assets(repo, tag):
+    release = json.loads(fetch(f"https://api.github.com/repos/{repo}/releases/tags/{tag}"))
+    return {asset["name"]: asset for asset in release["assets"]}
+
+
+def from_asset(asset, fmt, exe):
+    algorithm, sha = asset["digest"].split(":")
+    assert algorithm == "sha256", asset["digest"]
+    print(f"  {asset['browser_download_url']}", file=sys.stderr)
+    return {"url": asset["browser_download_url"], "size": asset["size"], "sha256": sha, "format": fmt, "exe": exe}
+
+
+def bws():
+    assets = github_assets("bitwarden/sdk-sm", f"bws-v{BWS}")
+    artifacts = {}
+    for platform, triple in TRIPLES.items():
+        exe = "bws.exe" if platform.startswith("windows") else "bws"
+        artifacts[platform] = from_asset(assets[f"bws-{triple}-{BWS}.zip"], "zip", exe)
+    return {"version": BWS, "artifacts": artifacts}
+
+
+# 1Password publishes no Windows arm64 or musl builds.
+OP_PLATFORMS = {
+    "darwin-arm64": "darwin_arm64",
+    "darwin-x64": "darwin_amd64",
+    "linux-x64": "linux_amd64",
+    "linux-arm64": "linux_arm64",
+    "windows-x64": "windows_amd64",
+}
+
+
+def op():
+    artifacts = {}
+    for platform, name in OP_PLATFORMS.items():
+        url = f"https://cache.agilebits.com/dist/1P/op2/pkg/v{OP}/op_{name}_v{OP}.zip"
+        print(f"  hashing {url}", file=sys.stderr)
+        size, sha = hash_download(url)
+        exe = "op.exe" if platform.startswith("windows") else "op"
+        artifacts[platform] = {"url": url, "size": size, "sha256": sha, "format": "zip", "exe": exe}
+    return {"version": OP, "artifacts": artifacts}
+
+
+LIGHTPANDA_PLATFORMS = {
+    "darwin-arm64": "aarch64-macos",
+    "darwin-x64": "x86_64-macos",
+    "linux-x64": "x86_64-linux",
+    "linux-arm64": "aarch64-linux",
+}
+
+
+def lightpanda():
+    assets = github_assets("lightpanda-io/browser", LIGHTPANDA)
+    artifacts = {
+        platform: from_asset(assets[f"lightpanda-{name}"], "binary", "lightpanda")
+        for platform, name in LIGHTPANDA_PLATFORMS.items()
+    }
+    return {"version": LIGHTPANDA, "artifacts": artifacts}
+
+
 def main():
     index = {
         "schema": "prometheus.runtime-index.v1",
@@ -188,6 +254,9 @@ def main():
             "uv": uv(),
             "chromium": chromium(),
             "doc-converter": doc_converter(),
+            "bws": bws(),
+            "op": op(),
+            "lightpanda": lightpanda(),
         },
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

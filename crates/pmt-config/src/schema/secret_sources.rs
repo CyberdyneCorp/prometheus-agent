@@ -30,6 +30,10 @@ pub struct BitwardenSourceConfig {
     /// A self-hosted server's URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_url: Option<String>,
+    /// The keys `prometheus secrets bitwarden sync --apply` accepted; the
+    /// source supplies only these (empty: every key of the project).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub names: Vec<String>,
     /// Resolved values stay in memory at most this long (never on disk).
     #[schemars(range(max = 86_400))]
     pub cache_ttl_secs: u64,
@@ -42,6 +46,7 @@ impl Default for BitwardenSourceConfig {
             access_token_secret: SecretName("BWS_ACCESS_TOKEN".to_owned()),
             project_id: None,
             server_url: None,
+            names: Vec::new(),
             cache_ttl_secs: SOURCE_CACHE_TTL_SECS,
         }
     }
@@ -58,6 +63,9 @@ pub struct OnePasswordSourceConfig {
     /// The stored secret holding the service-account token (the only
     /// place the token is read from).
     pub access_token_secret: SecretName,
+    /// The vault `setup --vault` selected (what `sync` reads).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault: Option<String>,
     /// Secret name to its `op://vault/item/field` reference.
     pub map: BTreeMap<String, String>,
     /// Resolved values stay in memory at most this long (never on disk).
@@ -70,6 +78,7 @@ impl Default for OnePasswordSourceConfig {
         Self {
             enabled: false,
             access_token_secret: SecretName("OP_SERVICE_ACCOUNT_TOKEN".to_owned()),
+            vault: None,
             map: BTreeMap::new(),
             cache_ttl_secs: SOURCE_CACHE_TTL_SECS,
         }

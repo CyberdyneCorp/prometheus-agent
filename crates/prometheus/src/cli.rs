@@ -1099,6 +1099,18 @@ pub enum SecretsCommand {
         #[arg(long, value_enum)]
         to: SecretsBackendArg,
     },
+    /// The Bitwarden Secrets Manager source (`bws`).
+    Bitwarden {
+        /// The bitwarden subcommand.
+        #[command(subcommand)]
+        command: crate::secret_sources_cmd::BitwardenCommand,
+    },
+    /// The 1Password source (`op`).
+    Onepassword {
+        /// The onepassword subcommand.
+        #[command(subcommand)]
+        command: crate::secret_sources_cmd::OnePasswordCommand,
+    },
 }
 
 /// A secrets backend named on the command line.
@@ -1261,6 +1273,23 @@ pub enum ProfileCommand {
         /// Do not ask for confirmation.
         #[arg(long)]
         yes: bool,
+    },
+    /// Set or generate a profile's description.
+    Describe(crate::profile_cmd::args::DescribeArgs),
+    /// Install a profile distribution from a git URL or a directory.
+    Install(crate::profile_cmd::args::InstallArgs),
+    /// Update a profile from the distribution it was installed from.
+    Update(crate::profile_cmd::args::UpdateArgs),
+    /// Show where a profile's distribution came from.
+    Info {
+        /// Profile name.
+        name: String,
+    },
+    /// Move or purge a profile's identity.
+    Identity {
+        /// The identity subcommand.
+        #[command(subcommand)]
+        command: crate::profile_cmd::args::IdentityCommand,
     },
 }
 

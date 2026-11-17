@@ -104,6 +104,7 @@ capabilities = [
     "scheduled-jobs",
     "hermes-migration",
     "platform-adapters",
+    "configuration-and-profiles",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -4985,3 +4986,19 @@ capabilities = [
 
 [platform-adapters."Busy acknowledgement via reactions (upgrade)"]
 "Reaction instead of noise" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_follow_up_during_a_turn_gets_a_reaction_instead_of_a_busy_text", "crates/pmt-gateway/tests/messaging/identity.rs::ack_reaction_marks_each_accepted_message"]
+
+[configuration-and-profiles."Remote configuration backend"]
+"Unreachable plane fails closed" = { tests = ["crates/prometheus/tests/config_remote.rs::unreachable_plane_fails_closed", "crates/prometheus/tests/config_remote.rs::the_plane_supplies_the_configuration_and_writes_carry_only_changed_keys", "crates/pmt-config/src/remote/tests.rs::a_locked_key_is_refused_naming_its_level"], note = "config.toml is a file that does not parse: the exit-78 error names the plane URL, never the parse error" }
+
+[configuration-and-profiles."Profile descriptions"]
+"Auto description does not overwrite" = ["crates/prometheus/tests/profile_distribution.rs::auto_description_does_not_overwrite"]
+
+[configuration-and-profiles."Profile distributions"]
+"Update keeps user config" = ["crates/prometheus/tests/profile_distribution.rs::install_previews_never_copies_credentials_and_update_keeps_user_config"]
+"Credentials never installed" = ["crates/prometheus/tests/profile_distribution.rs::install_previews_never_copies_credentials_and_update_keeps_user_config", "crates/prometheus/tests/profile_distribution.rs::an_incompatible_distribution_is_refused_with_78"]
+
+[configuration-and-profiles."Identity migration and purge"]
+"Purge is snapshotted" = ["crates/prometheus/tests/profile_distribution.rs::purge_is_snapshotted", "crates/prometheus/tests/profile_distribution.rs::identity_moves_to_another_profile"]
+
+[configuration-and-profiles."External secret source commands"]
+"Invalid rotated token refused" = ["crates/prometheus/tests/secret_sources_cli.rs::invalid_rotated_token_refused", "crates/prometheus/tests/secret_sources_cli.rs::bitwarden_status_shows_names_and_sync_writes_only_with_apply", "crates/prometheus/tests/secret_sources_cli.rs::onepassword_setup_map_and_sync"]

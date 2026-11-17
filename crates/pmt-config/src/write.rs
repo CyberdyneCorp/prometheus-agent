@@ -23,11 +23,44 @@ use crate::{backups, catalog, edit, parse};
 pub struct ConfigFile {
     path: PathBuf,
     backups: PathBuf,
+    /// The home and profile name, when the home may use the remote
+    /// configuration backend (every profile of a home does).
+    owner: Option<(PathBuf, String)>,
 }
 
 impl ConfigFile {
     pub(crate) fn new(path: PathBuf, backups: PathBuf) -> Self {
-        Self { path, backups }
+        Self {
+            path,
+            backups,
+            owner: None,
+        }
+    }
+
+    /// The file of profile `profile` of the home at `home`, whose text
+    /// comes from the remote plane when the home uses one.
+    pub(crate) fn of_profile(path: PathBuf, backups: PathBuf, home: &Path, profile: &str) -> Self {
+        Self {
+            owner: Some((home.to_owned(), profile.to_owned())),
+            ..Self::new(path, backups)
+        }
+    }
+
+    /// The remote plane serving this profile, with its name.
+    fn plane(&self) -> Result<Option<(std::sync::Arc<crate::remote::Plane>, &str)>, Error> {
+        let Some((home, profile)) = &self.owner else {
+            return Ok(None);
+        };
+        Ok(crate::remote::plane(home)?.map(|plane| (plane, profile.as_str())))
+    }
+
+    /// Whether this profile's configuration lives on a remote plane.
+    ///
+    /// # Errors
+    ///
+    /// The backend settings' own errors.
+    pub fn is_remote(&self) -> Result<bool, Error> {
+        Ok(self.plane()?.is_some())
     }
 
     /// The file path.
@@ -59,6 +92,9 @@ impl ConfigFile {
     ///
     /// `home.io` when it exists but cannot be read.
     pub fn raw(&self) -> Result<Option<String>, Error> {
+        if let Some((plane, profile)) = self.plane()? {
+            return plane.text(profile).map(Some);
+        }
         match std::fs::read_to_string(&self.path) {
             Ok(text) => Ok(Some(text)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -409,6 +445,9 @@ impl ConfigFile {
 
     fn commit(&self, old: Option<&str>, new: &str) -> Result<(), Error> {
         crate::generated::check_writable(profile_dir(&self.path))?;
+        if let Some((plane, profile)) = self.plane()? {
+            return plane.write(profile, old.unwrap_or_default(), new);
+        }
         if let Some(old) = old.filter(|old| *old != new) {
             backups::save(&self.backups, "config", old)?;
             backups::prune(&self.backups);

@@ -139,8 +139,8 @@ impl ExternalSources {
             return onepassword(op, name, reference, token).map(Some);
         }
         match &self.bitwarden {
-            Some(bws) => Ok(bitwarden(bws, token)?.remove(name)),
-            None => Ok(None),
+            Some(bws) if accepts(&bws.config, name) => Ok(bitwarden(bws, token)?.remove(name)),
+            _ => Ok(None),
         }
     }
 
@@ -165,6 +165,12 @@ impl ExternalSources {
         }
         values
     }
+}
+
+/// Whether the Bitwarden source supplies `name`: every key until `sync
+/// --apply` recorded an accepted list.
+fn accepts(config: &BitwardenSourceConfig, name: &str) -> bool {
+    config.names.is_empty() || config.names.iter().any(|n| n == name)
 }
 
 /// `op read <reference>` for mapped `name`, cached.
@@ -275,7 +281,11 @@ fn failure(source: &str, why: &str) -> Error {
 /// Runs `program args` with `token` in `variable` (and no other token
 /// variable); its stdout when it exits 0. Stderr is discarded (a CLI may
 /// echo what it was given).
-fn run(
+///
+/// # Errors
+///
+/// A one-line reason (it never contains the token).
+pub fn run(
     program: &Path,
     args: &[&str],
     variable: &str,
@@ -343,7 +353,8 @@ fn run(
 /// The CLI `name`: the newest managed install under
 /// `<home>/runtimes/<name>/`, else the bare name (found on `PATH` when
 /// run).
-fn program(home: &Path, name: &str) -> PathBuf {
+#[must_use]
+pub fn program(home: &Path, name: &str) -> PathBuf {
     let exe = if cfg!(windows) {
         format!("{name}.exe")
     } else {

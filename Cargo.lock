@@ -4216,6 +4216,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-tungstenite",
  "toml",
+ "toml_edit",
  "tracing",
  "tracing-subscriber",
  "ulid",

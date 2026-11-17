@@ -878,6 +878,17 @@
           ],
           "description": "Memory review."
         },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile descriptions of `profile describe --auto` (defaults to the\nmain model)."
+        },
         "schedule": {
           "anyOf": [
             {
@@ -1121,6 +1132,13 @@
           "default": false,
           "description": "Read secrets from Bitwarden (off by default: `bws` is then never\nrun).",
           "type": "boolean"
+        },
+        "names": {
+          "description": "The keys `prometheus secrets bitwarden sync --apply` accepted; the\nsource supplies only these (empty: every key of the project).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "project_id": {
           "description": "The project whose secrets are read (unset: every project the token\nsees).",
@@ -7031,6 +7049,13 @@
           "default": {},
           "description": "Secret name to its `op://vault/item/field` reference.",
           "type": "object"
+        },
+        "vault": {
+          "description": "The vault `setup --vault` selected (what `sync` reads).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"

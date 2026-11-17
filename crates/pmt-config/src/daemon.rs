@@ -61,6 +61,12 @@ pub struct DaemonConfig {
     /// (spec: web-dashboard, Desktop workspace in the browser).
     #[serde(default)]
     pub webapp: crate::daemon_dashboard::WebappConfig,
+    /// Where profile configuration comes from (spec:
+    /// configuration-and-profiles, Remote configuration backend);
+    /// `managed.toml`'s `[config_backend]` wins over this one. Boxed:
+    /// daemon futures hold this struct, and it is rarely set.
+    #[serde(default)]
+    pub config_backend: Box<crate::remote::ConfigBackend>,
 }
 
 /// `daemon.toml [gateway]`: the messaging gateway keys every served
@@ -309,7 +315,16 @@ impl RpcListenerConfig {
 /// The runtime names of the binary's pinned runtime index (spec:
 /// distribution-and-update, Managed runtime store); `runtimes.exclude`
 /// accepts only these. `pmt-update` checks its index names the same set.
-pub const RUNTIME_NAMES: &[&str] = &["node", "cpython", "uv", "chromium", "doc-converter"];
+pub const RUNTIME_NAMES: &[&str] = &[
+    "node",
+    "cpython",
+    "uv",
+    "chromium",
+    "doc-converter",
+    "bws",
+    "op",
+    "lightpanda",
+];
 
 /// The `[runtimes]` section (spec: distribution-and-update, Lazy runtime
 /// installation policy; Persistent runtime opt-outs; Download mirrors).
@@ -518,6 +533,9 @@ impl DaemonConfig {
             .local_runtime
             .validate()
             .map_err(|message| parse_error(&message))?;
+        if let Some(problem) = config.config_backend.problem() {
+            return Err(parse_error(&problem));
+        }
         config
             .gateway
             .http
@@ -682,7 +700,7 @@ mod tests {
         assert_eq!(err.exit_code(), 78);
         assert!(
             err.message().contains(
-                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter)"
+                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda)"
             ),
             "{err}"
         );
