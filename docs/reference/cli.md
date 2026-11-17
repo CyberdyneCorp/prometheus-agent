@@ -37,6 +37,7 @@ Commands:
   webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
+  egress       The profile's egress proxy for container and remote sandboxes
   backup       Back up the whole home to a .tar.zst archive, or restore one
   replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
   cache        The model-call cache: stats, prune, clear
@@ -18642,6 +18643,7 @@ Usage: prometheus security [OPTIONS] <COMMAND>
 
 Commands:
   audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  scan   Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
   help   Print this message or the help of the given subcommand(s)
 
 Options:
@@ -18786,6 +18788,65 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus security audit help help
 ```
 
+## `prometheus security scan`
+
+```text
+Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
+
+Usage: prometheus security scan [OPTIONS]
+
+Options:
+      --fail-on <FAIL_ON>
+          Exit 1 when any finding is at least this severe
+
+          Possible values:
+          - low:      Low
+          - moderate: Moderate (OSV's `MEDIUM`)
+          - high:     High
+          - critical: Critical
+
+          [default: critical]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --skip-runtimes
+          Leave out the managed runtimes
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --skip-plugins
+          Leave out plugin manifests and Python-bridge environments
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --skip-mcp
+          Leave out MCP server packages
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus security help`
 
 ```text
@@ -18795,6 +18856,7 @@ Usage: prometheus security help [COMMAND]
 
 Commands:
   audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  scan   Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
   help   Print this message or the help of the given subcommand(s)
 ```
 
@@ -18817,12 +18879,431 @@ Check the hash chain; exit 1 naming the first record that was edited, inserted o
 Usage: prometheus security help audit verify
 ```
 
+## `prometheus security help scan`
+
+```text
+Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
+
+Usage: prometheus security help scan
+```
+
 ## `prometheus security help help`
 
 ```text
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus security help help
+```
+
+## `prometheus egress`
+
+```text
+The profile's egress proxy for container and remote sandboxes
+
+Usage: prometheus egress [OPTIONS] <COMMAND>
+
+Commands:
+  status   Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+  start    Start the proxy (the daemon starts it for profiles that inject)
+  stop     Stop it (forced after 5 seconds)
+  restart  Stop and start it
+  reload   Apply allowlist, denylist and mapping changes without dropping connections
+  rotate   Mint new placeholders for every mapping (running sandboxes get them on their next command)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress status`
+
+```text
+Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+
+Usage: prometheus egress status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --show-tokens
+          Show the placeholders in full
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress start`
+
+```text
+Start the proxy (the daemon starts it for profiles that inject)
+
+Usage: prometheus egress start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress stop`
+
+```text
+Stop it (forced after 5 seconds)
+
+Usage: prometheus egress stop [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress restart`
+
+```text
+Stop and start it
+
+Usage: prometheus egress restart [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress reload`
+
+```text
+Apply allowlist, denylist and mapping changes without dropping connections
+
+Usage: prometheus egress reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress rotate`
+
+```text
+Mint new placeholders for every mapping (running sandboxes get them on their next command)
+
+Usage: prometheus egress rotate [OPTIONS]
+
+Options:
+      --confirm
+          Do not ask to type `rotate`
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress serve`
+
+```text
+Run the proxy in this process (started by `start` and the daemon)
+
+Usage: prometheus egress serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --owned
+          End when stdin closes (the daemon owns the proxy)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus egress help [COMMAND]
+
+Commands:
+  status   Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+  start    Start the proxy (the daemon starts it for profiles that inject)
+  stop     Stop it (forced after 5 seconds)
+  restart  Stop and start it
+  reload   Apply allowlist, denylist and mapping changes without dropping connections
+  rotate   Mint new placeholders for every mapping (running sandboxes get them on their next command)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus egress help status`
+
+```text
+Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+
+Usage: prometheus egress help status
+```
+
+## `prometheus egress help start`
+
+```text
+Start the proxy (the daemon starts it for profiles that inject)
+
+Usage: prometheus egress help start
+```
+
+## `prometheus egress help stop`
+
+```text
+Stop it (forced after 5 seconds)
+
+Usage: prometheus egress help stop
+```
+
+## `prometheus egress help restart`
+
+```text
+Stop and start it
+
+Usage: prometheus egress help restart
+```
+
+## `prometheus egress help reload`
+
+```text
+Apply allowlist, denylist and mapping changes without dropping connections
+
+Usage: prometheus egress help reload
+```
+
+## `prometheus egress help rotate`
+
+```text
+Mint new placeholders for every mapping (running sandboxes get them on their next command)
+
+Usage: prometheus egress help rotate
+```
+
+## `prometheus egress help serve`
+
+```text
+Run the proxy in this process (started by `start` and the daemon)
+
+Usage: prometheus egress help serve
+```
+
+## `prometheus egress help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus egress help help
 ```
 
 ## `prometheus backup`
@@ -36171,6 +36652,7 @@ Commands:
   webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
   vault        The credential vault: logins, cards and addresses the browser fills by handle
   security     Security records of the profile: verify the tamper-evident audit log
+  egress       The profile's egress proxy for container and remote sandboxes
   backup       Back up the whole home to a .tar.zst archive, or restore one
   replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
   cache        The model-call cache: stats, prune, clear
@@ -39022,6 +39504,7 @@ Usage: prometheus help security [COMMAND]
 
 Commands:
   audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  scan   Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
 ```
 
 ## `prometheus help security audit`
@@ -39041,6 +39524,86 @@ Commands:
 Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
 
 Usage: prometheus help security audit verify
+```
+
+## `prometheus help security scan`
+
+```text
+Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
+
+Usage: prometheus help security scan
+```
+
+## `prometheus help egress`
+
+```text
+The profile's egress proxy for container and remote sandboxes
+
+Usage: prometheus help egress [COMMAND]
+
+Commands:
+  status   Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+  start    Start the proxy (the daemon starts it for profiles that inject)
+  stop     Stop it (forced after 5 seconds)
+  restart  Stop and start it
+  reload   Apply allowlist, denylist and mapping changes without dropping connections
+  rotate   Mint new placeholders for every mapping (running sandboxes get them on their next command)
+```
+
+## `prometheus help egress status`
+
+```text
+Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+
+Usage: prometheus help egress status
+```
+
+## `prometheus help egress start`
+
+```text
+Start the proxy (the daemon starts it for profiles that inject)
+
+Usage: prometheus help egress start
+```
+
+## `prometheus help egress stop`
+
+```text
+Stop it (forced after 5 seconds)
+
+Usage: prometheus help egress stop
+```
+
+## `prometheus help egress restart`
+
+```text
+Stop and start it
+
+Usage: prometheus help egress restart
+```
+
+## `prometheus help egress reload`
+
+```text
+Apply allowlist, denylist and mapping changes without dropping connections
+
+Usage: prometheus help egress reload
+```
+
+## `prometheus help egress rotate`
+
+```text
+Mint new placeholders for every mapping (running sandboxes get them on their next command)
+
+Usage: prometheus help egress rotate
+```
+
+## `prometheus help egress serve`
+
+```text
+Run the proxy in this process (started by `start` and the daemon)
+
+Usage: prometheus help egress serve
 ```
 
 ## `prometheus help backup`
@@ -41811,6 +42374,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.snapshots.v1` | `prometheus snapshots list` |
 | `prometheus.profiles.v1` | `prometheus profile list` |
 | `prometheus.profile.v1` | `prometheus profile show` |
+| `prometheus.profile_info.v1` | `prometheus profile info` |
+| `prometheus.egress_status.v1` | `prometheus egress status` |
+| `prometheus.security_scan.v1` | `prometheus security scan` |
 | `prometheus.sessions.v1` | `prometheus sessions list` |
 | `prometheus.session.v1` | `prometheus sessions show` |
 | `prometheus.search.v1` | `prometheus sessions search` |

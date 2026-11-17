@@ -107,6 +107,15 @@ error_codes! {
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");
+    /// The OSV database could not be queried.
+    SECURITY_OSV_UNREACHABLE = ("security.osv_unreachable", Unavailable,
+        "`prometheus security scan` could not reach the OSV database (`security.scan.osv_url`); nothing was checked.");
+    /// The profile's egress proxy is not running.
+    EGRESS_PROXY_DOWN = ("egress.proxy_down", Unavailable,
+        "Credential injection is on and `security.egress.enforce_on_container` is set, but the profile's egress proxy is not running: start it with `prometheus egress start` (or the daemon) before a container or remote session.");
+    /// The egress proxy could not start.
+    EGRESS_PROXY_START = ("egress.proxy_start", Unavailable,
+        "The egress proxy did not start: its listener did not bind within 5 seconds, the credential source is missing mapped secrets, or a proxy of the profile is already running.");
     /// A profile distribution's manifest or content is invalid.
     PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
         "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");

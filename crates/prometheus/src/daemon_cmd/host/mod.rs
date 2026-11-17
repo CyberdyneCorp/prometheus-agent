@@ -155,6 +155,10 @@ struct Profile {
     /// (shared with every factory, whose shared tools read it).
     current: SharedScope,
     store: Arc<Store>,
+    /// The profile's egress proxy, when this daemon started it (it ends
+    /// when this is dropped: its stdin closes).
+    #[allow(dead_code)] // held for its lifetime only
+    egress_proxy: Mutex<Option<std::process::Child>>,
     /// What the reloads did, for `daemon status`.
     config: Mutex<reload::State>,
     /// Held across a whole config re-read, so a plugin reload that finds
@@ -223,6 +227,22 @@ fn session_span(profile: &str, session_id: &str) -> tracing::Span {
     )
 }
 
+/// The daemon owns the egress proxy of a profile that injects
+/// credentials (spec: security-boundaries, Egress proxy operation and
+/// status): it ends when the daemon drops the child (its stdin closes).
+fn own_egress_proxy(scope: &ProfileScope) -> Option<std::process::Child> {
+    if !crate::egress::gateway::covers(scope) || crate::egress::gateway::running(scope).is_some() {
+        return None;
+    }
+    match crate::egress::gateway::start(scope, true) {
+        Ok((_, child)) => Some(child),
+        Err(err) => {
+            tracing::error!(profile = %scope.name(), "{}", err.message());
+            None
+        }
+    }
+}
+
 fn busy(id: SessionId) -> Error {
     Error::new(
         &codes::SESSION_BUSY,
@@ -235,6 +255,7 @@ impl Profile {
     fn open(scope: ProfileScope) -> Result<Arc<Self>, Error> {
         let store = Arc::new(Store::open(&scope)?);
         crate::chat::session::backend::reap_orphans_in_background(&scope);
+        let egress_proxy = Mutex::new(own_egress_proxy(&scope));
         // Children a previous daemon left running end `interrupted`; their
         // completions are owed to their sessions.
         pmt_delegation::host::deliver::recover(&store);
@@ -244,6 +265,7 @@ impl Profile {
             config: Mutex::new(state),
             rereading: tokio::sync::Mutex::default(),
             store,
+            egress_proxy,
             factories: Mutex::default(),
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),

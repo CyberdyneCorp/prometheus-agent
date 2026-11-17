@@ -326,6 +326,20 @@ asks you to type the handle (or `--yes`). `vault sources [--enable|
 login sources (`vault.onepassword.enabled`, `vault.bitwarden.enabled`),
 which this build does not read yet.
 
+When a password-manager source is enabled and its CLI is installed (`op`
+from the runtime store or `PATH`, `bw` from `PATH`), [`browser_vault`](../reference/tools.md#browser_vault) lists
+it in `sources` with its state. A locked source is unlocked for the session
+with `unlock(source)`: you type the master password into a masked prompt,
+the CLI gets it through its non-interactive channel (stdin for `op signin
+--raw`, a child-only variable for `bw unlock --passwordenv`) and only the
+session token it returns is kept in memory, until 30 minutes pass without
+use. Its logins then appear in `list` as `op_<id>` / `bw_<id>` (metadata
+only) and fill only on the exact websites saved on the item (their
+origins, no subdomains). A session nobody can answer (cron, webhook, API,
+single query) sees a locked source as `unavailable_in_this_session` and is
+never prompted; 1Password with a stored service-account token
+(`secrets.onepassword.access_token_secret`) needs no unlock.
+
 The vault is `<profile>/vault/vault.enc` (XChaCha20-Poly1305, 0600). Its key
 is `<profile>/vault/vault.key` (0600) with `vault.key_storage = "file"`
 (default), or an OS keychain entry named in `vault.keyref` with

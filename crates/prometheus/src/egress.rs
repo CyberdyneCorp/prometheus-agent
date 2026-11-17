@@ -18,7 +18,9 @@ use pmt_core::error::{Error, codes};
 use pmt_net::DestinationPolicy;
 use pmt_net::egress::{Allowed, Denial, Denylist, HostPolicy, Mode, Observer};
 
+pub mod gateway;
 pub mod injection;
+pub mod mappings;
 
 /// The pmt-net mode of a configured mode.
 #[must_use]

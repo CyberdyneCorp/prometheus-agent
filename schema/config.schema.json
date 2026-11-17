@@ -2171,6 +2171,21 @@
         }
       ]
     },
+    "CredentialSource": {
+      "description": "Where the egress proxy reads injected credentials.",
+      "oneOf": [
+        {
+          "const": "store",
+          "description": "The profile's secrets store.",
+          "type": "string"
+        },
+        {
+          "const": "bitwarden",
+          "description": "Bitwarden Secrets Manager (`secrets.bitwarden`), fetched on every\nproxy start.",
+          "type": "string"
+        }
+      ]
+    },
     "CronConfig": {
       "additionalProperties": false,
       "description": "The `[cron]` section: the profile time zone (also the zone of daily\nbudgets and `usage --by day`) and the scheduled-job settings.",
@@ -3110,10 +3125,20 @@
           "description": "Allow private destinations without a session grant.",
           "type": "boolean"
         },
+        "allow_store_fallback": {
+          "default": false,
+          "description": "With `credential_source = \"bitwarden\"`, take a secret missing from\nthe project from the store instead of refusing to start.",
+          "type": "boolean"
+        },
         "credential_injection": {
           "default": false,
           "description": "Sandboxed children (a session's processes, stdio MCP servers,\nplugin sidecars) hold a placeholder, fresh per session or start,\ninstead of each secret mapped in `inject`; their egress proxy puts the\nreal value in only on TLS requests to the mapped hosts and refuses\nthe placeholder anywhere else (`credential_misdirected`).",
           "type": "boolean"
+        },
+        "credential_source": {
+          "$ref": "#/$defs/CredentialSource",
+          "default": "store",
+          "description": "Where the egress proxy reads the mapped secrets: the profile's\nsecrets store, or Bitwarden Secrets Manager (refetched every start)."
         },
         "deny": {
           "default": [],
@@ -3131,6 +3156,11 @@
           },
           "type": "array"
         },
+        "enforce_on_container": {
+          "default": true,
+          "description": "Container and remote sandboxes refuse to start while credential\ninjection is on but the egress proxy is down.",
+          "type": "boolean"
+        },
         "fake_ip_ranges": {
           "default": [],
           "description": "CIDR ranges a local TUN proxy answers with (treated as public).",
@@ -3147,13 +3177,29 @@
             "type": "array"
           },
           "default": {},
-          "description": "Secret name to the host patterns (`host`, `host:port`,\n`*.suffix`) its value may be sent to, under `credential_injection`.",
+          "description": "Secret name to the host patterns (`host`, `host:port`,\n`*.suffix`) its value may be sent to, under `credential_injection`.\nFor the egress proxy of container and remote sandboxes, an empty\nlist means the built-in provider hosts plus `inject_extra_hosts`.",
           "type": "object"
+        },
+        "inject_extra_hosts": {
+          "default": [],
+          "description": "Hosts added to the built-in provider hosts injected credentials of\ncontainer and remote sandboxes may go to.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "mode": {
           "$ref": "#/$defs/EgressMode",
           "default": "public",
           "description": "Which hosts tools, sandboxed children, plugins and browsers may\nreach: any public address (`public`), only the `allow` patterns\n(`allowlist`) or nothing (`none`). A session can narrow or extend\nit (`chat --egress`, `/egress`, `egress.set`)."
+        },
+        "proxy_port": {
+          "default": 9090,
+          "description": "The egress proxy's container bridge listener port (`prometheus\negress status` shows it).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -9293,6 +9339,18 @@
         }
       ]
     },
+    "ScanConfig": {
+      "additionalProperties": false,
+      "description": "The `[security.scan]` section (spec: security-boundaries, Dependency\nvulnerability scan).",
+      "properties": {
+        "osv_url": {
+          "default": "https://api.osv.dev",
+          "description": "The OSV API `security scan` queries (a mirror may stand in); it is\ncontacted only when the command runs.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "ScoreSchema": {
       "anyOf": [
         {
@@ -9459,12 +9517,17 @@
           "default": {
             "allow": [],
             "allow_private": false,
+            "allow_store_fallback": false,
             "credential_injection": false,
+            "credential_source": "store",
             "deny": [],
             "deny_files": [],
+            "enforce_on_container": true,
             "fake_ip_ranges": [],
             "inject": {},
-            "mode": "public"
+            "inject_extra_hosts": [],
+            "mode": "public",
+            "proxy_port": 9090
           },
           "description": "Outbound network policy."
         },
@@ -9493,6 +9556,13 @@
             "mode": "enforce"
           },
           "description": "OS sandbox."
+        },
+        "scan": {
+          "$ref": "#/$defs/ScanConfig",
+          "default": {
+            "osv_url": "https://api.osv.dev"
+          },
+          "description": "`prometheus security scan`."
         }
       },
       "type": "object",
@@ -13413,12 +13483,17 @@
         "egress": {
           "allow": [],
           "allow_private": false,
+          "allow_store_fallback": false,
           "credential_injection": false,
+          "credential_source": "store",
           "deny": [],
           "deny_files": [],
+          "enforce_on_container": true,
           "fake_ip_ranges": [],
           "inject": {},
-          "mode": "public"
+          "inject_extra_hosts": [],
+          "mode": "public",
+          "proxy_port": 9090
         },
         "protected_instruction_extra_patterns": [],
         "protected_instruction_files": true,
@@ -13426,6 +13501,9 @@
         "sandbox": {
           "allow_degraded": [],
           "mode": "enforce"
+        },
+        "scan": {
+          "osv_url": "https://api.osv.dev"
         }
       },
       "description": "Capabilities, sandbox, egress and redaction."

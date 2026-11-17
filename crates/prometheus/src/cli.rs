@@ -241,6 +241,12 @@ pub enum Command {
         #[command(subcommand)]
         command: SecurityCommand,
     },
+    /// The profile's egress proxy for container and remote sandboxes.
+    Egress {
+        /// The egress subcommand.
+        #[command(subcommand)]
+        command: crate::egress_cmd::EgressCommand,
+    },
     /// Back up the whole home to a .tar.zst archive, or restore one.
     Backup {
         /// The backup subcommand.
@@ -1057,6 +1063,9 @@ pub enum SecurityCommand {
         #[command(subcommand)]
         command: AuditCommand,
     },
+    /// Check runtimes, bridge environments, plugin and MCP packages
+    /// against the OSV vulnerability database.
+    Scan(crate::security_scan::ScanArgs),
 }
 
 /// `prometheus security audit` subcommands.

@@ -425,6 +425,26 @@ pub struct SecurityConfig {
     /// Supply-chain advisory ids whose startup warning is silenced
     /// (`prometheus doctor --ack <id>`); `doctor security` still shows them.
     pub acked_advisories: Vec<String>,
+    /// `prometheus security scan`.
+    pub scan: ScanConfig,
+}
+
+/// The `[security.scan]` section (spec: security-boundaries, Dependency
+/// vulnerability scan).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ScanConfig {
+    /// The OSV API `security scan` queries (a mirror may stand in); it is
+    /// contacted only when the command runs.
+    pub osv_url: String,
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            osv_url: "https://api.osv.dev".to_owned(),
+        }
+    }
 }
 
 impl Default for SecurityConfig {
@@ -437,6 +457,7 @@ impl Default for SecurityConfig {
             protected_instruction_files: true,
             protected_instruction_extra_patterns: Vec::new(),
             acked_advisories: Vec::new(),
+            scan: ScanConfig::default(),
         }
     }
 }
@@ -546,8 +567,9 @@ impl EgressMode {
 }
 
 /// The `[security.egress]` section.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent switches of one config section
 pub struct EgressConfig {
     /// Which hosts tools, sandboxed children, plugins and browsers may
     /// reach: any public address (`public`), only the `allow` patterns
@@ -575,7 +597,56 @@ pub struct EgressConfig {
     pub credential_injection: bool,
     /// Secret name to the host patterns (`host`, `host:port`,
     /// `*.suffix`) its value may be sent to, under `credential_injection`.
+    /// For the egress proxy of container and remote sandboxes, an empty
+    /// list means the built-in provider hosts plus `inject_extra_hosts`.
     pub inject: std::collections::BTreeMap<String, Vec<String>>,
+    /// Hosts added to the built-in provider hosts injected credentials of
+    /// container and remote sandboxes may go to.
+    pub inject_extra_hosts: Vec<String>,
+    /// The egress proxy's container bridge listener port (`prometheus
+    /// egress status` shows it).
+    pub proxy_port: u16,
+    /// Container and remote sandboxes refuse to start while credential
+    /// injection is on but the egress proxy is down.
+    pub enforce_on_container: bool,
+    /// Where the egress proxy reads the mapped secrets: the profile's
+    /// secrets store, or Bitwarden Secrets Manager (refetched every start).
+    pub credential_source: CredentialSource,
+    /// With `credential_source = "bitwarden"`, take a secret missing from
+    /// the project from the store instead of refusing to start.
+    pub allow_store_fallback: bool,
+}
+
+impl Default for EgressConfig {
+    fn default() -> Self {
+        Self {
+            mode: EgressMode::default(),
+            allow: Vec::new(),
+            allow_private: false,
+            fake_ip_ranges: Vec::new(),
+            deny: Vec::new(),
+            deny_files: Vec::new(),
+            credential_injection: false,
+            inject: std::collections::BTreeMap::new(),
+            inject_extra_hosts: Vec::new(),
+            proxy_port: 9090,
+            enforce_on_container: true,
+            credential_source: CredentialSource::Store,
+            allow_store_fallback: false,
+        }
+    }
+}
+
+/// Where the egress proxy reads injected credentials.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialSource {
+    /// The profile's secrets store.
+    #[default]
+    Store,
+    /// Bitwarden Secrets Manager (`secrets.bitwarden`), fetched on every
+    /// proxy start.
+    Bitwarden,
 }
 
 /// The `[network]` section.

@@ -19,6 +19,7 @@ mod connect;
 mod dispatcher;
 mod isolation;
 mod local_options;
+mod managers;
 mod real_profile;
 mod support;
 mod vault;

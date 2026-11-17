@@ -142,7 +142,7 @@ impl Repl {
                 let Some(live) = self.live.take() else {
                     return Flow::Continue;
                 };
-                self.immediate(name, args, &live).await;
+                Box::pin(self.immediate(name, args, &live)).await;
                 self.live = Some(live);
                 if name == "plugins" {
                     // A reload replaces the plugins' slash commands at once.

@@ -15,11 +15,24 @@ use pmt_sandbox::container::{Container, Flavor};
 use super::{EnvVar, Transport};
 use crate::terminal::spawn::SpawnError;
 
+/// Variables computed again for every command, winning over the
+/// session's: the egress proxy's placeholders, which `prometheus egress
+/// rotate` may replace while the session runs.
+pub type EnvOverrides = Arc<dyn Fn() -> Vec<(String, String)> + Send + Sync>;
+
 /// Exec into one container.
-#[derive(Debug)]
 pub struct ContainerTransport {
     container: Arc<Container>,
     user: std::sync::OnceLock<usize>,
+    overrides: Option<EnvOverrides>,
+}
+
+impl std::fmt::Debug for ContainerTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ContainerTransport")
+            .field("container", &self.container)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ContainerTransport {
@@ -29,7 +42,15 @@ impl ContainerTransport {
         Self {
             container,
             user: std::sync::OnceLock::new(),
+            overrides: None,
         }
+    }
+
+    /// Recomputes `overrides` before every command.
+    #[must_use]
+    pub fn with_overrides(mut self, overrides: EnvOverrides) -> Self {
+        self.overrides = Some(overrides);
+        self
     }
 
     /// Registers the session's activity with the container's idle reaper.
@@ -69,10 +90,15 @@ impl Transport for ContainerTransport {
         if stdin {
             command.arg("--interactive");
         }
-        for var in env {
+        let overrides = self.overrides.as_ref().map(|f| f()).unwrap_or_default();
+        let overridden = |name: &str| overrides.iter().any(|(n, _)| n == name);
+        for var in env.iter().filter(|v| !overridden(&v.name)) {
             command
                 .arg(format!("--env={}", var.name))
                 .env(&var.name, &var.value);
+        }
+        for (name, value) in &overrides {
+            command.arg(format!("--env={name}")).env(name, value);
         }
         command.arg(self.container.name()).args(argv);
         Ok(command)

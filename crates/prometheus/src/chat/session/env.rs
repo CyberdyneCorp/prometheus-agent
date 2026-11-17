@@ -336,7 +336,57 @@ fn vault(
         storage: inputs.scope.config().vault.key_storage,
         browser: Arc::clone(browser),
         prompt: inputs.vault_prompt.clone(),
+        managers: password_managers(inputs),
     })
+}
+
+/// The enabled password-manager login sources whose CLI is installed
+/// (`op` from the runtime store or `PATH`, `bw` from `PATH`); 1Password
+/// with a stored service-account token needs no unlock.
+fn password_managers(inputs: &EnvInputs<'_>) -> Vec<Arc<pmt_tools::browser::managers::Source>> {
+    use pmt_tools::browser::managers::{Manager, Source};
+    let config = inputs.scope.config();
+    let mut found = Vec::new();
+    if config.vault.onepassword.enabled
+        && let Some(program) = cli(inputs, "op")
+    {
+        let token_name = &config.secrets.onepassword.access_token_secret.0;
+        let service = inputs
+            .scope
+            .secrets()
+            .store()
+            .get(token_name)
+            .ok()
+            .flatten();
+        found.push(Arc::new(Source::new(
+            Manager::OnePassword,
+            program,
+            service,
+        )));
+    }
+    if config.vault.bitwarden.enabled
+        && let Some(program) = cli(inputs, "bw")
+    {
+        found.push(Arc::new(Source::new(Manager::Bitwarden, program, None)));
+    }
+    found
+}
+
+/// A password-manager CLI: the managed install, else the first on the
+/// launch `PATH`.
+fn cli(inputs: &EnvInputs<'_>, name: &str) -> Option<PathBuf> {
+    let managed = pmt_config::secrets::external::program(inputs.scope.home(), name);
+    if managed.is_absolute() {
+        return Some(managed);
+    }
+    let exe = if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    };
+    std::env::split_paths(inputs.launch.inherited("PATH")?)
+        .map(|dir| dir.join(&exe))
+        .find(|candidate| candidate.is_file())
 }
 
 /// The approval previewer: the session's shell (POSIX shells only: the

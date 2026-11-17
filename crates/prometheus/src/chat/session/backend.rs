@@ -145,6 +145,11 @@ fn try_select(
     let backend = registry.select(&terminal.backend)?;
     let descriptor = backend.descriptor(terminal);
     let mut held = None;
+    if !matches!(backend.kind, Kind::Local | Kind::Reserved(_)) {
+        // Container and remote sandboxes never start with real credentials
+        // while the egress proxy is down.
+        crate::egress::gateway::require_running(scope)?;
+    }
     let (place, transport): (Place, Option<Arc<dyn Transport>>) = match &backend.kind {
         Kind::Local | Kind::Reserved(_) => return Ok(None),
         Kind::Container => {
@@ -292,9 +297,46 @@ fn container(
     // Prometheus home (spec: skills, Skill credential file passthrough).
     spec.volumes
         .push(super::credentials::volume(scope, &spec.name()));
-    Ok(Arc::new(ContainerTransport::new(
-        Pool::process().container(spec),
-    )))
+    let cover = crate::egress::gateway::container_cover(scope, spec.runtime.flavor())?;
+    if let Some(cover) = &cover {
+        egress_mounts(&mut spec, cover);
+    }
+    let transport = ContainerTransport::new(Pool::process().container(spec));
+    Ok(Arc::new(match cover {
+        Some(cover) => transport.with_overrides(egress_env(cover)),
+        None => transport,
+    }))
+}
+
+/// The egress CA and bundle, read-only, and the host alias of the proxy
+/// (spec: security-boundaries, Egress proxy coverage of containers and
+/// remote sandboxes).
+fn egress_mounts(spec: &mut ContainerSpec, cover: &crate::egress::gateway::Cover) {
+    use crate::egress::gateway::{CONTAINER_BUNDLE, CONTAINER_CA};
+    for (host, container) in [
+        (&cover.bundle, CONTAINER_BUNDLE),
+        (&cover.ca_cert, CONTAINER_CA),
+    ] {
+        spec.volumes.push(options::Volume {
+            host: host.clone(),
+            container: container.to_owned(),
+            read_only: true,
+        });
+    }
+    spec.config.extra_args.extend(cover.add_host.clone());
+}
+
+/// The variables of every command: the proxy, the CA and the current
+/// placeholders (re-read so a rotation reaches the next command).
+fn egress_env(
+    cover: crate::egress::gateway::Cover,
+) -> pmt_tools::terminal::remote::container::EnvOverrides {
+    use crate::egress::gateway::{CONTAINER_BUNDLE, CONTAINER_CA};
+    Arc::new(move || {
+        let mut vars = cover.env(CONTAINER_BUNDLE, CONTAINER_CA);
+        vars.extend(crate::egress::mappings::read(&cover.mappings));
+        vars
+    })
 }
 
 /// The profile's singularity instance (shared by its sessions).

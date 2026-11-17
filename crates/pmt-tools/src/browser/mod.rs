@@ -29,6 +29,7 @@ pub mod connect;
 pub mod exec;
 pub mod launch;
 mod local;
+pub mod managers;
 pub mod options;
 pub mod profile;
 pub mod real_profile;

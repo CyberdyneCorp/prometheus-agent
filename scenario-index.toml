@@ -5002,3 +5002,18 @@ capabilities = [
 
 [configuration-and-profiles."External secret source commands"]
 "Invalid rotated token refused" = ["crates/prometheus/tests/secret_sources_cli.rs::invalid_rotated_token_refused", "crates/prometheus/tests/secret_sources_cli.rs::bitwarden_status_shows_names_and_sync_writes_only_with_apply", "crates/prometheus/tests/secret_sources_cli.rs::onepassword_setup_map_and_sync"]
+
+[security-boundaries."Egress proxy operation and status"]
+"Proxy down with enforcement" = ["crates/prometheus/tests/egress_proxy.rs::proxy_down_with_enforcement", "crates/prometheus/tests/egress_proxy.rs::start_status_rotate_reload_and_stop"]
+
+[security-boundaries."Egress proxy coverage of containers and remote sandboxes"]
+"CA inside the container" = { tests = ["crates/prometheus/tests/egress_proxy.rs::ca_inside_the_container", "crates/prometheus/tests/egress_proxy.rs::the_proxy_injects_the_real_key_only_toward_the_mapped_host"], note = "a real container session (curl image) through the proxy: curl verifies TLS against the mounted bundle (CURL_CA_BUNDLE, the same contract python requests uses via REQUESTS_CA_BUNDLE); skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+
+[security-boundaries."Egress credential source and placeholder rotation"]
+"Bitwarden missing a secret" = ["crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"]
+
+[security-boundaries."Password manager login sources"]
+"Headless session" = ["crates/pmt-tools/tests/browser/managers.rs::headless_session", "crates/pmt-tools/tests/browser/managers.rs::an_unlocked_manager_login_fills_only_on_its_saved_website"]
+
+[security-boundaries."Dependency vulnerability scan"]
+"CI gate" = ["crates/prometheus/tests/security_scan.rs::ci_gate", "crates/prometheus/tests/security_scan.rs::unreachable_osv_exits_69"]

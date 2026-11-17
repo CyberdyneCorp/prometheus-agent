@@ -131,12 +131,12 @@ pub use models::{
     WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig, EgressMode,
-    GatewayHealthConfig, HealthListenerConfig, LogLevel, LoggingConfig, MetricsEndpointConfig,
-    NetworkConfig, ObservabilityConfig, OtelConfig, OtelProtocol, PrivacyConfig, SandboxConfig,
-    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
-    WorktreesConfig,
+    BudgetsConfig, CredentialSource, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig,
+    EgressMode, GatewayHealthConfig, HealthListenerConfig, LogLevel, LoggingConfig,
+    MetricsEndpointConfig, NetworkConfig, ObservabilityConfig, OtelConfig, OtelProtocol,
+    PrivacyConfig, SandboxConfig, SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig,
+    SecurityConfig, TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage,
+    VaultSourceConfig, WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,

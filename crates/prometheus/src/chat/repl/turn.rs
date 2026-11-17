@@ -276,7 +276,7 @@ impl Repl {
                 if let Resolution::Builtin { command, args } =
                     self.registry.resolve(typed, Surface::Cli)
                 {
-                    self.immediate(command.name, &args, session).await;
+                    Box::pin(self.immediate(command.name, &args, session)).await;
                 }
             }
         }

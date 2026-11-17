@@ -51,9 +51,10 @@ pub fn for_children(scope: &ProfileScope) -> Result<Option<ChildInjection>, Erro
     let secrets = scope.secrets();
     let mappings: Vec<Mapping> = egress
         .inject
-        .iter()
-        .filter_map(|(name, hosts)| {
+        .keys()
+        .filter_map(|name| {
             let value = secrets.resolve(name).ok()?;
+            let hosts = pmt_config::egress_check::inject_hosts(config, name);
             Some(Mapping {
                 name: name.clone(),
                 placeholder: placeholder(),

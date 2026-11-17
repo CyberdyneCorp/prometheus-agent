@@ -281,7 +281,7 @@ impl Run<'_> {
                 "restoring a snapshot replaces the store the gateway daemon serves; stop it with 'prometheus daemon stop' and restore from the line interface",
             ),
             "snapshot" => done(crate::slash_handlers::snapshot(&self.profile.scope(), args)),
-            _ => self.shared(name, args).await,
+            _ => Box::pin(self.shared(name, args)).await,
         }
     }
 

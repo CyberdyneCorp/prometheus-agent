@@ -253,7 +253,12 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             text
         }),
         "yolo" => Ok(yolo(&ctx.strings(), live, args)),
-        "egress" => egress(&ctx.strings(), live, args),
+        "egress" => egress(&ctx.strings(), live, args).map(|text| {
+            match crate::egress_cmd::proxy_line(ctx.scope) {
+                Some(proxy) => format!("{text}\n{proxy}"),
+                None => text,
+            }
+        }),
         "config" => config(&ctx.strings(), ctx.scope, args),
         _ => return None,
     })

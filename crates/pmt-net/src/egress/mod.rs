@@ -151,7 +151,20 @@ pub struct Proxy {
     /// For [`Proxy::attacher`] (Unix only).
     #[cfg_attr(not(unix), allow(dead_code))]
     runtime: tokio::runtime::Handle,
-    rules: Arc<Rules>,
+    rules: Shared,
+}
+
+/// The rules a proxy serves: replaced in place by [`Proxy::reload`], read
+/// once per accepted connection (a connection keeps the rules it started
+/// with, so a reload drops nothing).
+type Shared = Arc<std::sync::RwLock<Arc<Rules>>>;
+
+fn current(shared: &Shared) -> Arc<Rules> {
+    Arc::clone(
+        &shared
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
 }
 
 impl Proxy {
@@ -161,7 +174,17 @@ impl Proxy {
     ///
     /// When the listener cannot bind or the thread cannot start.
     pub fn start(rules: Rules) -> io::Result<Self> {
-        let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+        Self::start_at(rules, SocketAddr::from(([127, 0, 0, 1], 0)))
+    }
+
+    /// Starts a proxy listening on `addr` (a container bridge listener
+    /// binds a fixed port).
+    ///
+    /// # Errors
+    ///
+    /// When the listener cannot bind or the thread cannot start.
+    pub fn start_at(rules: Rules, addr: SocketAddr) -> io::Result<Self> {
+        let listener = std::net::TcpListener::bind(addr)?;
         listener.set_nonblocking(true)?;
         let addr = listener.local_addr()?;
         let denied = Arc::new(AtomicU64::new(0));
@@ -171,7 +194,7 @@ impl Proxy {
             .enable_all()
             .build()?;
         let handle = runtime.handle().clone();
-        let rules = Arc::new(rules);
+        let rules: Shared = Arc::new(std::sync::RwLock::new(Arc::new(rules)));
         let served = Arc::clone(&rules);
         std::thread::Builder::new()
             .name("egress-proxy".into())
@@ -214,6 +237,16 @@ impl Proxy {
         self.addr
     }
 
+    /// Serves new connections with `rules` from now on (allowlist,
+    /// denylist and credential mapping changes); open connections finish
+    /// under the rules they started with.
+    pub fn reload(&self, rules: Rules) {
+        *self
+            .rules
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::new(rules);
+    }
+
     /// `http://127.0.0.1:<port>`, for `HTTP_PROXY`/`HTTPS_PROXY`.
     #[must_use]
     pub fn url(&self) -> String {
@@ -240,7 +273,7 @@ impl Drop for Proxy {
 #[derive(Debug, Clone)]
 pub struct Attacher {
     runtime: tokio::runtime::Handle,
-    rules: Arc<Rules>,
+    rules: Shared,
     denied: Arc<AtomicU64>,
 }
 
@@ -276,12 +309,12 @@ async fn closed(mut alive: tokio::net::UnixStream) {
     while matches!(alive.read(&mut byte).await, Ok(n) if n > 0) {}
 }
 
-async fn accept(listener: TcpListener, rules: Arc<Rules>, denied: Arc<AtomicU64>) {
+async fn accept(listener: TcpListener, shared: Shared, denied: Arc<AtomicU64>) {
     loop {
         let Ok((stream, _)) = listener.accept().await else {
             continue;
         };
-        let (rules, denied) = (Arc::clone(&rules), Arc::clone(&denied));
+        let (rules, denied) = (current(&shared), Arc::clone(&denied));
         pmt_core::spawn::spawn(async move {
             if let Err(Some(denial)) = serve(stream, &rules).await {
                 denied.fetch_add(1, Ordering::Relaxed);
