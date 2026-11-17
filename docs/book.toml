@@ -22,3 +22,6 @@ create-missing = false
 [output.html.search.chapter]
 "reference/rpc.md" = { enable = false }
 "reference/error-codes.md" = { enable = false }
+# The OpenBot study is long research notes, not a guide; leaving it out keeps
+# the index under the limit.
+"research/openbot.md" = { enable = false }
