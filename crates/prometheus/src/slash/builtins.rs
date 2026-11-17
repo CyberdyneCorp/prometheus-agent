@@ -587,6 +587,20 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "codex-runtime",
+        &["codex_runtime"],
+        Model,
+        "slash.desc.codex_runtime",
+        &[arg(
+            "mode",
+            ArgKind::Choice(&["auto", "codex_app_server", "on", "off", "status"]),
+            false,
+        )],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::NextSession,
+    ),
+    command(
         "personality",
         &[],
         Model,

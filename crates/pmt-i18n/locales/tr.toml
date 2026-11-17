@@ -409,6 +409,7 @@ local = "Yerel modeller: /local use <model> bu oturumu llamacpp/<model>'e geçir
 provider = "Sağlayıcı eklentisi ve [providers.*] değişikliklerini bu oturuma uygular (--now); yoksa yeni oturumlara ulaşır"
 reasoning = "Akıl yürütme düzeyini gösterir ya da ayarlar"
 fast = "Hızlı modu gösterir ya da ayarlar: sağlayıcının öncelik katmanı (--global agent.fast_mode'u kaydeder)"
+codex_runtime = "OpenAI sağlayıcılarında turları kimin çalıştıracağını gösterir ya da ayarlar: Prometheus veya Codex uygulama sunucusu (sonraki oturumdan itibaren)"
 personality = "Kişiliği gösterir ya da ayarlar"
 tools = "Araçları listeler ya da bir araç setini açar/kapatır"
 plugins = "Eklentileri listeler ya da yeniden yükler (--now yoksa araçlar ve istem bölümleri bir sonraki oturumda)"

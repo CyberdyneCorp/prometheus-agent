@@ -92,12 +92,12 @@ pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
     DedupConfig, DeliveryConfig, DmMode, EffectiveBots, EffectiveBusy, EffectiveDisplay,
     EffectiveGroups, GatewayBackground, GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay,
-    GatewayGroups, GatewayIdentity, GatewayQuickCommands, GatewaySessions, HomeChannel, McpEvents,
-    MediaConfig, MessageTimestamps, NotificationsConfig, OutboxConfig, PhraseMode, PlatformBots,
-    PlatformBusy, PlatformConfig, PlatformDisplay, PlatformGroups, PlatformSessions,
-    PlatformStreaming, PolicyChatType, PolicyFacts, RateLimitConfig, RateLimitOverride,
-    ReplyToMode, ShutdownConfig, StatusPhrases, StreamTransport, StreamingConfig, UnauthorizedDm,
-    VoiceConfig, VoiceReplyMode, WebhookRoute, resolve_policy,
+    GatewayGroups, GatewayIdentity, GatewayProxy, GatewayQuickCommands, GatewaySessions,
+    HomeChannel, McpEvents, MediaConfig, MessageTimestamps, NotificationsConfig, OutboxConfig,
+    PhraseMode, PlatformBots, PlatformBusy, PlatformConfig, PlatformDisplay, PlatformGroups,
+    PlatformSessions, PlatformStreaming, PolicyChatType, PolicyFacts, RateLimitConfig,
+    RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases, StreamTransport,
+    StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute, resolve_policy,
 };
 pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
 pub use hooks::{HooksConfig, OutboundHook, ShellHook};
@@ -127,8 +127,8 @@ pub use moa::{
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
     LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
-    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, RoutingPolicy,
-    WireFormat,
+    OpenaiRuntime, PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig,
+    RoutingPolicy, WireFormat,
 };
 pub use operations::{
     BudgetsConfig, CredentialSource, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig,

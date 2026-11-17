@@ -21,6 +21,7 @@ pub mod calls;
 pub mod canonical;
 pub mod capability;
 pub mod classify;
+pub mod codex;
 pub mod cost;
 pub mod datause;
 pub mod descriptor;

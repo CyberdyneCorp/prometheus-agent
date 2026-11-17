@@ -37,6 +37,7 @@ mod routes;
 mod runs;
 mod session;
 mod sessions_api;
+pub mod subscription_proxy;
 mod turn;
 
 use std::net::SocketAddr;

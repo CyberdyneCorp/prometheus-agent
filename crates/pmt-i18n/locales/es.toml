@@ -409,6 +409,7 @@ local = "Modelos locales: /local use <modelo> cambia esta sesión a llamacpp/<mo
 provider = "Aplica a esta sesión los cambios de plugins de proveedor y [providers.*] (--now); si no, llegan a las sesiones nuevas"
 reasoning = "Muestra o establece el esfuerzo de razonamiento"
 fast = "Muestra o establece el modo rápido: el nivel prioritario del proveedor (--global guarda agent.fast_mode)"
+codex_runtime = "Muestra o establece quién ejecuta los turnos en los proveedores de OpenAI: Prometheus o el servidor de aplicaciones de Codex (desde la próxima sesión)"
 personality = "Muestra o establece la personalidad"
 tools = "Lista las herramientas, o activa/desactiva un conjunto"
 plugins = "Lista los plugins, o los recarga (herramientas y secciones del prompt en la próxima sesión salvo --now)"

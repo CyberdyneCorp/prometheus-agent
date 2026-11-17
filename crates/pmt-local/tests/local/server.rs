@@ -44,6 +44,7 @@ fn stub_model(home: &Path, id: &str) {
             quant: None,
             context: 65_536,
             context_max: None,
+            placement: None,
             added_at: String::new(),
         })
         .unwrap();
@@ -129,7 +130,7 @@ async fn an_idle_model_is_unloaded_and_reloaded_by_the_next_request() {
     );
     let loads = stub_log(home.path())
         .iter()
-        .filter(|l| *l == "load qwen-x")
+        .filter(|l| l.starts_with("load qwen-x"))
         .count();
     assert_eq!(
         loads,

@@ -20,6 +20,7 @@ pub mod events;
 mod exit;
 pub mod fast;
 mod finish;
+pub mod growth;
 mod guardrails;
 mod guards;
 mod hints;
@@ -30,6 +31,7 @@ mod journal;
 pub mod lease;
 pub mod model;
 mod observe;
+mod performed;
 mod recall;
 mod recovery;
 pub mod repair;
@@ -188,6 +190,9 @@ pub struct AgentSetup {
     /// The auxiliary `compression` route; `None` compacts with the
     /// deterministic fallback summary.
     pub summarizer: Option<Arc<dyn Summarizer>>,
+    /// Grows a local model's window before compressing; `None` always
+    /// compresses.
+    pub growth: Option<Arc<dyn growth::WindowGrowth>>,
     /// Re-reads the prompt inputs that live on disk (memory snapshot,
     /// skills index, plugin sections) before every prompt rebuild, so a
     /// compaction or `--now` rebuild sees the current state.
@@ -361,6 +366,7 @@ impl AgentSetup {
             redactor: Redactor::default(),
             max_iterations: None,
             summarizer: None,
+            growth: None,
             refresh_prompt: None,
             memory: None,
             turn_hooks: None,

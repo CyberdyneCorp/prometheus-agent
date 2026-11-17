@@ -1309,6 +1309,12 @@ error_codes! {
     /// No peer gateway (or agent on it) has the name.
     PEER_NOT_FOUND = ("peer.not_found", NotFound,
         "No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers.");
+    /// The subscription proxy's provider has no usable sign-in.
+    PROXY_NOT_LOGGED_IN = ("proxy.not_logged_in", Auth,
+        "The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`.");
+    /// The subscription proxy was asked to listen beyond loopback.
+    PROXY_LAN_REFUSED = ("proxy.lan_refused", PermissionDenied,
+        "`prometheus gateway proxy start --host` names a non-loopback address without `--allow-lan`; with it, LAN clients must present the `PMT_PROXY_CLIENT_KEY` bearer.");
     /// The peer gateway could not be reached.
     PEER_UNREACHABLE = ("peer.unreachable", Unavailable,
         "The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right.");

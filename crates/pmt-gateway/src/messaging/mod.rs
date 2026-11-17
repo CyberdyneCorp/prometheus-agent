@@ -83,6 +83,7 @@ pub mod target;
 pub mod tasks;
 mod topics;
 mod typing;
+mod upstream;
 pub mod voice;
 pub mod ws;
 

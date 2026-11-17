@@ -241,6 +241,14 @@ pub enum Command {
         #[command(subcommand)]
         command: SecurityCommand,
     },
+    /// Who runs turns on the OpenAI providers: Prometheus, or the Codex
+    /// app-server (from the next session); migrate the profile's MCP
+    /// servers into the Codex config.
+    CodexRuntime {
+        /// The codex-runtime subcommand.
+        #[command(subcommand)]
+        command: crate::codex_runtime_cmd::CodexRuntimeCommand,
+    },
     /// The profile's egress proxy for container and remote sandboxes.
     Egress {
         /// The egress subcommand.

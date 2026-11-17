@@ -76,7 +76,11 @@ pub(super) struct Found {
 }
 
 /// The first source with a value; `models_dev` is consulted only when
-/// everything before it is silent.
+/// everything before it is silent. A local server's probe goes before the
+/// listing: it reports the window the server runs with, while a local
+/// listing (llama.cpp's `n_ctx_train`) reports the model's training
+/// maximum (spec: local-models, Local resource telemetry). Only local
+/// routes are probed, so remote providers keep the listing first.
 pub(super) fn resolve(
     found: &Found,
     models_dev: impl FnOnce() -> Option<u64>,
@@ -84,8 +88,8 @@ pub(super) fn resolve(
 ) -> (u64, ContextSource) {
     let ordered = [
         (found.pinned, ContextSource::Pinned),
-        (found.listed, ContextSource::Listing),
         (found.probed, ContextSource::Probe),
+        (found.listed, ContextSource::Listing),
         (found.discovered, ContextSource::Discovered),
         (found.builtin, ContextSource::Builtin),
     ];
@@ -149,16 +153,16 @@ mod tests {
     fn each_source_wins_over_every_later_one() {
         let all = Found {
             pinned: Some(1),
-            listed: Some(2),
-            probed: Some(3),
+            probed: Some(2),
+            listed: Some(3),
             discovered: Some(4),
             builtin: Some(5),
         };
         let mut found = all;
         let order = [
             ContextSource::Pinned,
-            ContextSource::Listing,
             ContextSource::Probe,
+            ContextSource::Listing,
             ContextSource::Discovered,
             ContextSource::Builtin,
         ];

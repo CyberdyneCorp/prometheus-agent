@@ -417,6 +417,32 @@ impl Resolver<'_> {
         (requested.provider_source >= requested.model_source).then_some(target)
     }
 
+    /// The Codex app-server route of `target` when `model.openai_runtime`
+    /// hands `provider`'s turns to it.
+    fn codex_route(
+        &self,
+        provider: &Provider,
+        target: &Target,
+        trace: &mut Trace,
+    ) -> Result<Option<Route>, Error> {
+        let model = &self.config.model;
+        let user_home = crate::external::user_home();
+        let codex_home =
+            crate::codex::codex_home(std::env::var_os("CODEX_HOME"), user_home.as_deref());
+        if !crate::codex::eligible(model.openai_runtime, provider.id(), codex_home.as_deref()) {
+            return Ok(None);
+        }
+        let program = trace.check(
+            "endpoint",
+            crate::codex::executable(
+                model.codex_bin.as_deref(),
+                std::env::var_os("PATH"),
+                user_home.as_deref(),
+            ),
+        )?;
+        Ok(Some(crate::codex::route(provider, target, &program, trace)))
+    }
+
     /// `target` with the launch-only endpoint, when one was given.
     fn with_ad_hoc(&self, mut target: Target) -> Target {
         if let Some(ad_hoc) = &self.ad_hoc {
@@ -451,6 +477,9 @@ impl Resolver<'_> {
         }
         if provider.auth() == pmt_config::schema::ProviderAuth::ExternalProcess {
             return crate::external::route(provider, target, trace);
+        }
+        if let Some(route) = self.codex_route(provider, target, trace)? {
+            return Ok(route);
         }
         let base_url = trace.check(
             "endpoint",

@@ -36,6 +36,7 @@ mod resume;
 mod topic;
 mod turns;
 pub(crate) mod update_relay;
+mod upstream;
 mod watchdog;
 
 use std::collections::VecDeque;

@@ -376,6 +376,17 @@ impl ModelCaller {
         self
     }
 
+    /// Answers the Codex app-server runtime's approval requests through
+    /// the session's gate (without it they are declined).
+    #[must_use]
+    pub fn with_runtime_approvals(
+        mut self,
+        approvals: Arc<dyn crate::codex::RuntimeApprovals>,
+    ) -> Self {
+        self.sender = self.sender.with_runtime_approvals(approvals);
+        self
+    }
+
     /// `error` after the classification hooks.
     async fn reclassify(
         &self,

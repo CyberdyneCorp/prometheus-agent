@@ -161,7 +161,7 @@ impl Turn<'_> {
     }
 }
 
-fn result_event(call: &RequestedCall, outcome: &ToolOutcome) -> ToolResultEvent {
+pub(super) fn result_event(call: &RequestedCall, outcome: &ToolOutcome) -> ToolResultEvent {
     let ok = matches!(outcome.result.status, Status::Ok | Status::Degraded);
     let text = outcome.result.text_content();
     ToolResultEvent {

@@ -21,6 +21,7 @@ pub mod bundle_cmd;
 pub mod cache_cmd;
 pub mod chat;
 pub mod cli;
+pub mod codex_runtime_cmd;
 pub mod completions;
 pub mod config_cmd;
 pub mod config_plane;

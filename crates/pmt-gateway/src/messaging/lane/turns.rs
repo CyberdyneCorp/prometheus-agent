@@ -215,6 +215,10 @@ impl Lane {
             self.say(&text);
             return;
         }
+        if let Some(upstream) = self.upstream() {
+            self.forward(pending, upstream).await;
+            return;
+        }
         let session = match self.ensure_session(&pending.routing).await {
             Ok(session) => session,
             Err(err) => {
@@ -256,47 +260,51 @@ impl Lane {
             .submit(&self.profile, params, author, link)
             .await
         {
-            Ok(submitted) => {
-                let routing = &pending.routing;
-                let typing = (!quiet)
-                    .then(|| {
-                        crate::messaging::typing::start(
-                            &self.shared,
-                            &self.profile,
-                            &routing.platform,
-                            &routing.chat_id,
-                            routing.thread_id.as_deref(),
-                        )
-                    })
-                    .flatten();
-                let speech = self
-                    .streams_audio(pending.voice)
-                    .then(|| super::reply::Spoken::new(&submitted.turn_id));
-                self.mark(pending.reply_to.as_ref(), super::lifecycle::STARTED)
-                    .await;
-                self.running = Some(Running {
-                    turn_id: submitted.turn_id,
-                    requester: pending.routing.sender_id.clone(),
-                    reply_to: pending.reply_to,
-                    stopped: false,
-                    draft: Draft::default(),
-                    voice: pending.voice,
-                    _typing: typing,
-                    speech,
-                    watch: super::watchdog::Watch::new(Instant::now()),
-                    progress: super::progress::Progress::new(Instant::now()),
-                    addressed: pending.addressed,
-                    stream: super::native::Stream::default(),
-                    quiet,
-                });
-                if !quiet {
-                    self.working_status(true).await;
-                }
-            }
+            Ok(submitted) => self.started(submitted.turn_id, pending, quiet).await,
             Err(err) => {
                 self.turn_over(&session);
                 self.say(err.message());
             }
+        }
+    }
+
+    /// Turn `turn_id` of `pending` runs: typing, the started mark and the
+    /// working status (unless `quiet`).
+    pub(super) async fn started(&mut self, turn_id: String, pending: Pending, quiet: bool) {
+        let routing = &pending.routing;
+        let typing = (!quiet)
+            .then(|| {
+                crate::messaging::typing::start(
+                    &self.shared,
+                    &self.profile,
+                    &routing.platform,
+                    &routing.chat_id,
+                    routing.thread_id.as_deref(),
+                )
+            })
+            .flatten();
+        let speech = self
+            .streams_audio(pending.voice)
+            .then(|| super::reply::Spoken::new(&turn_id));
+        self.mark(pending.reply_to.as_ref(), super::lifecycle::STARTED)
+            .await;
+        self.running = Some(Running {
+            turn_id,
+            requester: pending.routing.sender_id.clone(),
+            reply_to: pending.reply_to,
+            stopped: false,
+            draft: Draft::default(),
+            voice: pending.voice,
+            _typing: typing,
+            speech,
+            watch: super::watchdog::Watch::new(Instant::now()),
+            progress: super::progress::Progress::new(Instant::now()),
+            addressed: pending.addressed,
+            stream: super::native::Stream::default(),
+            quiet,
+        });
+        if !quiet {
+            self.working_status(true).await;
         }
     }
 

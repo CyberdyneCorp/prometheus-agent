@@ -33,6 +33,33 @@ pub struct ModelConfig {
     /// and the vendor's install prefixes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub codex_bin: Option<String>,
+    /// Who runs turns on `openai-codex`, `openai-api` and custom providers
+    /// the Codex config also defines: `auto` (Prometheus itself) or
+    /// `codex_app_server` (a long-lived `codex app-server`). A change
+    /// applies from the next session.
+    pub openai_runtime: OpenaiRuntime,
+}
+
+/// `model.openai_runtime`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenaiRuntime {
+    /// Prometheus runs every turn.
+    #[default]
+    Auto,
+    /// Eligible turns run in the Codex app-server.
+    CodexAppServer,
+}
+
+impl OpenaiRuntime {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::CodexAppServer => "codex_app_server",
+        }
+    }
 }
 
 impl Default for ModelConfig {
@@ -46,6 +73,7 @@ impl Default for ModelConfig {
                 .to_vec(),
             min_context_window: 64_000,
             codex_bin: None,
+            openai_runtime: OpenaiRuntime::Auto,
         }
     }
 }

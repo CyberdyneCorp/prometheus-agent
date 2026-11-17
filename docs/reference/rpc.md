@@ -847,6 +847,7 @@ One category of `session.context_usage`.
 | `categories` | array of [`ContextCategory`](#contextcategory) | no | `tokens` by category; they sum to `tokens` (empty when the session is not loaded). |
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
+| `local_resources` | [`LocalResources`](#localresources) or null | no | The local runtime's resource use while the session's local model is resident (sampled at most once every 2 seconds). |
 | `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
 
@@ -1532,6 +1533,18 @@ Result of every `local.*` method.
 |---|---|---|---|
 | `data` | any | no | The command's `--json` document (without `schema`), or `null`. |
 | `message` | string | yes | What happened, in one line. |
+
+### `LocalResources`
+
+GPU and RAM use of the local model runtime (spec: local-models, Local resource telemetry).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `gpu_memory_total` | integer | yes | GPU memory, bytes. |
+| `gpu_memory_used` | integer | yes | GPU memory in use, bytes. |
+| `gpu_utilization_percent` | number or null | no | How busy the GPU is, percent, when the driver reports it. |
+| `ram_total` | integer | yes | System RAM, bytes. |
+| `ram_used` | integer | yes | System RAM in use, bytes. |
 
 ### `LspServerStatus`
 

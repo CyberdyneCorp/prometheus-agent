@@ -745,6 +745,28 @@ pub struct ContextUsage {
     /// is not loaded).
     #[serde(default)]
     pub categories: Vec<ContextCategory>,
+    /// The local runtime's resource use while the session's local model
+    /// is resident (sampled at most once every 2 seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_resources: Option<LocalResources>,
+}
+
+/// GPU and RAM use of the local model runtime (spec: local-models, Local
+/// resource telemetry).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LocalResources {
+    /// How busy the GPU is, percent, when the driver reports it.
+    #[serde(default)]
+    pub gpu_utilization_percent: Option<f64>,
+    /// GPU memory in use, bytes.
+    pub gpu_memory_used: u64,
+    /// GPU memory, bytes.
+    pub gpu_memory_total: u64,
+    /// System RAM in use, bytes.
+    pub ram_used: u64,
+    /// System RAM, bytes.
+    pub ram_total: u64,
 }
 
 /// A subscription's status in `session.context_usage`.

@@ -22,6 +22,7 @@ pub(crate) mod serve;
 pub mod service;
 mod slack_manifest_cmd;
 pub(crate) mod standalone;
+pub mod sub_proxy;
 mod support_matrix;
 mod systemd;
 #[cfg(debug_assertions)]

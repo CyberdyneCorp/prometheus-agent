@@ -1773,6 +1773,17 @@
             "null"
           ]
         },
+        "local_resources": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalResources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The local runtime's resource use while the session's local model\nis resident (sampled at most once every 2 seconds)."
+        },
         "subscription": {
           "anyOf": [
             {
@@ -3825,6 +3836,52 @@
       },
       "required": [
         "message"
+      ],
+      "type": "object"
+    },
+    "LocalResources": {
+      "additionalProperties": false,
+      "description": "GPU and RAM use of the local model runtime (spec: local-models, Local\nresource telemetry).",
+      "properties": {
+        "gpu_memory_total": {
+          "description": "GPU memory, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpu_memory_used": {
+          "description": "GPU memory in use, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpu_utilization_percent": {
+          "default": null,
+          "description": "How busy the GPU is, percent, when the driver reports it.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ram_total": {
+          "description": "System RAM, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ram_used": {
+          "description": "System RAM in use, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "gpu_memory_used",
+        "gpu_memory_total",
+        "ram_used",
+        "ram_total"
       ],
       "type": "object"
     },

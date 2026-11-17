@@ -835,6 +835,23 @@ fn front_profile(
     }
 }
 
+/// Stops every adapter of `profile` for good with `error` (the upstream
+/// of a proxy-mode profile refused its key).
+pub(crate) async fn fail_profile(shared: &Shared, profile: &str, error: &AdapterError) {
+    let slots: Vec<((String, String), Arc<Slot>)> = all(shared)
+        .into_iter()
+        .filter(|(key, _)| key.0 == profile)
+        .collect();
+    for (key, slot) in slots {
+        slot.stop.cancel();
+        slot.adapter.disconnect().await;
+        release(&slot);
+        slot.set(AdapterState::Fatal, Some(error));
+        platform_event(shared, &key, error).await;
+    }
+    check_all_down(shared);
+}
+
 /// Disconnects every adapter.
 pub(crate) async fn disconnect_all(shared: &Shared) {
     let slots: Vec<Arc<Slot>> = shared

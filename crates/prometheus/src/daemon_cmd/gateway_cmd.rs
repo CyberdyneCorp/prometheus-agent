@@ -52,6 +52,13 @@ pub enum GatewayCommand {
         #[command(subcommand)]
         command: super::peers::cmd::PeerCommand,
     },
+    /// The subscription proxy: lend this profile's provider sign-in to
+    /// other tools as a local OpenAI-compatible endpoint (port 8645).
+    Proxy {
+        /// The proxy subcommand.
+        #[command(subcommand)]
+        command: super::sub_proxy::ProxyCommand,
+    },
     /// List every running Prometheus daemon of this OS user, whatever its
     /// home.
     List,
@@ -157,6 +164,7 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Outbox { command } => outbox(command, ctx),
         GatewayCommand::Send(args) => super::send_cmd::run(args, ctx),
         GatewayCommand::Peer { command } => super::peers::cmd::run(command, ctx),
+        GatewayCommand::Proxy { command } => super::sub_proxy::run(command, ctx),
         GatewayCommand::List => super::inventory::list(ctx),
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
         GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),

@@ -10,7 +10,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::Method;
+use super::{Event, Method};
 
 /// Params of every `local.*` method; each uses the fields its command
 /// takes (`model` for pull, rm and use; `job` for pause and resume;
@@ -76,3 +76,25 @@ method!(/// `local.start`: the daemon starts and supervises the managed server.
     LocalStart = "local.start" (LocalParams) -> LocalReply);
 method!(/// `local.stop`: stops the managed server.
     LocalStop = "local.stop" (LocalParams) -> LocalReply);
+
+/// `local_model.context_grown` payload: a session's local model was
+/// relaunched at a larger window instead of compressing (spec:
+/// local-models, Context window and memory placement).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LocalModelContextGrown {
+    /// The session.
+    pub session_id: String,
+    /// `llamacpp`.
+    pub provider: String,
+    /// The library model.
+    pub model: String,
+    /// The window before, tokens.
+    pub from: u64,
+    /// The window now, tokens.
+    pub to: u64,
+}
+
+event!(/// `local_model.context_grown`: the session's local model now runs
+    /// with a larger window (the context gauge re-reads it).
+    LocalModelContextGrownEvent = "local_model.context_grown" (LocalModelContextGrown));

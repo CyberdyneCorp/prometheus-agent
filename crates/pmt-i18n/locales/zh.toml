@@ -409,6 +409,7 @@ local = "本地模型：/local use <模型> 将此会话切换到 llamacpp/<模�
 provider = "将提供方插件和 [providers.*] 的更改应用到此会话（--now）；否则仅对新会话生效"
 reasoning = "显示或设置推理强度"
 fast = "显示或设置快速模式：提供方的优先级层（--global 保存 agent.fast_mode）"
+codex_runtime = "显示或设置由谁执行 OpenAI 提供方上的回合：Prometheus 或 Codex 应用服务器（从下一个会话起）"
 personality = "显示或设置个性"
 tools = "列出工具，或启用/禁用工具集"
 plugins = "列出插件，或重新加载（除非 --now，否则工具和提示词部分在下一会话生效）"

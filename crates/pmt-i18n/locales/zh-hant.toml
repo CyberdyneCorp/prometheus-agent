@@ -409,6 +409,7 @@ local = "本機模型：/local use <模型> 將此工作階段切換到 llamacpp
 provider = "將供應商外掛與 [providers.*] 的變更套用到此工作階段（--now）；否則僅對新的工作階段生效"
 reasoning = "顯示或設定推理強度"
 fast = "顯示或設定快速模式：供應商的優先層級（--global 儲存 agent.fast_mode）"
+codex_runtime = "顯示或設定由誰執行 OpenAI 供應商上的回合：Prometheus 或 Codex 應用伺服器（自下一個工作階段起）"
 personality = "顯示或設定個性"
 tools = "列出工具，或啟用/停用工具組"
 plugins = "列出外掛，或重新載入（除非 --now，否則工具與提示區段在下一個工作階段生效）"

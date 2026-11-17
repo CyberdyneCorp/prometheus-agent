@@ -517,6 +517,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
 | `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
 | `gateway.profile_routes` | array of table | `[]` | any | `live` | Events this profile's adapters receive that belong to another served profile (one shared bot, several communities); the target must list this profile in its `accept_routes_from`. |
+| `gateway.proxy.key_secret` | string | unset | a secret name | `live` | The secret holding the remote profile's API key. |
+| `gateway.proxy.url` | string | unset | any | `live` | The remote API server's base URL including its profile prefix (`http://host.docker.internal:8642/p/default`); unset: turns run here. |
 | `gateway.proxy_url` | string | unset | any | `restart` | The proxy every adapter without its own `proxy_url` uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). |
 | `gateway.proxy_url_secret` | string | unset | a secret name | `restart` | The secret holding the shared proxy URL when it carries credentials. |
 | `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
@@ -700,6 +702,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `model.codex_bin` | string | unset | any | `next_session` | Absolute path of the Codex CLI the Codex app-server runtime runs; unset finds `codex` on `PATH`, in the user-local bin directories and the vendor's install prefixes. |
 | `model.default` | string | unset | any | `next_session` | Default model id (or a `[model.aliases]` name). |
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
+| `model.openai_runtime` | one of "auto", "codex_app_server" | `"auto"` | `"auto"`, `"codex_app_server"` | `next_session` | Who runs turns on `openai-codex`, `openai-api` and custom providers the Codex config also defines: `auto` (Prometheus itself) or `codex_app_server` (a long-lived `codex app-server`). A change applies from the next session. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
 | `models` | table | `{}` | any | `next_session` | Model aliases and metadata overrides, keyed by name or `"<provider>/<model>"`. |
 | `network.expect_isolated` | boolean | `false` | any | `restart` | The deployment is network-isolated (the egress proxy in `network.proxy` is the only way out, as in the image's `compose.isolated.yaml`): `prometheus doctor network --online` fails when a direct connection succeeds. |

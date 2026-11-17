@@ -212,6 +212,9 @@ impl Turn<'_> {
                 return Ok(());
             }
         }
+        if self.grow_window(route, tokens).await {
+            return Ok(());
+        }
         self.attempt(trigger, frozen, route, Some(tokens))
             .await
             .map(drop)

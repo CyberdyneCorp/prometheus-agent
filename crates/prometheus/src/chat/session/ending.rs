@@ -120,6 +120,7 @@ impl Live {
             delegation.close();
         }
         pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
+        pmt_providers::codex::close(&self.id.to_string());
         crate::memory_provider::close(&self.id.to_string()).await;
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),

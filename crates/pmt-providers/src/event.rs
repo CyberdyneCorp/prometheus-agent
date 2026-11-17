@@ -106,6 +106,21 @@ pub enum StreamEvent {
         /// The item as the provider returned it.
         item: serde_json::Value,
     },
+    /// An action an agent runtime already performed on its own (the Codex
+    /// app-server ran a command or applied a patch): recorded in the
+    /// transcript and trajectory as a finished tool call, never run again.
+    ExternalCall {
+        /// Call id.
+        id: String,
+        /// The tool name it is recorded under.
+        name: String,
+        /// Arguments as canonical JSON text.
+        arguments: String,
+        /// What the action produced.
+        output: String,
+        /// Whether it succeeded.
+        ok: bool,
+    },
     /// Token usage (exactly one, before `stop`).
     Usage {
         /// The usage.
@@ -124,6 +139,17 @@ struct OpenCall {
     id: String,
     name: String,
     arguments: String,
+}
+
+/// An action a runtime performed, as [`Normalizer::external_call`] takes
+/// it.
+#[derive(Debug, Clone)]
+pub(crate) struct ExternalCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: serde_json::Value,
+    pub output: String,
+    pub ok: bool,
 }
 
 /// Token counts as a wire format reports them; `None` keeps what an
@@ -216,6 +242,22 @@ impl Normalizer {
                 arguments: canonical_json(&call.arguments),
             });
         }
+    }
+
+    /// An action the runtime performed itself (see
+    /// [`StreamEvent::ExternalCall`]); it does not make the stop
+    /// `tool_use`.
+    pub(crate) fn external_call(&mut self, call: ExternalCall) {
+        if self.finished {
+            return;
+        }
+        self.out.push(StreamEvent::ExternalCall {
+            id: call.id,
+            name: call.name,
+            arguments: call.arguments.to_string(),
+            output: call.output,
+            ok: call.ok,
+        });
     }
 
     pub(crate) fn compaction_item(&mut self, item: serde_json::Value) {
@@ -321,6 +363,7 @@ mod tests {
                 StreamEvent::Stop { .. } => "stop",
                 StreamEvent::ReasoningDelta { .. } => "reasoning",
                 StreamEvent::CompactionItem { .. } => "compaction",
+                StreamEvent::ExternalCall { .. } => "external",
             })
             .collect();
         assert_eq!(

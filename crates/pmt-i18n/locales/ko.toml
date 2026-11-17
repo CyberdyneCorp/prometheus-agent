@@ -409,6 +409,7 @@ local = "로컬 모델: /local use <모델>로 이 세션을 llamacpp/<모델>�
 provider = "공급자 플러그인과 [providers.*] 변경을 이 세션에 적용(--now). 아니면 새 세션부터 적용"
 reasoning = "추론 강도 표시 또는 설정"
 fast = "빠른 모드 표시 또는 설정: 공급자의 우선 처리 등급(--global은 agent.fast_mode 저장)"
+codex_runtime = "OpenAI 공급자의 턴을 누가 실행할지 표시 또는 설정: Prometheus 또는 Codex 앱 서버(다음 세션부터)"
 personality = "성격 표시 또는 설정"
 tools = "도구 목록, 또는 도구 모음 켜기/끄기"
 plugins = "플러그인 목록 또는 다시 불러오기(--now가 없으면 도구와 프롬프트 섹션은 다음 세션부터)"

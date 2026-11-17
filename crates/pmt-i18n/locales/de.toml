@@ -409,6 +409,7 @@ local = "Lokale Modelle: /local use <modell> stellt diese Sitzung auf llamacpp/<
 provider = "Änderungen an Anbieter-Plugins und [providers.*] auf diese Sitzung anwenden (--now); sonst erreichen sie neue Sitzungen"
 reasoning = "Den Denkaufwand anzeigen oder setzen"
 fast = "Den Schnellmodus anzeigen oder setzen: die Prioritätsstufe des Anbieters (--global speichert agent.fast_mode)"
+codex_runtime = "Anzeigen oder festlegen, wer Züge bei den OpenAI-Anbietern ausführt: Prometheus oder der Codex-App-Server (ab der nächsten Sitzung)"
 personality = "Die Persönlichkeit anzeigen oder setzen"
 tools = "Werkzeuge auflisten oder ein Toolset aktivieren/deaktivieren"
 plugins = "Plugins auflisten oder neu laden (Werkzeuge und Promptabschnitte ab der nächsten Sitzung, außer mit --now)"

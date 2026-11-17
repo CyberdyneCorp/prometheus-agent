@@ -105,6 +105,8 @@ capabilities = [
     "hermes-migration",
     "platform-adapters",
     "configuration-and-profiles",
+    "api-server",
+    "local-models",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -5020,3 +5022,28 @@ capabilities = [
 
 [security-boundaries."Dependency vulnerability scan"]
 "CI gate" = ["crates/prometheus/tests/security_scan.rs::ci_gate", "crates/prometheus/tests/security_scan.rs::unreachable_osv_exits_69"]
+
+# Group 73.4: the Codex app-server runtime and the Codex runtime migration.
+[model-providers."Codex app-server runtime"]
+"Runtime switch deferred" = { tests = ["crates/prometheus/tests/codex_runtime_switch.rs::runtime_switch_is_deferred_to_the_next_session", "crates/pmt-providers/tests/providers/codex.rs::one_server_and_thread_serve_a_session_and_the_persona_goes_once", "crates/pmt-agent/tests/turn/performed.rs::performed_actions_are_recorded_as_a_finished_tool_round"], note = "the line-interface session runs in a pseudo-terminal (unix); the route is resolved once per session from the configuration it started with, on every platform" }
+"Codex binary missing" = ["crates/prometheus/tests/codex_runtime.rs::turning_the_runtime_on_without_codex_is_refused_and_changes_nothing", "crates/pmt-providers/tests/providers/codex.rs::a_missing_codex_binary_fails_the_route_naming_model_codex_bin"]
+
+[model-providers."Codex runtime migration"]
+"User text preserved" = ["crates/prometheus/tests/codex_runtime.rs::migrate_twice_keeps_the_user_block_and_one_managed_section", "crates/prometheus/src/codex_runtime_cmd/migrate.rs::user_text_is_preserved_and_the_section_appears_once"]
+
+# Group 73.5: gateway proxy mode and the subscription proxy.
+[api-server."Gateway proxy mode"]
+"Container relays to host agent" = { tests = ["crates/prometheus/tests/gateway_proxy.rs::a_proxied_chat_is_answered_by_the_host_agent", "crates/prometheus/tests/gateway_proxy.rs::an_unreachable_upstream_answers_unavailable_and_queues_nothing", "crates/prometheus/tests/gateway_proxy.rs::a_refused_key_puts_the_adapters_in_fatal_with_proxy_auth"], note = "two homes stand for the container and the host: the container daemon's test adapter receives the message and its gateway.proxy.url names the host daemon's API server" }
+
+[api-server."Subscription proxy"]
+"Disallowed path" = ["crates/prometheus/tests/subscription_proxy.rs::allowed_paths_go_upstream_with_the_profile_credential_and_others_are_404"]
+"Client bearer replaced" = ["crates/prometheus/tests/subscription_proxy.rs::allowed_paths_go_upstream_with_the_profile_credential_and_others_are_404"]
+"LAN requires a client key" = ["crates/prometheus/tests/subscription_proxy.rs::a_lan_listener_requires_the_client_key"]
+
+# Group 73.6: local-model window placement and growth, resource telemetry.
+[local-models."Context window and memory placement"]
+"Window grows before compression" = { tests = ["crates/pmt-agent/tests/turn/growth.rs::a_grown_window_skips_the_compaction", "crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-local/src/placement.rs::growth_doubles_toward_the_need_or_says_why_not"], note = "the turn loop asks its growth port at the compression threshold (pmt-agent, fake port); the daemon test drives the real port against the stub llama-server: preset, unload and reload at 131072" }
+"Growth impossible triggers compression" = ["crates/pmt-agent/tests/turn/growth.rs::an_impossible_growth_compacts_as_usual", "crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows"]
+
+[local-models."Local resource telemetry"]
+"Gauge shows real window" = ["crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-providers/src/metadata/window.rs::each_source_wins_over_every_later_one"]

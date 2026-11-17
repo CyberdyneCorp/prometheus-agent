@@ -126,6 +126,7 @@ impl Host for AskingHost {
             billing_source: None,
             subscription: None,
             categories: Vec::new(),
+            local_resources: None,
         })
     }
 

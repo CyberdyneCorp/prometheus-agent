@@ -10,6 +10,7 @@ mod borrowed;
 mod bundled;
 mod caching;
 mod call_cache;
+mod codex;
 mod external;
 mod faults;
 mod idp;

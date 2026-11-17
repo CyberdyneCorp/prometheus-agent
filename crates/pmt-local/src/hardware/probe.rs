@@ -52,6 +52,7 @@ fn apple_gpu(hardware: &Hardware) -> Gpu {
         integrated: true,
         cuda: None,
         bandwidth_gbps: None,
+        utilization_percent: None,
     }
 }
 
@@ -79,7 +80,7 @@ fn nvidia() -> Vec<Gpu> {
     let Some(csv) = run(
         "nvidia-smi",
         &[
-            "--query-gpu=name,memory.total,memory.used",
+            "--query-gpu=name,memory.total,memory.used,utilization.gpu",
             "--format=csv,noheader,nounits",
         ],
     ) else {
@@ -89,8 +90,8 @@ fn nvidia() -> Vec<Gpu> {
     nvidia_gpus(&csv, cuda)
 }
 
-/// Parses `nvidia-smi --query-gpu=name,memory.total,memory.used
-/// --format=csv,noheader,nounits` (MiB values).
+/// Parses `nvidia-smi --query-gpu=name,memory.total,memory.used[,utilization.gpu]
+/// --format=csv,noheader,nounits` (MiB values, utilisation percent).
 #[must_use]
 pub fn nvidia_gpus(csv: &str, cuda: Option<u32>) -> Vec<Gpu> {
     csv.lines()
@@ -99,6 +100,7 @@ pub fn nvidia_gpus(csv: &str, cuda: Option<u32>) -> Vec<Gpu> {
             let name = fields.next().filter(|n| !n.is_empty())?;
             let total: u64 = fields.next()?.parse().ok()?;
             let used: u64 = fields.next()?.parse().ok()?;
+            let utilization_percent = fields.next().and_then(|u| u.parse().ok());
             Some(Gpu {
                 vendor: Vendor::Nvidia,
                 name: name.to_owned(),
@@ -107,6 +109,7 @@ pub fn nvidia_gpus(csv: &str, cuda: Option<u32>) -> Vec<Gpu> {
                 integrated: false,
                 cuda,
                 bandwidth_gbps: None,
+                utilization_percent,
             })
         })
         .collect()
@@ -154,6 +157,7 @@ pub fn sysfs_gpu(device: &Path) -> Option<Gpu> {
         integrated,
         cuda: None,
         bandwidth_gbps: None,
+        utilization_percent: None,
     })
 }
 
@@ -192,6 +196,7 @@ pub fn windows_gpus(json: &str) -> Vec<Gpu> {
                 integrated,
                 cuda: None,
                 bandwidth_gbps: None,
+                utilization_percent: None,
             })
         })
         .collect()

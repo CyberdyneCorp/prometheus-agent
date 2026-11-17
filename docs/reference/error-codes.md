@@ -492,6 +492,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `kanban.invalid_archive` | `invalid_input` | 65 | The file is not a board archive written by `prometheus kanban boards export`, or its format version is newer than this build reads. |
 | `peer.invalid_name` | `usage` | 2 | A peer name must match `^[a-z][a-z0-9-]{0,31}$`: 1-32 characters, lowercase letters, digits or `-`, starting with a letter. |
 | `peer.not_found` | `not_found` | 66 | No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers. |
+| `proxy.not_logged_in` | `auth` | 78 | The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`. |
+| `proxy.lan_refused` | `permission_denied` | 77 | `prometheus gateway proxy start --host` names a non-loopback address without `--allow-lan`; with it, LAN clients must present the `PMT_PROXY_CLIENT_KEY` bearer. |
 | `peer.unreachable` | `unavailable` | 69 | The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right. |
 | `peer.key_rejected` | `auth` | 78 | The peer answered 401, or the secret `PEER_<NAME>_KEY` is missing: register the peer again with `prometheus gateway peer add <name> --url <url>` and paste the key of the peer profile's `api_server.key_secret` on stdin. |
 | `peer.rejected` | `tool` | 1 | The peer's API server refused the request; the message carries its answer (an unknown run, a run that cannot be stopped, a paused home, a busy profile). |

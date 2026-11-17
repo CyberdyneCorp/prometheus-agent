@@ -319,6 +319,7 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
         Command::Security { command } => prometheus::security_cmd::run(command, ctx),
         Command::Egress { command } => prometheus::egress_cmd::run(command, ctx),
+        Command::CodexRuntime { command } => prometheus::codex_runtime_cmd::run(command, ctx),
         Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
         Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
         Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),

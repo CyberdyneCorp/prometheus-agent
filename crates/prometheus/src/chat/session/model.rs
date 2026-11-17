@@ -84,6 +84,8 @@ pub struct Models {
     calls: Calls,
     /// The session recordings, when trajectories are on.
     recording: Option<Arc<Writer>>,
+    /// The sessions' gates, answering the Codex app-server's approvals.
+    codex_gates: Arc<super::codex_gates::CodexGates>,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -278,6 +280,8 @@ impl Models {
             ),
             None => (aux, caller),
         };
+        let codex_gates = Arc::new(super::codex_gates::CodexGates::default());
+        let caller = caller.with_runtime_approvals(Arc::clone(&codex_gates) as _);
         Ok(Self {
             setup: Arc::new(ProviderSetupParts {
                 config: Arc::new(config.clone()),
@@ -296,6 +300,7 @@ impl Models {
             conversations,
             calls,
             recording,
+            codex_gates,
         })
     }
 
@@ -362,6 +367,11 @@ impl Models {
         if let Some(pii) = &self.pii {
             pii.register_id(id);
         }
+    }
+
+    /// The sessions' gates the Codex app-server's approvals go to.
+    pub(super) fn codex_gates(&self) -> &super::codex_gates::CodexGates {
+        &self.codex_gates
     }
 
     /// Adds the model providers the profile's plugins registered (spec:
@@ -467,6 +477,7 @@ impl Models {
             conversations: self.conversations.clone(),
             calls: self.calls.clone(),
             recording: self.recording.clone(),
+            codex_gates: Arc::clone(&self.codex_gates),
         };
         Ok((reloaded, changed))
     }
@@ -584,7 +595,34 @@ impl Models {
         target: &Target,
         owners: &[Owner<'_>],
     ) -> Result<Arc<ProviderModel>, Error> {
-        self.maker().port_scoped(target, owners).await
+        let port = self.maker().port_scoped(target, owners).await?;
+        self.probe_served_window(&port).await;
+        Ok(port)
+    }
+
+    /// Records the window the llama.cpp server runs the session's model with
+    /// (spec: local-models, Local resource telemetry: the context gauge
+    /// uses the window the server actually runs with); best effort.
+    async fn probe_served_window(&self, port: &ProviderModel) {
+        let route = port.current_route().await;
+        let kind = pmt_providers::local::ServerKind::of(&route.provider);
+        // The local model runtime; other loopback endpoints are not probed.
+        if !route.local || kind != pmt_providers::local::ServerKind::LlamaCpp {
+            return;
+        }
+        match pmt_providers::local::probe(&self.client, kind, &route.base_url, &route.model).await {
+            Ok(found) => {
+                if let Some(window) = found.context_window {
+                    self.setup.catalog.record_probe(
+                        &route.provider,
+                        &route.model,
+                        &route.base_url,
+                        window,
+                    );
+                }
+            }
+            Err(err) => tracing::debug!("local served-window probe failed: {}", err.message()),
+        }
     }
 
     /// The route `model` (`[<provider>/]<model>`, as `/model` reads it)
@@ -850,6 +888,12 @@ impl Models {
     /// The profile's model catalog.
     pub(crate) fn catalog(&self) -> &Catalog {
         &self.setup.catalog
+    }
+
+    /// The profile's model catalog, shared (it keeps local servers'
+    /// served windows).
+    pub(crate) fn shared_catalog(&self) -> Arc<Catalog> {
+        Arc::clone(&self.setup.catalog)
     }
 
     /// The `vision` auxiliary route of a session on `main` when its model

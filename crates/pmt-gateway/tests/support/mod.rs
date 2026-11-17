@@ -247,6 +247,7 @@ impl Host for FakeHost {
                 billing_source: None,
                 subscription: None,
                 categories: Vec::new(),
+                local_resources: None,
             })
         })
     }

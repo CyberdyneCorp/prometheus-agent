@@ -4152,6 +4152,12 @@
           "type": "array",
           "x-apply": "live"
         },
+        "proxy": {
+          "$ref": "#/$defs/GatewayProxy",
+          "default": {},
+          "description": "Proxy mode: forward every admitted turn to another daemon's API\nserver instead of running an agent here.",
+          "x-apply": "live"
+        },
         "proxy_url": {
           "description": "The proxy every adapter without its own `proxy_url` uses\n(`http://`, `https://` or `socks5://`, without a password; a URL\nwith credentials goes in a secret named by `proxy_url_secret`).",
           "type": [
@@ -4497,6 +4503,31 @@
           "$ref": "#/$defs/DmMode",
           "default": "per_platform",
           "description": "`per_platform` (default): each account's DMs are its own\nconversation; `shared`: DMs from all of a person's linked accounts\ncontinue one conversation, answered on the platform of the latest\nmessage (group conversations never merge)."
+        }
+      },
+      "type": "object"
+    },
+    "GatewayProxy": {
+      "additionalProperties": false,
+      "description": "`[gateway.proxy]` (spec: api-server, Gateway proxy mode): the adapters\nkeep authorization, pairing, routing keys and delivery here, and every\nadmitted turn runs on the API server at `url` as a session-chat request\nkeyed by the local conversation key.",
+      "properties": {
+        "key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the remote profile's API key."
+        },
+        "url": {
+          "description": "The remote API server's base URL including its profile prefix\n(`http://host.docker.internal:8642/p/default`); unset: turns run\nhere.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -6679,6 +6710,11 @@
           "minimum": 16000,
           "type": "integer"
         },
+        "openai_runtime": {
+          "$ref": "#/$defs/OpenaiRuntime",
+          "default": "auto",
+          "description": "Who runs turns on `openai-codex`, `openai-api` and custom providers\nthe Codex config also defines: `auto` (Prometheus itself) or\n`codex_app_server` (a long-lived `codex app-server`). A change\napplies from the next session."
+        },
         "provider": {
           "description": "Provider id or alias; unset means `auto`.",
           "type": [
@@ -7166,6 +7202,21 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "OpenaiRuntime": {
+      "description": "`model.openai_runtime`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Prometheus runs every turn.",
+          "type": "string"
+        },
+        {
+          "const": "codex_app_server",
+          "description": "Eligible turns run in the Codex app-server.",
+          "type": "string"
+        }
+      ]
     },
     "OtelConfig": {
       "additionalProperties": false,
@@ -13039,6 +13090,7 @@
         },
         "platforms": {},
         "profile_routes": [],
+        "proxy": {},
         "quick_commands": {
           "timeout_secs": 30
         },
@@ -13255,7 +13307,8 @@
           "google",
           "nous"
         ],
-        "min_context_window": 64000
+        "min_context_window": 64000,
+        "openai_runtime": "auto"
       },
       "description": "The main model and provider."
     },

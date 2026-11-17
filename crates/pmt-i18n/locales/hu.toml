@@ -409,6 +409,7 @@ local = "Helyi modellek: a /local use <modell> erre a munkamenetre llamacpp/<mod
 provider = "A szolgáltatói bővítmények és a [providers.*] módosításainak alkalmazása erre a munkamenetre (--now); egyébként az új munkamenetekre hatnak"
 reasoning = "A gondolkodási erőfeszítés megjelenítése vagy beállítása"
 fast = "A gyors mód megjelenítése vagy beállítása: a szolgáltató prioritási szintje (a --global elmenti: agent.fast_mode)"
+codex_runtime = "Megjeleníti vagy beállítja, ki futtatja a köröket az OpenAI-szolgáltatóknál: a Prometheus vagy a Codex alkalmazásszerver (a következő munkamenettől)"
 personality = "A személyiség megjelenítése vagy beállítása"
 tools = "Eszközök listája, vagy egy eszközkészlet be-/kikapcsolása"
 plugins = "Bővítmények listája vagy újratöltése (eszközök és promptszakaszok a következő munkamenettől, hacsak nincs --now)"

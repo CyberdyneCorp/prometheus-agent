@@ -478,6 +478,7 @@ impl<'a> Turn<'a> {
             )));
         }
         self.empty_streak = 0;
+        self.keep_performed(&reply).await?;
         let mut reply = reply;
         if reply.tool_calls.is_empty() {
             if let Some((message, kind)) = self.before_final(&reply, route).await {

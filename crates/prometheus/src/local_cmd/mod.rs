@@ -9,6 +9,7 @@
 
 mod args;
 mod engine;
+pub mod growth;
 mod models;
 pub(crate) mod quickstart;
 pub mod rpc;

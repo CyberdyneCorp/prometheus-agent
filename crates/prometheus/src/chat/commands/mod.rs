@@ -260,6 +260,7 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             }
         }),
         "config" => config(&ctx.strings(), ctx.scope, args),
+        "codex-runtime" => crate::codex_runtime_cmd::slash(ctx.scope, ctx.factory.launch(), args),
         _ => return None,
     })
 }

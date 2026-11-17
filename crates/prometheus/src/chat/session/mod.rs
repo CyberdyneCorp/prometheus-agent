@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+mod codex_gates;
 pub mod credentials;
 pub mod cron;
 pub mod delegation;
@@ -646,7 +647,7 @@ impl Factory {
         let (reach, aux) = ((&selection, &capabilities), (&summarizer, &model));
         let (agent_tools, clarify) =
             self.agent_tools(id, &memory, aux, reach, cards, &delegation)?;
-        let gate = self.gate_for(id, child, &model, &environment)?;
+        let gate = self.gate_for(id, child, (&model, &registry), &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);

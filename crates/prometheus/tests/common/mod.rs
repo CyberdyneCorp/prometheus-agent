@@ -344,3 +344,28 @@ pub mod plugin_catalog;
 pub mod tls_upstream;
 #[cfg(feature = "gateway")]
 pub mod ws;
+
+/// The fake Codex CLI of the Codex runtime tests (`pmt-providers`'s
+/// `pmt-codex-fixture`), copied into `dir` so its request log
+/// (`codex-fixture.log`) is the test's own.
+pub fn codex_fixture(dir: &Path) -> std::path::PathBuf {
+    let built = Path::new(BIN)
+        .parent()
+        .unwrap()
+        .join(format!("pmt-codex-fixture{}", std::env::consts::EXE_SUFFIX));
+    if !built.exists() {
+        let target = Path::new(BIN).parent().unwrap().parent().unwrap();
+        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+        let status = Command::new(cargo)
+            .args(["build", "-p", "pmt-providers", "--bin", "pmt-codex-fixture"])
+            .arg("--target-dir")
+            .arg(target)
+            .status()
+            .unwrap();
+        assert!(status.success(), "building pmt-codex-fixture failed");
+    }
+    std::fs::create_dir_all(dir).unwrap();
+    let copy = dir.join(format!("codex{}", std::env::consts::EXE_SUFFIX));
+    std::fs::copy(&built, &copy).unwrap();
+    copy
+}

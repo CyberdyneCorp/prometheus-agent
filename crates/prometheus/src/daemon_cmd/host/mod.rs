@@ -62,6 +62,7 @@ mod interop;
 mod kanban;
 mod listing;
 mod live;
+mod local_telemetry;
 mod model_picker;
 mod notify;
 mod panes;
@@ -801,6 +802,7 @@ impl Host for DaemonHost {
                 tokens,
                 context_window,
                 cost_usd: (cost.calls > cost.unpriced_calls).then_some(cost.cost_usd),
+                local_resources: local_telemetry::sample(&profile.scope(), route.as_ref()),
                 billing_source: route.map(|r| r.billing_source),
                 subscription,
                 categories,

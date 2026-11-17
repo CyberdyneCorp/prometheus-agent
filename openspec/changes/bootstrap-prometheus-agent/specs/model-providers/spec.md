@@ -783,7 +783,7 @@ The system SHALL, in `prometheus doctor` and in the `provider.missing_base_url`/
 - **THEN** the output SHALL contain a WARN naming mirrored networking and the detected host IP
 
 ### Requirement: Context length detection chain
-The system SHALL resolve a model's context window in order from: the `[models."<provider>/<model>"] context_window` pin (shown with a `(pinned)` label in `/model`, status and picker); the provider's per-model listing; a local server probe; a persistent discovered-value cache in `state.db` (keyed by provider, model and base URL, reused across sessions for `providers.<id>.catalog_ttl_secs`); the built-in catalog; the bundled models.dev snapshot refreshed by `prometheus model list --refresh`; family defaults by model-name prefix; and finally 128000 tokens, recording the winning source in `prometheus model explain`.
+The system SHALL resolve a model's context window in order from: the `[models."<provider>/<model>"] context_window` pin (shown with a `(pinned)` label in `/model`, status and picker); a local server's probe of the window it serves (before that server's own listing, which reports the model's training maximum: `local-models` › Local resource telemetry); the provider's per-model listing; a persistent discovered-value cache in `state.db` (keyed by provider, model and base URL, reused across sessions for `providers.<id>.catalog_ttl_secs`); the built-in catalog; the bundled models.dev snapshot refreshed by `prometheus model list --refresh`; family defaults by model-name prefix; and finally 128000 tokens, recording the winning source in `prometheus model explain`.
 **Milestone:** M1
 
 #### Scenario: Pinned window labelled

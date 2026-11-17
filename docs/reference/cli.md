@@ -10,82 +10,83 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
-  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
-  config       Read, change, validate and explain the profile's config.toml
-  secrets      Store, list and remove the profile's secrets (values never on the command line)
-  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
-  journey      The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
-  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants       List and revoke the profile's permanent capability grants and approvals
-  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
-  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
-  cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
-  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
-  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
-  eval         Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
-  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
-  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
-  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
-  projects     Projects: named workspaces spanning folders, the active project, archive and restore
-  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
-  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
-  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
-  vault        The credential vault: logins, cards and addresses the browser fills by handle
-  security     Security records of the profile: verify the tamper-evident audit log
-  egress       The profile's egress proxy for container and remote sandboxes
-  backup       Back up the whole home to a .tar.zst archive, or restore one
-  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
-  cache        The model-call cache: stats, prune, clear
-  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
-  verify       Detect a project's build/test/start recipe and run it
-  snapshots    Snapshot and restore the selected profile's critical state
-  profile      List, create, select, rename and delete profiles
-  sessions     List, search, export and manage the profile's sessions
-  logs         Show structured log records of a component (`list` names them)
-  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
-  usage        Totals of model and metered tool calls from the usage ledger
-  prompt       Measure the system prompt and tool schemas a new session would send
-  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
-  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  providers    Provider routing state: per-route health scores
-  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
-  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
-  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
-  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets     List toolsets and show the tools a toolset resolves to
-  approvals    Check how the approval gate treats a command, without running it
-  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
-  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
-  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
-  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
-  identity     Messaging accounts linked across platforms with `/link`
-  portal       The Nous Portal subscription and its tool gateway routing
-  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
-  dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
-  serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
-  webapp       Open the desktop workspace in the browser (`webapp.enabled`)
-  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`) [alias: gui]
-  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
-  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
-  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
-  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
-  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
-  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
-  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
-  schema       Print the JSON Schema of a published contract (`subagent-result`)
-  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
-  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
-  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help         Print this message or the help of the given subcommand(s)
+  chat           Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version        Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup          Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor         Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug          Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
+  config         Read, change, validate and explain the profile's config.toml
+  secrets        Store, list and remove the profile's secrets (values never on the command line)
+  skills         List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator        The skill curator: status, passes, pins, archive and restore, ledger and rollback
+  journey        The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
+  memory         Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants         List and revoke the profile's permanent capability grants and approvals
+  browser        Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp            Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  cron           Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness        The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience     The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+  eval           Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
+  evolve         Harness evolution jobs (opt-in: `evolve.enabled = true`)
+  kanban         Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
+  worktrees      Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects       Projects: named workspaces spanning folders, the active project, archive and restore
+  themes         Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console        A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks       Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
+  vault          The credential vault: logins, cards and addresses the browser fills by handle
+  security       Security records of the profile: verify the tamper-evident audit log
+  codex-runtime  Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+  egress         The profile's egress proxy for container and remote sandboxes
+  backup         Back up the whole home to a .tar.zst archive, or restore one
+  replay         Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache          The model-call cache: stats, prune, clear
+  files          Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify         Detect a project's build/test/start recipe and run it
+  snapshots      Snapshot and restore the selected profile's critical state
+  profile        List, create, select, rename and delete profiles
+  sessions       List, search, export and manage the profile's sessions
+  logs           Show structured log records of a component (`list` names them)
+  status         Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+  usage          Totals of model and metered tool calls from the usage ledger
+  prompt         Measure the system prompt and tool schemas a new session would send
+  demo           Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory     Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
+  model          Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers      Provider routing state: per-route health scores
+  moa            List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local          Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
+  fallback       List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth           Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
+  tools          List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets       List toolsets and show the tools a toolset resolves to
+  approvals      Check how the approval gate treats a command, without running it
+  update         Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle         Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate        Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+  uninstall      Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
+  pause          Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  identity       Messaging accounts linked across platforms with `/link`
+  portal         The Nous Portal subscription and its tool gateway routing
+  daemon         Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  dashboard      Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+  serve          Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+  webapp         Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop        Launch the Prometheus Desktop app for the selected profile, or install it (`--install`) [alias: gui]
+  gateway        Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing        Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  connectors     Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge         The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp            MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins        Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
+  tui            The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp            The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
+  schema         Print the JSON Schema of a published contract (`subagent-result`)
+  rpc            The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions    Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes       List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help           Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -18895,6 +18896,221 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus security help help
 ```
 
+## `prometheus codex-runtime`
+
+```text
+Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+
+Usage: prometheus codex-runtime [OPTIONS] <COMMAND>
+
+Commands:
+  status   The configured runtime and the Codex executable it would run
+  set      Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+  migrate  Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime status`
+
+```text
+The configured runtime and the Codex executable it would run
+
+Usage: prometheus codex-runtime status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime set`
+
+```text
+Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+
+Usage: prometheus codex-runtime set [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>
+          `auto`, `codex_app_server`, `on` or `off`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime migrate`
+
+```text
+Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+
+Usage: prometheus codex-runtime migrate [OPTIONS]
+
+Options:
+      --dry-run
+          Show what would be written; write nothing
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus codex-runtime help [COMMAND]
+
+Commands:
+  status   The configured runtime and the Codex executable it would run
+  set      Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+  migrate  Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus codex-runtime help status`
+
+```text
+The configured runtime and the Codex executable it would run
+
+Usage: prometheus codex-runtime help status
+```
+
+## `prometheus codex-runtime help set`
+
+```text
+Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+
+Usage: prometheus codex-runtime help set
+```
+
+## `prometheus codex-runtime help migrate`
+
+```text
+Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+
+Usage: prometheus codex-runtime help migrate
+```
+
+## `prometheus codex-runtime help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus codex-runtime help help
+```
+
 ## `prometheus egress`
 
 ```text
@@ -30116,6 +30332,7 @@ Commands:
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
   peer            Peer gateways on other machines: register them, message their agents and run tasks there
+  proxy           The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -31040,6 +31257,232 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway peer help help
 ```
 
+## `prometheus gateway proxy`
+
+```text
+The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
+
+Usage: prometheus gateway proxy [OPTIONS] <COMMAND>
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus gateway proxy start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <PROVIDER>
+          The provider whose sign-in it lends: `nous` or `xai`
+
+          [default: nous]
+
+      --host <HOST>
+          The address to listen on
+
+          [default: 127.0.0.1]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --port <PORT>
+          The port
+
+          [default: 8645]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --allow-lan
+          Listen beyond loopback; clients then need `PMT_PROXY_CLIENT_KEY`
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus gateway proxy status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus gateway proxy providers [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway proxy help [COMMAND]
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway proxy help start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus gateway proxy help start
+```
+
+## `prometheus gateway proxy help status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus gateway proxy help status
+```
+
+## `prometheus gateway proxy help providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus gateway proxy help providers
+```
+
+## `prometheus gateway proxy help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway proxy help help
+```
+
 ## `prometheus gateway list`
 
 ```text
@@ -31409,6 +31852,7 @@ Commands:
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
   peer            Peer gateways on other machines: register them, message their agents and run tasks there
+  proxy           The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -31566,6 +32010,43 @@ Usage: prometheus gateway help peer status
 Stop a remote run
 
 Usage: prometheus gateway help peer stop
+```
+
+## `prometheus gateway help proxy`
+
+```text
+The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
+
+Usage: prometheus gateway help proxy [COMMAND]
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+```
+
+## `prometheus gateway help proxy start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus gateway help proxy start
+```
+
+## `prometheus gateway help proxy status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus gateway help proxy status
+```
+
+## `prometheus gateway help proxy providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus gateway help proxy providers
 ```
 
 ## `prometheus gateway help list`
@@ -33140,6 +33621,9 @@ Options:
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
+
+      --tools <TOOLS>
+          Expose exactly these tools (comma-separated) instead of `mcp_server.expose_toolsets` (the Codex runtime's callback server)
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
@@ -36625,82 +37109,83 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
-  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
-  config       Read, change, validate and explain the profile's config.toml
-  secrets      Store, list and remove the profile's secrets (values never on the command line)
-  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
-  journey      The skills and memories the agent learned, as a timeline; list, delete, edit
-  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants       List and revoke the profile's permanent capability grants and approvals
-  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
-  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
-  cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
-  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
-  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
-  eval         Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
-  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
-  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
-  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
-  projects     Projects: named workspaces spanning folders, the active project, archive and restore
-  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
-  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
-  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
-  vault        The credential vault: logins, cards and addresses the browser fills by handle
-  security     Security records of the profile: verify the tamper-evident audit log
-  egress       The profile's egress proxy for container and remote sandboxes
-  backup       Back up the whole home to a .tar.zst archive, or restore one
-  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
-  cache        The model-call cache: stats, prune, clear
-  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
-  verify       Detect a project's build/test/start recipe and run it
-  snapshots    Snapshot and restore the selected profile's critical state
-  profile      List, create, select, rename and delete profiles
-  sessions     List, search, export and manage the profile's sessions
-  logs         Show structured log records of a component (`list` names them)
-  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
-  usage        Totals of model and metered tool calls from the usage ledger
-  prompt       Measure the system prompt and tool schemas a new session would send
-  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
-  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  providers    Provider routing state: per-route health scores
-  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
-  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
-  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
-  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets     List toolsets and show the tools a toolset resolves to
-  approvals    Check how the approval gate treats a command, without running it
-  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
-  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
-  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
-  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
-  identity     Messaging accounts linked across platforms with `/link`
-  portal       The Nous Portal subscription and its tool gateway routing
-  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
-  dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
-  serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
-  webapp       Open the desktop workspace in the browser (`webapp.enabled`)
-  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
-  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
-  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
-  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
-  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
-  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
-  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
-  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
-  schema       Print the JSON Schema of a published contract (`subagent-result`)
-  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
-  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
-  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help         Print this message or the help of the given subcommand(s)
+  chat           Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version        Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup          Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor         Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug          Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
+  config         Read, change, validate and explain the profile's config.toml
+  secrets        Store, list and remove the profile's secrets (values never on the command line)
+  skills         List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator        The skill curator: status, passes, pins, archive and restore, ledger and rollback
+  journey        The skills and memories the agent learned, as a timeline; list, delete, edit
+  memory         Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants         List and revoke the profile's permanent capability grants and approvals
+  browser        Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp            Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  cron           Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness        The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience     The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+  eval           Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
+  evolve         Harness evolution jobs (opt-in: `evolve.enabled = true`)
+  kanban         Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
+  worktrees      Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects       Projects: named workspaces spanning folders, the active project, archive and restore
+  themes         Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console        A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks       Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
+  vault          The credential vault: logins, cards and addresses the browser fills by handle
+  security       Security records of the profile: verify the tamper-evident audit log
+  codex-runtime  Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+  egress         The profile's egress proxy for container and remote sandboxes
+  backup         Back up the whole home to a .tar.zst archive, or restore one
+  replay         Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache          The model-call cache: stats, prune, clear
+  files          Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify         Detect a project's build/test/start recipe and run it
+  snapshots      Snapshot and restore the selected profile's critical state
+  profile        List, create, select, rename and delete profiles
+  sessions       List, search, export and manage the profile's sessions
+  logs           Show structured log records of a component (`list` names them)
+  status         Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+  usage          Totals of model and metered tool calls from the usage ledger
+  prompt         Measure the system prompt and tool schemas a new session would send
+  demo           Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory     Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
+  model          Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers      Provider routing state: per-route health scores
+  moa            List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local          Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
+  fallback       List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth           Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
+  tools          List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets       List toolsets and show the tools a toolset resolves to
+  approvals      Check how the approval gate treats a command, without running it
+  update         Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle         Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate        Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+  uninstall      Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
+  pause          Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  identity       Messaging accounts linked across platforms with `/link`
+  portal         The Nous Portal subscription and its tool gateway routing
+  daemon         Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  dashboard      Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+  serve          Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+  webapp         Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop        Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
+  gateway        Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing        Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  connectors     Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge         The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp            MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins        Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
+  tui            The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp            The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
+  schema         Print the JSON Schema of a published contract (`subagent-result`)
+  rpc            The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions    Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes       List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help           Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus help chat`
@@ -39534,6 +40019,43 @@ Check runtimes, bridge environments, plugin and MCP packages against the OSV vul
 Usage: prometheus help security scan
 ```
 
+## `prometheus help codex-runtime`
+
+```text
+Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+
+Usage: prometheus help codex-runtime [COMMAND]
+
+Commands:
+  status   The configured runtime and the Codex executable it would run
+  set      Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+  migrate  Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+```
+
+## `prometheus help codex-runtime status`
+
+```text
+The configured runtime and the Codex executable it would run
+
+Usage: prometheus help codex-runtime status
+```
+
+## `prometheus help codex-runtime set`
+
+```text
+Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+
+Usage: prometheus help codex-runtime set
+```
+
+## `prometheus help codex-runtime migrate`
+
+```text
+Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+
+Usage: prometheus help codex-runtime migrate
+```
+
 ## `prometheus help egress`
 
 ```text
@@ -41307,6 +41829,7 @@ Commands:
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
   peer            Peer gateways on other machines: register them, message their agents and run tasks there
+  proxy           The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -41463,6 +41986,43 @@ Usage: prometheus help gateway peer status
 Stop a remote run
 
 Usage: prometheus help gateway peer stop
+```
+
+## `prometheus help gateway proxy`
+
+```text
+The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
+
+Usage: prometheus help gateway proxy [COMMAND]
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+```
+
+## `prometheus help gateway proxy start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus help gateway proxy start
+```
+
+## `prometheus help gateway proxy status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus help gateway proxy status
+```
+
+## `prometheus help gateway proxy providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus help gateway proxy providers
 ```
 
 ## `prometheus help gateway list`

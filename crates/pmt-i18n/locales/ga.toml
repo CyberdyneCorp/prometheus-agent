@@ -409,6 +409,7 @@ local = "Múnlaí áitiúla: aistríonn /local use <múnla> an seisiún seo go l
 provider = "Cuir athruithe ar bhreiseáin soláthraí agus ar [providers.*] i bhfeidhm ar an seisiún seo (--now); murach sin sroicheann siad seisiúin nua"
 reasoning = "Taispeáin nó socraigh an iarracht réasúnaíochta"
 fast = "Taispeáin nó socraigh an mód tapa: leibhéal tosaíochta an tsoláthraí (sábhálann --global agent.fast_mode)"
+codex_runtime = "Taispeáin nó socraigh cé a ritheann sealanna ar sholáthraithe OpenAI: Prometheus nó freastalaí aipe Codex (ón gcéad seisiún eile)"
 personality = "Taispeáin nó socraigh an phearsantacht"
 tools = "Liostaigh uirlisí, nó cumasaigh/díchumasaigh tacar uirlisí"
 plugins = "Liostaigh breiseáin, nó athluchtaigh iad (uirlisí agus codanna leide sa chéad seisiún eile murach --now)"

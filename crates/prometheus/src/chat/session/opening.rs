@@ -255,18 +255,21 @@ impl Factory {
         }
     }
 
-    /// The session's approval gate: a child's fails closed.
+    /// The session's approval gate: a child's fails closed. It also
+    /// answers the Codex app-server runtime's approvals of the session.
     pub(super) fn gate_for(
         &self,
         id: SessionId,
         child: Option<&ChildSpec>,
-        model: &Arc<SwitchableModel>,
+        (model, registry): (&Arc<SwitchableModel>, &Arc<pmt_tools::ToolRegistry>),
         environment: &env::Attached,
     ) -> Result<tools::Gate, Error> {
-        match child {
+        let gate = match child {
             Some(spec) => self.child_gate(id, spec, environment),
             None => self.gate(id, Some(model), Some(environment)),
-        }
+        }?;
+        self.models.codex_gates().register(id, &gate.gate, registry);
+        Ok(gate)
     }
 
     /// The session's `execute_code`, in its own sandbox.
@@ -339,6 +342,10 @@ impl Factory {
             setup.memory = None;
         }
         setup.compaction_boundary = Some(Arc::clone(inputs.tool_state) as _);
+        setup.growth = Some(Arc::new(crate::local_cmd::growth::LocalGrowth::new(
+            self.scope.home(),
+            self.models.shared_catalog(),
+        )));
         setup.context_engine = crate::context_engine::for_session(
             &self.scope,
             &self.plugins,

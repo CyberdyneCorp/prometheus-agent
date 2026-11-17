@@ -75,6 +75,7 @@ pub fn catalog_job(
         quant: Some(quant.quant.clone()),
         context: priced.context_start,
         context_max: Some(entry.context_max),
+        placement: priced.placement,
         added_at: String::new(),
     };
     create(jobs, &model, files.into_iter().map(|(s, _)| s).collect())

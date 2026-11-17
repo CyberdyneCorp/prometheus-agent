@@ -631,6 +631,8 @@ export interface ContextUsage {
   context_window?: number | null;
   /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
   cost_usd?: number | null;
+  /** The local runtime's resource use while the session's local model is resident (sampled at most once every 2 seconds). */
+  local_resources?: LocalResources | null;
   /** The subscription the current route bills, when it is one. */
   subscription?: SubscriptionStatus | null;
   /** Estimated tokens of the active context. */
@@ -1336,6 +1338,20 @@ export interface LocalReply {
   data?: unknown;
   /** What happened, in one line. */
   message: string;
+}
+
+/** GPU and RAM use of the local model runtime (spec: local-models, Local resource telemetry). */
+export interface LocalResources {
+  /** GPU memory, bytes. */
+  gpu_memory_total: number;
+  /** GPU memory in use, bytes. */
+  gpu_memory_used: number;
+  /** How busy the GPU is, percent, when the driver reports it. */
+  gpu_utilization_percent?: number | null;
+  /** System RAM, bytes. */
+  ram_total: number;
+  /** System RAM in use, bytes. */
+  ram_used: number;
 }
 
 /** One running language server. */
