@@ -120,7 +120,7 @@ The system SHALL set `status = "rolled-back"` on every entry whose `harness_vers
 - **THEN** E SHALL have `status = "rolled-back"` and SHALL NOT appear in the next job's evidence
 
 ### Requirement: Library CLI
-The system SHALL provide `prometheus experience list [--domain D] [--all]` (entries with id, domain, status, confidence, pinned, times shown, cue), `show <entry_id>`, `domains` (domain names with entry counts), `pin|unpin <entry_id>`, `forget <entry_id>` (removes the entry directory, keeps the harness version) and `restore <entry_id>`, with RPC equivalents `experience.list`, `experience.show`, `experience.domains`, `experience.pin`, `experience.forget`, `experience.restore`. An unknown entry id SHALL exit 1 with `no experience entry '<id>'`.
+The system SHALL provide `prometheus experience list [--domain D] [--all]` (entries with id, domain, status, confidence, pinned, times shown, cue), `show <entry_id>`, `domains` (domain names with entry counts), `pin|unpin <entry_id>`, `forget <entry_id>` (removes the entry directory, keeps the harness version), `disable <entry_id>` (sets `status = "disabled"`, hiding the entry from proposers and sessions) and `restore <entry_id>` (back to `active` from `rolled-back` or `disabled`), with RPC equivalents `experience.list`, `experience.show`, `experience.domains`, `experience.pin`, `experience.forget`, `experience.disable`, `experience.restore`. An unknown entry id SHALL exit 1 with `no experience entry '<id>'`.
 **Milestone:** M3
 
 #### Scenario: Forget an entry

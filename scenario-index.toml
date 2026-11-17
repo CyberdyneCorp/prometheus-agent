@@ -85,9 +85,12 @@ capabilities = [
     "desktop-app",
     "kanban",
     "distribution-and-update",
+    "experience-library",
+    "harness-evolution",
     "messaging-gateway",
     "plugin-system",
     "projects",
+    "replay-and-evaluation",
     "web-dashboard",
 ]
 
@@ -4119,6 +4122,12 @@ capabilities = [
 "Delegation cost rolls up" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
 "Budget warning" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
 
+[web-dashboard."Harness-evolution view (upgrade)"]
+"Adopting a harness" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::a_harness_adopted_from_the_dashboard_applies_to_new_sessions_only"], note = "a chat session is live in the daemon when Adopt is clicked on the finished run's proposal (web/e2e/evolution.spec.ts): the page says it applies from the next session, the live session keeps answering, its frozen prompt lacks the adopted harness text and a session started afterwards has it" }
+
+[web-dashboard."Experience library view (upgrade)"]
+"Removing a bad lesson" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::a_lesson_deleted_from_the_dashboard_is_not_offered_to_later_sessions"], note = "a session in the domain gets the lessons layer before; web/e2e/experience.spec.ts disables the lesson (a session started then does not raise its times-shown count) and deletes it; a session started afterwards in the domain has no lessons layer" }
+
 [web-dashboard."Logs page is redacted and bounded"]
 "Path traversal" = ["crates/prometheus/tests/dashboard_api.rs::logs_are_named_from_the_registry_bounded_and_redacted", "crates/prometheus/tests/dashboard_e2e.rs::the_logs_page_tails_registry_logs"]
 
@@ -4574,8 +4583,8 @@ capabilities = [
 "Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
-"Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
-"Evolve task requires approval" = { deferred = "69 harness evolution engine (prometheus evolve, harness adoption from the next session): today an evolve task is validated and its completion always lands in review, but the worker blocks it with kind capability because no evolution engine exists in this build" }
+"Eval task on replayed provider" = { tests = ["crates/prometheus/tests/kanban_tasks.rs::a_replayed_eval_task_makes_no_live_request_and_attaches_the_report"], note = "the assignee's model route is a live fake chat-completions server that counts requests: the replayed eval task (eval run + judge through the eval engine on the mock provider, cache read-only) completes with the smoke summary and eval-report.txt attached while the server saw zero requests; a_live_eval_task_runs_its_suite_on_the_profile_route shows live mode reaching the route" }
+"Evolve task requires approval" = { tests = ["crates/prometheus/tests/kanban_tasks.rs::an_evolve_task_waits_in_review_until_a_person_approves_it", "crates/pmt-kanban/tests/flow.rs::only_a_person_approves_an_evolve_task"], note = "budget_k = 2 job on the mock provider under adoption policy auto: the task lands in review with harness.diff attached, the proposal stays pending and the active version is unchanged until kanban approve adopts it; a reviewer profile's approval is refused" }
 
 [kanban."Event log and run history"]
 "Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
@@ -4637,3 +4646,227 @@ capabilities = [
 
 [projects."Kanban board binding"]
 "Branch convention" = ["crates/prometheus/tests/kanban_upgrades.rs::a_bound_projects_board_is_selected_and_names_the_branch"]
+
+# M3 group 69 (harness evolution 69.1-69.3): crates/pmt-config/src/harness
+# holds the tree and its on-disk versions, crates/pmt-evolve the surface,
+# validation, budget, task capture and triggers; crates/prometheus/tests
+# harness_cli.rs and evolve_cli.rs run the CLI, sessions and `/evolve` on
+# the mock provider.
+[harness-evolution."Opt-in per profile"]
+"Disabled profile" = ["crates/prometheus/tests/evolve_cli.rs::a_disabled_profile_exits_78_and_writes_nothing", "crates/pmt-evolve/tests/jobs.rs::a_disabled_profile_refuses_with_78_and_creates_nothing", "crates/pmt-evolve/src/gate.rs::a_profile_without_the_section_is_refused_with_exit_78"]
+"Harness inspection without evolution" = ["crates/prometheus/tests/harness_cli.rs::the_log_works_on_a_profile_without_evolution"]
+
+[harness-evolution."Harness tree and on-disk layout"]
+"Fresh profile" = ["crates/prometheus/tests/harness_cli.rs::a_fresh_profile_activates_the_builtin_version_with_empty_always_on_files", "crates/pmt-config/src/harness/versions.rs::a_fresh_profile_gets_the_builtin_version_once"]
+"Traversal rejected" = ["crates/pmt-evolve/tests/validate.rs::a_traversal_key_fails_naming_the_path", "crates/prometheus/tests/harness_cli.rs::an_invalid_apply_writes_no_version"]
+
+[harness-evolution."Editable surface and component numbering"]
+"Off-surface write" = ["crates/pmt-evolve/tests/validate.rs::off_surface_paths_are_listed_and_reject_the_tree", "crates/pmt-evolve/src/harness/surface.rs::each_component_number_names_exactly_one_component"]
+
+[harness-evolution."Harness size caps"]
+"Always-on cap exceeded" = ["crates/pmt-evolve/tests/validate.rs::always_on_text_one_char_over_the_cap_fails"]
+
+[harness-evolution."Harness validation"]
+"Missing referenced script" = ["crates/prometheus/tests/harness_cli.rs::validate_accepts_the_valid_fixture_and_lists_every_error_of_the_others", "crates/pmt-evolve/tests/validate.rs::a_referenced_script_must_exist"]
+"Skill without trigger line is repaired" = ["crates/pmt-evolve/tests/validate.rs::an_unnamed_skill_gets_its_trigger_line", "crates/prometheus/tests/harness_cli.rs::a_harness_subagent_and_skill_are_registered_for_the_session"]
+"Unknown hook event" = ["crates/pmt-evolve/tests/validate.rs::an_unknown_hook_event_is_refused"]
+
+[harness-evolution."Harness loaded once per session"]
+"Adoption mid-session" = { tests = ["crates/prometheus/tests/harness_cli.rs::an_open_session_keeps_its_harness_until_an_explicit_now", "crates/prometheus/tests/harness_hooks.rs::a_session_runs_the_hooks_of_its_recorded_version", "crates/prometheus/tests/harness_cli.rs::a_now_activation_rebuilds_an_open_session_at_its_next_turn"], note = "the new version is activated with `harness apply`; `evolve adopt [--now]` writes and activates the adopted version through the same activation and `--now` path (crates/prometheus/src/evolve_cmd/proposals.rs)" }
+"Harness layer placement" = ["crates/pmt-agent/tests/turn/prompt.rs::the_harness_opens_the_profile_tier_after_the_identity"]
+
+[harness-evolution."Harness execution confinement"]
+"Hook asking for network" = ["crates/pmt-evolve/tests/validate.rs::a_hooks_file_cannot_ask_for_network"]
+
+[harness-evolution."Harness history and diff"]
+"Diff summary" = ["crates/pmt-evolve/src/harness/diff.rs::a_new_skill_and_a_grown_guardrails_file_summarize_as_the_spec_shows", "crates/prometheus/tests/harness_cli.rs::diff_prints_the_unified_diff_and_the_summary"]
+
+[harness-evolution."Rollback and manual edits"]
+"Rollback creates a new version" = ["crates/prometheus/tests/harness_cli.rs::a_rollback_writes_a_new_version_with_the_old_tree"]
+
+[harness-evolution."On-demand and scheduled triggers"]
+"Slash command does not block" = { tests = ["crates/prometheus/tests/evolve_cli.rs::slash_evolve_answers_with_the_job_id_without_a_model_call"], note = "unix: driven through a pseudo-terminal" }
+"Cron-triggered evolution" = ["crates/prometheus/tests/evolve_cli.rs::a_scheduled_evolve_job_queues_an_evolution_job_with_its_id", "crates/pmt-evolve/tests/jobs.rs::a_cron_trigger_records_its_trigger_and_job_id"]
+
+[harness-evolution."Automatic triggers after failed or long tasks"]
+"Daily cap" = ["crates/pmt-evolve/tests/jobs.rs::the_fourth_automatic_job_of_a_day_is_not_queued", "crates/pmt-evolve/src/job/auto.rs::a_fourth_qualifying_session_is_stopped_by_the_daily_cap", "crates/prometheus/tests/evolve_auto.rs::the_daily_cap_stops_a_second_job_and_its_notice"]
+"Queued job is announced" = ["crates/prometheus/tests/evolve_auto.rs::a_session_that_fails_after_a_tool_call_queues_a_job_and_says_so", "crates/prometheus/tests/evolve_auto.rs::the_line_interface_says_so_as_the_user_leaves", "crates/prometheus/tests/evolve_auto.rs::a_chat_is_told_when_new_ends_a_session_that_queues_a_job"]
+"Evaluation tasks never evolve the harness" = ["crates/prometheus/tests/evolve_auto.rs::a_failing_eval_task_queues_no_job", "crates/pmt-evolve/src/job/auto.rs::failed_and_long_sessions_qualify_and_others_do_not"]
+
+[harness-evolution."Evolution task capture"]
+"Git workspace" = ["crates/pmt-evolve/tests/jobs.rs::a_git_session_freezes_head_and_a_patch_that_reproduces_it"]
+
+[harness-evolution."Modes, budget and labels"]
+"Parallel k=2 labels" = ["crates/pmt-evolve/src/job/budget.rs::parallel_k2_has_the_spec_stage_and_composition_labels"]
+"Invalid k" = ["crates/prometheus/tests/evolve_cli.rs::k_nine_is_a_usage_error", "crates/pmt-evolve/src/job/budget.rs::k_outside_one_to_eight_is_a_usage_error"]
+
+[harness-evolution."Leak globs and verdict tripwire"]
+"Eval verdict in source" = ["crates/pmt-evolve/tests/jobs.rs::an_eval_verdict_file_is_left_out_of_the_task", "crates/pmt-evolve/tests/engine/stages.rs::a_verdict_in_a_rollout_deliverable_trips_every_stage_that_would_see_it", "crates/pmt-evolve/tests/engine/stages.rs::a_planted_rubric_file_aborts_the_job", "crates/pmt-evolve/src/engine/tripwire.rs::verdict_markers_and_leak_globs_are_caught_with_context"]
+"Dot-file glob honoured" = ["crates/pmt-evolve/tests/jobs.rs::a_dot_file_leak_glob_is_excluded_from_the_snapshot"]
+"Leak file tracked at HEAD" = ["crates/pmt-evolve/tests/jobs.rs::a_tracked_leak_file_is_excluded_from_a_git_snapshot"]
+
+[harness-evolution."Parallel mode"]
+"Parallel ledger" = ["crates/pmt-evolve/tests/engine/modes.rs::parallel_k3_ledgers_twelve_rollouts_and_nine_sessions", "crates/pmt-evolve/src/job/budget.rs::every_mode_spends_four_k_rollouts_and_three_k_sessions"]
+
+[harness-evolution."Sequential mode"]
+"Second round sees history" = ["crates/pmt-evolve/tests/engine/modes.rs::sequential_round_two_sees_the_first_checkpoint", "crates/pmt-evolve/src/engine/prompts.rs::sequential_prompts_never_call_candidates_independent"]
+
+[harness-evolution."Isolated rollouts"]
+"Approval inside a rollout" = { tests = ["crates/prometheus/tests/evolve_engine.rs::rollouts_deny_approvals_and_work_on_a_copy_without_leak_files"], note = "the rollout's `rm -rf ~/important` is denied (BLOCKED in its trajectory) with stdin closed, so no prompt can reach a surface; the rollout still ends ok" }
+"Workspace untouched" = ["crates/prometheus/tests/evolve_engine.rs::rollouts_deny_approvals_and_work_on_a_copy_without_leak_files", "crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness", "crates/pmt-evolve/src/job/workspace.rs::a_copied_task_diffs_its_changes_and_finds_new_images"]
+"Candidate hooks in a rollout" = ["crates/prometheus/tests/evolve_engine.rs::a_rollout_runs_its_candidates_hooks_instead_of_the_active_ones"]
+"Rollout egress limited to the configured providers" = ["crates/prometheus/src/evolve_host/rollout.rs::rollout_egress_lists_configured_providers_at_their_effective_endpoints"]
+
+[harness-evolution."Side-effect dry-run in rollouts (upgrade)"]
+"Message not sent" = ["crates/prometheus/tests/evolve_engine.rs::a_rollout_records_send_message_instead_of_sending_it", "crates/prometheus/src/chat/session/rollout.rs::external_calls_are_recorded_and_confined_ones_run"]
+
+[harness-evolution."Improver sessions"]
+"Improver cannot run candidate scripts" = { tests = ["crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness"], note = "every improver session's first call runs python3 on context/pool/inv1/harness/scripts/fix.py through `terminal`, which its toolset does not have: the call fails as an unknown tool" }
+
+[harness-evolution."Stage acceptance, retry and fallback"]
+"Invalid then valid" = ["crates/pmt-evolve/tests/engine/stages.rs::a_rejected_script_is_retried_from_the_models_own_edit", "crates/pmt-evolve/tests/engine/stages.rs::two_rejections_fall_back_to_the_active_harness_and_are_still_rolled_out", "crates/pmt-evolve/tests/engine/stages.rs::transport_failures_are_retried_once_then_fall_back_without_a_stage_retry"]
+
+[harness-evolution."Evidence context"]
+"Pool diff baseline" = ["crates/pmt-evolve/tests/engine/modes.rs::a_composition_sees_each_candidate_diffed_against_the_active_harness", "crates/pmt-evolve/src/engine/evidence.rs::long_observations_are_truncated_and_others_kept"]
+
+[harness-evolution."Answer-free prompts"]
+"Propose prompt blocks" = ["crates/pmt-evolve/src/engine/prompts.rs::a_domain_mission_carries_both_blocks_and_the_layout", "crates/pmt-evolve/tests/engine/stages.rs::every_mission_carries_the_blocks_and_the_cache_records_the_prompt_version"]
+
+[harness-evolution."Budget ledger and spend cap"]
+"Cap reached mid-job" = ["crates/pmt-evolve/tests/engine/budget.rs::reaching_the_cap_during_agg1_stops_the_job_without_a_proposal", "crates/pmt-evolve/src/engine/gate.rs::reaching_the_cap_stops_new_work_and_cancels_the_token", "crates/pmt-evolve/src/engine/ledger.rs::the_identity_holds_only_for_four_k_rollouts_and_three_k_sessions"]
+
+[harness-evolution."Concurrency limits"]
+"Out-of-order completion" = ["crates/pmt-evolve/tests/engine/modes.rs::ledger_order_is_serial_even_when_dom1_finishes_first", "crates/pmt-evolve/tests/engine/budget.rs::sessions_stay_within_the_process_bound_and_one_domain_runs_one_job"]
+
+[harness-evolution."Blind anonymised selection"]
+"Stable ids" = ["crates/pmt-evolve/src/engine/select.rs::the_same_job_k_and_mode_give_every_label_the_same_id", "crates/pmt-evolve/src/engine/select.rs::ids_are_bijective_base_26", "crates/pmt-evolve/tests/engine/selection.rs::the_selector_sees_only_anonymous_candidates_and_its_choice_maps_back"]
+"Unknown id" = ["crates/pmt-evolve/tests/engine/selection.rs::an_unknown_choice_fails_the_selection_and_makes_no_proposal"]
+
+[harness-evolution."User-driven selection (upgrade)"]
+"User picks a candidate" = ["crates/pmt-evolve/tests/engine/selection.rs::a_user_selection_pauses_then_continues_with_the_chosen_id", "crates/prometheus/tests/evolve_engine.rs::a_user_selection_pauses_the_job_until_choose"]
+
+[harness-evolution."Proposals and adoption policy"]
+"Auto policy with a new script" = ["crates/pmt-evolve/tests/engine/proposals.rs::auto_policy_waits_for_approval_when_a_script_is_added", "crates/pmt-evolve/src/proposal.rs::scripts_hooks_and_subagents_need_approval_and_prose_does_not"]
+"Review before adoption" = ["crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness"]
+"Both modes under the auto policy" = ["crates/pmt-evolve/tests/engine/proposals.rs::auto_policy_with_both_modes_adopts_one_and_supersedes_the_other", "crates/pmt-evolve/tests/engine/proposals.rs::a_refused_automatic_adoption_leaves_the_proposal_pending_and_the_job_ok"]
+
+[harness-evolution."Stale proposal protection"]
+"Manual edit after job" = ["crates/pmt-evolve/tests/engine/proposals.rs::a_stale_proposal_is_refused_unless_it_rebases_cleanly", "crates/prometheus/tests/evolve_engine.rs::adopting_a_stale_proposal_exits_65_and_keeps_the_active_version"]
+
+[harness-evolution."Job lifecycle, events and RPC"]
+"Cancel" = ["crates/pmt-evolve/tests/engine/budget.rs::cancel_during_inv2_stops_new_model_calls_and_records_spend", "crates/pmt-evolve/tests/engine/resume.rs::expired_jobs_are_pruned_but_an_adopted_jobs_summary_stays", "crates/prometheus/tests/evolve_engine.rs::a_queued_job_can_be_cancelled", "crates/prometheus/tests/evolve_rpc.rs::a_job_started_over_rpc_runs_in_the_daemon_and_its_proposal_is_adopted"]
+
+[harness-evolution."Resume and content-addressed session cache"]
+"Resume after crash" = ["crates/pmt-evolve/tests/engine/resume.rs::a_job_stopped_after_agg1_resumes_with_only_agg2_and_the_selection", "crates/prometheus/tests/evolve_rpc.rs::the_daemon_resumes_an_interrupted_job_at_start"]
+"Edited cached harness" = ["crates/pmt-evolve/tests/engine/resume.rs::an_edited_cached_workspace_reruns_the_stage_and_its_dependents"]
+
+[harness-evolution."Offline demo pipeline (upgrade)"]
+"Demo resume" = ["crates/prometheus/tests/evolve_demo.rs::evolve_demo_reports_no_model_calls_when_run_again"]
+
+[harness-evolution."Human-only evaluation of proposals (upgrade)"]
+"Review runs confined" = ["crates/prometheus/tests/evolve_engine.rs::a_review_eval_runs_only_under_the_rollout_confinement"]
+"Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only", "crates/prometheus/tests/evolve_engine.rs::a_user_suite_compares_the_base_and_the_proposed_harness"], note = "a_user_suite_compares_the_base_and_the_proposed_harness runs a user suite through the eval engine on the base version and on the proposal materialised as a temporary harness (scores 0 vs 100, no version written); the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
+
+[experience-library."Library layout"]
+"Entry created" = ["crates/pmt-evolve/tests/engine/library.rs::an_adopted_proposal_with_a_lesson_becomes_an_entry", "crates/prometheus/tests/experience_cli.rs::a_mock_job_distils_a_lesson_that_adoption_files_in_its_domain"]
+
+[experience-library."Domain names"]
+"Slash in domain" = ["crates/pmt-evolve/src/experience/domain.rs::slashes_spaces_and_case_are_normalised"]
+
+[experience-library."Domain resolution for a job"]
+"Classifier limited to known domains" = ["crates/pmt-evolve/src/experience/domain.rs::the_classifier_never_invents_a_domain", "crates/pmt-evolve/tests/engine/library.rs::a_job_without_a_domain_is_filed_under_a_known_domain_or_general", "crates/prometheus/tests/experience_cli.rs::a_task_without_a_domain_is_classified_among_existing_domains"]
+
+[experience-library."Reflection workspace"]
+"Failed selection skips reflection" = ["crates/pmt-evolve/tests/engine/library.rs::a_failed_selection_runs_no_reflection"]
+
+[experience-library."Experience distillation"]
+"All edits confounded" = ["crates/pmt-evolve/tests/engine/library.rs::a_no_entry_reflection_adopts_without_an_entry", "crates/pmt-evolve/src/experience/lesson.rs::no_entry_and_incomplete_lessons_yield_none"]
+
+[experience-library."Entries are written on adoption only"]
+"Rejected proposal" = ["crates/pmt-evolve/tests/engine/library.rs::a_rejected_proposal_writes_no_entry", "crates/prometheus/tests/experience_cli.rs::a_rejected_proposal_writes_no_entry"]
+
+[experience-library."Entry contents"]
+"Inventory wording" = ["crates/pmt-evolve/src/experience/entry.rs::a_guardrails_only_change_reads_always_on_edits_only"]
+
+[experience-library."Answer-free and secret-free entries"]
+"Verdict in lesson" = ["crates/pmt-evolve/tests/engine/library.rs::a_verdict_in_the_lesson_rejects_the_entry_but_not_the_adoption"]
+
+[experience-library."Index"]
+"Empty domain" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry"]
+
+[experience-library."Exposure to proposers"]
+"Index without entries" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry", "crates/pmt-evolve/tests/engine/library.rs::a_job_started_before_an_adoption_never_sees_it_even_on_resume"]
+
+[experience-library."Stream order within a domain"]
+"Second job sees the first" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry", "crates/pmt-evolve/tests/engine/budget.rs::sessions_stay_within_the_process_bound_and_one_domain_runs_one_job", "crates/prometheus/src/evolve_host/mod.rs::one_job_per_domain_starts_in_queue_order"]
+
+[experience-library."Lessons offered to later sessions (upgrade)"]
+"Low-confidence lesson excluded" = ["crates/pmt-evolve/tests/experience.rs::only_high_and_medium_lessons_reach_sessions_and_each_showing_counts", "crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+"Lesson adopted mid-session" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+
+[experience-library."Rollback demotes entries (upgrade)"]
+"Rolling back an adopted harness" = ["crates/pmt-evolve/tests/experience.rs::a_rollback_demotes_entries_of_versions_the_harness_left", "crates/prometheus/tests/experience_cli.rs::entries_are_pinned_forgotten_demoted_and_restored_from_the_cli"]
+
+[experience-library."Library CLI"]
+"Forget an entry" = ["crates/prometheus/tests/experience_cli.rs::entries_are_pinned_forgotten_demoted_and_restored_from_the_cli", "crates/prometheus/tests/evolve_rpc.rs::a_job_started_over_rpc_runs_in_the_daemon_and_its_proposal_is_adopted"]
+
+[experience-library."Retention cap"]
+"Eviction" = ["crates/pmt-evolve/tests/experience.rs::the_oldest_unpinned_entry_is_evicted_and_a_pinned_one_kept"]
+
+[experience-library."Export and import between profiles (upgrade)"]
+"Archive with a secret" = ["crates/pmt-evolve/tests/experience.rs::an_archive_with_a_secret_is_refused_whole", "crates/prometheus/tests/experience_cli.rs::archives_move_between_profiles_and_a_secret_refuses_the_whole_archive"]
+
+[experience-library."Restore on resume and repair"]
+"Deleted library directory" = ["crates/pmt-evolve/tests/experience.rs::a_deleted_domain_is_rebuilt_from_adopted_proposals", "crates/prometheus/tests/experience_cli.rs::a_deleted_domain_is_rebuilt_without_a_model"]
+
+[experience-library."Library events"]
+"Injection observable" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+
+# M3 replay-and-evaluation (task group 71).
+
+[replay-and-evaluation."Offline self-improvement demo"]
+"Resume makes no new work" = ["crates/prometheus/tests/evolve_demo.rs::the_evolve_demo_selects_the_fixed_totals_and_resumes_without_work"]
+
+[replay-and-evaluation."Eval suite format"]
+"Missing prompt" = ["crates/prometheus/tests/eval_cli.rs::a_task_without_a_prompt_fails_validation_naming_its_file"]
+"Override that loosens isolation" = ["crates/prometheus/tests/eval_cli.rs::a_run_toml_that_loosens_isolation_is_refused", "crates/pmt-eval/src/overrides.rs::isolation_settings_are_refused", "crates/prometheus/src/eval_cmd/exec.rs::isolation_is_applied_again_after_a_tasks_overrides"]
+"Task capability beyond the profile" = ["crates/prometheus/tests/eval_cli.rs::a_task_asking_for_more_than_the_profile_grants_does_not_run"]
+
+[replay-and-evaluation."Eval run"]
+"Budget stops a run" = { tests = ["crates/prometheus/tests/eval_cli.rs::the_budget_refuses_the_third_task_and_skips_the_rest"], note = "a fake chat-completions provider reports usage and a probe run fixes the price so each task costs 0.20 USD; the run budget is the eval root's budgets.root_usd, refused on the call's worst case" }
+
+[replay-and-evaluation."Eval runs are resumable"]
+"Tampered deliverable" = ["crates/prometheus/tests/eval_cli.rs::a_resumed_run_reruns_only_tasks_whose_deliverables_changed"]
+
+[replay-and-evaluation."Answer-free boundary"]
+"Agent searches for the answer" = ["crates/prometheus/tests/eval_cli.rs::a_task_reaching_for_grader_material_is_contaminated", "crates/pmt-eval/src/boundary.rs::grader_paths_and_leak_globs_are_attempts"]
+
+[replay-and-evaluation."Post-hoc judging"]
+"Judge failure is not a zero" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/prometheus/tests/eval_judge.rs::script_graders_score_deliverables_and_unexecuted_tasks_stay_ungraded"]
+
+[replay-and-evaluation."Re-judging and judge identity"]
+"Flaky re-judge keeps the grade" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/pmt-eval/src/judge.rs::a_failed_re_judge_keeps_the_graded_row"]
+
+[replay-and-evaluation."Eval reports and comparison (upgrade)"]
+"Harness comparison" = ["crates/prometheus/tests/eval_judge.rs::a_report_of_two_runs_shows_the_score_delta_with_its_interval", "crates/pmt-eval/src/report.rs::a_comparison_within_noise_says_so", "crates/pmt-eval/src/report.rs::repeats_give_pass_at_k_and_task_spread"]
+
+[replay-and-evaluation."Benchmark adapter protocol"]
+"Score not callable during execution" = ["crates/prometheus/tests/eval_bench.rs::an_adapter_is_never_asked_to_score_during_execution", "crates/prometheus/tests/eval_bench_plugins.rs::a_wasm_plugin_adapter_is_never_asked_to_score_during_execution", "crates/prometheus/tests/eval_bench_plugins.rs::a_python_plugin_adapter_is_never_asked_to_score_during_execution"]
+
+[replay-and-evaluation."Session-to-task capture (upgrade)"]
+"Bug report becomes a regression task" = ["crates/prometheus/tests/eval_bench.rs::a_mis_summed_session_becomes_a_regression_task"]
+
+[replay-and-evaluation."Batch prompt datasets"]
+"Resume after interruption" = { tests = ["crates/prometheus/tests/eval_batch.rs::a_resumed_batch_runs_only_the_remaining_prompts"], note = "the first invocation stops after part of the dataset (--max-samples), leaving the run as an interrupted one does: completed tasks with their markers" }
+"Ephemeral prompt not recorded" = ["crates/prometheus/tests/eval_batch.rs::the_ephemeral_system_prompt_reaches_the_model_and_no_file"]
+
+[replay-and-evaluation."Batch statistics and quality filtering"]
+"Zero-filled tool stats" = ["crates/prometheus/tests/eval_batch.rs::statistics_zero_fill_tools_and_filtered_tasks_leave_exports", "crates/pmt-eval/src/batch.rs::unused_tools_of_the_enabled_toolsets_are_zero_filled"]
+
+[replay-and-evaluation."Toolset distributions"]
+"Reproducible sampling" = ["crates/pmt-eval/src/distribution.rs::the_same_seed_samples_the_same_toolsets", "crates/prometheus/tests/eval_batch.rs::a_seeded_distribution_samples_the_same_toolsets_in_every_run"]
+"Compound key rolls once" = ["crates/pmt-eval/src/distribution.rs::a_compound_key_enables_all_or_none_of_its_members"]
+
+[replay-and-evaluation."Trajectory compressor"]
+"Head and tail preserved" = ["crates/pmt-eval/src/compress.rs::head_and_tail_survive_and_one_summary_replaces_the_middle", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
+"Short trajectory untouched" = ["crates/pmt-eval/src/compress.rs::a_short_record_is_copied_without_a_model_call", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]

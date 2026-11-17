@@ -45,6 +45,10 @@ pub struct ExportArgs {
     /// Also sessions that ended in an error.
     #[arg(long)]
     pub include_failed: bool,
+    /// With `--eval-run`: also the batch tasks its statistics filtered
+    /// out (no reply, `--max-turns` reached, only failed tool calls).
+    #[arg(long, requires = "eval_run")]
+    pub include_filtered: bool,
     /// The JSON-lines file to write.
     #[arg(short = 'o', long = "output", value_name = "FILE")]
     pub output: PathBuf,
@@ -67,7 +71,7 @@ struct Written {
 pub fn run(args: &ExportArgs, ctx: &Context<'_>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let store = Store::open(&scope)?;
-    let ids = selection(args, &store)?;
+    let ids = selection(args, &store, scope.dir())?;
     let redactor = scope.secrets().redactor()?;
     let dir = scope.path(files::DIR);
     let mut out = String::new();
@@ -111,7 +115,11 @@ pub fn run(args: &ExportArgs, ctx: &Context<'_>) -> Result<u8, Error> {
 }
 
 /// The sessions to export, oldest first.
-fn selection(args: &ExportArgs, store: &Store) -> Result<Vec<SessionId>, Error> {
+fn selection(
+    args: &ExportArgs,
+    store: &Store,
+    profile_dir: &Path,
+) -> Result<Vec<SessionId>, Error> {
     if !args.session.is_empty() {
         return args
             .session
@@ -132,6 +140,11 @@ fn selection(args: &ExportArgs, store: &Store) -> Result<Vec<SessionId>, Error> 
     if let Some(run) = &args.eval_run {
         sessions
             .retain(|s| s.source == Source::Eval && s.source_tag.as_deref() == Some(run.as_str()));
+        if !args.include_filtered {
+            let run_dir = pmt_eval::run::RunDir::of(profile_dir, run);
+            let filtered = pmt_eval::batch::filtered_sessions(&run_dir);
+            sessions.retain(|s| !filtered.contains(&s.id.to_string()));
+        }
         if sessions.is_empty() {
             return Err(Error::new(
                 &codes::SESSION_NOT_FOUND,

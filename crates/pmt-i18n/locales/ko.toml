@@ -377,6 +377,8 @@ suggestions = "제안된 자동화: list, accept <n>, dismiss <n>, catalog, clea
 blueprint = "블루프린트로 예약 작업 만들기: /blueprint [이름] [슬롯=값 ...]"
 goal = "에이전트가 계속 추구하는 상시 목표: /goal <텍스트> | draft <텍스트> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "활성 목표의 추가 조건: /subgoal <텍스트> | remove <N> | clear"
+evolve = "이 세션의 하네스 진화 작업을 대기열에 추가: /evolve [--k N]"
+domain = "이 세션의 경험 라이브러리 도메인을 표시하거나 설정: /domain [NAME]"
 loop = "메시지나 명령 반복: /loop [간격] <메시지> [--times N] [--until <조건>] | status | pause | resume | stop"
 heartbeat = "유휴 상태일 때 확인: /heartbeat every <간격> <메시지> | status | pause | resume | clear"
 worktree = "Git worktree: 활성 worktree 표시, new [이름], list, prune [--dry-run]"

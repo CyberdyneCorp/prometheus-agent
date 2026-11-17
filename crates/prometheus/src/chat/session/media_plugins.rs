@@ -9,9 +9,10 @@ use pmt_media::plugin::{Kind, MediaPlugins, PluginFuture, SttFuture, SttRequest}
 use pmt_plugins::hooks::{Hooks, Payload};
 use pmt_plugins::host::CallInfo;
 use pmt_plugins::host::hook_world::Reply;
-use pmt_plugins::load::Loaded;
 use pmt_plugins::providers::{Category, ProviderRegistry};
 use serde_json::{Map, Value};
+
+use crate::plugins_host::ProfilePlugins;
 
 /// The providers and hooks of one plugin load, called for one session
 /// (or surface).
@@ -22,12 +23,13 @@ pub struct PluginMedia {
 }
 
 impl PluginMedia {
-    /// The media providers and hooks of `loaded`, called as `call`.
+    /// The media providers and hooks of `plugins` (its hook view, so a
+    /// rollout's candidate hooks apply), called as `call`.
     #[must_use]
-    pub fn shared(loaded: &Loaded, call: CallInfo) -> Arc<dyn MediaPlugins> {
+    pub fn shared(plugins: &ProfilePlugins, call: CallInfo) -> Arc<dyn MediaPlugins> {
         Arc::new(Self {
-            providers: loaded.providers.clone(),
-            hooks: Arc::clone(&loaded.hooks),
+            providers: plugins.current().providers.clone(),
+            hooks: plugins.hooks(),
             call,
         })
     }

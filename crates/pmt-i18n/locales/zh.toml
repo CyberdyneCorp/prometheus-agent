@@ -377,6 +377,8 @@ suggestions = "建议的自动化：list、accept <n>、dismiss <n>、catalog、
 blueprint = "从蓝图创建计划任务：/blueprint [名称] [槽位=值 ...]"
 goal = "代理持续推进的长期目标：/goal <文本> | draft <文本> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "当前目标的附加标准：/subgoal <文本> | remove <N> | clear"
+evolve = "为此会话排队一个 harness 演进任务：/evolve [--k N]"
+domain = "显示或设置此会话的经验库领域：/domain [NAME]"
 loop = "重复一条消息或命令：/loop [间隔] <消息> [--times N] [--until <条件>] | status | pause | resume | stop"
 heartbeat = "空闲时定期检查：/heartbeat every <间隔> <消息> | status | pause | resume | clear"
 worktree = "Git worktree：显示当前的、new [名称]、list、prune [--dry-run]"

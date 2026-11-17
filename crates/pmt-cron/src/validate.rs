@@ -81,12 +81,8 @@ pub fn script_path(scripts_dir: &Path, script: &str) -> Result<PathBuf, Error> {
     Ok(resolved)
 }
 
-/// Checks `spec` for the profile whose scripts live in `scripts_dir`.
-///
-/// # Errors
-///
-/// `cron.invalid_job` naming the first problem.
-pub fn validate(spec: &JobSpec, scripts_dir: &Path, catalog: &dyn Catalog) -> Result<(), Error> {
+/// An agent job runs a prompt, a script or a skill.
+fn validate_payload(spec: &JobSpec) -> Result<(), Error> {
     if spec.prompt.trim().is_empty() && spec.skills.is_empty() && spec.script.is_none() {
         return Err(invalid(
             "cron job has nothing to run: provide a prompt, a script, or at least one skill",
@@ -97,6 +93,32 @@ pub fn validate(spec: &JobSpec, scripts_dir: &Path, catalog: &dyn Catalog) -> Re
             "no_agent needs a script: the script is the whole job",
         ));
     }
+    Ok(())
+}
+
+/// An `evolve` job names its task file and runs nothing else.
+fn validate_evolve(spec: &JobSpec) -> Result<(), Error> {
+    if spec.task.as_deref().is_none_or(|t| t.trim().is_empty()) {
+        return Err(invalid("an evolve job needs a task file"));
+    }
+    if !spec.prompt.trim().is_empty() || !spec.skills.is_empty() || spec.script.is_some() {
+        return Err(invalid(
+            "an evolve job queues an evolution job for its task: it takes no prompt, script or skill",
+        ));
+    }
+    Ok(())
+}
+
+/// Checks `spec` for the profile whose scripts live in `scripts_dir`.
+///
+/// # Errors
+///
+/// `cron.invalid_job` naming the first problem.
+pub fn validate(spec: &JobSpec, scripts_dir: &Path, catalog: &dyn Catalog) -> Result<(), Error> {
+    if spec.kind == crate::job::JobKind::Evolve {
+        return validate_evolve(spec);
+    }
+    validate_payload(spec)?;
     if let Some(script) = &spec.script {
         script_path(scripts_dir, script)?;
     }

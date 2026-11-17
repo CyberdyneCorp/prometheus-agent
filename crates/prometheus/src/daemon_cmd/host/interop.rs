@@ -292,15 +292,14 @@ impl DaemonHost {
         let link = gateway.link(&session);
         let timeout =
             Duration::from_secs(profile.scope().config().bot_mode.relay_turn_timeout_secs);
-        let outcome = match self
-            .submit_turn(
-                profile,
-                params,
-                (author, link),
-                Some(BusyInputMode::Queue),
-                None,
-            )
-            .await
+        let outcome = match Box::pin(self.submit_turn(
+            profile,
+            params,
+            (author, link),
+            Some(BusyInputMode::Queue),
+            None,
+        ))
+        .await
         {
             Ok(submitted) => super::turn_results::wait(&submitted.turn_id, timeout)
                 .await

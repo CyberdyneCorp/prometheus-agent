@@ -286,7 +286,7 @@ fn arguments(text: &str) -> Value {
 }
 
 impl ToolReplay for Replayer {
-    fn answer(&self, call: &RequestedCall) -> ToolAnswer {
+    fn answer(&self, call: &RequestedCall, _: Option<&pmt_agent::turn::Declared>) -> ToolAnswer {
         let mut progress = self.progress();
         progress.steps += 1;
         if progress.live || self.mode == Mode::ToolsLive {

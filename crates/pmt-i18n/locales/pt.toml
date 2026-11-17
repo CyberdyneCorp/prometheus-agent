@@ -377,6 +377,8 @@ suggestions = "Automações sugeridas: list, accept <n>, dismiss <n>, catalog, c
 blueprint = "Cria uma tarefa agendada a partir de um modelo: /blueprint [nome] [slot=valor ...]"
 goal = "Uma meta permanente para a qual o agente continua trabalhando: /goal <texto> | draft <texto> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Critérios extras da meta ativa: /subgoal <texto> | remove <N> | clear"
+evolve = "Enfileira um trabalho de evolução do harness para esta sessão: /evolve [--k N]"
+domain = "Mostra ou define o domínio da biblioteca de experiência desta sessão: /domain [NOME]"
 loop = "Repete uma mensagem ou comando: /loop [intervalo] <mensagem> [--times N] [--until <condição>] | status | pause | resume | stop"
 heartbeat = "Verifica durante a inatividade: /heartbeat every <intervalo> <mensagem> | status | pause | resume | clear"
 worktree = "Worktrees do Git: mostra o ativo, new [NOME], list, prune [--dry-run]"

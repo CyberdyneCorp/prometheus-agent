@@ -51,7 +51,7 @@ pub(crate) const TASK_COLUMNS: &str = "id, title, body, status, assignee, review
     not_before, consecutive_failures, last_failure, max_retries, budget_usd, budget_tokens, \
     artifacts, result, summary, created_by, created_run, created_at, updated_at, completed_at, \
     completion_contract, pr_url, goal_mode, goal_max_turns, model, provider, skills, lane, project, \
-    repo_root";
+    repo_root, domain";
 
 pub(crate) const RUN_COLUMNS: &str = "id, task_id, profile, role, started_at, ended_at, outcome, \
     exit_code, session_id, trajectory_id, cost_usd, tokens, pid, pid_start, lease_expires_at, \
@@ -112,6 +112,7 @@ pub(crate) fn task_row(row: &Row<'_>) -> rusqlite::Result<Task> {
         lane: row.get(36)?,
         project: row.get(37)?,
         repo_root: row.get::<_, Option<String>>(38)?.map(PathBuf::from),
+        domain: row.get(39)?,
     })
 }
 

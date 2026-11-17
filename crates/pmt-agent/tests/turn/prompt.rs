@@ -134,6 +134,34 @@ async fn static_and_profile_tiers_are_shared_across_working_directories() {
     assert_ne!(a.system[2], b.system[2], "session tier differs");
 }
 
+/// Scenario: Harness layer placement (spec: harness-evolution, Harness
+/// loaded once per session).
+#[tokio::test]
+async fn the_harness_opens_the_profile_tier_after_the_identity() {
+    let profile = Profile::new("");
+    std::fs::write(profile.dir().join("SOUL.md"), "You are Ada.").unwrap();
+    let mut requests = Vec::new();
+    for harness in ["Answer in French.", "Answer in German."] {
+        let s = profile.session(Source::Cli);
+        let model = mock_model(&profile, ANSWER, "mock").await;
+        let run = agent(&profile, s, model.clone(), FakeTools::new(), |setup| {
+            setup.prompt = PromptSetup::new("telegram", None);
+            setup.prompt.harness = Some(harness.to_owned());
+        });
+        run.turn(&profile, "hi").await;
+        let request = model.requests().remove(0);
+        assert!(request.system[0].text.starts_with("You are Ada."));
+        assert!(!request.system[0].text.contains(harness));
+        assert!(
+            request.system[1].text.starts_with(harness),
+            "{}",
+            request.system[1].text
+        );
+        requests.push(request);
+    }
+    assert_eq!(requests[0].system[0], requests[1].system[0], "static tier");
+}
+
 #[tokio::test]
 async fn the_runtime_block_is_last() {
     let profile = Profile::new("");

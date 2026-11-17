@@ -3,6 +3,7 @@ subset of the Hermes API, mapped onto the Prometheus host through
 ``host.call`` requests. Anything else raises UnsupportedPluginApi."""
 
 import asyncio
+import base64
 import dataclasses
 import inspect
 import json
@@ -35,11 +36,13 @@ class Host:
 
 
 class HostError(Exception):
-    """The host refused or failed a request."""
+    """The host refused or failed a request: ``code`` names why, ``rpc`` is
+    the JSON-RPC error code (-32002 for a refused benchmark score push)."""
 
-    def __init__(self, code, message):
+    def __init__(self, code, message, rpc=None):
         super().__init__(message)
         self.code = code
+        self.rpc = rpc
 
 
 def host(method, args=None, timeout=None):
@@ -89,6 +92,29 @@ class PostedMessage:
 
     async def aedit(self, text):
         return await asyncio.to_thread(self.edit, text)
+
+
+class BenchHost:
+    """What a benchmark adapter method reaches as its ``host`` argument: the
+    call's directory (``read``, ``write``, ``list``; the workspace during
+    ``prepare``, the run directory during ``deliverables`` and ``score``) and
+    ``request``, the protocol's adapter-to-host request (always an error;
+    a score push during ``prometheus eval run`` raises HostError with
+    ``rpc == -32002``)."""
+
+    def read(self, path):
+        return base64.b64decode(host("bench.files.read", {"path": str(path)}))
+
+    def write(self, path, data):
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        host("bench.files.write", {"path": str(path), "data": base64.b64encode(bytes(data)).decode("ascii")})
+
+    def list(self):
+        return list(host("bench.files.list") or [])
+
+    def request(self, method, params=None):
+        return host("bench.request", {"method": str(method), "params": params or {}})
 
 
 class PlatformActions:
@@ -365,6 +391,17 @@ class PluginContext:
 
     def register_provider(self, profile):
         state.REGISTRY["providers"][profile.name] = profile
+
+    def register_bench_adapter(self, adapter):
+        """A benchmark adapter (Prometheus extension): ``adapter.name`` is what
+        ``prometheus eval run bench:<name>`` names, and its methods ``describe``,
+        ``tasks``, ``task``, ``prepare``, ``deliverables``, ``preflight`` and
+        ``score`` answer the protocol's ``bench.*`` calls (keyword arguments
+        as the protocol's params, plus ``host`` when the method takes it)."""
+        name = str(getattr(adapter, "name", "")).strip()
+        if not _TRANSPORT_NAME.fullmatch(name):
+            raise ValueError("bench adapter name must match [a-z0-9][a-z0-9_-]{0,63}")
+        state.REGISTRY["bench_adapters"][name] = adapter
 
     def register_approval_transport(self, name, present_fn):
         clean = str(name).strip().lower()

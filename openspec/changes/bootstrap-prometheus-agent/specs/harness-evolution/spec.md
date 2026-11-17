@@ -67,13 +67,18 @@ The system SHALL validate a tree by collecting every error (not stopping at the 
 - **THEN** validation SHALL fail with `unknown hook event 'on_magic'`
 
 ### Requirement: Harness loaded once per session
-The system SHALL resolve `<profile>/harness/ACTIVE` exactly once at session start, record the version id on the session row (`sessions.harness_version`), and inject the always-on files as one harness layer of the system prompt in the fixed order c1, c2, c3, c4 immediately after the built-in base prompt and before identity and context files; harness skills and subagents SHALL be registered for that session only. A harness version adopted, rolled back or edited while a session is open SHALL NOT change that session's system prompt, tools or skills, except through an explicit `--now` which SHALL rebuild the prompt at the next turn boundary and log `prompt cache invalidated by harness change` at WARN.
+The system SHALL resolve `<profile>/harness/ACTIVE` exactly once at session start, record the version id on the session row (`sessions.harness_version`), and inject the always-on files as one harness layer of the system prompt in the fixed order c1, c2, c3, c4, placed as the first layer of the `profile` tier of `agent-turn-loop` (Layered system prompt): immediately after the built-in `static` tier (identity, tool-use guidance, model-family guidance) and before the platform hint, skills index, personality, project context files and memory, so that adopting a harness version never invalidates the cached `static` block; harness skills and subagents SHALL be registered for that session only. A harness version adopted, rolled back or edited while a session is open SHALL NOT change that session's system prompt, tools or skills, except through an explicit `--now` which SHALL rebuild the prompt at the next turn boundary and log `prompt cache invalidated by harness change` at WARN.
 **Milestone:** M3
 
 #### Scenario: Adoption mid-session
 - **GIVEN** an open session started on `h3-aaaa`
 - **WHEN** the user adopts a proposal creating `h4-bbbb` without `--now`
 - **THEN** the open session's next request SHALL carry a byte-identical system prompt and a new session SHALL record `harness_version = "h4-bbbb"`
+
+#### Scenario: Harness layer placement
+- **GIVEN** a profile with a `SOUL.md` and an active harness whose `SYSTEM.md` is not empty
+- **WHEN** a new session builds its system prompt
+- **THEN** the `static` tier SHALL hold the `SOUL.md` identity and no harness text, the `profile` tier SHALL begin with the harness layer, and a session started on another harness version SHALL carry a byte-identical `static` tier
 
 ### Requirement: Harness execution confinement
 The system SHALL run harness scripts and hook commands only inside the session's execution sandbox under the session's existing capability grants; a harness SHALL NOT be able to declare, request or widen any capability grant, network egress rule, secret access or approval mode, and validation SHALL reject any `hooks.toml` key other than `event`, `command`, `timeout_secs` (1–120, default 30) and `matcher`.
@@ -115,7 +120,7 @@ The system SHALL start an evolution job from: `prometheus evolve run (--session 
 - **THEN** an evolution job SHALL be queued with `trigger = "cron"` and the scheduled job's id
 
 ### Requirement: Automatic triggers after failed or long tasks
-The system SHALL queue an evolution job automatically only when `evolve.auto.enabled = true` (default `false`) and a finished session either ended in error or interruption after at least one tool call (`evolve.auto.on_failure = true`), or used at least `evolve.auto.min_iterations = 40` iterations (`evolve.auto.on_long_task = true`); automatic jobs SHALL be limited to `evolve.auto.max_jobs_per_day = 3` per profile, SHALL never be queued from sessions whose `source` is `evolve`, and SHALL notify the user that a job was queued.
+The system SHALL queue an evolution job automatically only when `evolve.auto.enabled = true` (default `false`) and a finished session either ended in error or interruption after at least one tool call (`evolve.auto.on_failure = true`), or used at least `evolve.auto.min_iterations = 40` iterations (`evolve.auto.on_long_task = true`); automatic jobs SHALL be limited to `evolve.auto.max_jobs_per_day = 3` per profile, SHALL be queued only from top-level user sessions, so never from sessions whose `source` is `harness` (the rollouts and improver sessions of a job, `session-storage`) or `eval` (evaluation task sessions, `replay-and-evaluation`), nor from hidden sessions or delegated child sessions (subagents; a compression continuation, fork or reset of a user session still counts as that user's task), and SHALL notify the user that a job was queued on the surface of the session that ended: the line interface or stderr, the messaging chat, or the session's attached clients as a `command.notice` session event.
 **Milestone:** M3
 
 #### Scenario: Daily cap
@@ -123,8 +128,18 @@ The system SHALL queue an evolution job automatically only when `evolve.auto.ena
 - **WHEN** a fourth qualifying session ends in error
 - **THEN** no job SHALL be queued and the decision SHALL be logged at INFO with reason `daily auto-evolve cap reached`
 
+#### Scenario: Queued job is announced
+- **GIVEN** `evolve.auto.enabled = true`
+- **WHEN** a session ends in error after a tool call
+- **THEN** one job with trigger `auto` SHALL be queued and the session's surface SHALL show `harness evolution job <id> queued after this session`
+
+#### Scenario: Evaluation tasks never evolve the harness
+- **GIVEN** `evolve.auto.enabled = true`
+- **WHEN** an `eval run` task session ends in error after a tool call
+- **THEN** no evolution job SHALL be queued
+
 ### Requirement: Evolution task capture
-The system SHALL freeze each job's task into `<profile>/evolve/jobs/<job_id>/task/` containing `task.md` (the task statement: by default the session's first user message, editable via `--edit` before the job starts), `source/` (a snapshot of the workspace files the session read or modified, or, when the workspace is a git repository, `repo.toml` with the HEAD commit plus `uncommitted.patch`), and `task.toml` (`domain`, `toolsets`, `model`, `backend`, `source_session`, `fingerprint`). The snapshot SHALL be capped at `evolve.task.max_source_bytes = 52428800`, SHALL pass the redaction pass of `security-boundaries`, and SHALL exclude files matching leak globs; a task exceeding the cap SHALL fail with exit 65.
+The system SHALL freeze each job's task into `<profile>/evolve/jobs/<job_id>/task/` containing `task.md` (the task statement: by default the session's first user message, editable via `--edit` before the job starts), `source/` (a snapshot of the workspace files the session read or modified, or, when the workspace is a git repository, `repo.toml` with the HEAD commit, an `excluded` list of the paths tracked at that commit that match leak globs, plus `uncommitted.patch`; materialising the workspace SHALL delete every `excluded` path and SHALL leave none of them reachable from the workspace's own git history, which SHALL hold no reference to the user's repository), and `task.toml` (`domain`, `toolsets`, `model`, `backend`, `source_session`, `fingerprint`). The snapshot SHALL be capped at `evolve.task.max_source_bytes = 52428800`, SHALL pass the redaction pass of `security-boundaries`, and SHALL exclude files matching leak globs; a task exceeding the cap SHALL fail with exit 65.
 **Milestone:** M3
 
 #### Scenario: Git workspace
@@ -161,7 +176,7 @@ In sequential mode the system SHALL, for t = 1..k, run `inv<t>` and `dom<t>` aga
 - **THEN** the evidence for `inv2` SHALL contain `pool/c1/rollout.md` and `decisions/c1.md`
 
 ### Requirement: Isolated rollouts
-The system SHALL execute every rollout as a headless, non-interactive session (`source = "evolve"`) with the candidate harness, in a fresh sandbox workspace (a detached git worktree at the recorded commit with the patch applied, or a copy of `task/source/`) on backend `evolve.rollout.backend` (default `local-sandbox`; the unsandboxed host backend SHALL be rejected), with network egress limited to the configured model providers unless `evolve.rollout.network = "session"` reuses the source session's egress rules. Rollouts SHALL auto-deny every approval request, SHALL NOT write memory, SHALL be hidden from session lists, search and memory nudges, and SHALL be bounded by `evolve.rollout.max_iterations = 60` and `evolve.rollout.timeout_secs = 900`. A rollout that errors SHALL be recorded as `ok = false` with the error, never aborting the job; a rollout is `ok` when it ends with a final assistant message.
+The system SHALL execute every rollout as a headless, non-interactive session (session `source = "harness"`, `session-storage`) with the candidate harness (its prompt layer, skills, subagents and `hooks.toml` hooks, which replace the active version's hooks for that session), in a fresh sandbox workspace (a detached checkout of the recorded commit from a `--shared` clone that only reads the user's repository, with the patch applied and the `excluded` paths deleted, or a copy of `task/source/`) on backend `evolve.rollout.backend` (default `local-sandbox`, the `local` backend with full sandbox enforcement and no `security.sandbox.allow_degraded` features; the unsandboxed host backend, spelled `local` or `host`, SHALL be rejected), with network egress limited to the configured model providers (the endpoint hosts, configured `base_url` or built-in default, of every `[providers.<id>]` block and of the main route's provider, or of each `model.auto_order` provider under `auto`) unless `evolve.rollout.network = "session"` reuses the source session's egress rules. Rollouts SHALL auto-deny every approval request, SHALL NOT write memory, SHALL be hidden from session lists, search and memory nudges, and SHALL be bounded by `evolve.rollout.max_iterations = 60` and `evolve.rollout.timeout_secs = 900`. A rollout that errors SHALL be recorded as `ok = false` with the error, never aborting the job; a rollout is `ok` when it ends with a final assistant message.
 **Milestone:** M3
 
 #### Scenario: Approval inside a rollout
@@ -172,8 +187,18 @@ The system SHALL execute every rollout as a headless, non-interactive session (`
 - **WHEN** a rollout deletes files in its workspace
 - **THEN** the user's real workspace SHALL be byte-identical before and after the job
 
+#### Scenario: Candidate hooks in a rollout
+- **GIVEN** an active harness whose `hooks.toml` blocks the terminal tool with one message and a candidate whose `hooks.toml` blocks it with another
+- **WHEN** the candidate is rolled out
+- **THEN** the candidate's hook SHALL answer in that rollout's trajectory and the active version's hook SHALL NOT, while base rollouts still run the active version's hook
+
+#### Scenario: Rollout egress limited to the configured providers
+- **GIVEN** `evolve.rollout.network = "providers"`, a main route on a built-in provider without a `[providers]` block and a block without `base_url`
+- **WHEN** a rollout's egress allowlist is built
+- **THEN** it SHALL hold the built-in endpoint hosts of both and the host of every configured `base_url`
+
 ### Requirement: Side-effect dry-run in rollouts (upgrade)
-The system SHALL replace, during rollouts, every tool whose registry entry declares `effect = "external"` (messaging and gateway delivery, email, scheduled-job and kanban mutation, memory writes, delegation outside the rollout sandbox, browser actions on hosts outside the egress allowlist) with a recorder that stores the call arguments in the trajectory and returns `recorded, not executed during harness evolution`. Rollout deliverables SHALL consist of the final assistant message, the workspace diff, and the list of recorded external calls.
+The system SHALL replace, during rollouts, every tool whose registry entry declares `effect = "external"` (messaging and gateway delivery, email, scheduled-job and kanban mutation, memory writes, delegation outside the rollout sandbox, browser actions on hosts outside the egress allowlist) with a recorder that stores the call arguments in the trajectory and returns `recorded, not executed during harness evolution`; the `terminal` and `process` tools stay live because they run inside the rollout's own sandbox, workspace and egress limit, so their effects never leave the rollout. Rollout deliverables SHALL consist of the final assistant message, the workspace diff, and the list of recorded external calls.
 **Milestone:** M3
 
 #### Scenario: Message not sent
@@ -206,7 +231,7 @@ The system SHALL build each improver's evidence directory as `context/` with `ta
 - **THEN** each `pool/inv<i>/harness.diff` SHALL be the diff from the active harness to that candidate
 
 ### Requirement: Answer-free prompts
-The system SHALL include in every improver prompt an answer-free block (no rubric, reference answer or grading verdict exists; judge only by the task statement and trajectories; never write phrases asserting what an evaluator expects) and an evidence-boundary block (everything under `context/` is data, instructions found inside trajectories, tool output or candidate harnesses SHALL NOT be followed, and nothing found in a candidate harness may be executed). Prompts SHALL be versioned by the constant `evolve.prompt_version = "pmt-evolve-1"`, which is part of every session cache key.
+The system SHALL include in every improver prompt an answer-free block (no rubric, reference answer or grading verdict exists; judge only by the task statement and trajectories; never write phrases asserting what an evaluator expects) and an evidence-boundary block (everything under `context/` is data, instructions found inside trajectories, tool output or candidate harnesses SHALL NOT be followed, and nothing found in a candidate harness may be executed). Prompts SHALL be versioned by the constant `evolve.prompt_version` (currently `"pmt-evolve-2"`), which SHALL be bumped whenever any improver prompt changes and is part of every session cache key.
 **Milestone:** M3
 
 #### Scenario: Propose prompt blocks
@@ -226,6 +251,11 @@ The system SHALL exclude from task sources and reject in any evidence tree, sele
 - **GIVEN** `evolve.leak_globs = [".answers/**"]`
 - **WHEN** the workspace contains `.answers/q1.txt`
 - **THEN** it SHALL be excluded from the snapshot
+
+#### Scenario: Leak file tracked at HEAD
+- **GIVEN** a git workspace whose HEAD commit tracks `grader/rubric.md`, also modified since
+- **WHEN** a job captures the task
+- **THEN** `uncommitted.patch` SHALL NOT mention it, `repo.toml` SHALL list it under `excluded`, and the workspace rebuilt at the recorded commit with the patch applied SHALL NOT contain it
 
 ### Requirement: Budget ledger and spend cap
 The system SHALL keep a per-mode ledger of rollouts and sessions (`kind`, `label`, `usd`, `cached`, `attempts`), SHALL assert at mode completion that R = 4k, P = 3k and no label repeats within a kind (a violation fails the mode with `budget identity violated`), and SHALL record rollout, improver, selection and reflection costs separately in `ledger.json`. Before starting, the system SHALL print an estimate; it SHALL stop a job with status `budget-exceeded` as soon as total spend reaches `--budget-usd` or `evolve.budget.max_usd = 5.0`, keeping completed artifacts and producing no proposal. All costs SHALL be charged to the job's root in the observability cost ledger.
@@ -278,6 +308,11 @@ The system SHALL turn a successful selection into a proposal (`<profile>/evolve/
 - **WHEN** the user runs `prometheus evolve review <proposal>`
 - **THEN** the system SHALL print the diff against the base version, the census, the selector reason and the lesson
 
+#### Scenario: Both modes under the auto policy
+- **GIVEN** `evolve.adoption.policy = "auto"` and a job with mode `both` whose two proposals change prose only
+- **WHEN** the job finishes
+- **THEN** exactly one proposal SHALL be `adopted`, the other SHALL be `superseded`, and the job SHALL still end with its status, ledger and `evolve.job.finished` event; an automatic adoption that fails SHALL leave its proposal `pending` and SHALL NOT fail the job
+
 ### Requirement: Stale proposal protection
 The system SHALL refuse to adopt a proposal whose base version is not the currently active version, exiting 65 with `active harness changed since this proposal was produced (base <A>, active <B>); re-run the job or adopt with --rebase`; `--rebase` SHALL apply the proposal's diff to the active tree only if it applies without conflicts and the result validates. Adopting one proposal SHALL mark other pending proposals with the same base as `superseded`.
 **Milestone:** M3
@@ -288,7 +323,7 @@ The system SHALL refuse to adopt a proposal whose base version is not the curren
 - **THEN** the command SHALL exit 65 with the stale message and `ACTIVE` SHALL remain `h5`
 
 ### Requirement: Job lifecycle, events and RPC
-The system SHALL persist each job in `<profile>/evolve/jobs/<job_id>/` with `job.toml` and an atomically replaced `summary.json`, with status ∈ {`queued`, `running`, `awaiting-selection`, `cancelled`, `base-failed`, `budget-exceeded`, `partial`, `failed`, `ok`}; expose `prometheus evolve status|list|cancel` and the RPC methods `evolve.start`, `evolve.status`, `evolve.list`, `evolve.cancel`, `evolve.choose`, `evolve.proposals.list`, `evolve.proposals.adopt`, `evolve.proposals.reject`, `harness.log`, `harness.diff`, `harness.rollback`; emit trajectory events `evolve.job.started`, `evolve.stage.finished`, `evolve.rollout.finished`, `evolve.selection.finished`, `evolve.proposal.ready`, `evolve.job.finished`; and prune job directories older than `evolve.retention_secs = 2592000` except the summary of jobs whose proposal was adopted. `cancel` SHALL stop the job at the next model-call boundary with status `cancelled`. A foreground `evolve run` SHALL exit 0 when the job ends `ok`, and 1 otherwise.
+The system SHALL persist each job in `<profile>/evolve/jobs/<job_id>/` with `job.toml` and an atomically replaced `summary.json`, with status ∈ {`queued`, `running`, `awaiting-selection`, `cancelled`, `base-failed`, `budget-exceeded`, `partial`, `failed`, `ok`}; expose `prometheus evolve status|list|cancel` and the RPC methods `evolve.start`, `evolve.status`, `evolve.list`, `evolve.cancel`, `evolve.choose`, `evolve.proposals.list`, `evolve.proposals.adopt`, `evolve.proposals.reject`, `harness.log`, `harness.diff`, `harness.rollback`; emit trajectory events `evolve.job.started`, `evolve.stage.finished`, `evolve.rollout.finished`, `evolve.selection.finished`, `evolve.proposal.ready`, `evolve.job.finished` (in the trajectory line shape, appended to the job's `events.jsonl`, since a job is not a session); and prune job directories older than `evolve.retention_secs = 2592000` except the summary of jobs whose proposal was adopted. `cancel` SHALL stop the job at the next model-call boundary with status `cancelled`. A foreground `evolve run` SHALL exit 0 when the job ends `ok`, and 1 otherwise.
 **Milestone:** M3
 
 #### Scenario: Cancel
@@ -319,8 +354,13 @@ The system SHALL ship `prometheus evolve demo [--k N] [--mode parallel|sequentia
 - **THEN** it SHALL exit 0 and report `0 model calls, 0 rollouts`
 
 ### Requirement: Human-only evaluation of proposals (upgrade)
-The system SHALL support `prometheus evolve review <proposal> --eval <suite>`, which runs an eval suite of `replay-and-evaluation` against both the base and the proposed harness and shows the results to the user only; eval results SHALL be written outside `<profile>/evolve/` with the verdict canary, SHALL NOT be stored in proposals, harness versions or experience entries, and SHALL never be shown to any improver, selector or reflector.
+The system SHALL support `prometheus evolve review <proposal> --eval <suite>`, which runs an eval suite of `replay-and-evaluation` against both the base and the proposed harness and shows the results to the user only; because a proposal's hooks and scripts are not yet approved, both runs SHALL go under the confinement of rollouts (the sandboxed `evolve.rollout.backend` with the unsandboxed host refused, and egress limited to the configured model providers under `evolve.rollout.network = "providers"`); eval results SHALL be written outside `<profile>/evolve/` with the verdict canary, SHALL NOT be stored in proposals, harness versions or experience entries, and SHALL never be shown to any improver, selector or reflector.
 **Milestone:** M3
+
+#### Scenario: Review runs confined
+- **GIVEN** `evolve.rollout.backend = "local"` (the unsandboxed host)
+- **WHEN** the user runs `prometheus evolve review <proposal> --eval smoke`
+- **THEN** the review SHALL refuse with `config.invalid` and no eval task SHALL run
 
 #### Scenario: Verdict does not reach the library
 - **GIVEN** a proposal reviewed with `--eval smoke` and then adopted

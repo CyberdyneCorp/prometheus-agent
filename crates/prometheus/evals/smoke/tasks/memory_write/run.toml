@@ -1,0 +1,5 @@
+# The memory tool writes memory: `prometheus smoke-suite` runs each task in
+# a scratch home of its own, and `prometheus eval run` gives this task's
+# session a scratch memory store under its unit directory, so neither
+# touches the profile's memory.
+requires = "memory"

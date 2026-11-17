@@ -355,6 +355,14 @@ name = "remote-kit"
 version = "0.1.0"
 
 [[package]]
+name = "sample-bench"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen-rt",
+]
+
+[[package]]
 name = "sample-context-engine"
 version = "0.1.0"
 dependencies = [

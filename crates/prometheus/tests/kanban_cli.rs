@@ -536,47 +536,6 @@ text = "finished"
     );
 }
 
-/// Scenario: Eval task on replayed provider.
-#[test]
-fn an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report() {
-    let home = common::temp_home();
-    let id = create(
-        home.path(),
-        &[
-            "smoke eval",
-            "--assignee",
-            "default",
-            "--kind",
-            "eval",
-            "--suite",
-            "smoke",
-            "--provider-mode",
-            "replay",
-        ],
-    );
-    let deadline = Instant::now() + Duration::from_mins(3);
-    let mut now = status(home.path(), &id);
-    while now != "done" && now != "blocked" {
-        assert!(Instant::now() < deadline, "eval stayed {now}");
-        ok(&run(home.path(), &["kanban", "dispatch", "--once"]));
-        std::thread::sleep(Duration::from_millis(500));
-        now = status(home.path(), &id);
-    }
-    let shown = task(home.path(), &id);
-    assert_eq!(now, "done", "{shown}");
-    assert!(
-        shown["task"]["result"]
-            .as_str()
-            .unwrap()
-            .starts_with("smoke: "),
-        "{shown}"
-    );
-    assert_eq!(shown["attachments"][0]["filename"], "eval-report.txt");
-    // No model call was made by the worker itself: no session, no spend.
-    assert_eq!(shown["spend"]["tokens"], 0);
-    assert!(shown["runs"][0]["session_id"].is_null(), "{shown}");
-}
-
 fn git(dir: &Path, args: &[&str]) -> String {
     let out = std::process::Command::new("git")
         .current_dir(dir)

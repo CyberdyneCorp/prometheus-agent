@@ -64,3 +64,41 @@ The balance script is POSIX `sh` (integer arithmetic only) and PowerShell
 on Windows, so the demo needs no Python, Node.js or other runtime. CI runs
 it with networking disabled on every Tier 1 target and as the offline smoke
 run of the Tier 2 targets.
+
+## The self-improvement demo
+
+`prometheus demo --evolve [--k 2] [--mode parallel|sequential|both]
+[--output DIR]`, also `prometheus evolve demo` with the same flags, shows
+harness evolution end to end offline: two ledger-totalling tasks of the
+`accounting` domain go through base rollouts, proposals, probes,
+composition, blind selection, reflection and the experience library, with
+the mock provider playing the agent, the proposer, the selector and the
+reflector, in a profile of the demo's own (it needs neither
+`evolve.enabled` nor credentials).
+
+The base harness ships `scripts/total.py`, which adds only the positive
+amounts. Each rollout gets its candidate harness's `scripts/` in its
+workspace; the scripted agent reads the script and reports the total it
+computes (`Total: 160.25` and `Total: 30.00` with the base script). The
+proposer rewrites the script to subtract the debits, so the selected
+candidates report `Total: 85.15` and `Total: 20.25`. After each job the
+demo adopts the selected proposal (harness script changes always need an
+explicit approval; the demo gives it), and the job's lesson enters the
+library.
+
+```sh
+prometheus demo --evolve --output d
+# ledger-a: ran; selected: Total: 85.15 (expected Total: 85.15)
+# ledger-b: ran; selected: Total: 20.25 (expected Total: 20.25)
+# 16 executions, 12 editor calls, <n> model calls
+# demo: 2 tasks completed; 0 failed
+```
+
+`DIR/demo.json` records `tasks_completed`, `tasks_failed`, `executions`
+(rollouts run, cache hits excluded), `editor_calls` (proposer sessions
+run), `model_calls` and each task's job and selected answers; the command
+exits 1 when a task's selected answer is wrong. The jobs and their state
+stay in `DIR`: running the same command again resumes them instead of
+starting new ones, so a finished demo reports zero executions and editor
+calls (`prometheus evolve demo` prints `0 model calls, 0 rollouts`).
+Without `--output` the demo runs in a temporary directory it removes.

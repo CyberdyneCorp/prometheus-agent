@@ -163,6 +163,35 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::cron_cmd::CronCommand,
     },
+    /// The profile's harness: validate, history, diff, rollback and
+    /// manual edits (works without `evolve.enabled`).
+    Harness {
+        /// The harness subcommand.
+        #[command(subcommand)]
+        command: crate::harness_cmd::HarnessCommand,
+    },
+    /// The experience library: entries, domains, pin, forget, restore,
+    /// export, import and rebuild.
+    Experience {
+        /// The experience subcommand.
+        #[command(subcommand)]
+        command: crate::experience_cmd::ExperienceCommand,
+    },
+    /// Evaluation: suites, runs, post-hoc judging, reports, benchmark
+    /// adapters, session capture and batch datasets.
+    #[cfg(feature = "eval")]
+    Eval {
+        /// The eval subcommand.
+        #[command(subcommand)]
+        command: crate::eval_cmd::EvalCommand,
+    },
+    /// Harness evolution jobs (opt-in: `evolve.enabled = true`).
+    #[cfg(feature = "evolve")]
+    Evolve {
+        /// The evolve subcommand.
+        #[command(subcommand)]
+        command: crate::evolve_cmd::EvolveCommand,
+    },
     /// Kanban boards shared by every profile: tasks, dependencies, the
     /// dispatcher, workers, review, notifications, export and import.
     Kanban(crate::kanban_cmd::KanbanArgs),
@@ -578,6 +607,39 @@ pub struct DemoArgs {
     /// Keep the directory afterwards.
     #[arg(long, help = "Keep the demo's home and repository afterwards")]
     pub keep: bool,
+    /// Run the offline self-improvement demo: two accounting tasks through
+    /// harness evolution (re-running with the same --output resumes).
+    #[arg(long, conflicts_with = "keep")]
+    pub evolve: bool,
+    /// `--evolve`: candidates per mode.
+    #[arg(long, value_name = "N", default_value_t = 2, requires = "evolve", value_parser = clap::value_parser!(u8).range(1..=8))]
+    pub k: u8,
+    /// `--evolve`: the evolution modes.
+    #[arg(long, value_enum, default_value = "parallel", requires = "evolve")]
+    pub mode: DemoMode,
+}
+
+/// `demo --evolve --mode` and `evolve demo --mode` values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum DemoMode {
+    /// Independent proposals, then composition.
+    Parallel,
+    /// One proposal building on the last.
+    Sequential,
+    /// Both, one proposal each.
+    Both,
+}
+
+impl DemoMode {
+    /// The evolution mode.
+    #[must_use]
+    pub const fn mode(self) -> pmt_config::schema::EvolveMode {
+        match self {
+            Self::Parallel => pmt_config::schema::EvolveMode::Parallel,
+            Self::Sequential => pmt_config::schema::EvolveMode::Sequential,
+            Self::Both => pmt_config::schema::EvolveMode::Both,
+        }
+    }
 }
 
 /// `prometheus smoke-suite` flags.
@@ -943,6 +1005,9 @@ pub enum TrajectoryCommand {
     /// JSON line per session, redacted; sessions that ended in an error
     /// are left out unless `--include-failed`.
     Export(crate::trajectory_export::ExportArgs),
+    /// Compress `ShareGPT` records over a token target: head and tail
+    /// kept, one summary turn in between.
+    Compress(crate::trajectory_compress::CompressArgs),
 }
 
 /// `trajectory show --format` values.

@@ -516,6 +516,14 @@ pub struct AuxiliaryConfig {
     /// Kanban `specify` and `decompose` (defaults to the main model).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kanban: Option<AuxiliaryTask>,
+    /// `llm` graders of `prometheus eval judge` (defaults to the main
+    /// model; a grader's own `model` wins).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eval_judge: Option<AuxiliaryTask>,
+    /// Summaries of `prometheus trajectory compress` (defaults to the main
+    /// model; `--model` wins).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trajectory_compress: Option<AuxiliaryTask>,
 }
 
 impl Default for AuxiliaryConfig {
@@ -537,6 +545,8 @@ impl Default for AuxiliaryConfig {
             voice_chat: None,
             commit_message: None,
             kanban: None,
+            eval_judge: None,
+            trajectory_compress: None,
         }
     }
 }

@@ -185,7 +185,7 @@ pub fn media_categories(
     )?;
     let cwd = std::env::current_dir().unwrap_or_default();
     setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
-        &crate::plugins_host::for_session(scope, &cwd).current(),
+        &crate::plugins_host::for_session(scope, &cwd),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: "cli".to_owned(),

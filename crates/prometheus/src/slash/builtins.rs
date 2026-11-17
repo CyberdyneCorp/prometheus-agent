@@ -328,6 +328,30 @@ pub static BUILTINS: &[Command] = &[
         Immediate,
         Effect::None,
     ),
+    // Queues a job and answers at once; the job never runs in the turn
+    // (spec: harness-evolution, On-demand and scheduled triggers).
+    command(
+        "evolve",
+        &[],
+        Session,
+        "slash.desc.evolve",
+        &[text("args")],
+        CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    // The session's experience-library domain tag (spec:
+    // experience-library, Domain resolution for a job).
+    command(
+        "domain",
+        &[],
+        Session,
+        "slash.desc.domain",
+        &[text("args")],
+        CHATS,
+        Immediate,
+        Effect::None,
+    ),
     command(
         "loop",
         &["proactive"],

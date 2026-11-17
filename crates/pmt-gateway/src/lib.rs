@@ -29,6 +29,8 @@ pub mod desktop;
 pub mod devices;
 pub mod discovery;
 pub mod editor;
+pub mod evolve;
+pub mod experience;
 pub mod health_http;
 pub mod host;
 pub mod hub;

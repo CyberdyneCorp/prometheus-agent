@@ -103,6 +103,10 @@ pmt-plugins.workspace = true
 pmt-pybridge.workspace = true
 pmt-obs.workspace = true
 pmt-eval.workspace = true
+# Harness trees, validation and evolution jobs (the `harness` command and
+# every session's harness layer need it; the `evolve` feature gates only
+# the evolution surfaces).
+pmt-evolve.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
 pmt-sandbox.workspace = true

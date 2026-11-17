@@ -319,6 +319,12 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
         Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
         Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
         Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
+        Command::Harness { command } => prometheus::harness_cmd::run(command, ctx),
+        Command::Experience { command } => prometheus::experience_cmd::run(command, ctx),
+        #[cfg(feature = "evolve")]
+        Command::Evolve { command } => prometheus::evolve_cmd::run(command, ctx),
+        #[cfg(feature = "eval")]
+        Command::Eval { command } => prometheus::eval_cmd::run(command, ctx),
         Command::Kanban(args) => prometheus::kanban_cmd::run(args, ctx),
         Command::Cache { command } => prometheus::cache_cmd::run(command, ctx),
         Command::Replay { command } => prometheus::replay_cmd::run(command, ctx),

@@ -246,7 +246,7 @@ When a turn ends with any exit reason other than `completed` and the stored tran
 - **THEN** the session SHALL end with one assistant boundary row
 
 ### Requirement: Layered system prompt
-The system SHALL build the system prompt from three ordered tiers, each ending at a cache breakpoint: `static` (identity, tool-use guidance, model-family guidance), `profile` (platform hint, skills index, pinned auto-load skills), and `session` (caller system message, project context files, memory and user-profile snapshot, plugin sections, workspace snapshot, the session start timestamp, and last a runtime environment block delimited by `# Prometheus runtime environment` and `<!-- End Prometheus runtime environment -->`); this tier placement SHALL be the only documented placement and docs SHALL be generated from it.
+The system SHALL build the system prompt from three ordered tiers, each ending at a cache breakpoint: `static` (identity, tool-use guidance, model-family guidance), `profile` (the session's harness layer of `harness-evolution`, platform hint, skills index, pinned auto-load skills), and `session` (caller system message, project context files, memory and user-profile snapshot, plugin sections, workspace snapshot, the session start timestamp, and last a runtime environment block delimited by `# Prometheus runtime environment` and `<!-- End Prometheus runtime environment -->`); this tier placement SHALL be the only documented placement and docs SHALL be generated from it.
 **Milestone:** M1
 
 #### Scenario: Runtime block last

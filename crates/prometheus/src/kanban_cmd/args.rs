@@ -463,6 +463,10 @@ pub struct CreateArgs {
     /// A skill preloaded in the worker session (repeatable).
     #[arg(long = "skill")]
     pub skills: Vec<String>,
+    /// The experience-library domain of the task's work (the worker
+    /// session's domain tag; an evolve task's job domain).
+    #[arg(long, value_name = "NAME")]
+    pub domain: Option<String>,
 }
 
 /// `kanban notify` subcommands.

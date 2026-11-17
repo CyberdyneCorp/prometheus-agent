@@ -218,7 +218,7 @@ pub fn media(scope: &ProfileScope, surface: &str, cwd: &Path) -> Option<Arc<Medi
         .ok()
         .map(|store| media::profile_usage_sink(Arc::new(store)));
     setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
-        &crate::plugins_host::for_session(scope, cwd).current(),
+        &crate::plugins_host::for_session(scope, cwd),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: surface.to_owned(),

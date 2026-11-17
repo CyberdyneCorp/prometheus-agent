@@ -16,6 +16,7 @@ The system prompt is sent as one block per tier, each ending at a prompt-cache b
 
 | Layer | Contents |
 |---|---|
+| `harness` | The harness version the session started on: its non-empty `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` in that order. It opens the profile tier, after the built-in static tier, so a new harness version leaves the cached static block intact. |
 | `platform_hint` | The surface's hint, changed by `prompt.platform_hints.<platform>`. |
 | `skills_index` | The index of available skills. |
 | `pinned_skills` | Skills loaded into every session. |
@@ -24,6 +25,7 @@ The system prompt is sent as one block per tier, each ending at a prompt-cache b
 
 | Layer | Contents |
 |---|---|
+| `lessons` | With `experience.session_lessons`, `## Lessons from earlier work in <domain>`: the `cue → lesson` lines of up to `experience.session_lessons_max` high- or medium-confidence experience entries of the session's domain, frozen at the session's start. It opens the session tier, so sessions of different domains share the profile block. |
 | `personality` | The `agent.personality` overlay. |
 | `caller_system` | The caller's own system message. |
 | `project_context` | Project context files under `# Project Context`. |

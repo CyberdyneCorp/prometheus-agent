@@ -8,7 +8,9 @@
 //! revisions and a refused batch writes none. The sink is bound late
 //! because the surface that shows the line (the line interface, a daemon
 //! session's clients, a messaging chat) exists only after the session's
-//! memory does; a notice before that is dropped.
+//! memory does; a notice before that is dropped. The same sink carries
+//! the few notices about the session itself that are not memory's (an
+//! automatic evolution job queued at its end): [`Notices::say`].
 
 use std::sync::{Arc, Mutex, PoisonError};
 
@@ -52,6 +54,12 @@ impl Notices {
         *self.sink.lock().unwrap_or_else(PoisonError::into_inner) = Some(sink);
     }
 
+    /// Shows a notice about the session itself, whatever the memory
+    /// notification mode (dropped when no surface is bound yet).
+    pub fn say(&self, text: String) {
+        self.show(text);
+    }
+
     fn show(&self, text: String) {
         let sink = self
             .sink
@@ -61,7 +69,7 @@ impl Notices {
         if let Some(sink) = sink {
             sink.show(text);
         } else {
-            tracing::debug!("memory notice dropped (no surface yet): {text}");
+            tracing::debug!("session notice dropped (no surface yet): {text}");
         }
     }
 

@@ -178,7 +178,32 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::TurnEnded>()
         .event::<c::UsageUpdatedEvent>()
         .event::<c::HealthChangedEvent>();
+    declare_evolution(d);
     declare_desktop(d);
+}
+
+/// Harness evolution and its experience library (spec:
+/// harness-evolution, experience-library).
+fn declare_evolution(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::EvolveStart>()
+        .method::<c::EvolveStatus>()
+        .method::<c::EvolveList>()
+        .method::<c::EvolveCancel>()
+        .method::<c::EvolveChoose>()
+        .method::<c::EvolveProposalsList>()
+        .method::<c::EvolveProposalsAdopt>()
+        .method::<c::EvolveProposalsReject>()
+        .method::<c::HarnessLog>()
+        .method::<c::HarnessDiff>()
+        .method::<c::HarnessRollback>()
+        .method::<c::ExperienceList>()
+        .method::<c::ExperienceShow>()
+        .method::<c::ExperienceDomainsList>()
+        .method::<c::ExperiencePin>()
+        .method::<c::ExperienceForget>()
+        .method::<c::ExperienceDisable>()
+        .method::<c::ExperienceRestore>();
 }
 
 /// The desktop app's names (spec: desktop-app).

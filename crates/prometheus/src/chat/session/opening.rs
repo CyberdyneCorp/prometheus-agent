@@ -123,8 +123,15 @@ impl Factory {
         (skills, memory): (&Arc<SkillsSession>, &Arc<MemorySession>),
         notices: &mut Vec<String>,
         child: Option<&ChildSpec>,
-    ) -> (PromptSetup, Arc<Mutex<Vec<String>>>) {
+    ) -> (PromptSetup, Arc<Mutex<Vec<String>>>, Vec<String>) {
         let (mut prompt, sections) = self.session_prompt(id, skills, memory, notices).await;
+        let lessons = self.lessons_for(id, child.is_some());
+        prompt.lessons = lessons.layer;
+        prompt.harness = self.harness_dir(id).and_then(|dir| {
+            pmt_config::harness::Tree::read(&dir)
+                .ok()
+                .and_then(|(tree, _)| crate::harness_host::layer_of(&tree))
+        });
         if let Some(spec) = child {
             spec.shape_prompt(&mut prompt);
         } else if let Some(run) = &self.options.kanban {
@@ -138,7 +145,7 @@ impl Factory {
                 .instructions
                 .map(|text| format!("# Instructions from the API caller\n{text}"));
         }
-        (prompt, sections)
+        (prompt, sections, lessons.injected)
     }
 
     /// The session's model port (spec: model-providers, Scoped fallback
@@ -300,6 +307,8 @@ impl Factory {
         if let Some(replay) = &self.options.replay {
             setup.prompt_pins = Some(Arc::clone(&replay.pins));
             tools.replay_from(Arc::clone(&replay.tools));
+        } else if let Some(run) = &self.options.rollout {
+            tools.replay_from(Arc::clone(&run.recorder) as Arc<dyn crate::replay::ToolReplay>);
         }
     }
 }

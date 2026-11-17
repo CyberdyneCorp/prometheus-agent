@@ -83,9 +83,39 @@ impl HookSource for Handle {
 #[derive(Clone)]
 pub struct ProfilePlugins {
     handle: Arc<Handle>,
+    /// Where hook callbacks are read: the live set's, unless a session
+    /// replaced it ([`ProfilePlugins::with_hooks`]).
+    hooks: Arc<dyn HookSource>,
 }
 
 impl ProfilePlugins {
+    fn of(handle: Arc<Handle>) -> Self {
+        let hooks = Arc::clone(&handle) as Arc<dyn HookSource>;
+        Self { handle, hooks }
+    }
+
+    /// The same plugin set with hook callbacks read from `hooks` (a
+    /// harness-evolution rollout's candidate hooks).
+    #[must_use]
+    pub fn with_hooks(&self, hooks: Arc<dyn HookSource>) -> Self {
+        Self {
+            handle: Arc::clone(&self.handle),
+            hooks,
+        }
+    }
+
+    /// Where this view reads hook callbacks.
+    #[must_use]
+    pub fn hook_source(&self) -> Arc<dyn HookSource> {
+        Arc::clone(&self.hooks)
+    }
+
+    /// The hook callbacks current now.
+    #[must_use]
+    pub fn hooks(&self) -> Arc<Hooks> {
+        self.hooks.hooks()
+    }
+
     /// The current set.
     #[must_use]
     pub fn current(&self) -> Arc<Loaded> {
@@ -102,10 +132,7 @@ impl ProfilePlugins {
     /// set is current at each call.
     #[must_use]
     pub fn tool_hooks(&self, call: CallInfo) -> Arc<dyn ToolHooks> {
-        Arc::new(PluginToolHooks::live(
-            Arc::clone(&self.handle) as Arc<dyn HookSource>,
-            call,
-        ))
+        Arc::new(PluginToolHooks::live(Arc::clone(&self.hooks), call))
     }
 
     /// [`ProfilePlugins::tool_hooks`] behind the first-party
@@ -133,7 +160,7 @@ impl ProfilePlugins {
         call: CallInfo,
     ) -> Arc<dyn pmt_providers::caller::ErrorClassifier> {
         Arc::new(pmt_plugins::hooks::PluginErrorClassifier::new(
-            Arc::clone(&self.handle) as Arc<dyn HookSource>,
+            Arc::clone(&self.hooks),
             call,
         ))
     }
@@ -141,12 +168,9 @@ impl ProfilePlugins {
     /// The turn loop's hook seam for one session.
     #[must_use]
     pub fn turn_hooks(&self, call: CallInfo) -> Arc<dyn TurnHooks> {
-        let observers = Observers::start(
-            Arc::clone(&self.handle) as Arc<dyn HookSource>,
-            call.clone(),
-        );
+        let observers = Observers::start(Arc::clone(&self.hooks), call.clone());
         Arc::new(SessionTurnHooks {
-            handle: Arc::clone(&self.handle),
+            hooks: Arc::clone(&self.hooks),
             call,
             observers,
         })
@@ -155,7 +179,7 @@ impl ProfilePlugins {
     /// Fires an observer hook of this profile and waits for its callbacks
     /// (whatever they answer is discarded).
     pub async fn fire_observer(&self, call: &CallInfo, hook: &str, fields: Map<String, Value>) {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         if hooks.handles(hook) {
             hooks.fire(hook, &Payload::new(fields), call).await;
         }
@@ -164,7 +188,7 @@ impl ProfilePlugins {
     /// Queues an observer hook of this profile (fired off the caller's
     /// path; answers discarded).
     pub fn observe(&self, call: CallInfo, hook: &'static str, fields: Map<String, Value>) {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         if !hooks.handles(hook) {
             return;
         }
@@ -178,14 +202,14 @@ impl ProfilePlugins {
 }
 
 struct SessionTurnHooks {
-    handle: Arc<Handle>,
+    hooks: Arc<dyn HookSource>,
     call: CallInfo,
     observers: Observers,
 }
 
 impl TurnHooks for SessionTurnHooks {
     fn holds_stream(&self) -> bool {
-        self.handle.hooks().holds_stream()
+        self.hooks.hooks().holds_stream()
     }
 
     fn transform_llm_output<'a>(
@@ -193,7 +217,7 @@ impl TurnHooks for SessionTurnHooks {
         reply: FinalReply<'a>,
         held: bool,
     ) -> BoxFuture<'a, Transformed> {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         Box::pin(async move {
             let fields = object(json!({
                 "session_id": reply.session_id,
@@ -210,7 +234,7 @@ impl TurnHooks for SessionTurnHooks {
     }
 
     fn pre_verify<'a>(&'a self, verify: Verify<'a>) -> BoxFuture<'a, Option<String>> {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         Box::pin(async move {
             let fields = object(json!({
                 "session_id": verify.session_id,
@@ -227,7 +251,7 @@ impl TurnHooks for SessionTurnHooks {
 
     fn observe(&self, hook: &'static str, payload: Map<String, Value>) {
         // Checked here so a stream nobody watches queues nothing per token.
-        if self.handle.hooks().handles(hook) {
+        if self.hooks.hooks().handles(hook) {
             self.observers.fire(hook, payload);
         }
     }
@@ -237,7 +261,7 @@ impl TurnHooks for SessionTurnHooks {
         session_id: &'a str,
         user_message: &'a str,
     ) -> BoxFuture<'a, Option<String>> {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         Box::pin(async move {
             if !hooks.handles("pre_llm_call") {
                 return None;
@@ -262,7 +286,7 @@ pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
     let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
     let plugins = for_session(scope, &cwd);
     let each = vec![skill_fields(skill, action)];
-    outside::fire_blocking(&plugins.handle.hooks(), "on_skill_lifecycle", each, &cwd);
+    outside::fire_blocking(&plugins.hooks(), "on_skill_lifecycle", each, &cwd);
 }
 
 /// Fires kanban lifecycle hooks (spec: plugin-system, Kanban lifecycle
@@ -271,7 +295,7 @@ pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
 pub fn kanban_fired(scope: &ProfileScope, fired: Vec<(&'static str, Map<String, Value>)>) {
     let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
     let plugins = for_session(scope, &cwd);
-    let hooks = plugins.handle.hooks();
+    let hooks = plugins.hooks();
     for (hook, payload) in fired {
         outside::fire_blocking(&hooks, hook, vec![payload], &cwd);
     }
@@ -286,7 +310,7 @@ pub fn sessions_deleted(scope: &ProfileScope, sessions: &[String]) {
         .iter()
         .map(|id| object(json!({ "session_id": id })))
         .collect();
-    outside::fire_blocking(&plugins.handle.hooks(), "on_session_delete", each, &cwd);
+    outside::fire_blocking(&plugins.hooks(), "on_session_delete", each, &cwd);
 }
 
 fn object(value: Value) -> Map<String, Value> {
@@ -328,7 +352,7 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
             .insert(key, at);
     }
     match existing {
-        Some(handle) if !due => ProfilePlugins { handle },
+        Some(handle) if !due => ProfilePlugins::of(handle),
         _ => refresh(scope, scope.dir(), false),
     }
 }
@@ -377,9 +401,7 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
         && !force
         && handle.generation().fingerprint == fingerprint
     {
-        return ProfilePlugins {
-            handle: Arc::clone(handle),
-        };
+        return ProfilePlugins::of(Arc::clone(handle));
     }
     let loaded = Arc::new(load_now(scope, &inputs, statuses));
     let handle = existing.unwrap_or_else(|| {
@@ -411,7 +433,7 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
         });
     }
     outside::plugins_loaded(&loaded, cwd);
-    ProfilePlugins { handle }
+    ProfilePlugins::of(handle)
 }
 
 /// Loads when some plugin is to be instantiated; otherwise reports the

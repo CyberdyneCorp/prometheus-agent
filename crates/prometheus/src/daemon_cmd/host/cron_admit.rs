@@ -83,13 +83,13 @@ impl DaemonHost {
             origin: None,
         };
         let link = gateway.link(&session);
-        self.submit_turn(
+        Box::pin(self.submit_turn(
             &profile,
             params,
             (author, link),
             Some(BusyInputMode::Queue),
             None,
-        )
+        ))
         .await?;
         Ok(session)
     }

@@ -56,6 +56,9 @@ pub struct SessionSetup {
     pub bundled: Arc<Bundled>,
     /// Plugin skill directories (M2).
     pub plugins: Vec<(String, PathBuf)>,
+    /// The session's harness `skills/` directory (frozen at session
+    /// start with the harness version).
+    pub harness: Option<PathBuf>,
     /// The skills guard.
     pub scanner: Arc<dyn Scanner>,
     /// Runs inline shell snippets in the session sandbox; `None` renders
@@ -91,6 +94,7 @@ impl SessionSetup {
             posture: Posture::Default,
             bundled: Bundled::builtin(),
             plugins: Vec::new(),
+            harness: None,
             scanner: Arc::new(PatternScanner),
             inline_shell: None,
             secret_prompt: None,
@@ -193,6 +197,7 @@ impl SkillsSession {
             cwd: self.setup.cwd.as_deref(),
             user_home: self.setup.user_home.as_deref(),
             plugins: &self.setup.plugins,
+            harness: self.setup.harness.as_deref(),
             bundled: Arc::clone(&self.setup.bundled),
         })
     }

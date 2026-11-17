@@ -107,6 +107,7 @@ pub(crate) fn run_with(
             let automation =
                 pmt_core::spawn::spawn(super::host::schedule_automation(Arc::clone(&host)));
             let kanban = pmt_core::spawn::spawn(super::host::schedule_kanban(Arc::clone(&host)));
+            let evolve = pmt_core::spawn::spawn(super::host::schedule_evolve(Arc::clone(&host)));
             let sampler = pmt_core::spawn::spawn(super::host::sample_health(Arc::clone(&host)));
             let liveness = super::watchdog::background(home, ctx.launch);
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
@@ -126,6 +127,7 @@ pub(crate) fn run_with(
                     scheduler.abort();
                     automation.abort();
                     kanban.abort();
+                    evolve.abort();
                     sampler.abort();
                     liveness.abort();
                     return Ok(pmt_core::exit::FAILURE);
@@ -148,6 +150,7 @@ pub(crate) fn run_with(
             scheduler.abort();
             automation.abort();
             kanban.abort();
+            evolve.abort();
             crate::kanban_host::release(home, "daemon");
             sampler.abort();
             liveness.abort();

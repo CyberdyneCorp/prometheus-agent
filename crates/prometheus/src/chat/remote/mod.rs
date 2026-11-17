@@ -132,6 +132,11 @@ pub fn setup_of(args: &ChatArgs, set: &[String], cwd: &Path) -> Result<SessionSe
         mock_script: args.mock_script.as_deref().map(|p| absolute(cwd, p)),
         base_url: args.endpoint.base_url.clone(),
         api_key,
+        domain: args
+            .domain
+            .as_deref()
+            .map(pmt_evolve::experience::domain::parse)
+            .transpose()?,
     })
 }
 

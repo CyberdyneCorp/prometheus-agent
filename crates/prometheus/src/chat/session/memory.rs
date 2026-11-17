@@ -109,7 +109,10 @@ impl Factory {
     ) -> Result<MemorySetup, Error> {
         let mut setup = MemorySetup::new(
             self.scope.clone(),
-            Arc::clone(&self.store),
+            self.options
+                .memory_store
+                .clone()
+                .unwrap_or_else(|| Arc::clone(&self.store)),
             Some(id),
             Source::Cli,
         );

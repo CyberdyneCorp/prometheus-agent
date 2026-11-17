@@ -253,6 +253,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("experience.show", "experience-library"),
     method("experience.pin", "experience-library"),
     method("experience.forget", "experience-library"),
+    method("experience.disable", "experience-library"),
     method("experience.restore", "experience-library"),
     method("experience.domains", "experience-library"),
     // server-to-client requests (workspace-architecture)

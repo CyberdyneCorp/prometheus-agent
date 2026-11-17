@@ -200,6 +200,9 @@ impl Home {
             // A new profile starts on the default `file` secrets backend.
             ensure_private_file(&dir.join("secrets.toml"))?;
         }
+        // Every profile has an active harness: the built-in `h1` until the
+        // user or an adopted evolution proposal writes another.
+        crate::harness::HarnessDir::of(&dir).seed()?;
         tighten(&config, 0o600);
         tighten(&dir.join("secrets.toml"), 0o600);
         Ok(ProfileDir {

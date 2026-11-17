@@ -53,8 +53,16 @@ struct Grader {
 
 /// Harness capabilities this platform has. `interrupt` (stopping a
 /// running child from outside: SIGINT on Unix, Ctrl+Break to the child's
-/// own console process group on Windows) is on every supported target.
+/// own console process group on Windows) is on every supported target;
+/// `memory` (a memory tool writing the profile's memory) is here because
+/// every task runs in a scratch home of its own.
 fn has(capability: &str) -> bool {
+    capability == "memory" || interrupts(capability)
+}
+
+/// Whether `capability` is `interrupt` and this platform can interrupt a
+/// running task.
+pub(crate) fn interrupts(capability: &str) -> bool {
     capability == "interrupt" && cfg!(any(unix, windows))
 }
 
@@ -83,34 +91,19 @@ pub fn run(args: &SmokeSuiteArgs) -> Result<u8, Error> {
             .map_err(|e| Error::io(&pmt_core::error::codes::DEMO_IO, path, &e))?,
         None => String::new(),
     };
-    let ids = super::task_ids();
-    let (mut passed, mut failed, mut skipped) = (0, Vec::new(), Vec::new());
-    for id in &ids {
-        if args.skip.iter().any(|s| s == id) {
-            skipped.push(format!("{id} (left out)"));
-            continue;
-        }
-        match run_task(&bin, id, &place.root().join(id), &extra) {
-            Outcome::Passed => {
-                passed += 1;
-                println!("passed: {id}");
-            }
-            Outcome::Failed(why) => {
-                println!("FAILED: {id}: {why}");
-                failed.push(*id);
-            }
-            Outcome::Skipped(needed) => skipped.push(format!("{id} (needs {needed})")),
-        }
-    }
+    let report = suite(&bin, place.root(), &extra, &args.skip, |line| {
+        println!("{line}");
+    });
     println!(
-        "smoke: {passed} of {} tasks passed",
-        ids.len() - skipped.len()
+        "smoke: {} of {} tasks passed",
+        report.passed.len(),
+        report.passed.len() + report.failed.len()
     );
-    for task in &skipped {
+    for task in &report.skipped {
         println!("skipped: {task}");
     }
     place.finish(args.keep);
-    Ok(if failed.is_empty() {
+    Ok(if report.failed.is_empty() {
         pmt_core::exit::SUCCESS
     } else {
         pmt_core::exit::FAILURE
@@ -121,6 +114,47 @@ enum Outcome {
     Passed,
     Failed(String),
     Skipped(String),
+}
+
+/// What a suite run found.
+#[derive(Debug, Clone, Default)]
+pub struct Report {
+    /// Tasks that met their grade.
+    pub passed: Vec<String>,
+    /// Tasks that missed it, with why.
+    pub failed: Vec<(String, String)>,
+    /// Tasks left out or not runnable here, with why.
+    pub skipped: Vec<String>,
+}
+
+/// Runs every task (but `skip`) under `root`; `progress` hears one line
+/// per task.
+pub fn suite(
+    bin: &Path,
+    root: &Path,
+    extra: &str,
+    skip: &[String],
+    progress: impl Fn(&str),
+) -> Report {
+    let mut report = Report::default();
+    for id in super::task_ids() {
+        if skip.iter().any(|s| s == id) {
+            report.skipped.push(format!("{id} (left out)"));
+            continue;
+        }
+        match run_task(bin, id, &root.join(id), extra) {
+            Outcome::Passed => {
+                progress(&format!("passed: {id}"));
+                report.passed.push(id.to_owned());
+            }
+            Outcome::Failed(why) => {
+                progress(&format!("FAILED: {id}: {why}"));
+                report.failed.push((id.to_owned(), why));
+            }
+            Outcome::Skipped(needed) => report.skipped.push(format!("{id} (needs {needed})")),
+        }
+    }
+    report
 }
 
 fn run_task(bin: &Path, id: &str, scratch: &Path, extra_config: &str) -> Outcome {

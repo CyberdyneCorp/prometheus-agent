@@ -46,6 +46,8 @@ pub struct HostFault {
     pub code: String,
     /// What happened.
     pub message: String,
+    /// The JSON-RPC error code (-32000 unless set).
+    pub rpc: i64,
 }
 
 impl HostFault {
@@ -55,7 +57,16 @@ impl HostFault {
         Self {
             code: code.to_owned(),
             message: message.into(),
+            rpc: -32000,
         }
+    }
+
+    /// This fault with JSON-RPC error code `rpc` (a benchmark adapter's
+    /// refused score push answers -32002 over every transport).
+    #[must_use]
+    pub const fn with_rpc(mut self, rpc: i64) -> Self {
+        self.rpc = rpc;
+        self
     }
 }
 
@@ -511,7 +522,7 @@ fn dispatch(inner: &Arc<Inner>, message: Value, host: &Arc<dyn HostHandler>) {
             let name = params["method"].as_str().unwrap_or("").to_owned();
             let reply = match host.handle(&name, params["args"].clone(), &params["context"]) {
                 Ok(result) => wire::result(&id, &result),
-                Err(fault) => wire::error(&id, -32000, &fault.message, &fault.code),
+                Err(fault) => wire::error(&id, fault.rpc, &fault.message, &fault.code),
             };
             let _ = Sidecar { inner }.write(&reply);
         });

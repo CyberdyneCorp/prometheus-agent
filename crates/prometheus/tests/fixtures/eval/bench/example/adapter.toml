@@ -1,0 +1,3 @@
+# The sample benchmark adapter of the eval tests (spec:
+# replay-and-evaluation, Benchmark adapter protocol).
+command = ["python3", "adapter.py"]

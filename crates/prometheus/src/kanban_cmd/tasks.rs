@@ -68,6 +68,11 @@ pub(super) fn create(env: &Env<'_>, args: &CreateArgs) -> Result<u8, Error> {
         model: args.model.clone(),
         provider: args.provider.clone(),
         skills: args.skills.clone(),
+        domain: args
+            .domain
+            .as_deref()
+            .map(pmt_evolve::experience::domain::parse)
+            .transpose()?,
     };
     let created = board.create(&env.actor(), &new, &env.profiles(), pmt_kanban::now_ms())?;
     if env.ctx.json {
@@ -167,6 +172,9 @@ pub(super) fn show(env: &Env<'_>, id: &str) -> Result<u8, Error> {
     }
     if !task.skills.is_empty() {
         let _ = writeln!(out, "skills: {}", task.skills.join(", "));
+    }
+    if let Some(domain) = &task.domain {
+        let _ = writeln!(out, "domain: {domain}");
     }
     if task.goal_mode {
         let _ = writeln!(out, "goal mode: up to {} judged turn(s)", task.goal_turns());

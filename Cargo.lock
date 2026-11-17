@@ -3334,20 +3334,50 @@ dependencies = [
 name = "pmt-eval"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
+ "glob",
  "jiff",
  "pmt-core",
+ "regex",
  "serde",
  "serde_json",
  "sha2 0.11.1",
  "similar",
  "tar",
  "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
  "zstd",
 ]
 
 [[package]]
 name = "pmt-evolve"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "glob",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-skills",
+ "pmt-store",
+ "pmt-tools",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "shlex",
+ "similar",
+ "tar",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+ "zstd",
+]
 
 [[package]]
 name = "pmt-gateway"
@@ -4129,6 +4159,7 @@ dependencies = [
  "pmt-delegation",
  "pmt-desktop",
  "pmt-eval",
+ "pmt-evolve",
  "pmt-gateway",
  "pmt-i18n",
  "pmt-kanban",

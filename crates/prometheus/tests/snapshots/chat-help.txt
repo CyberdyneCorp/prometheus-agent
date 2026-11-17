@@ -109,6 +109,9 @@ Options:
       --source <TAG>
           Integration tag recorded on the session
 
+      --domain <NAME>
+          The session's experience-library domain: evolution jobs of the session file their lessons there, and (with `experience.session_lessons`) the session starts with its lessons
+
       --pass-session-id
           Put the session id in the system prompt
 

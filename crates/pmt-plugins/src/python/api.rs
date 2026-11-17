@@ -34,6 +34,9 @@ pub const SUPPORTED: &[&str] = &[
     "register_cli_command",
     "register_provider",
     "register_approval_transport",
+    // A Prometheus extension: benchmark adapters (spec:
+    // replay-and-evaluation, Benchmark adapter protocol).
+    "register_bench_adapter",
     "post_message",
     "apost_message",
     "inject_message",

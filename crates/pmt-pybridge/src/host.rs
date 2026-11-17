@@ -15,7 +15,7 @@ use pmt_core::capability::{Capability, PluginRight};
 use pmt_plugins::grants::PluginGrants;
 use pmt_plugins::host::Console;
 use pmt_plugins::host::ports::{
-    InjectTarget, LlmCall, PlatformAction, PortFuture, Ports, PostFailure, Posted,
+    BenchPort, InjectTarget, LlmCall, PlatformAction, PortFuture, Ports, PostFailure, Posted,
 };
 use serde_json::{Value, json};
 
@@ -47,6 +47,7 @@ pub struct BridgeHost {
     loaded: Arc<dyn Fn(&str) -> bool + Send + Sync>,
     terminal: Mutex<Option<Terminal>>,
     events: Mutex<Option<Arc<dyn pmt_plugins::host::ports::EventsPort>>>,
+    bench: Mutex<Option<Arc<dyn BenchPort>>>,
 }
 
 impl BridgeHost {
@@ -73,12 +74,65 @@ impl BridgeHost {
             loaded,
             terminal: Mutex::new(None),
             events: Mutex::new(None),
+            bench: Mutex::new(None),
         }
     }
 
     /// Routes `ctx.emit` to `bus` (the profile's current event bus).
     pub fn set_events(&self, bus: Arc<dyn pmt_plugins::host::ports::EventsPort>) {
         *self.events.lock().unwrap_or_else(PoisonError::into_inner) = Some(bus);
+    }
+
+    /// Serves the `bench.*` host methods of the benchmark adapter call in
+    /// progress through `port` (`None` when it ends).
+    pub fn set_bench(&self, port: Option<Arc<dyn BenchPort>>) {
+        *self.bench.lock().unwrap_or_else(PoisonError::into_inner) = port;
+    }
+
+    /// `bench.files.read|write|list` and `bench.request` (spec:
+    /// replay-and-evaluation, Benchmark adapter protocol): the call's
+    /// directory and the host's answers, as a WASM `bench` plugin gets
+    /// them. File bytes travel base64-encoded.
+    fn bench(&self, method: &str, args: &Value) -> Result<Value, HostFault> {
+        use base64::Engine as _;
+        let port = self
+            .bench
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+            .ok_or_else(|| {
+                HostFault::new("unavailable", "no benchmark adapter call is in progress")
+            })?;
+        let path = args["path"].as_str().unwrap_or("");
+        let failed = |e: String| HostFault::new("bench_files", e);
+        let b64 = base64::engine::general_purpose::STANDARD;
+        match method {
+            "bench.files.read" => port
+                .read(path)
+                .map(|bytes| json!(b64.encode(bytes)))
+                .map_err(failed),
+            "bench.files.write" => {
+                let data = b64
+                    .decode(args["data"].as_str().unwrap_or(""))
+                    .map_err(|e| HostFault::new("invalid_argument", e.to_string()))?;
+                port.write(path, &data)
+                    .map(|()| Value::Null)
+                    .map_err(failed)
+            }
+            "bench.files.list" => port.list().map(|names| json!(names)).map_err(failed),
+            _ => {
+                let (code, message) = port.request(
+                    args["method"].as_str().unwrap_or(""),
+                    &args["params"].to_string(),
+                );
+                let kind = if code == -32002 {
+                    "score_refused"
+                } else {
+                    "unknown_method"
+                };
+                Err(HostFault::new(kind, message).with_rpc(code))
+            }
+        }
     }
 
     /// Attaches the terminal of a `plugins run` command.
@@ -349,6 +403,9 @@ impl HostHandler for BridgeHost {
             "messaging.platform_action" => self.platform_action(&args),
             "plugins.has" => Ok(json!((self.loaded)(args["id"].as_str().unwrap_or("")))),
             "console.write" | "console.readline" => self.console(method, &args),
+            "bench.files.read" | "bench.files.write" | "bench.files.list" | "bench.request" => {
+                self.bench(method, &args)
+            }
             other => Err(HostFault::new(
                 "unknown_method",
                 format!("unknown host method '{other}'"),

@@ -265,7 +265,7 @@ impl Runner for HostRunner {
             if let Some(missing) = self.missing_adapter(job) {
                 return Err(missing);
             }
-            if job.spec.no_agent {
+            if job.spec.no_agent || job.spec.kind == pmt_cron::job::JobKind::Evolve {
                 return Ok(());
             }
             agent::credential(&self.scope, &self.launch, job).await
@@ -287,6 +287,12 @@ impl Runner for HostRunner {
 
     fn fetch<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<String, String>> {
         Box::pin(fetch::get(&self.scope, url))
+    }
+
+    fn queue_evolve<'a>(&'a self, job: &'a Job) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            crate::evolve_cmd::cron::queue(&self.scope, job).map_err(|e| e.message().to_owned())
+        })
     }
 
     fn run_agent(&self, request: AgentRequest) -> BoxFuture<'_, AgentOutcome> {

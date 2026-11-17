@@ -377,6 +377,8 @@ suggestions = "Önerilen otomasyonlar: list, accept <n>, dismiss <n>, catalog, c
 blueprint = "Bir taslaktan zamanlanmış iş oluşturur: /blueprint [ad] [yuva=değer ...]"
 goal = "Ajanın sürekli üzerinde çalıştığı kalıcı hedef: /goal <metin> | draft <metin> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "Etkin hedefin ek ölçütleri: /subgoal <metin> | remove <N> | clear"
+evolve = "Bu oturum için bir koşum evrimi işini kuyruğa al: /evolve [--k N]"
+domain = "Bu oturumun deneyim kitaplığı alanını göster veya ayarla: /domain [AD]"
 loop = "Bir mesajı ya da komutu yineler: /loop [aralık] <mesaj> [--times N] [--until <koşul>] | status | pause | resume | stop"
 heartbeat = "Boştayken yoklar: /heartbeat every <aralık> <mesaj> | status | pause | resume | clear"
 worktree = "Git worktree'leri: etkin olanı gösterir, new [AD], list, prune [--dry-run]"

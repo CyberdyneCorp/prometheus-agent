@@ -377,6 +377,8 @@ suggestions = "建議的自動化：list、accept <n>、dismiss <n>、catalog、
 blueprint = "從藍圖建立排程工作：/blueprint [名稱] [欄位=值 ...]"
 goal = "代理程式持續推進的長期目標：/goal <文字> | draft <文字> | status | show | pause | resume | clear | wait <pid> | unwait | gate add|list|remove|clear"
 subgoal = "目前目標的額外條件：/subgoal <文字> | remove <N> | clear"
+evolve = "為此工作階段排入一個 harness 演進工作：/evolve [--k N]"
+domain = "顯示或設定此工作階段的經驗庫領域：/domain [NAME]"
 loop = "重複一則訊息或指令：/loop [間隔] <訊息> [--times N] [--until <條件>] | status | pause | resume | stop"
 heartbeat = "閒置時定期檢查：/heartbeat every <間隔> <訊息> | status | pause | resume | clear"
 worktree = "Git worktree：顯示目前的、new [名稱]、list、prune [--dry-run]"

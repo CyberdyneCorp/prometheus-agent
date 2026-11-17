@@ -1270,6 +1270,75 @@ error_codes! {
     /// The peer refused the request.
     PEER_REJECTED = ("peer.rejected", Tool,
         "The peer's API server refused the request; the message carries its answer (an unknown run, a run that cannot be stopped, a paused home, a busy profile).");
+    /// Harness evolution is turned off for the profile.
+    EVOLVE_DISABLED = ("evolve.disabled", Config,
+        "Harness evolution is opt-in per profile: set `evolve.enabled = true` in the profile's `config.toml` (`prometheus config set evolve.enabled true`). The `prometheus harness` commands work without it.");
+    /// An evolution task could not be captured or is malformed.
+    EVOLVE_INVALID_TASK = ("evolve.invalid_task", InvalidInput,
+        "The evolution task could not be frozen: its task file is malformed, its session has no user message, or its workspace snapshot exceeds `evolve.task.max_source_bytes`; nothing was queued.");
+    /// No evolution job has the id.
+    EVOLVE_JOB_NOT_FOUND = ("evolve.job_not_found", NotFound,
+        "No evolution job of this profile has this id; `prometheus evolve list` shows the jobs.");
+    /// The evolution job is already running in another process.
+    EVOLVE_JOB_RUNNING = ("evolve.job_running", Conflict,
+        "Another process (the daemon or a foreground `prometheus evolve run`) is running this job; wait for it, or `prometheus evolve cancel <job>` it.");
+    /// The evolution job is not in a state that allows the operation.
+    EVOLVE_JOB_STATE = ("evolve.job_state", InvalidInput,
+        "The job is not in a state that allows this (only a job in `awaiting-selection` takes `evolve choose`; only an unfinished job can be cancelled or resumed); `prometheus evolve status <job>` shows its state.");
+    /// No proposal has the id.
+    EVOLVE_PROPOSAL_NOT_FOUND = ("evolve.proposal_not_found", NotFound,
+        "No harness proposal of this profile has this id; `prometheus evolve proposals` lists them.");
+    /// The proposal cannot be adopted as it stands.
+    EVOLVE_PROPOSAL_REFUSED = ("evolve.proposal_refused", InvalidInput,
+        "The proposal cannot be adopted: it is not pending, the active harness changed since it was produced (re-run the job, or adopt with `--rebase` when its diff applies cleanly), or its tree no longer validates.");
+    /// A harness tree failed validation.
+    HARNESS_INVALID = ("harness.invalid", InvalidInput,
+        "The harness tree failed validation; every error is listed (paths outside the editable surface, size caps, skill and subagent front matter, script syntax and references, `hooks.toml` keys and events, templates, secrets). No version was written.");
+    /// No harness version matches the reference.
+    HARNESS_VERSION_NOT_FOUND = ("harness.version_not_found", NotFound,
+        "No harness version has this id (`h<n>` or `h<n>-<fingerprint>`), or the version is not in the tree; `prometheus harness log` lists the versions.");
+    /// A harness version could not be read or written.
+    HARNESS_IO = ("harness.io", Io,
+        "A file under `<profile>/harness/` could not be read or written.");
+    /// No experience-library entry has the id.
+    EXPERIENCE_ENTRY_NOT_FOUND = ("experience.entry_not_found", Tool,
+        "No entry of this profile's experience library has this id; `prometheus experience list --all` lists every entry with its status.");
+    /// A domain name is not valid after normalisation.
+    EXPERIENCE_INVALID_DOMAIN = ("experience.invalid_domain", Usage,
+        "Experience-library domains are lower-case letters, digits and `-` (`[a-z0-9][a-z0-9-]{0,47}`); input is lower-cased and runs of other characters become `-`, so only an over-long name is refused.");
+    /// An experience archive was refused as a whole.
+    EXPERIENCE_IMPORT_REJECTED = ("experience.import_rejected", InvalidInput,
+        "The experience archive was refused and nothing was written: an entry's harness does not validate, or an entry carries a leak-glob file, an eval verdict marker or a secret; the message names the entry.");
+    /// The experience library could not be read or written.
+    EXPERIENCE_IO = ("experience.io", Io,
+        "A file under `<profile>/experience/` (or an experience archive) could not be read or written.");
+    /// An eval suite does not validate.
+    EVAL_INVALID_SUITE = ("eval.invalid_suite", InvalidInput,
+        "An eval suite (`suite.toml`, a task's `task.toml`, its `grader/grader.toml` or `run.toml`) does not validate; the message names the first invalid file and the problem (`prometheus eval validate`).");
+    /// No eval suite has that name or path.
+    EVAL_SUITE_NOT_FOUND = ("eval.suite_not_found", NotFound,
+        "No eval suite has that name: suites are directories with a `suite.toml`, given by path or found under `<profile>/evals/` (the bundled `smoke` suite is always there).");
+    /// No eval run has that id.
+    EVAL_RUN_NOT_FOUND = ("eval.run_not_found", NotFound,
+        "No eval run has that id under `<profile>/evals/runs/` (`prometheus eval report`, `eval judge`).");
+    /// A resumed eval run does not match what it resumes.
+    EVAL_RUN_MISMATCH = ("eval.run_mismatch", Usage,
+        "`--run-id` names an existing run whose suite version, model or harness hash differ from this invocation (`run.json`); resume it with the same settings or start another run id.");
+    /// The judge of an eval run changed.
+    EVAL_JUDGE_CHANGED = ("eval.judge_changed", Tool,
+        "`prometheus eval judge` was asked to merge rows scored by another judge model or grader version than the one recorded in `judged.json`; pass `--judge-namespace NAME` to score separately.");
+    /// A batch dataset or toolset distribution does not validate.
+    EVAL_INVALID_DATASET = ("eval.invalid_dataset", InvalidInput,
+        "A batch dataset line (`prometheus eval batch`), a prefill file or a toolset distribution does not validate; the message names the line or the toolset. Nothing ran.");
+    /// A session cannot become an eval task.
+    EVAL_CAPTURE_REFUSED = ("eval.capture_refused", InvalidInput,
+        "`prometheus eval capture` refused: the session's recording has no workspace contents for files the task declares, the task id exists already, or no grader was given.");
+    /// A benchmark adapter failed or broke the protocol.
+    EVAL_BENCH_FAILED = ("eval.bench_failed", Unavailable,
+        "A benchmark adapter (`bench:<name>`) could not be started, answered with an error or broke the adapter protocol; the message names the method.");
+    /// Eval files could not be read or written.
+    EVAL_IO = ("eval.io", Io,
+        "A file of an eval suite or run (`<profile>/evals/`) or a trajectory dataset could not be read or written.");
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");

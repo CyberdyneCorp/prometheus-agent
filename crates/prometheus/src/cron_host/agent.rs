@@ -108,6 +108,7 @@ fn factory(
             notepad: notepad.map(std::path::Path::to_path_buf),
             trace: run_id.map(pmt_obs::otel::context::cron_run),
         }),
+        domain: job.spec.domain.clone(),
         ..Options::default()
     };
     Factory::with_store(

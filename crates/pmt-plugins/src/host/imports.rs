@@ -68,6 +68,8 @@ pub(crate) struct HostState {
     pub(crate) limits: StoreLimits,
     /// Set only while a `run-cli` call runs.
     pub(crate) console: Option<Arc<dyn Console>>,
+    /// Set only while a `bench` world call runs.
+    pub(crate) bench: Option<Arc<dyn super::ports::BenchPort>>,
     /// The budget of the call in progress.
     pub(crate) meter: super::instance::Meter,
 }

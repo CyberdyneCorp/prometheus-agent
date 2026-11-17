@@ -28,6 +28,7 @@ pmt-kanban = { path = "crates/pmt-kanban" }
 pmt-delegation = { path = "crates/pmt-delegation" }
 pmt-i18n = { path = "crates/pmt-i18n" }
 pmt-eval = { path = "crates/pmt-eval" }
+pmt-evolve = { path = "crates/pmt-evolve" }
 pmt-worktrees = { path = "crates/pmt-worktrees" }
 pmt-memory = { path = "crates/pmt-memory" }
 pmt-migrate = { path = "crates/pmt-migrate" }

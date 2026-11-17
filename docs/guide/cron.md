@@ -64,6 +64,10 @@ command refuses with exit 4.
   the last 4 KiB of its standard error.
 - `--no-agent` (with `--script`): the script is the whole job; its output
   is delivered as it is, and empty output delivers nothing.
+- `--evolve-task <file>` (with no prompt, skill or script): each run
+  queues a [harness evolution](harness.md) job for the task file (relative
+  to the profile directory) with `trigger = "cron"` and the job's id,
+  instead of starting an agent; the run's output names the queued job.
 
 Toolsets (`--toolsets web,file`, `none` for no tools) default to
 `cron.default_toolsets`, else the cron surface's default

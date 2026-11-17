@@ -127,6 +127,12 @@ pub trait Runner: Send + Sync {
     fn run_agent(&self, request: AgentRequest) -> BoxFuture<'_, AgentOutcome>;
     /// Redacts known secrets from delivered text.
     fn redact(&self, text: &str) -> String;
+    /// Queues the harness-evolution job of an `evolve` job; `Ok` is the
+    /// queued job's id, `Err` why it was not queued.
+    fn queue_evolve<'a>(&'a self, job: &'a Job) -> BoxFuture<'a, Result<String, String>> {
+        let _ = job;
+        Box::pin(async { Err("harness evolution is not available in this build".to_owned()) })
+    }
 }
 
 /// What [`execute`] works with.

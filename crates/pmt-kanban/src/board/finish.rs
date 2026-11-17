@@ -348,6 +348,16 @@ impl Board {
     ) -> Result<(), Error> {
         let task = self.task(id)?;
         workflow::check(Verb::Approve, actor.kind, task.status, Status::Done)?;
+        // Approving an evolve task adopts a harness: a person's call only
+        // (spec: kanban, Eval and harness-evolution tasks).
+        if matches!(task.kind, TaskKind::Evolve { .. }) && actor.kind != ActorKind::User {
+            return Err(Error::new(
+                &codes::KANBAN_NOT_PERMITTED,
+                format!(
+                    "{id} is an evolve task: only a person approves it (prometheus kanban approve {id})"
+                ),
+            ));
+        }
         if let Some(refusal) = self.contract_gate(actor, &task, None, now)? {
             return Err(self.refuse(actor, id, &refusal, now));
         }

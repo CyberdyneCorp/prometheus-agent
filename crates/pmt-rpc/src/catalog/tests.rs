@@ -30,7 +30,7 @@ fn the_schema_records_each_name_with_its_owning_capability() {
         assert!(section.get(entry.name).is_some(), "{} missing", entry.name);
     }
     assert!(schema["methods"]["prompt.submit"]["params"].is_object());
-    assert_eq!(schema["methods"]["evolve.start"]["declared"], false);
+    assert_eq!(schema["methods"]["wake.feed"]["declared"], false);
 }
 
 #[test]

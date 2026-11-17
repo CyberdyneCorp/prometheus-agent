@@ -1,7 +1,7 @@
 // The chat transcript (shared with the desktop): stored messages, then the
 // live turn rendered from client protocol events: streamed answer text,
 // tool calls with their results, subagent status, approval and clarify
-// cards, and the turn's end.
+// cards, session notices, and the turn's end.
 
 import type { Envelope, TranscriptMessage, TurnFinished } from "../../../schema/rpc";
 import { h } from "../lib/dom";
@@ -98,6 +98,11 @@ export class Transcript {
       case "subagent.progress":
       case "subagent.finished":
         this.subagent(data.type, p);
+        break;
+      // A notice about the session itself (a memory change, an automation
+      // status, an evolution job queued as it ended).
+      case "command.notice":
+        this.add(h("p", { class: "notice info", role: "status" }, String(p.text ?? "")));
         break;
       default:
         break;

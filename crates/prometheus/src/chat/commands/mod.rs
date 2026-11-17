@@ -199,6 +199,8 @@ async fn work_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<St
         "subgoal" => crate::automation::commands::subgoal(ctx, args),
         "loop" => crate::automation::commands::looping(ctx, args),
         "heartbeat" => crate::automation::commands::heartbeat(ctx, args),
+        "evolve" => crate::evolve_cmd::slash::evolve(ctx, args),
+        "domain" => crate::experience_cmd::slash::domain(ctx, args),
         _ => return None,
     })
 }

@@ -282,6 +282,12 @@ name = "tiers"                       # the plugin id when absent
 tier = { type = "string", enum = ["fast", "deep"] }
 ```
 
+A `bench` plugin is a benchmark adapter for `prometheus eval run
+bench:<plugin id>` (see [Benchmark adapters](eval.md#benchmark-adapters)):
+`call(method, params)` answers the `bench.*` methods with JSON, `files`
+reaches only the directory of the call in progress, and `requests` is its
+request to the host. `plugins/samples/bench` is a complete one.
+
 A `provider` plugin registers named providers (image generation, web
 search, text-to-speech...) that config selects by name, such as
 `web.search_backend = "<name>"`. Its `models` interface (provider world

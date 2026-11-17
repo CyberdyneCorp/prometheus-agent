@@ -96,6 +96,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.curator.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.curator.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.curator.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.eval_judge.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.eval_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.eval_judge.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.eval_judge.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.eval_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.eval_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.evolution.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.evolution.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.evolution.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -139,6 +145,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.title.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.title.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.title.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.trajectory_compress.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.trajectory_compress.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.trajectory_compress.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.trajectory_compress.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.trajectory_compress.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.trajectory_compress.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.transient_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable auxiliary failure. |
 | `auxiliary.vision.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.vision.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
@@ -316,6 +328,35 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
 | `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
 | `display.vim_mode` | boolean | `false` | any | `next_session` | Vim key bindings in the composer (the line editor is set up when the session starts). |
+| `evolve.adoption.policy` | one of "ask", "auto", "never" | `"ask"` | `"ask"`, `"auto"`, `"never"` | `live` | `ask` (default), `auto` (adopt at once, except proposals touching scripts, hooks or subagents, which always wait for approval) or `never` (proposals are kept for review). |
+| `evolve.auto.enabled` | boolean | `false` | any | `live` | Queue jobs automatically at all. |
+| `evolve.auto.max_jobs_per_day` | integer | `3` | ≥ 0 | `live` | Automatic jobs per profile per day. |
+| `evolve.auto.min_iterations` | integer | `40` | ≥ 1 | `live` | What counts as a long session. |
+| `evolve.auto.on_failure` | boolean | `true` | any | `live` | After a session that ended in error or interruption after at least one tool call. |
+| `evolve.auto.on_long_task` | boolean | `true` | any | `live` | After a session of at least `min_iterations` iterations. |
+| `evolve.budget.max_usd` | number | `5.0` | ≥ 0.0 | `live` | A job stops (`budget-exceeded`) once its spend reaches this many US dollars, unless `--budget-usd` names another cap. |
+| `evolve.concurrency.rollouts` | integer | `2` | ≥ 1 | `live` | Rollouts running at once. |
+| `evolve.concurrency.sessions` | integer | `2` | ≥ 1 | `live` | Improver sessions running at once. |
+| `evolve.enabled` | boolean | `false` | any | `live` | Allow harness evolution in this profile (`prometheus evolve`, `/evolve`, the `evolve.*` RPC methods, scheduled and automatic jobs). |
+| `evolve.evidence.obs_trunc_chars` | integer | `50000` | ≥ 10000 | `live` | A tool observation longer than this is truncated in the rollout trajectories improvers read. |
+| `evolve.improver.max_iterations` | integer | `120` | ≥ 1 | `live` | Model calls one session may make. |
+| `evolve.improver.model` | string | unset | any | `live` | `provider/model` of every improver session; unset uses the `evolution` auxiliary route, else the profile's main model. |
+| `evolve.improver.timeout_secs` | integer | `1800` | ≥ 1 | `live` | Wall-clock limit of one session. |
+| `evolve.k` | integer | `2` | 1 to 8 | `live` | Recursion budget k: each mode spends 4k rollouts and 3k improver sessions. |
+| `evolve.leak_globs` | array of string | `["**/*reference_answer*","**/*rubric*","**/expected/**","**/*.expected.*","**/.pmt-eval/**"]` | any | `live` | Files never captured into a task, evidence or library entry, matched against the full relative path (leading dots included). |
+| `evolve.mode` | one of "parallel", "sequential", "both" | `"parallel"` | `"parallel"`, `"sequential"`, `"both"` | `live` | `parallel` (width), `sequential` (depth) or `both` (one proposal per mode on shared base rollouts). |
+| `evolve.resume_on_start` | boolean | `true` | any | `live` | Interrupted jobs are queued again when the daemon starts. |
+| `evolve.retention_secs` | integer | `2592000` | ≥ 1 | `live` | Job directories older than this are pruned (the summary of a job whose proposal was adopted is kept). |
+| `evolve.rollout.backend` | string | `"local-sandbox"` | any | `live` | Execution backend: `local-sandbox` (the `local` backend with full sandbox enforcement) or another sandboxed backend (`container`, `ssh`, `singularity`, a plugin backend). The unsandboxed host is refused. |
+| `evolve.rollout.max_iterations` | integer | `60` | ≥ 1 | `live` | Model calls one rollout may make. |
+| `evolve.rollout.network` | one of "providers", "session" | `"providers"` | `"providers"`, `"session"` | `live` | `providers`: egress only to the configured model providers; `session`: the source session's egress rules. |
+| `evolve.rollout.timeout_secs` | integer | `900` | ≥ 1 | `live` | Wall-clock limit of one rollout. |
+| `evolve.selection` | one of "model", "user" | `"model"` | `"model"`, `"user"` | `live` | Who picks the final of each mode: `model` (a blind selector session) or `user` (`prometheus evolve choose`). |
+| `evolve.task.max_source_bytes` | integer | `52428800` | ≥ 1 | `live` | Largest workspace snapshot of a task, in bytes. |
+| `experience.max_entries_in_evidence` | integer | `20` | 1 to 200 | `live` | Newest visible entries of the job's domain copied into its evidence (pinned entries first). |
+| `experience.max_entries_per_domain` | integer | `50` | 1 to 1000 | `live` | Entries kept per domain; the oldest unpinned one is evicted. |
+| `experience.session_lessons` | boolean | `false` | any | `live` | Offer a domain's lessons to new sessions that start with a known domain, as a frozen prompt layer. |
+| `experience.session_lessons_max` | integer | `5` | 1 to 20 | `live` | Lessons in that layer (high or medium confidence only). |
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
@@ -483,6 +524,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `goals.gate_timeout_secs` | integer | `300` | 1 to 86400 | `live` | Seconds one quality gate command may run. |
 | `goals.max_turns` | integer | `20` | 1 to 1000 | `live` | Continuation turns a goal may use before it pauses. |
 | `goals.max_wait_secs` | integer | `1800` | 1 to 86400 | `live` | Longest wait of a goal parked on a process (seconds). |
+| `harness.always_on_cap_chars` | integer | `24000` | 4000 to 64000 | `live` | Combined characters of `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` a harness may hold. |
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |

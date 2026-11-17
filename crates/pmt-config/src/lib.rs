@@ -36,6 +36,7 @@ mod gateway_check_platforms;
 mod gateway_check_routes;
 pub mod generated;
 pub mod grants;
+pub mod harness;
 pub mod home;
 pub mod hooks_check;
 pub mod image_models;

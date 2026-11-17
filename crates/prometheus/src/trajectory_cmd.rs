@@ -33,6 +33,7 @@ pub fn run(command: &TrajectoryCommand, ctx: &Context<'_>) -> Result<u8, Error> 
             max_chars,
         } => (session, format, args_trunc, obs_trunc, max_chars),
         TrajectoryCommand::Export(args) => return crate::trajectory_export::run(args, ctx),
+        TrajectoryCommand::Compress(args) => return crate::trajectory_compress::run(args, ctx),
     };
     let scope = ctx.scope()?;
     let id = match SessionId::parse(session) {

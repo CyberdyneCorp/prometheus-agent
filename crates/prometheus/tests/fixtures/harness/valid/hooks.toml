@@ -1,0 +1,5 @@
+[[hooks]]
+event = "pre_tool_call"
+command = "sh scripts/guard.sh"
+matcher = "^terminal$"
+timeout_secs = 10

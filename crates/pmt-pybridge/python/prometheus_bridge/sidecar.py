@@ -24,7 +24,7 @@ UNSUPPORTED = -32010
 UNSERIALIZABLE = -32011
 
 METHODS = {"bridge.hello", "bridge.ping", "bridge.shutdown", "plugin.load", "plugin.unload", "tool.invoke",
-           "hook.invoke", "command.invoke", "provider.call", "event.deliver"}
+           "hook.invoke", "command.invoke", "provider.call", "event.deliver", "bench.invoke"}
 
 
 class Failure(Exception):
@@ -58,7 +58,8 @@ class Sidecar:
             raise context.HostError("timeout", f"host did not answer {method}")
         if "error" in slot:
             error = slot["error"]
-            raise context.HostError((error.get("data") or {}).get("code", ""), error.get("message", ""))
+            raise context.HostError((error.get("data") or {}).get("code", ""), error.get("message", ""),
+                                    error.get("code"))
         return slot.get("result")
 
     def _resolve(self, message):
@@ -225,6 +226,7 @@ def registrations():
         "subscriptions": [event for event, _ in reg["subscriptions"]],
         "skills": [{"name": n, **s} for n, s in reg["skills"].items()],
         "blueprints": [typed.to_wire(b) for b in reg["blueprints"]],
+        "bench_adapters": sorted(reg["bench_adapters"]),
         "degraded": list(dict.fromkeys(reg["degraded"])),
     }
 
@@ -412,13 +414,38 @@ def _event(_, params):
     return {}
 
 
+BENCH_METHODS = {"bench.describe": "describe", "bench.tasks": "tasks", "bench.task": "task",
+                 "bench.prepare": "prepare", "bench.deliverables": "deliverables",
+                 "bench.preflight": "preflight", "bench.score": "score"}
+
+
+def _bench(_, params):
+    """One benchmark protocol call on a registered adapter: the protocol's params
+    as keyword arguments, plus ``host`` (a BenchHost) when the method takes it."""
+    name, method = params.get("adapter", ""), params.get("method", "")
+    adapter = state.REGISTRY["bench_adapters"].get(name)
+    if adapter is None:
+        raise Failure(PLUGIN_ERROR, f"bench adapter '{name}' is not registered by plugin '{state.PLUGIN_ID}'")
+    attribute = BENCH_METHODS.get(method)
+    if attribute is None or not callable(getattr(adapter, attribute, None)):
+        raise Failure(UNKNOWN_METHOD, f"bench adapter '{name}' does not answer {method}")
+    function = getattr(adapter, attribute)
+    args = dict(params.get("params") or {})
+    if "host" in inspect.signature(function).parameters:
+        args["host"] = context.BenchHost()
+    result = function(**args)
+    if inspect.iscoroutine(result):
+        result = asyncio.run(result)
+    return typed.to_wire(result, f"{name}.{attribute}")
+
+
 def _unload(sidecar, _):
     sidecar._unload()
     return {}
 
 
 HANDLERS = {"plugin.load": _load, "tool.invoke": _tool, "hook.invoke": _hook, "command.invoke": _command,
-            "provider.call": _provider, "event.deliver": _event, "plugin.unload": _unload}
+            "provider.call": _provider, "event.deliver": _event, "plugin.unload": _unload, "bench.invoke": _bench}
 
 
 def main():
