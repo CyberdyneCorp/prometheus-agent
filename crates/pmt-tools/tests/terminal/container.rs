@@ -92,6 +92,7 @@ impl Session {
             volumes: Vec::new(),
             user: None,
             idle_lifetime: Duration::from_mins(5),
+            network: None,
             config,
         };
         let mount = spec.config.mount_workspace;

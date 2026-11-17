@@ -255,6 +255,46 @@ fn proxy_down_with_enforcement() {
     );
 }
 
+/// A sandbox the proxy cannot keep to it (a singularity instance shares
+/// the host's network) is refused while injection is on, even with the
+/// proxy running: nothing runs around the proxy.
+#[test]
+fn a_backend_the_proxy_cannot_cover_is_refused() {
+    let home = mock_home();
+    injecting(home.path(), "", "");
+    ok(&run_with_stdin(
+        home.path(),
+        &["secrets", "set", "OPENAI_API_KEY"],
+        KEY,
+    ));
+    append_config(
+        home.path(),
+        "\n[terminal]\nbackend = \"singularity\"\n\n[terminal.singularity]\nimage = \"docker://alpine\"\n",
+    );
+    ok(&run(home.path(), &["egress", "start"]));
+    let script = home.path().join("s.toml");
+    std::fs::write(
+        &script,
+        "[[rule]]\nstep = 0\n[[rule.tool_calls]]\nname = \"terminal\"\narguments = { command = \"echo hi\" }\n\n\
+         [[rule]]\nstep = 1\ntext = \"done\"\n",
+    )
+    .unwrap();
+    let out = common::command(home.path())
+        .args(["chat", "--yolo", "--mock-script", script.to_str().unwrap()])
+        .args(["--json", "-z", "go"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    let _ = run(home.path(), &["egress", "stop"]);
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), stderr(&out));
+    let id = common::newest_session(home.path());
+    let sessions = format!("{:?}", common::session_messages(home.path(), &id));
+    assert!(
+        sessions.contains("cannot be enforced") || text.contains("cannot be enforced"),
+        "{text}\n{sessions}"
+    );
+}
+
 /// An image with `sh` and `curl`, pinned by digest.
 const CURL_IMAGE: &str = "docker.io/curlimages/curl@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69";
 
@@ -274,9 +314,26 @@ fn containers() -> bool {
     found
 }
 
+/// Removes the test home's egress networks with their containers.
+fn remove_egress_networks(home: &Path) {
+    let docker = |args: &[&str]| {
+        let out = Command::new("docker").args(args).output().unwrap();
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let label = format!("label=prometheus.egress-home={}", home.display());
+    for network in docker(&["network", "ls", "-q", "--filter", &label]).split_whitespace() {
+        let filter = format!("network={network}");
+        for container in docker(&["ps", "-aq", "--filter", &filter]).split_whitespace() {
+            docker(&["rm", "-f", container]);
+        }
+        docker(&["network", "rm", network]);
+    }
+}
+
 /// Scenario: CA inside the container. A container session's command
 /// holds only the placeholder, verifies TLS against the mounted bundle
-/// and the upstream gets the real key.
+/// and the upstream gets the real key; on its egress-only network it
+/// reaches nothing directly.
 #[test]
 fn ca_inside_the_container() {
     if !containers() {
@@ -304,8 +361,12 @@ fn ca_inside_the_container() {
         KEY,
     ));
     ok(&run(home.path(), &["egress", "start"]));
+    // Without the proxy the container reaches nothing: not the host's
+    // listener, not the internet.
     let command = format!(
-        "printf 'held:%s\\n' \"$OPENAI_API_KEY\"; curl -sS --max-time 20 https://localhost:{port}/v1/models -H \"Authorization: Bearer $OPENAI_API_KEY\" && echo VERIFIED"
+        "printf 'held:%s\\n' \"$OPENAI_API_KEY\"; curl -sS --max-time 20 https://localhost:{port}/v1/models -H \"Authorization: Bearer $OPENAI_API_KEY\" && echo VERIFIED; \
+         for url in https://host.docker.internal:{port}/ https://host.containers.internal:{port}/ https://1.1.1.1/; do \
+         curl -sk --noproxy '*' -o /dev/null --max-time 5 \"$url\" && echo \"LEAK:$url\"; done; echo DIRECT-CHECKED"
     );
     let script = home.path().join("s.toml");
     std::fs::write(
@@ -329,10 +390,15 @@ fn ca_inside_the_container() {
         .ok()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
         .filter(|h| !h.is_empty());
-    let mut chat = common::command(home.path());
-    if let Some(host) = docker_host {
-        chat.env("DOCKER_HOST", host);
-    }
+    let docker = |args: &[&str]| {
+        let mut command = common::command(home.path());
+        if let Some(host) = &docker_host {
+            command.env("DOCKER_HOST", host);
+        }
+        command.args(args);
+        command
+    };
+    let mut chat = docker(&[]);
     let out = chat
         .args([
             "chat",
@@ -345,14 +411,31 @@ fn ca_inside_the_container() {
         .stdin(std::process::Stdio::null())
         .output()
         .unwrap();
-    let _ = run(home.path(), &["egress", "stop"]);
+    // Stopping the proxy removes the relay to it.
+    let stopped = docker(&["egress", "stop"]).output().unwrap();
+    assert!(stopped.status.success(), "{}", stderr(&stopped));
     assert!(out.status.success(), "{}", stderr(&out));
+    let relays = Command::new("docker")
+        .args(["ps", "-a", "--format", "{{.Names}}", "--filter"])
+        .arg(format!(
+            "label=prometheus.egress-home={}",
+            home.path().display()
+        ))
+        .output()
+        .unwrap();
+    assert!(relays.status.success());
+    assert_eq!(String::from_utf8_lossy(&relays.stdout).trim(), "");
+    remove_egress_networks(home.path());
     let seen = heads.lock().unwrap().join("\n");
     let id = common::newest_session(home.path());
     let messages = format!("{:?}", common::session_messages(home.path(), &id));
     assert!(seen.contains(KEY), "upstream saw: {seen}\n{messages}");
     assert!(
         messages.contains("VERIFIED") && messages.contains("held:pmt-egress-"),
+        "{messages}"
+    );
+    assert!(
+        messages.contains("DIRECT-CHECKED") && !messages.contains("LEAK:https"),
         "{messages}"
     );
     assert!(!seen.contains("pmt-egress-"), "{seen}");

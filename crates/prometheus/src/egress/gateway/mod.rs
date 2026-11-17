@@ -14,6 +14,7 @@
 //! [`super::mappings`] and always refuses private and metadata addresses
 //! upstream.
 
+pub mod cover;
 pub mod serve;
 
 use std::io::{BufRead as _, BufReader, Write as _};
@@ -158,12 +159,13 @@ pub fn start(scope: &ProfileScope, owned: bool) -> Result<(Record, std::process:
 }
 
 /// Stops the proxy of `scope` (graceful, killed after [`STOP_GRACE`]);
-/// whether one was running.
+/// whether one was running. The container relay to it goes too.
 ///
 /// # Errors
 ///
 /// `home.io` when its record cannot be removed.
 pub fn stop(scope: &ProfileScope) -> Result<bool, Error> {
+    cover::remove_relay(scope);
     let Some((record, _)) = running(scope) else {
         // A record nobody answers for is stale: never signal its pid.
         remove_record(scope)?;
@@ -226,101 +228,6 @@ pub fn covers(scope: &ProfileScope) -> bool {
     egress.credential_injection && !egress.inject.is_empty()
 }
 
-/// What a container session needs to use the proxy.
-#[derive(Debug, Clone)]
-pub struct Cover {
-    /// `http://<host alias>:<bridge port>`.
-    pub proxy_url: String,
-    /// The `--add-host` a Docker container needs for the alias.
-    pub add_host: Option<String>,
-    /// The profile's egress CA certificate (mounted read-only).
-    pub ca_cert: PathBuf,
-    /// The CA bundle (platform roots and the egress CA; mounted
-    /// read-only).
-    pub bundle: PathBuf,
-    /// The mapping file the placeholders are read from at each command.
-    pub mappings: PathBuf,
-}
-
-impl Cover {
-    /// The variables a sandbox gets: the proxy, the CA bundle and the
-    /// Node.js switches.
-    #[must_use]
-    pub fn env(&self, bundle: &str, ca: &str) -> Vec<(String, String)> {
-        let mut vars: Vec<(String, String)> = pmt_net::egress::PROXY_VARS
-            .iter()
-            .map(|name| ((*name).to_owned(), self.proxy_url.clone()))
-            .collect();
-        for name in ["SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE"] {
-            vars.push((name.to_owned(), bundle.to_owned()));
-        }
-        vars.push(("NODE_EXTRA_CA_CERTS".to_owned(), ca.to_owned()));
-        vars.push(("NODE_OPTIONS".to_owned(), "--use-openssl-ca".to_owned()));
-        vars
-    }
-}
-
-/// The cover of a container session of `scope`: `None` when injection is
-/// off.
-///
-/// # Errors
-///
-/// `egress.proxy_down` when the proxy is not running and
-/// `security.egress.enforce_on_container` is on; the bundle's errors.
-pub fn container_cover(
-    scope: &ProfileScope,
-    flavor: pmt_sandbox::container::Flavor,
-) -> Result<Option<Cover>, Error> {
-    if !covers(scope) {
-        return Ok(None);
-    }
-    let Some((record, _)) = running(scope) else {
-        if scope.config().security.egress.enforce_on_container {
-            return Err(down());
-        }
-        tracing::warn!(
-            profile = %scope.name(),
-            "the egress proxy is not running; this sandbox reaches the network without it"
-        );
-        return Ok(None);
-    };
-    let (alias, add_host) = match flavor {
-        pmt_sandbox::container::Flavor::Podman => ("host.containers.internal", None),
-        pmt_sandbox::container::Flavor::Docker => (
-            "host.docker.internal",
-            Some("--add-host=host.docker.internal:host-gateway".to_owned()),
-        ),
-    };
-    let dir = super::injection::ca_dir(scope);
-    let bundle = dir.join("container-ca-bundle.pem");
-    let ca_cert = dir.join(pmt_net::egress::inject::CA_CERT);
-    let config = scope.config();
-    let mut extra: Vec<&std::path::Path> = config
-        .network
-        .extra_ca_file
-        .as_deref()
-        .map(std::path::Path::new)
-        .into_iter()
-        .collect();
-    extra.push(&ca_cert);
-    pmt_net::tls::write_child_bundle(&bundle, &extra)?;
-    // The container's user is not ours: the certificates it reads (public
-    // ones; the key never leaves the host) are mounted world-readable.
-    let ca_copy = dir.join("container-ca.crt");
-    std::fs::copy(&ca_cert, &ca_copy).map_err(|e| Error::io(&codes::HOME_IO, &ca_copy, &e))?;
-    for file in [&bundle, &ca_copy] {
-        readable(file)?;
-    }
-    let ca_cert = ca_copy;
-    Ok(Some(Cover {
-        proxy_url: format!("http://{alias}:{}", record.bridge.port()),
-        add_host,
-        ca_cert,
-        bundle,
-        mappings: super::mappings::path(scope),
-    }))
-}
-
 /// Refuses a container or remote sandbox of `scope` while injection is on,
 /// enforced, and the proxy is down (checked before anything is started).
 ///
@@ -334,19 +241,6 @@ pub fn require_running(scope: &ProfileScope) -> Result<(), Error> {
     {
         return Err(down());
     }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn readable(file: &std::path::Path) -> Result<(), Error> {
-    use std::os::unix::fs::PermissionsExt as _;
-    std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o644))
-        .map_err(|e| Error::io(&codes::HOME_IO, file, &e))
-}
-
-#[cfg(not(unix))]
-#[allow(clippy::unnecessary_wraps)] // fallible on Unix
-fn readable(_file: &std::path::Path) -> Result<(), Error> {
     Ok(())
 }
 

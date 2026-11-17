@@ -4989,6 +4989,7 @@ capabilities = [
 
 [configuration-and-profiles."Remote configuration backend"]
 "Unreachable plane fails closed" = { tests = ["crates/prometheus/tests/config_remote.rs::unreachable_plane_fails_closed", "crates/prometheus/tests/config_remote.rs::the_plane_supplies_the_configuration_and_writes_carry_only_changed_keys", "crates/pmt-config/src/remote/tests.rs::a_locked_key_is_refused_naming_its_level"], note = "config.toml is a file that does not parse: the exit-78 error names the plane URL, never the parse error" }
+"Every reader uses the plane" = { tests = ["crates/pmt-config/src/gateway_check_routes.rs::a_remote_targets_opt_in_comes_from_the_plane", "crates/pmt-config/src/language.rs::a_plane_set_language_reaches_the_strings", "crates/prometheus/tests/config_remote.rs::plane_enabled_adapter_plugins_are_preregistered"], note = "readers that hold only another profile's directory build its file with ConfigFile::of_profile_dir (remote-aware)" }
 
 [configuration-and-profiles."Profile descriptions"]
 "Auto description does not overwrite" = ["crates/prometheus/tests/profile_distribution.rs::auto_description_does_not_overwrite"]
@@ -5007,7 +5008,9 @@ capabilities = [
 "Proxy down with enforcement" = ["crates/prometheus/tests/egress_proxy.rs::proxy_down_with_enforcement", "crates/prometheus/tests/egress_proxy.rs::start_status_rotate_reload_and_stop"]
 
 [security-boundaries."Egress proxy coverage of containers and remote sandboxes"]
-"CA inside the container" = { tests = ["crates/prometheus/tests/egress_proxy.rs::ca_inside_the_container", "crates/prometheus/tests/egress_proxy.rs::the_proxy_injects_the_real_key_only_toward_the_mapped_host"], note = "a real container session (curl image) through the proxy: curl verifies TLS against the mounted bundle (CURL_CA_BUNDLE, the same contract python requests uses via REQUESTS_CA_BUNDLE); skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"CA inside the container" = { tests = ["crates/prometheus/tests/egress_proxy.rs::ca_inside_the_container", "crates/prometheus/tests/egress_proxy.rs::the_proxy_injects_the_real_key_only_toward_the_mapped_host"], note = "a real container session (curl image) through the proxy: curl verifies TLS against the mounted bundle (CURL_CA_BUNDLE, the same contract python requests uses via REQUESTS_CA_BUNDLE); on the egress-only network curl reaches neither the host nor the internet without the proxy; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"SSH sandbox through the tunnelled proxy" = { tests = ["crates/prometheus/tests/egress_ssh.rs::an_ssh_sandbox_goes_through_the_tunnelled_proxy", "crates/prometheus/tests/egress_ssh.rs::an_ssh_host_refusing_the_tunnel_runs_nothing"], note = "an sshd container (fixtures/sshd-egress) with and without AllowTcpForwarding; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"Sandbox the proxy cannot cover" = ["crates/prometheus/tests/egress_proxy.rs::a_backend_the_proxy_cannot_cover_is_refused"]
 
 [security-boundaries."Egress credential source and placeholder rotation"]
 "Bitwarden missing a secret" = ["crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"]

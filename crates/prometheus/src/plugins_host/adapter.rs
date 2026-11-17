@@ -77,7 +77,15 @@ fn enabled_adapters(home: &Path) -> Vec<String> {
         .flatten()
         .flatten();
     for profile in profiles {
-        let Some(config) = toml_of(&profile.path().join("config.toml")) else {
+        // The profile's own configuration: its plane document when the
+        // home uses a remote backend (an unreachable plane fails the
+        // profile's load later, with the same error).
+        let config = pmt_config::ConfigFile::of_profile_dir(&profile.path()).raw();
+        let Some(config) = config
+            .ok()
+            .flatten()
+            .and_then(|text| text.parse::<toml::Table>().ok())
+        else {
             continue;
         };
         let plugins = config.get("plugins");

@@ -212,14 +212,15 @@ impl Runner {
     fn config(&self) -> Result<String, String> {
         match self.provider {
             Provider::Mock => Ok("[model]\nprovider = \"mock\"\ndefault = \"mock\"\n".to_owned()),
-            Provider::Live => {
-                let path = self.scope.path("config.toml");
-                match std::fs::read_to_string(&path) {
-                    Ok(text) => Ok(text),
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-                    Err(e) => Err(format!("{}: {e}", path.display())),
-                }
-            }
+            // The profile's own configuration: its plane document when
+            // the home uses a remote backend.
+            Provider::Live => Ok(self
+                .scope
+                .profile()
+                .config_file()
+                .raw()
+                .map_err(|e| e.message().to_owned())?
+                .unwrap_or_default()),
         }
     }
 

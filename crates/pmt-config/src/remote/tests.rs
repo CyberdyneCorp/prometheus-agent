@@ -151,3 +151,37 @@ fn settings_without_an_instance_are_refused() {
     assert!(backend.problem().unwrap().contains("instance_id"));
     assert!(ConfigBackend::default().problem().is_none());
 }
+
+/// A plane answering every fetch with HTTP 403, counting the fetches.
+#[derive(Default)]
+struct Refusing(Mutex<u32>);
+
+impl Transport for Refusing {
+    fn get(&self, _: &str, _: &SecretString) -> Result<Reply, String> {
+        *self.0.lock().unwrap() += 1;
+        Ok(Reply {
+            status: 403,
+            body: Vec::new(),
+        })
+    }
+
+    fn patch(&self, _: &str, _: &SecretString, _: &str, _: &[u8]) -> Result<Reply, String> {
+        unreachable!("nothing writes")
+    }
+}
+
+/// One command reads a profile's configuration from several places: once
+/// its first fetch failed, the next reader gets the same error without
+/// another fetch (an unreachable plane would otherwise cost every reader
+/// its own 30-second retry window).
+#[test]
+fn a_failed_first_fetch_is_not_repeated_within_the_retry_window() {
+    let home = home_with_token();
+    let fake = Arc::new(Refusing::default());
+    let plane = Plane::new(home.path(), settings(), fake.clone());
+    let first = plane.text("default").unwrap_err();
+    let second = plane.text("default").unwrap_err();
+    assert_eq!(first.code().code, "config.remote_unreachable");
+    assert_eq!(second.message(), first.message());
+    assert_eq!(*fake.0.lock().unwrap(), 1);
+}

@@ -46,6 +46,26 @@ impl ConfigFile {
         }
     }
 
+    /// The file of the profile directory `dir` (`<home>/profiles/<name>`,
+    /// the home layout), remote-aware like
+    /// [`crate::ProfileDir::config_file`]: for code that holds only the
+    /// directory of a profile, possibly another one than its own. A
+    /// directory outside that layout (a test fixture, a scratch profile)
+    /// is a plain local file.
+    #[must_use]
+    pub fn of_profile_dir(dir: &Path) -> Self {
+        let path = dir.join("config.toml");
+        let backups = dir.join("backups").join("config");
+        let parent = dir.parent();
+        let in_layout = parent.and_then(Path::file_name) == Some("profiles".as_ref());
+        match (in_layout, parent.and_then(Path::parent), dir.file_name()) {
+            (true, Some(home), Some(name)) => {
+                Self::of_profile(path, backups, home, &name.to_string_lossy())
+            }
+            _ => Self::new(path, backups),
+        }
+    }
+
     /// The remote plane serving this profile, with its name.
     fn plane(&self) -> Result<Option<(std::sync::Arc<crate::remote::Plane>, &str)>, Error> {
         let Some((home, profile)) = &self.owner else {

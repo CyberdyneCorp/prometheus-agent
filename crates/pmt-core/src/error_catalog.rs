@@ -113,6 +113,9 @@ error_codes! {
     /// The profile's egress proxy is not running.
     EGRESS_PROXY_DOWN = ("egress.proxy_down", Unavailable,
         "Credential injection is on and `security.egress.enforce_on_container` is set, but the profile's egress proxy is not running: start it with `prometheus egress start` (or the daemon) before a container or remote session.");
+    /// A sandbox cannot reach the profile's egress proxy.
+    EGRESS_PROXY_UNREACHABLE = ("egress.proxy_unreachable", Unavailable,
+        "Credential injection is on, but the terminal backend cannot be kept to the profile's egress proxy (a plugin remote sandbox runs outside this host; a singularity instance shares its network): use the container or ssh backend, or turn `security.egress.credential_injection` off.");
     /// The egress proxy could not start.
     EGRESS_PROXY_START = ("egress.proxy_start", Unavailable,
         "The egress proxy did not start: its listener did not bind within 5 seconds, the credential source is missing mapped secrets, or a proxy of the profile is already running.");

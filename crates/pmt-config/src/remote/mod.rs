@@ -13,6 +13,9 @@
 
 pub mod wire;
 
+#[cfg(test)]
+pub(crate) mod fake;
+
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
@@ -204,6 +207,38 @@ pub struct Plane {
     settings: ConfigBackend,
     transport: Arc<dyn Transport>,
     profiles: Mutex<BTreeMap<String, Snapshot>>,
+    /// The last failed first fetch of each profile: another reader within
+    /// [`RETRY_WINDOW`] of it gets the same error at once rather than
+    /// waiting out a second window (one command reads a profile from
+    /// several places).
+    failed: Mutex<BTreeMap<String, Failure>>,
+}
+
+/// A failed first fetch.
+struct Failure {
+    at: Instant,
+    code: &'static pmt_core::error::ErrorCode,
+    message: String,
+    hint: Option<String>,
+}
+
+impl Failure {
+    fn of(error: &Error) -> Self {
+        Self {
+            at: Instant::now(),
+            code: error.code(),
+            message: error.message().to_owned(),
+            hint: error.hint().map(str::to_owned),
+        }
+    }
+
+    fn error(&self) -> Error {
+        let error = Error::new(self.code, self.message.clone());
+        match &self.hint {
+            Some(hint) => error.with_hint(hint.clone()),
+            None => error,
+        }
+    }
 }
 
 impl std::fmt::Debug for Plane {
@@ -225,6 +260,7 @@ impl Plane {
             settings,
             transport,
             profiles: Mutex::default(),
+            failed: Mutex::default(),
         }
     }
 
@@ -268,8 +304,27 @@ impl Plane {
                 }
             };
         }
-        let fresh = self.fetch_retrying(profile)?;
-        Ok(self.store(profile, fresh))
+        // Held across the fetch: concurrent first readers wait for it.
+        let mut failed = self.failed.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(snapshot) = self.cached(profile) {
+            return Ok(snapshot.layered.text);
+        }
+        if let Some(failure) = failed.get(profile)
+            && failure.at.elapsed() < RETRY_WINDOW
+        {
+            return Err(failure.error());
+        }
+        match self.fetch_retrying(profile) {
+            Ok(fresh) => {
+                failed.remove(profile);
+                drop(failed);
+                Ok(self.store(profile, fresh))
+            }
+            Err(error) => {
+                failed.insert(profile.to_owned(), Failure::of(&error));
+                Err(error)
+            }
+        }
     }
 
     /// The level locking `key` for `profile`, as last fetched.

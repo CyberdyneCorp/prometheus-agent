@@ -144,3 +144,44 @@ fn unreachable_plane_fails_closed() {
     assert!(took >= Duration::from_secs(25), "gave up after {took:?}");
     assert!(took < Duration::from_mins(1), "took {took:?}");
 }
+
+/// A platform-adapter plugin the plane enables is declared before the
+/// profile's configuration is checked, so the plane's
+/// `[gateway.platforms.<plugin>]` table validates; the local
+/// `config.toml` (which does not parse here) is never read for it.
+#[tokio::test(flavor = "multi_thread")]
+async fn plane_enabled_adapter_plugins_are_preregistered() {
+    let plane = MockServer::start().await;
+    let values = json!({
+        "plugins": {"enabled": ["mattermost"]},
+        "gateway": {"platforms": {"mattermost": {"enabled": true, "options": {"api": "x"}}}}
+    });
+    Mock::given(method("GET"))
+        .and(path(DOC))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            json!({"version": "1", "layers": [{"level": "profile", "values": values}]}),
+        ))
+        .mount(&plane)
+        .await;
+    let home = remote_home(&plane.uri());
+    let plugin = home.path().join("profiles/default/plugins/mattermost");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(
+        plugin.join("plugin.toml"),
+        "manifest_version = 1\nid = \"mattermost\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
+         description = \"Mattermost adapter\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
+         worlds = [\"platform-adapter@1.0\"]\n",
+    )
+    .unwrap();
+    let home_path = home.path().to_owned();
+    let got = pmt_core::spawn::blocking(move || {
+        run(
+            &home_path,
+            &["config", "get", "gateway.platforms.mattermost.enabled"],
+        )
+    })
+    .await
+    .unwrap();
+    assert!(got.status.success(), "{}", stderr(&got));
+    assert_eq!(String::from_utf8_lossy(&got.stdout).trim(), "true");
+}

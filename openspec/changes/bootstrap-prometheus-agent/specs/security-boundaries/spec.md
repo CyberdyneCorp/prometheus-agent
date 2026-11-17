@@ -380,13 +380,23 @@ The egress proxy SHALL be owned by the gateway daemon and managed with `promethe
 - **THEN** the session SHALL fail with `egress proxy is not running` rather than starting with real credentials
 
 ### Requirement: Egress proxy coverage of containers and remote sandboxes
-When credential injection is enabled the system SHALL route container and remote-sandbox traffic through the egress proxy (proxy env vars plus, for containers, a network that only reaches the proxy), SHALL generate a per-profile CA at `<profile>/egress/ca.crt` with its key at `ca.key` (0600, created with no-follow, never copied off the host), SHALL mount the certificate read-only into containers and upload it to remote sandboxes, set `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NODE_OPTIONS=--use-openssl-ca` to it, and SHALL by default allow injected credentials only toward the built-in provider hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.x.ai`, `api.mistral.ai`, `api.groq.com`, `api.together.xyz`, `api.deepseek.com`, `inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`; the proxy SHALL always deny the private and metadata ranges of this spec on its upstream side regardless of host allowlists.
+When credential injection is enabled the system SHALL route container and remote-sandbox traffic through the egress proxy (proxy env vars plus, for containers, a network that only reaches the proxy: an internal runtime network per profile whose only other member is a relay to the proxy; for SSH hosts, a reverse forward from the remote loopback to the proxy on a connection of its own, failing closed when the server refuses it), SHALL refuse sandboxes it cannot keep to the proxy (plugin remote sandboxes, which cannot reach the host, and singularity instances, which share the host's network) with `egress.proxy_unreachable`, SHALL generate a per-profile CA at `<profile>/egress/ca.crt` with its key at `ca.key` (0600, created with no-follow, never copied off the host), SHALL mount the certificate read-only into containers and upload it to remote sandboxes, set `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NODE_OPTIONS=--use-openssl-ca` to it, and SHALL by default allow injected credentials only toward the built-in provider hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.x.ai`, `api.mistral.ai`, `api.groq.com`, `api.together.xyz`, `api.deepseek.com`, `inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`; the proxy SHALL always deny the private and metadata ranges of this spec on its upstream side regardless of host allowlists.
 **Milestone:** M3
 
 #### Scenario: CA inside the container
 - **GIVEN** credential injection enabled and a container session
 - **WHEN** the model runs `python -c "import requests; requests.get('https://api.openai.com/v1/models')"` with the placeholder token
 - **THEN** TLS SHALL verify against the mounted CA and the upstream request SHALL carry the real key
+
+#### Scenario: SSH sandbox through the tunnelled proxy
+- **GIVEN** credential injection enabled and the `ssh` backend
+- **WHEN** the model runs a request with the placeholder token on the SSH host
+- **THEN** it SHALL go through the reverse-forwarded proxy, verify TLS against the uploaded CA and reach the upstream with the real key, and a server refusing the forward SHALL run no command
+
+#### Scenario: Sandbox the proxy cannot cover
+- **GIVEN** credential injection enabled, the proxy running and `terminal.backend = "singularity"`
+- **WHEN** a session runs a command
+- **THEN** it SHALL be refused with `egress.proxy_unreachable` and nothing SHALL run
 
 ### Requirement: Egress credential source and placeholder rotation
 `security.egress.credential_source` SHALL be `store` (default: the profile's secrets store) or `bitwarden` (refetched from Bitwarden Secrets Manager on every proxy start); with `bitwarden`, a missing access token, missing project id or a mapped secret absent from the fetch SHALL make the proxy refuse to start listing the missing names unless `security.egress.allow_store_fallback = true`; `prometheus egress rotate` SHALL require typing `rotate` (or `--confirm`) because it invalidates placeholders in running sandboxes, SHALL back up the previous mapping file (0600), mint new placeholders for every mapped secret, and push them to running sessions' sandboxes on their next command; re-running setup without `rotate` SHALL keep existing placeholders and mint only for new mappings.

@@ -7,6 +7,7 @@
 //! - [`hardening`] is the flag set every container starts with and maps a
 //!   runtime's rejection back to the flag it names.
 //! - [`options`] validates `terminal.container.volumes` and `extra_args`.
+//! - [`egress`] sets up a profile's egress-only network and its relay.
 //! - [`lifecycle`] creates, starts, stops and removes containers, keeps
 //!   the process-wide pool idle reaper, and reaps a profile's orphans.
 //!
@@ -21,6 +22,7 @@ use std::time::Duration;
 use pmt_config::schema::{DegradedFeature, SandboxConfig};
 use pmt_core::error::{Error, codes};
 
+pub mod egress;
 pub mod hardening;
 pub mod lifecycle;
 pub mod options;

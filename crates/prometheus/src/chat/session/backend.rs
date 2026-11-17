@@ -28,6 +28,8 @@ use pmt_tools::terminal::remote::ssh::SshTransport;
 use pmt_tools::terminal::remote::{RemoteExec, RemoteTarget, Transport};
 use pmt_tools::terminal::target::{PluginTarget, Target, Unavailable};
 
+use crate::egress::gateway::cover::Uncovered;
+
 /// The release's sandbox image (`terminal.container.image` unset). The
 /// release pipeline publishes it per version (spec: distribution-and-update,
 /// Container image).
@@ -150,6 +152,14 @@ fn try_select(
         // while the egress proxy is down.
         crate::egress::gateway::require_running(scope)?;
     }
+    let uncovered = match backend.kind {
+        Kind::Singularity => Some(Uncovered::Singularity),
+        Kind::Plugin => Some(Uncovered::Plugin),
+        _ => None,
+    };
+    if let Some(kind) = uncovered {
+        crate::egress::gateway::cover::refuse_uncovered(scope, &backend.name, kind)?;
+    }
     let (place, transport): (Place, Option<Arc<dyn Transport>>) = match &backend.kind {
         Kind::Local | Kind::Reserved(_) => return Ok(None),
         Kind::Container => {
@@ -161,12 +171,7 @@ fn try_select(
             };
             (place, Some(transport as Arc<dyn Transport>))
         }
-        Kind::Ssh => {
-            let control = scope.path("run/ssh");
-            pmt_core::private_fs::create_dir(&control).ok();
-            let target = SshTarget::from_config(&terminal.ssh, Some(&control))?;
-            (Place::Ssh, Some(Arc::new(SshTransport::new(target))))
-        }
+        Kind::Ssh => (Place::Ssh, Some(ssh(scope)?)),
         Kind::Singularity => {
             let place = Place::Container {
                 workspace_mounted: false,
@@ -261,6 +266,21 @@ fn over_transport(
     }
 }
 
+/// The SSH host, through the egress proxy's tunnel when it covers the
+/// profile.
+fn ssh(scope: &ProfileScope) -> Result<Arc<dyn Transport>, Error> {
+    let control = scope.path("run/ssh");
+    pmt_core::private_fs::create_dir(&control).ok();
+    let target = SshTarget::from_config(&scope.config().terminal.ssh, Some(&control))?;
+    let transport = SshTransport::new(target);
+    Ok(Arc::new(
+        match crate::egress::gateway::cover::ssh_egress(scope)? {
+            Some(egress) => transport.with_egress(egress),
+            None => transport,
+        },
+    ))
+}
+
 /// The session's container: one per session, or per `shared_key`.
 fn container(
     scope: &ProfileScope,
@@ -292,12 +312,13 @@ fn container(
         volumes,
         user: options.run_as_host_user.then(host_user).flatten(),
         idle_lifetime: Duration::from_secs(config.terminal.idle_lifetime_secs),
+        network: None,
     };
     // Skill credential files appear read-only under the container's
     // Prometheus home (spec: skills, Skill credential file passthrough).
     spec.volumes
         .push(super::credentials::volume(scope, &spec.name()));
-    let cover = crate::egress::gateway::container_cover(scope, spec.runtime.flavor())?;
+    let cover = crate::egress::gateway::cover::container_cover(scope, &spec.runtime, &spec.image)?;
     if let Some(cover) = &cover {
         egress_mounts(&mut spec, cover);
     }
@@ -308,10 +329,10 @@ fn container(
     }))
 }
 
-/// The egress CA and bundle, read-only, and the host alias of the proxy
+/// The egress CA and bundle, read-only, and the egress-only network
 /// (spec: security-boundaries, Egress proxy coverage of containers and
 /// remote sandboxes).
-fn egress_mounts(spec: &mut ContainerSpec, cover: &crate::egress::gateway::Cover) {
+fn egress_mounts(spec: &mut ContainerSpec, cover: &crate::egress::gateway::cover::Cover) {
     use crate::egress::gateway::{CONTAINER_BUNDLE, CONTAINER_CA};
     for (host, container) in [
         (&cover.bundle, CONTAINER_BUNDLE),
@@ -323,13 +344,13 @@ fn egress_mounts(spec: &mut ContainerSpec, cover: &crate::egress::gateway::Cover
             read_only: true,
         });
     }
-    spec.config.extra_args.extend(cover.add_host.clone());
+    spec.network.clone_from(&cover.network);
 }
 
 /// The variables of every command: the proxy, the CA and the current
 /// placeholders (re-read so a rotation reaches the next command).
 fn egress_env(
-    cover: crate::egress::gateway::Cover,
+    cover: crate::egress::gateway::cover::Cover,
 ) -> pmt_tools::terminal::remote::container::EnvOverrides {
     use crate::egress::gateway::{CONTAINER_BUNDLE, CONTAINER_CA};
     Arc::new(move || {

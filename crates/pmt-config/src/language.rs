@@ -22,7 +22,7 @@ use std::time::{Duration, Instant, SystemTime};
 use pmt_core::error::Error;
 use pmt_i18n::{PackLocale, Sources, Strings, Surface};
 
-use crate::layers::Overrides;
+use crate::layers::{Layered, Overrides};
 use crate::schema::Config;
 use crate::write::ConfigFile;
 
@@ -92,6 +92,9 @@ fn written_language(text: &str) -> Option<String> {
 struct Cached {
     checked: Instant,
     stamp: Vec<(PathBuf, Option<(SystemTime, u64)>)>,
+    /// The configuration text the strings were built from: a remote
+    /// plane's document changes without any local file changing.
+    config: Option<String>,
     strings: Arc<Strings>,
 }
 
@@ -109,11 +112,12 @@ pub fn strings(profile_dir: &Path, surface: Surface) -> Arc<Strings> {
             return Arc::clone(&cached.strings);
         }
         cached.checked = Instant::now();
-        if stamp(&cached.stamp) == cached.stamp {
+        if stamp(&cached.stamp) == cached.stamp && config_text(profile_dir) == cached.config {
             return Arc::clone(&cached.strings);
         }
     }
-    let sources = current_sources(profile_dir);
+    let config = config_text(profile_dir);
+    let sources = current_sources(profile_dir, config.as_deref());
     let strings = Arc::new(Strings::load(&sources, surface));
     let watched = watched(profile_dir, &sources, surface);
     cache.insert(
@@ -121,20 +125,26 @@ pub fn strings(profile_dir: &Path, surface: Surface) -> Arc<Strings> {
         Cached {
             checked: Instant::now(),
             stamp: stamp(&watched),
+            config,
             strings: Arc::clone(&strings),
         },
     );
     strings
 }
 
-/// The sources the profile's configuration names now; English alone when
-/// the configuration cannot be read (its error surfaces elsewhere).
-fn current_sources(profile_dir: &Path) -> Sources {
-    let file = ConfigFile::new(
-        profile_dir.join("config.toml"),
-        profile_dir.join("backups").join("config"),
-    );
-    match file.load_unmigrated(&Overrides::default()) {
+/// The profile's configuration text now (its remote plane's document
+/// when the home uses one); `None` when missing or unreadable.
+fn config_text(profile_dir: &Path) -> Option<String> {
+    ConfigFile::of_profile_dir(profile_dir).raw().ok().flatten()
+}
+
+/// The sources the configuration `text` names; English alone when it
+/// cannot be read (its error surfaces elsewhere).
+fn current_sources(profile_dir: &Path, text: Option<&str>) -> Sources {
+    let path = profile_dir.join("config.toml");
+    let layered = crate::migrate::in_memory(&path, text.unwrap_or_default())
+        .and_then(|(_, migrated)| Layered::build(&path, &migrated, &Overrides::default()));
+    match layered {
         Ok(layered) => sources(layered.config(), profile_dir),
         Err(_) => Sources::of_profile(pmt_i18n::ENGLISH, profile_dir, Vec::new()),
     }
@@ -224,6 +234,25 @@ mod tests {
         .unwrap();
         after_recheck();
         assert_eq!(super::strings(dir.path(), Surface::Core).language(), "ja");
+    }
+
+    /// Spec: configuration-and-profiles, Remote configuration backend: the
+    /// UI language of a remote profile is the plane's.
+    #[test]
+    fn a_plane_set_language_reaches_the_strings() {
+        let home = tempfile::tempdir().unwrap();
+        crate::remote::fake::serve(
+            home.path(),
+            &[(
+                "default",
+                serde_json::json!({"display": {"language": "es"}}),
+            )],
+        );
+        let dir = home.path().join("profiles/default");
+        std::fs::write(dir.join("config.toml"), "[display]\nlanguage = \"ja\"\n").unwrap();
+        let strings = strings(&dir, Surface::Core);
+        assert_eq!(strings.language(), "es");
+        assert_eq!(strings.get("approval.denied"), "Denegado");
     }
 
     #[test]

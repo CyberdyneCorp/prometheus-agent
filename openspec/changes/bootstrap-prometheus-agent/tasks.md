@@ -657,9 +657,11 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 73. M3 Additional upgrades: configuration, egress, runtimes and providers
 
-- [ ] 73.1 Implement the remote configuration backend (unreachable plane fails closed), profile descriptions, profile distributions (updates keep user config, credentials never installed), identity migration and purge (purge snapshotted) and external secret source commands; verify with fixtures (spec: configuration-and-profiles)
-- [ ] 73.2 Implement egress proxy operation and status, egress proxy coverage of containers and remote sandboxes (CA inside the container), the egress credential source with placeholder rotation, password manager login sources and the dependency vulnerability scan CI gate; verify with proxy integration tests (spec: security-boundaries)
+- [x] 73.1 Implement the remote configuration backend (unreachable plane fails closed), profile descriptions, profile distributions (updates keep user config, credentials never installed), identity migration and purge (purge snapshotted) and external secret source commands; verify with fixtures (spec: configuration-and-profiles)
+  - Known gap: `profile create --clone*` of a profile on the remote configuration backend copies its local `config.toml`; the plane document is not cloned onto the new profile.
+- [x] 73.2 Implement egress proxy operation and status, egress proxy coverage of containers and remote sandboxes (CA inside the container), the egress credential source with placeholder rotation, password manager login sources and the dependency vulnerability scan CI gate; verify with proxy integration tests (spec: security-boundaries)
 - [ ] 73.3 Implement the Lightpanda browser engine, the bot screen (virtual display for the agent) and the bot screen takeover lease; verify that the agent waits during a user takeover (spec: execution-environments)
+  - Not started: the Lightpanda engine, the bot screen and the takeover lease are not built (only the `lightpanda` runtime is pinned); the scenario's `computer_use` tool is task 76.1.
 - [ ] 73.4 Implement the Codex app-server runtime (switch deferred to the next session) and the Codex runtime migration (user text preserved); verify with a stub Codex binary (spec: model-providers)
 - [ ] 73.5 Implement API gateway proxy mode (container relays to the host agent) and the subscription proxy on `8645` (path allowlist, client bearer replaced, LAN clients need a key); verify with HTTP tests (spec: api-server)
 - [ ] 73.6 Implement local-model context window and memory placement (window grows before compression) and local resource telemetry; verify with a stub server (spec: local-models)

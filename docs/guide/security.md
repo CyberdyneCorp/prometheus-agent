@@ -236,16 +236,33 @@ mappings get one, existing ones keep theirs. `prometheus egress rotate`
 mapping; container sessions read them again for each command, so the next
 command already uses them.
 
-A container session then gets `HTTP(S)_PROXY` pointing at
-`host.docker.internal` (Docker, with `--add-host ...:host-gateway`) or
-`host.containers.internal` (Podman) on the bridge port, the profile's egress
-CA mounted read-only at `/etc/prometheus/egress/ca.crt` and a bundle of the
-platform roots, `network.extra_ca_file` and that CA at
+A container session joins the profile's egress-only network,
+`pmt-egress-<profile>-<home digest>`: an `--internal` runtime network with
+no route off it, whose only other member is the relay container
+`pmt-egress-relay-<profile>-<home digest>`. The relay runs the session
+image (it uses the image's `socat`, `python3` or busybox `nc -e`), without
+capabilities and read-only, and forwards every connection to the proxy's
+bridge port on the host (`host.docker.internal` or
+`host.containers.internal`); `prometheus egress stop` removes it. The
+container gets `HTTP(S)_PROXY=http://prometheus-egress:<bridge port>`, the
+profile's egress CA mounted read-only at `/etc/prometheus/egress/ca.crt`
+and a bundle of the platform roots, `network.extra_ca_file` and that CA at
 `/etc/prometheus/egress/ca-bundle.pem`, which `SSL_CERT_FILE`,
 `REQUESTS_CA_BUNDLE` and `CURL_CA_BUNDLE` name (`NODE_EXTRA_CA_CERTS`
-names the CA, with `NODE_OPTIONS=--use-openssl-ca`). With
-`security.egress.enforce_on_container = true` (the default) a container
-session refuses every command with `egress proxy is not running` while the
+names the CA, with `NODE_OPTIONS=--use-openssl-ca`).
+
+An SSH session opens a second SSH connection of its own carrying a reverse
+forward (`-R 127.0.0.1:0:<proxy loopback>`, the server picks the port) and
+uploads the bundle and the CA to `~/.cache/prometheus-terminal/egress/`;
+every command gets the proxy at `http://127.0.0.1:<that port>`, the same CA
+variables and the current placeholders. A server that refuses forwarding
+(`AllowTcpForwarding no`) runs no command: the session reports why. Plugin
+remote sandboxes cannot reach the proxy on this host, and singularity
+instances share its network, so while credential injection is on they are
+refused with `egress.proxy_unreachable`.
+
+With `security.egress.enforce_on_container = true` (the default) a container
+or SSH session refuses every command with `egress proxy is not running` while the
 proxy is down, rather than run with real credentials. A mapping without
 hosts (`OPENAI_API_KEY = []`) may be sent only to the built-in provider
 hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`,
@@ -254,11 +271,6 @@ hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`,
 `inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`.
 Upstream, the proxy refuses private and metadata addresses whatever the
 allowlists say.
-
-Not yet done: a container keeps the network its runtime gives it (the
-proxy is reached through the variables above, not forced by a network that
-reaches only the proxy), and SSH and plugin sandboxes are refused while the
-proxy is down but are not yet routed through it or given its CA.
 
 `security.egress.credential_source = "bitwarden"` reads the mapped values
 from the Bitwarden project of `[secrets.bitwarden]` at every proxy start
