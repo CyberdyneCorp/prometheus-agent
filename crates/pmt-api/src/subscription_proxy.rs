@@ -93,11 +93,16 @@ pub async fn serve(listener: tokio::net::TcpListener, proxy: Arc<Proxy>, stop: C
         let Ok((stream, _)) = accepted else {
             continue;
         };
+        // The address this connection reached: on an all-interfaces bind it
+        // is the one interface address the client may name in `Host`.
+        let Ok(local) = stream.local_addr() else {
+            continue;
+        };
         let proxy = Arc::clone(&proxy);
         pmt_core::spawn::spawn(async move {
             let service = hyper::service::service_fn(move |req| {
                 let proxy = Arc::clone(&proxy);
-                async move { Ok::<_, Infallible>(answer(&proxy, req).await) }
+                async move { Ok::<_, Infallible>(answer(&proxy, local, req).await) }
             });
             let conn = hyper::server::conn::http1::Builder::new()
                 .timer(TokioTimer::new())
@@ -110,8 +115,8 @@ pub async fn serve(listener: tokio::net::TcpListener, proxy: Arc<Proxy>, stop: C
     }
 }
 
-async fn answer(proxy: &Proxy, req: Request<Incoming>) -> Reply {
-    if let Some(refused) = refusal(proxy, req.headers()) {
+async fn answer(proxy: &Proxy, local: SocketAddr, req: Request<Incoming>) -> Reply {
+    if let Some(refused) = refusal(proxy, local, req.headers()) {
         return refused;
     }
     let path = req.uri().path().to_owned();
@@ -133,9 +138,9 @@ async fn answer(proxy: &Proxy, req: Request<Incoming>) -> Reply {
 
 /// Why a request is refused before anything else: a foreign `Host`, a
 /// browser, or a LAN client without the key.
-fn refusal(proxy: &Proxy, headers: &hyper::HeaderMap) -> Option<Reply> {
+fn refusal(proxy: &Proxy, local: SocketAddr, headers: &hyper::HeaderMap) -> Option<Reply> {
     let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
-    if !own_host(proxy.listen, header("host")) {
+    if !own_host(proxy.listen, local, header("host")) {
         return Some(json(
             StatusCode::FORBIDDEN,
             &json!({"error": {"message": "Host is not this proxy", "type": "forbidden"}}),
@@ -155,9 +160,12 @@ fn refusal(proxy: &Proxy, headers: &hyper::HeaderMap) -> Option<Reply> {
     (!ok).then(|| json(StatusCode::UNAUTHORIZED, &json!({"error": {"message": "this proxy needs its client key (PMT_PROXY_CLIENT_KEY)", "type": "unauthorized"}})))
 }
 
-/// Whether `host` names this listener: its port, and its own address (a
-/// loopback name on loopback; any address when bound to all interfaces).
-fn own_host(listen: SocketAddr, host: Option<&str>) -> bool {
+/// Whether `host` names this listener: its port and its own address, as
+/// an IP literal (a loopback address also as `localhost`). On an
+/// all-interfaces bind the own address is the interface `local` the
+/// connection arrived on, so a DNS name (a rebinding page) is refused there
+/// too.
+fn own_host(listen: SocketAddr, local: SocketAddr, host: Option<&str>) -> bool {
     let Some(host) = host else {
         return false;
     };
@@ -168,13 +176,14 @@ fn own_host(listen: SocketAddr, host: Option<&str>) -> bool {
         return false;
     }
     let name = name.trim_start_matches('[').trim_end_matches(']');
-    let ip = listen.ip();
-    if ip.is_unspecified() {
-        return true;
-    }
+    let own = if listen.ip().is_unspecified() {
+        local.ip().to_canonical()
+    } else {
+        listen.ip()
+    };
     name.parse::<std::net::IpAddr>().map_or_else(
-        |_| ip.is_loopback() && name.eq_ignore_ascii_case("localhost"),
-        |named| named == ip,
+        |_| own.is_loopback() && name.eq_ignore_ascii_case("localhost"),
+        |named| named.to_canonical() == own,
     )
 }
 
@@ -326,13 +335,27 @@ mod tests {
     #[test]
     fn only_this_listener_s_own_host_is_served() {
         let loopback: SocketAddr = "127.0.0.1:8645".parse().unwrap();
-        assert!(own_host(loopback, Some("127.0.0.1:8645")));
-        assert!(own_host(loopback, Some("localhost:8645")));
-        assert!(!own_host(loopback, Some("evil.example:8645")));
-        assert!(!own_host(loopback, Some("127.0.0.1:9000")));
-        assert!(!own_host(loopback, None));
-        let lan: SocketAddr = "0.0.0.0:8645".parse().unwrap();
-        assert!(own_host(lan, Some("192.168.1.20:8645")));
+        let own = |host| own_host(loopback, loopback, Some(host));
+        assert!(own("127.0.0.1:8645"));
+        assert!(own("localhost:8645"));
+        assert!(!own("evil.example:8645"));
+        assert!(!own("127.0.0.1:9000"));
+        assert!(!own_host(loopback, loopback, None));
+    }
+
+    #[test]
+    fn an_all_interfaces_listener_serves_only_the_address_a_client_reached() {
+        let any: SocketAddr = "0.0.0.0:8645".parse().unwrap();
+        let lan: SocketAddr = "192.168.1.20:8645".parse().unwrap();
+        assert!(own_host(any, lan, Some("192.168.1.20:8645")));
+        assert!(!own_host(any, lan, Some("evil.example:8645")));
+        assert!(!own_host(any, lan, Some("localhost:8645")));
+        assert!(!own_host(any, lan, Some("10.0.0.9:8645")));
+        let loopback: SocketAddr = "127.0.0.1:8645".parse().unwrap();
+        assert!(own_host(any, loopback, Some("localhost:8645")));
+        let dual: SocketAddr = "[::]:8645".parse().unwrap();
+        let mapped: SocketAddr = "[::ffff:192.168.1.20]:8645".parse().unwrap();
+        assert!(own_host(dual, mapped, Some("192.168.1.20:8645")));
     }
 
     #[test]

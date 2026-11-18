@@ -2,8 +2,9 @@
 //! crate, never shipped with Prometheus). `pmt-codex-fixture app-server`
 //! speaks the app-server's JSON-RPC on stdio: it answers `initialize`,
 //! `thread/start`, `plugin/list` and `turn/start`. A turn whose input
-//! contains `run` asks to run `echo hi` and reports the command (declined
-//! or completed with the answer it got); one containing `edit` reports a
+//! contains `run` asks to run a command (`rm -rf build` when the input also
+//! contains `clean`, else `echo hi`) and reports it (declined or completed
+//! with the answer it got); one containing `edit` reports a
 //! file change; every turn then streams a thought and the message
 //! `codex saw: <input>`, its token usage and `turn/completed`.
 //!
@@ -49,7 +50,12 @@ impl<I: Iterator<Item = std::io::Result<String>>, W: Write> Turn<'_, I, W> {
     fn run(&mut self) {
         let turn = json!({"threadId": "thr-1", "turnId": "turn-1"});
         if self.text.contains("run") {
-            self.command(&turn);
+            let command = if self.text.contains("clean") {
+                "rm -rf build"
+            } else {
+                "echo hi"
+            };
+            self.command(&turn, command);
         }
         if self.text.contains("edit") {
             let item = json!({"type": "fileChange", "id": "chg-1", "status": "completed",
@@ -82,12 +88,11 @@ impl<I: Iterator<Item = std::io::Result<String>>, W: Write> Turn<'_, I, W> {
         );
     }
 
-    /// Asks to run `echo hi`, then reports the command as the answer
-    /// decided.
-    fn command(&mut self, turn: &Value) {
+    /// Asks to run `command`, then reports it as the answer decided.
+    fn command(&mut self, turn: &Value, command: &str) {
         let mut params = turn.clone();
         params["itemId"] = "cmd-1".into();
-        params["command"] = "echo hi".into();
+        params["command"] = command.into();
         params["cwd"] = "/work".into();
         send(
             self.out,
@@ -106,12 +111,12 @@ impl<I: Iterator<Item = std::io::Result<String>>, W: Write> Turn<'_, I, W> {
             .as_str()
             .unwrap_or("none")
             .to_owned();
-        log(&json!({"approval": decision}));
+        log(&json!({"approval": decision, "command": command}));
         let item = if decision == "accept" {
-            json!({"type": "commandExecution", "id": "cmd-1", "command": "echo hi", "cwd": "/work",
+            json!({"type": "commandExecution", "id": "cmd-1", "command": command, "cwd": "/work",
                 "status": "completed", "exitCode": 0, "aggregatedOutput": "hi\n"})
         } else {
-            json!({"type": "commandExecution", "id": "cmd-1", "command": "echo hi", "cwd": "/work",
+            json!({"type": "commandExecution", "id": "cmd-1", "command": command, "cwd": "/work",
                 "status": "declined"})
         };
         notify(self.out, "item/completed", &json!({"item": item}));

@@ -232,7 +232,9 @@ attaches the profile's current token, refreshed under the cross-process
 refresh lock. Bodies are never logged; each call is recorded in the usage
 ledger with `billing_source = "subscription:<provider>"` and purpose
 `proxy`, in a hidden session tagged `proxy`. Requests whose `Host` is not
-the proxy's own address and browser requests (an `Origin`, or
+the proxy's own address (the IP literal it listens on, or on
+`--host 0.0.0.0` the interface address the client connected to; a loopback
+address also as `localhost`; DNS names are refused) and browser requests (an `Origin`, or
 `Sec-Fetch-Site` other than `none`) are refused. A non-loopback `--host`
 needs `--allow-lan`, and LAN clients must then send
 `Authorization: Bearer <PMT_PROXY_CLIENT_KEY>` (the secret is generated on

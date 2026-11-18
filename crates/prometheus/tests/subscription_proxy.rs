@@ -104,11 +104,19 @@ fn request(
     body: &str,
 ) -> (u16, String) {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    let own = format!("127.0.0.1:{port}");
+    let host = headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("host"))
+        .map_or(own.as_str(), |(_, value)| *value);
     let mut text = format!(
-        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
+        "{method} {path} HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
         body.len()
     );
-    for (name, value) in headers {
+    for (name, value) in headers
+        .iter()
+        .filter(|(n, _)| !n.eq_ignore_ascii_case("host"))
+    {
         let _ = write!(text, "{name}: {value}\r\n");
     }
     text.push_str("\r\n");
@@ -242,6 +250,20 @@ fn a_lan_listener_requires_the_client_key() {
         &ask,
     );
     assert_eq!(status, 200);
+    // Bound to every interface, a DNS name on the right port is still not
+    // this proxy's own address (DNS rebinding), even with the key.
+    let rebound = format!("evil.example:{port}");
+    let (status, _) = request(
+        port,
+        "POST",
+        "/v1/chat/completions",
+        &[
+            ("Host", rebound.as_str()),
+            ("Authorization", "Bearer lan-client-key-0123456789"),
+        ],
+        &ask,
+    );
+    assert_eq!(status, 403);
 }
 
 #[test]
