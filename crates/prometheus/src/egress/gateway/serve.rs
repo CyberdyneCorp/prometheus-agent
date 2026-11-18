@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
+use std::time::Duration;
 
 use pmt_config::ProfileScope;
 use pmt_config::schema::CredentialSource;
@@ -82,8 +83,18 @@ pub fn serve(scope: &ProfileScope, owned: bool) -> Result<u8, Error> {
     Ok(0)
 }
 
+/// How long one control connection may hold the (single-threaded) control
+/// loop: a client that connects and sends nothing must not block `status`,
+/// `reload` and `stop` for everyone else.
+const CONTROL_IO_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Handles one control request; `true` to stop.
 fn answer(scope: &ProfileScope, record: &Record, served: &mut Served, stream: &TcpStream) -> bool {
+    if stream.set_read_timeout(Some(CONTROL_IO_TIMEOUT)).is_err()
+        || stream.set_write_timeout(Some(CONTROL_IO_TIMEOUT)).is_err()
+    {
+        return false;
+    }
     let mut line = String::new();
     let Ok(clone) = stream.try_clone() else {
         return false;
@@ -251,25 +262,12 @@ fn bitwarden(scope: &ProfileScope) -> Result<BTreeMap<String, SecretString>, Str
         .ok()
         .flatten()
         .ok_or_else(|| format!("no access token ({token_name} is not set)"))?;
-    let project = config
-        .project_id
-        .as_deref()
-        .ok_or_else(|| "no project id (secrets.bitwarden.project_id)".to_owned())?;
+    // Unlike the external source, the proxy never lists every project the
+    // token reaches (spec: Egress credential source and placeholder
+    // rotation).
+    if config.project_id.is_none() {
+        return Err("no project id (secrets.bitwarden.project_id)".to_owned());
+    }
     let program = pmt_config::secrets::external::program(scope.home(), "bws");
-    let mut args = vec!["secret", "list", project, "--output", "json"];
-    if let Some(url) = &config.server_url {
-        args.extend(["--server-url", url]);
-    }
-    let out = pmt_config::secrets::external::run(&program, &args, "BWS_ACCESS_TOKEN", &token)?;
-    let listed: Vec<Value> =
-        serde_json::from_slice(&out).map_err(|_| "bws did not print a JSON list".to_owned())?;
-    let mut values = BTreeMap::new();
-    for entry in &listed {
-        if let (Some(key), Some(value)) = (entry["key"].as_str(), entry["value"].as_str()) {
-            values
-                .entry(key.to_owned())
-                .or_insert_with(|| SecretString::new(value));
-        }
-    }
-    Ok(values)
+    pmt_config::secrets::external::bitwarden_list(config, &program, &token)
 }

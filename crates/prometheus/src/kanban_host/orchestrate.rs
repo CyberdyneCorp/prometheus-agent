@@ -41,14 +41,7 @@ const BODY_CHARS: usize = 8_000;
 /// what assignment routing tells the model about an assignee.
 #[must_use]
 pub fn profile_description(home: &Path, name: &str) -> Option<String> {
-    let text = std::fs::read_to_string(
-        home.join("profiles")
-            .join(name)
-            .join(pmt_config::profiles::DESCRIPTION_FILE),
-    )
-    .ok()?;
-    let text = text.trim();
-    (!text.is_empty()).then(|| text.to_owned())
+    pmt_config::profiles::description(&home.join("profiles").join(name))
 }
 
 /// Each assignee with its description, for the decomposition prompt.

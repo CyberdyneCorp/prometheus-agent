@@ -124,3 +124,30 @@ fn blobs_seal_whole_and_open_with_their_key_only() {
     assert_eq!(open_blob(&key, &sealed).unwrap(), b"attachment");
     assert!(open_blob(&Key::generate().unwrap(), &sealed).is_err());
 }
+
+#[test]
+fn a_page_swapped_into_another_place_does_not_read() {
+    let tmp = dir();
+    let path = tmp.path().join("state.db");
+    let c = crypt();
+    {
+        let conn = open(&path, Some(&c)).unwrap();
+        conn.pragma_update(None, "journal_mode", "wal").unwrap();
+        fill(&conn, 200);
+        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+            .unwrap();
+    }
+    let mut bytes = std::fs::read(&path).unwrap();
+    let page = pages::PAGE;
+    assert!(bytes.len() >= 4 * page);
+    // Two leaf pages of the table, each a valid sealed page on its own.
+    let (third, fourth) = bytes.split_at_mut(3 * page);
+    third[2 * page..].swap_with_slice(&mut fourth[..page]);
+    std::fs::write(&path, &bytes).unwrap();
+    let read = open(&path, Some(&c)).and_then(|conn| {
+        conn.query_row("SELECT group_concat(body) FROM t", [], |r| {
+            r.get::<_, String>(0)
+        })
+    });
+    assert!(read.is_err(), "a moved page must not authenticate");
+}

@@ -62,7 +62,10 @@ text = "the notes say remember the milk"
 fn program(home: &Path, exe: &Path) -> Command {
     let mut cmd = Command::new(exe);
     common::isolate_user_home(&mut cmd, home);
-    cmd.env_remove("PMT_HOME").env_remove("PROMETHEUS_HOME");
+    // The Python SDK is imported from the source tree: no bytecode caches there.
+    cmd.env_remove("PMT_HOME")
+        .env_remove("PROMETHEUS_HOME")
+        .env("PYTHONDONTWRITEBYTECODE", "1");
     cmd
 }
 
@@ -222,6 +225,7 @@ async fn an_ephemeral_session_with_an_overlay_leaves_no_transcript() {
     );
     let listed = ok(&run(home.path(), &["--json", "sessions", "list"]));
     assert!(!listed.contains(&session.id), "hidden: {listed}");
+    assert_live_transcript_unreadable(home.path(), &session.id).await;
     let id = session.id.clone();
     drop(client);
     drop(daemon);
@@ -253,6 +257,58 @@ async fn an_ephemeral_session_with_an_overlay_leaves_no_transcript() {
         usage["total"]["calls"], 1,
         "the spend stays on the ledger: {usage}"
     );
+}
+
+/// Embeds every input as the same vector.
+struct Flat;
+
+impl wiremock::Respond for Flat {
+    fn respond(&self, request: &wiremock::Request) -> wiremock::ResponseTemplate {
+        let body: Value = serde_json::from_slice(&request.body).unwrap();
+        let count = body["input"].as_array().map_or(1, Vec::len);
+        let data: Vec<Value> = (0..count)
+            .map(|index| serde_json::json!({"index": index, "embedding": [1.0, 0.5]}))
+            .collect();
+        wiremock::ResponseTemplate::new(200).set_body_json(serde_json::json!({"data": data}))
+    }
+}
+
+/// While ephemeral session `id` is live, neither a search (full text or
+/// hybrid) nor the semantic fill it runs reads its transcript, and the
+/// embedding model never receives its text.
+async fn assert_live_transcript_unreadable(home: &Path, id: &str) {
+    let embeddings = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/v1/embeddings"))
+        .respond_with(Flat)
+        .mount(&embeddings)
+        .await;
+    append_config(
+        home,
+        &format!(
+            "\n[providers.emb]\nbase_url = \"{}/v1\"\nwire_format = \"chat_completions\"\nauth = \"none\"\n\n\
+             [sessions.search]\nsemantic = true\nembedding_model = \"emb/e1\"\n",
+            embeddings.uri()
+        ),
+    );
+    let h = home.to_owned();
+    let (fts, hybrid) = pmt_core::spawn::blocking(move || {
+        let search = |mode: &str| {
+            ok(&run(
+                &h,
+                &["--json", "sessions", "search", "PRIVATE", "--mode", mode],
+            ))
+        };
+        (search("fts"), search("hybrid"))
+    })
+    .await
+    .unwrap();
+    assert!(!fts.contains(id), "{fts}");
+    assert!(!hybrid.contains(id), "{hybrid}");
+    for request in embeddings.received_requests().await.unwrap() {
+        let body = String::from_utf8_lossy(&request.body);
+        assert!(!body.contains("PROMPT-PRIVATE-QUESTION"), "{body}");
+    }
 }
 
 /// A home whose "daemon" (this process) speaks protocol major 2 at an

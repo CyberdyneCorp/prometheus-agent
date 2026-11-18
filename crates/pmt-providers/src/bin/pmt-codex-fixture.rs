@@ -128,7 +128,8 @@ fn main() {
         eprintln!("usage: pmt-codex-fixture app-server");
         std::process::exit(2);
     }
-    log(&json!({"start": std::process::id()}));
+    let cwd = std::env::current_dir().unwrap_or_default();
+    log(&json!({"start": std::process::id(), "cwd": cwd}));
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
     let mut lines = stdin.lock().lines();

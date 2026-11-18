@@ -249,13 +249,16 @@ impl Store {
             let sql_text = format!(
                 "SELECT {HIT_COLUMNS} FROM messages m JOIN sessions s ON s.id = m.session_id \
                  WHERE m.active = 1 AND m.role IN ('user', 'assistant') \
+                 AND s.source_tag IS NOT ?3 \
                  AND (m.content IS NOT NULL OR m.content_ref IS NOT NULL) \
                  AND NOT EXISTS (SELECT 1 FROM message_embeddings e \
                      WHERE e.message_id = m.id AND e.model = ?1) \
                  ORDER BY m.created_at, m.rowid LIMIT ?2"
             );
             let mut stmt = conn.prepare(&sql_text).map_err(sql)?;
-            let mut rows = stmt.query(params![model, limit]).map_err(sql)?;
+            let mut rows = stmt
+                .query(params![model, limit, crate::ephemeral::TAG])
+                .map_err(sql)?;
             let mut out = Vec::new();
             while let Some(row) = rows.next().map_err(sql)? {
                 let text = content(row, &blob_dir)?;

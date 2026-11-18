@@ -240,7 +240,10 @@ With `model.openai_runtime = "codex_app_server"` (default `auto`), turns on
 `openai-codex`, `openai-api` and custom providers that `~/.codex/config.toml`
 also defines under `[model_providers]` run in a long-lived `codex app-server`
 (`model.codex_bin`, else `codex` found as above) with Codex's own sign-in.
-One app-server process and Codex thread serve each session: the system
+Codex runs in the session's workspace, under the `workspace-write` sandbox
+and the `untrusted` approval policy that Prometheus sets on its thread
+(never the ones in Codex's own config), so every command Codex does not
+itself deem read-only asks first. One app-server process and Codex thread serve each session: the system
 prompt goes once as the thread's developer instructions, and each turn sends
 only what the thread has not seen. Codex runs its own tools; the commands,
 patches and tool calls it ran are recorded in the session's transcript and

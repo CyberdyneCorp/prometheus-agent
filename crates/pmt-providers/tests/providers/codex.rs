@@ -52,12 +52,17 @@ fn config(runtime: &str, codex: &Path) -> String {
 struct Gate {
     allow: bool,
     asked: Mutex<Vec<RuntimeAsk>>,
+    workdir: Option<PathBuf>,
 }
 
 impl RuntimeApprovals for Gate {
     fn ask(&self, ask: RuntimeAsk) -> Pin<Box<dyn Future<Output = bool> + Send + '_>> {
         self.asked.lock().unwrap().push(ask);
         Box::pin(async move { self.allow })
+    }
+
+    fn workdir(&self, _session: &str) -> Option<PathBuf> {
+        self.workdir.clone()
     }
 }
 
@@ -103,6 +108,7 @@ async fn a_turn_streams_codex_messages_and_the_actions_it_performed() {
     let gate = Arc::new(Gate {
         allow: true,
         asked: Mutex::default(),
+        workdir: None,
     });
     let events = events(
         &env,
@@ -150,6 +156,31 @@ async fn a_turn_streams_codex_messages_and_the_actions_it_performed() {
         (100, 20, 7)
     );
     assert!(log(dir.path()).iter().any(|e| e["approval"] == "accept"));
+}
+
+#[tokio::test]
+async fn a_session_thread_runs_in_its_workspace_and_asks_before_commands() {
+    let (dir, codex) = install();
+    let env = Env::new(&config("codex_app_server", &codex), &[]);
+    let workspace = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let workspace = workspace.path().canonicalize().unwrap();
+    let gate = Arc::new(Gate {
+        allow: true,
+        asked: Mutex::default(),
+        workdir: Some(workspace.clone()),
+    });
+    let session = SessionId::new();
+    events(&env, Some(gate), &request("hello"), Some(session)).await;
+    pmt_providers::codex::close(&session.to_string());
+    let log = log(dir.path());
+    let started = log.iter().find_map(|e| e["cwd"].as_str()).unwrap();
+    assert_eq!(Path::new(started).canonicalize().unwrap(), workspace);
+    let thread = requests(&log, "thread/start")[0];
+    assert_eq!(thread["cwd"], workspace.to_string_lossy().as_ref());
+    // Fail closed: Codex asks before every command it does not deem
+    // read-only, inside a sandbox Prometheus chose.
+    assert_eq!(thread["approvalPolicy"], "untrusted");
+    assert_eq!(thread["sandbox"], "workspace-write");
 }
 
 #[tokio::test]

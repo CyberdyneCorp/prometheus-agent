@@ -68,9 +68,11 @@ creates a session attached to the connection:
   the store when the session unloads (when the daemon stops, or at the next
   daemon start after a crash). Its row and usage stay, so its spend counts
   against every budget and shows in `prometheus usage`. While it runs, its
-  messages live in the store like any session's (the turn loop reads them
-  back), and SQLite may keep fragments of removed rows in free pages until
-  it reuses them, as after `sessions delete`.
+  messages are in the store only for its own turn loop to read back:
+  `sessions search`, the [`session_search`](../reference/tools.md#session_search) tool of every other session and
+  the semantic search index never see them (no embedding model receives
+  their text). SQLite may keep fragments of removed rows in free pages
+  until it reuses them, as after `sessions delete`.
 
 `session.prompt(text, attachments?)` streams the turn's events (the
 trajectory events of `session.event`) and ends with the result of

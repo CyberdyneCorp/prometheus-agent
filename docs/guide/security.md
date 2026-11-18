@@ -190,7 +190,10 @@ the profile's egress CA, `<profile>/egress/ca.crt` (its key `ca.key` is
 with a certificate that CA signs for the host, verifies the real server
 itself (platform roots plus `network.extra_ca_file`), and replaces a
 placeholder in the request head with the real value only when the host
-matches that secret's patterns. A placeholder bound for any other host, in
+matches that secret's patterns and the request's own `Host` header (and an
+absolute-form target, when there is one) names that same host, so a
+request fronted to another tenant of a shared server never gets the value.
+A placeholder bound for any other host, in
 the head or later in the stream, ends the request before it is forwarded:
 the child gets `403` (`credential misdirected`) and the session an
 `egress.denied` event with reason `credential_misdirected`. Plain HTTP never
@@ -285,8 +288,10 @@ allowlists say.
 
 `security.egress.credential_source = "bitwarden"` reads the mapped values
 from the Bitwarden project of `[secrets.bitwarden]` at every proxy start
-instead of the secrets store; a missing token, project id or mapped secret
-stops the start naming what is missing, unless
+instead of the secrets store, taking only the keys the external source
+would (secret names, and the names `prometheus secrets bitwarden sync --apply`
+accepted, once it has recorded any); a missing token, project id or mapped
+secret stops the start naming what is missing, unless
 `security.egress.allow_store_fallback = true`.
 
 ### Website blocklist

@@ -268,7 +268,9 @@ impl Factory {
             Some(spec) => self.child_gate(id, spec, environment),
             None => self.gate(id, Some(model), Some(environment)),
         }?;
-        self.models.codex_gates().register(id, &gate.gate, registry);
+        self.models
+            .codex_gates()
+            .register(id, &gate.gate, registry, self.options.cwd.clone());
         Ok(gate)
     }
 

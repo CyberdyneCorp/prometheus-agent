@@ -106,6 +106,37 @@ fn start_status_rotate_reload_and_stop() {
 }
 
 #[test]
+fn an_idle_control_connection_does_not_block_status_or_stop() {
+    let home = mock_home();
+    injecting(home.path(), "\"localhost\"", "");
+    ok(&run_with_stdin(
+        home.path(),
+        &["secrets", "set", "OPENAI_API_KEY"],
+        KEY,
+    ));
+    ok(&run(home.path(), &["egress", "start"]));
+    let record = home.path().join("profiles/default/run/egress-proxy.json");
+    let recorded: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&record).unwrap()).unwrap();
+    let control = recorded["control"].as_str().unwrap();
+    // Any local process may connect and then say nothing.
+    let _idle = std::net::TcpStream::connect(control).unwrap();
+    assert_eq!(status(home.path())["running"], true);
+    ok(&run(home.path(), &["egress", "stop"]));
+    assert!(!record.exists());
+    let pid = u32::try_from(recorded["pid"].as_u64().unwrap()).unwrap();
+    let gone = (0..50).any(|_| {
+        let alive = Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .is_ok_and(|s| s.success());
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        !alive
+    });
+    assert!(gone, "the proxy process exited");
+}
+
+#[test]
 fn the_proxy_injects_the_real_key_only_toward_the_mapped_host() {
     let home = mock_home();
     let ca_file = home.path().join("upstream-ca.pem");
@@ -218,6 +249,36 @@ fn bitwarden_missing_a_secret() {
     ));
     ok(&run(home.path(), &["egress", "start"]));
     ok(&run(home.path(), &["egress", "stop"]));
+}
+
+#[test]
+fn bitwarden_keys_not_accepted_by_sync_are_never_injected() {
+    let home = mock_home();
+    let dir = home.path().join("runtimes/bws/9.9.9-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let bws = dir.join("bws");
+    std::fs::write(
+        &bws,
+        "#!/bin/sh\necho '[{\"key\":\"OPENAI_API_KEY\",\"value\":\"sk-from-bws\"}]'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&bws, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // `sync --apply` accepted another key only: the project's
+    // OPENAI_API_KEY is not one the profile takes from Bitwarden.
+    injecting(
+        home.path(),
+        "",
+        "credential_source = \"bitwarden\"\n[secrets.bitwarden]\nproject_id = \"p1\"\n\
+         names = [\"ANTHROPIC_API_KEY\"]\n",
+    );
+    ok(&run_with_stdin(
+        home.path(),
+        &["secrets", "set", "BWS_ACCESS_TOKEN"],
+        "bws-token",
+    ));
+    let out = run(home.path(), &["egress", "start"]);
+    assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
+    assert!(stderr(&out).contains("OPENAI_API_KEY"), "{}", stderr(&out));
 }
 
 #[test]

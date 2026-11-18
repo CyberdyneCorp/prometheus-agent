@@ -26,6 +26,46 @@ pub const CLONED_DIRS: &[&str] = &["memories", "skills", "themes", "plugins"];
 /// The free-text description `profile create --description` records.
 pub const DESCRIPTION_FILE: &str = "description";
 
+/// The longest profile description (spec: configuration-and-profiles,
+/// Profile descriptions).
+pub const DESCRIPTION_MAX_CHARS: usize = 500;
+
+/// The description of the profile at `dir`, when it has a non-empty one.
+#[must_use]
+pub fn description(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(DESCRIPTION_FILE)).ok()?;
+    let text = text.trim();
+    (!text.is_empty()).then(|| text.to_owned())
+}
+
+/// `text` trimmed, when it fits a description.
+///
+/// # Errors
+///
+/// `cli.usage` for over [`DESCRIPTION_MAX_CHARS`] characters.
+pub fn checked_description(text: &str) -> Result<&str, Error> {
+    let text = text.trim();
+    if text.chars().count() > DESCRIPTION_MAX_CHARS {
+        return Err(Error::new(
+            &codes::CLI_USAGE,
+            format!("a description holds at most {DESCRIPTION_MAX_CHARS} characters"),
+        ));
+    }
+    Ok(text)
+}
+
+/// Stores `text` (trimmed) as the description of the profile at `dir`.
+///
+/// # Errors
+///
+/// As [`checked_description`], `home.io`.
+pub fn set_description(dir: &Path, text: &str) -> Result<(), Error> {
+    let text = checked_description(text)?;
+    let path = dir.join(DESCRIPTION_FILE);
+    private_fs::write_atomic(&path, text.as_bytes())
+        .map_err(|e| Error::io(&codes::HOME_IO, &path, &e))
+}
+
 /// The import sync registry (spec: hermes-migration, Keeping imports in
 /// sync), copied by a clone only with `--sync-imports`.
 pub const IMPORT_SYNC_FILE: &str = "migrations/import-sync.toml";

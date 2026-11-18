@@ -25,6 +25,8 @@ const CONTENT: &[&str] = &[
     "DELETE FROM session_pins WHERE session_id = ?1",
     "DELETE FROM session_prompts WHERE session_id = ?1",
     "DELETE FROM session_compression WHERE session_id = ?1",
+    "DELETE FROM message_embeddings WHERE message_id IN \
+     (SELECT id FROM messages WHERE session_id = ?1)",
     "DELETE FROM messages WHERE session_id = ?1",
     "DELETE FROM blob_refs WHERE owner_kind = 'session' AND owner_id = ?1",
     "DELETE FROM blob_refs WHERE owner_kind = 'turn_journal' AND owner_id = ?1",
@@ -136,5 +138,32 @@ mod tests {
         assert!(store.messages(left, Visibility::All).unwrap().is_empty());
         assert_eq!(store.messages(kept, Visibility::All).unwrap().len(), 1);
         assert_eq!(store.forget_ephemeral().unwrap(), 0);
+    }
+
+    #[test]
+    fn a_live_ephemeral_transcript_is_neither_searched_nor_embedded() {
+        let (_dir, store) = store();
+        let kept = session(&store, None);
+        let live = session(&store, Some(TAG));
+        let hits = store
+            .search("secret plan", &crate::SearchOptions::default())
+            .unwrap()
+            .hits;
+        assert!(hits.iter().all(|hit| hit.session_id != live), "{hits:?}");
+        assert!(hits.iter().any(|hit| hit.session_id == kept));
+        let pending = store.unembedded_messages("m", 100).unwrap();
+        assert_eq!(pending.len(), 1, "only the ordinary session's message");
+    }
+
+    #[test]
+    fn forgetting_drops_the_vectors_of_the_transcript() {
+        let (_dir, store) = store();
+        let id = session(&store, Some(TAG));
+        let message = store.messages(id, Visibility::All).unwrap()[0].id;
+        store
+            .put_message_embeddings("m", &[(message, "a secret plan".into(), vec![1.0])])
+            .unwrap();
+        store.forget_transcript(id).unwrap();
+        assert!(!store.has_message_embeddings("m").unwrap());
     }
 }

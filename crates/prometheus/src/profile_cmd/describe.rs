@@ -17,7 +17,7 @@ use crate::chat::session::model::{Models, RouteFlags};
 use crate::context::Context;
 
 /// The longest description kept.
-pub const MAX_CHARS: usize = 500;
+pub use pmt_config::profiles::DESCRIPTION_MAX_CHARS as MAX_CHARS;
 
 /// What `--auto` asks the model.
 const SYSTEM: &str = "You write a one-paragraph description (at most 400 characters) of an AI \
@@ -36,13 +36,9 @@ pub fn run(home: &Home, ctx: &Context<'_>, args: &DescribeArgs) -> Result<u8, Er
     if args.text.is_none() && !args.auto {
         return Err(usage("profile describe needs --text <TEXT> or --auto"));
     }
-    if let Some(text) = &args.text
-        && text.trim().chars().count() > MAX_CHARS
-    {
-        return Err(Error::new(
-            &codes::CLI_USAGE,
-            format!("a description holds at most {MAX_CHARS} characters"),
-        ));
+    if let Some(text) = &args.text {
+        // Refused before any profile is touched (`--all` writes several).
+        pmt_config::profiles::checked_description(text)?;
     }
     let names = if args.all {
         home.profiles()?
@@ -78,11 +74,7 @@ pub fn run(home: &Home, ctx: &Context<'_>, args: &DescribeArgs) -> Result<u8, Er
 ///
 /// `home.io`.
 pub fn write(home: &Home, name: &ProfileName, text: &str) -> Result<(), Error> {
-    let path = home
-        .profile_path(name)
-        .join(pmt_config::profiles::DESCRIPTION_FILE);
-    pmt_core::private_fs::write_atomic(&path, text.as_bytes())
-        .map_err(|e| Error::io(&codes::HOME_IO, &path, &e))
+    pmt_config::profiles::set_description(&home.profile_path(name), text)
 }
 
 /// One description from the auxiliary model, cut to [`MAX_CHARS`].

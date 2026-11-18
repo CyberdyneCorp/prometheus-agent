@@ -417,6 +417,56 @@ unsafe extern "C" fn f_read(
     }
 }
 
+/// The number of the page image at `start`: from its offset in the
+/// database, else from the 4 big-endian bytes before it (a WAL frame
+/// header's first field, a journal record's first field), taken from
+/// `around` (the bytes at `offset` of this read or write) when they are
+/// there and from the file otherwise.
+fn page_number(
+    file: *mut ffi::sqlite3_file,
+    layout: Layout,
+    start: u64,
+    (around, offset): (&[u8], u64),
+) -> Result<u32, c_int> {
+    let before = match layout {
+        Layout::Database => {
+            return u32::try_from(start / PAGE as u64 + 1).map_err(|_| ffi::SQLITE_IOERR);
+        }
+        Layout::Wal => pages::FRAME_HEADER,
+        Layout::Journal => 4,
+    };
+    let at = start.checked_sub(before).ok_or(ffi::SQLITE_IOERR)?;
+    let mut number = [0u8; 4];
+    match usize::try_from(at.wrapping_sub(offset)) {
+        Ok(i) if at >= offset && i + 4 <= around.len() => {
+            number.copy_from_slice(&around[i..i + 4]);
+        }
+        _ => {
+            if raw_read(file, &mut number, at) != ffi::SQLITE_OK {
+                return Err(ffi::SQLITE_IOERR);
+            }
+        }
+    }
+    Ok(u32::from_be_bytes(number))
+}
+
+/// Opens page image `page` read at `start`. A blank database page is one
+/// SQLite never wrote (it leaves holes: freed pages it skips writing), as
+/// is any blank page past the end of the file (a short read's zeros);
+/// those stay zeros. Anything else must authenticate as its own page.
+fn open_page(
+    file: *mut ffi::sqlite3_file,
+    (key, layout): (&Key, Layout),
+    page: &mut [u8],
+    start: u64,
+    number: Result<u32, c_int>,
+) -> Result<(), c_int> {
+    if pages::is_blank(page) && (layout == Layout::Database || start >= file_size(file)) {
+        return Ok(());
+    }
+    pages::open(key, page, number?).map_err(|_| ffi::SQLITE_IOERR_READ)
+}
+
 /// Opens the page images inside `buf` (read at `offset`); one only partly
 /// inside is read whole on its own first.
 fn open_pages(
@@ -429,9 +479,11 @@ fn open_pages(
     let end = offset + buf.len() as u64;
     for start in pages::pages(layout, offset, buf.len()) {
         let stop = start + PAGE as u64;
+        // Headers lie between page images: never changed by opening one.
+        let number = page_number(file, layout, start, (buf, offset));
         if start >= offset && stop <= end {
             let at = usize::try_from(start - offset).map_err(|_| ffi::SQLITE_IOERR_READ)?;
-            pages::open(key, &mut buf[at..at + PAGE]).map_err(|_| ffi::SQLITE_IOERR_READ)?;
+            open_page(file, (key, layout), &mut buf[at..at + PAGE], start, number)?;
             continue;
         }
         let mut page = vec![0u8; PAGE];
@@ -439,7 +491,7 @@ fn open_pages(
         if rc != ffi::SQLITE_OK && rc != ffi::SQLITE_IOERR_SHORT_READ {
             return Err(rc);
         }
-        pages::open(key, &mut page).map_err(|_| ffi::SQLITE_IOERR_READ)?;
+        open_page(file, (key, layout), &mut page, start, number)?;
         let from = start.max(offset);
         let to = stop.min(end);
         let src = usize::try_from(from - start).map_err(|_| ffi::SQLITE_IOERR_READ)?;
@@ -473,27 +525,43 @@ unsafe extern "C" fn f_write(
     match mode {
         Mode::Stream(stream) => keystream(stream, &mut out, offset),
         Mode::Pages(layout) => {
-            for start in pages::pages(*layout, offset, len) {
-                // A page image is always written whole (powersafe
-                // overwrite); anything else would need its old bytes.
-                if start < offset || start + PAGE as u64 > offset + len as u64 {
-                    tracing::error!(
-                        offset,
-                        len,
-                        "partial page write refused by the encrypting VFS"
-                    );
-                    return ffi::SQLITE_IOERR_WRITE;
-                }
-                let Ok(at) = usize::try_from(start - offset) else {
-                    return ffi::SQLITE_IOERR_WRITE;
-                };
-                if pages::seal(key, &mut out[at..at + PAGE]).is_err() {
-                    return ffi::SQLITE_IOERR_WRITE;
-                }
+            if let Err(rc) = seal_pages(file, key, *layout, (plain, &mut out), offset) {
+                return rc;
             }
         }
     }
     raw_write(file, &out, offset)
+}
+
+/// Seals the page images of `plain` (written at `offset`) in `out`, its
+/// copy.
+fn seal_pages(
+    file: *mut ffi::sqlite3_file,
+    key: &Key,
+    layout: Layout,
+    (plain, out): (&[u8], &mut [u8]),
+    offset: u64,
+) -> Result<(), c_int> {
+    let len = plain.len();
+    for start in pages::pages(layout, offset, len) {
+        // A page image is always written whole (powersafe overwrite);
+        // anything else would need its old bytes.
+        if start < offset || start + PAGE as u64 > offset + len as u64 {
+            tracing::error!(
+                offset,
+                len,
+                "partial page write refused by the encrypting VFS"
+            );
+            return Err(ffi::SQLITE_IOERR_WRITE);
+        }
+        let at = usize::try_from(start - offset).map_err(|_| ffi::SQLITE_IOERR_WRITE)?;
+        // SQLite writes a WAL frame's header, and a journal record's page
+        // number, before the page itself.
+        let number = page_number(file, layout, start, (plain, offset))
+            .map_err(|_| ffi::SQLITE_IOERR_WRITE)?;
+        pages::seal(key, &mut out[at..at + PAGE], number).map_err(|_| ffi::SQLITE_IOERR_WRITE)?;
+    }
+    Ok(())
 }
 
 /// The name of the platform VFS (a plaintext copy's target).

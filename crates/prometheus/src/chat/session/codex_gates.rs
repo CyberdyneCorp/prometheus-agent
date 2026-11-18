@@ -3,10 +3,12 @@
 //! `terminal` call and a file change as a `patch` call by the approval
 //! gate of the session the turn belongs to, so the same rules, prompts and
 //! `approval.request` apply as to the session's own tools. A request of a
-//! session without a registered gate is declined.
+//! session without a registered gate is declined. The registry also holds
+//! each session's workspace, where its Codex process and thread run.
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
@@ -16,8 +18,9 @@ use pmt_tools::ToolRegistry;
 use pmt_tools::approval::CommandGate;
 use pmt_tools::dispatch::{ApprovalGate as _, GateRequest, GateVerdict};
 
-/// A session's gate and the registry its asks are checked against.
-type Entry = (Weak<CommandGate>, Weak<ToolRegistry>);
+/// A session's gate, the registry its asks are checked against, and its
+/// workspace.
+type Entry = (Weak<CommandGate>, Weak<ToolRegistry>, PathBuf);
 
 /// The gates of a factory's open sessions.
 #[derive(Default)]
@@ -27,24 +30,26 @@ pub(super) struct CodexGates {
 
 impl CodexGates {
     /// Answers session `id`'s Codex approvals with `gate`, finding the
-    /// tools they are checked as in `registry`.
+    /// tools they are checked as in `registry`; its Codex works in
+    /// `workdir`.
     pub(super) fn register(
         &self,
         id: SessionId,
         gate: &Arc<CommandGate>,
         registry: &Arc<ToolRegistry>,
+        workdir: PathBuf,
     ) {
         let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
-        sessions.retain(|_, (gate, _)| gate.strong_count() > 0);
+        sessions.retain(|_, (gate, _, _)| gate.strong_count() > 0);
         sessions.insert(
             id.to_string(),
-            (Arc::downgrade(gate), Arc::downgrade(registry)),
+            (Arc::downgrade(gate), Arc::downgrade(registry), workdir),
         );
     }
 
     fn of(&self, session: &str) -> Option<(Arc<CommandGate>, Arc<ToolRegistry>)> {
         let sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
-        let (gate, registry) = sessions.get(session)?;
+        let (gate, registry, _) = sessions.get(session)?;
         Some((gate.upgrade()?, registry.upgrade()?))
     }
 }
@@ -74,5 +79,10 @@ impl RuntimeApprovals for CodexGates {
             // an outright allow lets it run.
             verdict == GateVerdict::Allow
         })
+    }
+
+    fn workdir(&self, session: &str) -> Option<PathBuf> {
+        let sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
+        sessions.get(session).map(|(_, _, dir)| dir.clone())
     }
 }

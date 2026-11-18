@@ -184,10 +184,14 @@ pub struct RuntimeAsk {
 
 /// Answers Codex's approval requests through the session's approval gate
 /// (the same prompts, rules and `approval.request` the session's own tool
-/// calls raise).
+/// calls raise), and says where the session works.
 pub trait RuntimeApprovals: Send + Sync {
     /// Whether the action may run.
     fn ask(&self, ask: RuntimeAsk) -> Pin<Box<dyn Future<Output = bool> + Send + '_>>;
+
+    /// The workspace of `session`, where its Codex process and thread run
+    /// (`None`: unknown, the process's own directory).
+    fn workdir(&self, session: &str) -> Option<PathBuf>;
 }
 
 #[cfg(test)]

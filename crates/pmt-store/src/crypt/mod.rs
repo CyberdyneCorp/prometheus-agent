@@ -136,7 +136,7 @@ pub fn opens_first_page(path: &Path, key: &Key) -> bool {
     use std::io::Read as _;
     let mut page = vec![0u8; pages::PAGE];
     let read = std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut page));
-    read.is_err() || pages::open(key, &mut page).is_ok()
+    read.is_err() || pages::is_blank(&page) || pages::open(key, &mut page, 1).is_ok()
 }
 
 /// Seals a blob: a random 24-byte nonce, then the ciphertext and tag.

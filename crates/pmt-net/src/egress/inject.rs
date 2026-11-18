@@ -10,7 +10,9 @@
 //! A placeholder bound for any other host, in the head or later in the
 //! stream, ends the connection before it is forwarded: an `egress.denied`
 //! with reason `credential_misdirected`. Plain HTTP never gets a real
-//! value, and a tunnel that is not TLS is only scanned. Every request on
+//! value, and a tunnel that is not TLS is only scanned. Inside a TLS
+//! tunnel a real value goes only in a request whose `Host` (and
+//! absolute-form target) names the tunnel's host. Every request on
 //! an intercepted connection is sent with `Connection: close`, so each
 //! head the proxy reads is a request head.
 
@@ -229,6 +231,16 @@ impl Injection {
         if self.foreign(host, port).iter().any(|p| contains(head, p)) {
             return Err(Misdirected);
         }
+        // The TLS tunnel reaches `host`, but a shared front (CDN, virtual
+        // hosts) routes by the request's own authority: a real value only
+        // goes to a request addressed to `host` itself.
+        let carries = self
+            .mappings
+            .iter()
+            .any(|m| contains(head, m.placeholder.as_bytes()));
+        if inject && carries && !addressed_to(head, host, port) {
+            return Err(Misdirected);
+        }
         let mut text = String::from_utf8_lossy(head).into_owned();
         if inject {
             for mapping in &self.mappings {
@@ -237,6 +249,49 @@ impl Injection {
         }
         Ok(close_connection(&text).into_bytes())
     }
+}
+
+/// Whether request `head` is addressed to `host:port`: its one `Host`
+/// header, and an absolute-form request target when there is one, name
+/// that host, with that port or none.
+fn addressed_to(head: &[u8], host: &str, port: u16) -> bool {
+    let text = String::from_utf8_lossy(head);
+    let mut lines = text.split("\r\n");
+    let target = lines
+        .next()
+        .and_then(|line| line.split(' ').nth(1))
+        .unwrap_or_default();
+    let hosts: Vec<&str> = lines
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.trim().eq_ignore_ascii_case("host"))
+        .map(|(_, value)| value.trim())
+        .collect();
+    let names = |authority: &str| {
+        let (name, given) = split_authority(authority);
+        name.eq_ignore_ascii_case(host) && given.is_none_or(|p| p == port)
+    };
+    let absolute = target
+        .split_once("://")
+        .map(|(_, rest)| rest.split(['/', '?', '#']).next().unwrap_or_default());
+    matches!(hosts.as_slice(), [one] if names(one)) && absolute.is_none_or(names)
+}
+
+/// `authority` (`host`, `host:port`, `[v6]:port`) as its host and port;
+/// an unparsable port is port 0 (matches no target).
+fn split_authority(authority: &str) -> (&str, Option<u16>) {
+    let authority = authority.rsplit_once('@').map_or(authority, |(_, a)| a);
+    let (name, port) = match authority.strip_prefix('[') {
+        Some(v6) => match v6.split_once(']') {
+            Some((name, rest)) => (name, rest.strip_prefix(':')),
+            None => (v6, None),
+        },
+        None => match authority.rsplit_once(':') {
+            Some((name, port)) => (name, Some(port)),
+            None => (authority, None),
+        },
+    };
+    (name, port.map(|p| p.parse().unwrap_or(0)))
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
@@ -457,6 +512,44 @@ mod tests {
                 .unwrap()
                 .contains("pmt-egress-0123")
         );
+    }
+
+    #[test]
+    fn a_placeholder_for_another_authority_inside_the_tunnel_is_refused() {
+        let inj = injection();
+        let fronted = |host_line: &str, target: &str| {
+            format!(
+                "GET {target} HTTP/1.1\r\n{host_line}\r\nAuthorization: Bearer pmt-egress-0123\r\n\r\n"
+            )
+        };
+        for refused in [
+            fronted("Host: evil.example", "/user"),
+            fronted("Host: api.github.com:8443", "/user"),
+            fronted("Host: api.github.com\r\nHost: evil.example", "/user"),
+            fronted("X-Other: 1", "/user"),
+            fronted("Host: api.github.com", "https://evil.example/user"),
+        ] {
+            assert_eq!(
+                inj.rewrite(refused.as_bytes(), "api.github.com", 443, true),
+                Err(Misdirected),
+                "{refused}"
+            );
+        }
+        for admitted in [
+            fronted("host: API.github.com", "/user"),
+            fronted(
+                "Host: api.github.com:443",
+                "https://api.github.com:443/user",
+            ),
+        ] {
+            let text = inj
+                .rewrite(admitted.as_bytes(), "api.github.com", 443, true)
+                .unwrap();
+            assert!(String::from_utf8(text).unwrap().contains("ghp_real"));
+        }
+        // No placeholder: nothing to inject, nothing to refuse.
+        let plain = b"GET / HTTP/1.1\r\nHost: other.example\r\n\r\n";
+        assert!(inj.rewrite(plain, "api.github.com", 443, true).is_ok());
     }
 
     #[tokio::test]

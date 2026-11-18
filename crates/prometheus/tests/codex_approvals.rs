@@ -119,3 +119,33 @@ fn codex_command_approvals_go_through_the_session_gate() {
         ("decline".into(), "rm -rf build".into())
     );
 }
+
+#[test]
+fn a_daemon_session_runs_codex_in_its_own_workspace() {
+    let (home, codex) = codex_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let port = api::port(home.path());
+    let id = create(port, "hello");
+    run_until_terminal(port, "default", &id);
+    // An API session works in the profile's workspace, not wherever the
+    // daemon process was started.
+    let workspace = home
+        .path()
+        .join("profiles/default/workspace")
+        .canonicalize()
+        .unwrap();
+    let log: Vec<Value> =
+        std::fs::read_to_string(codex.parent().unwrap().join("codex-fixture.log"))
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+    let started = log.iter().find_map(|e| e["cwd"].as_str()).unwrap();
+    assert_eq!(Path::new(started).canonicalize().unwrap(), workspace);
+    let thread = log
+        .iter()
+        .find(|e| e["method"] == "thread/start")
+        .expect("a thread");
+    let cwd = thread["params"]["cwd"].as_str().unwrap();
+    assert_eq!(Path::new(cwd).canonicalize().unwrap(), workspace);
+}

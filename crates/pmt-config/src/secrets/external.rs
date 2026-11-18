@@ -222,17 +222,39 @@ fn bitwarden(
         failure("bitwarden", &why)
     };
     let token = bootstrap(&bws.config.access_token_secret.0, token).map_err(failed)?;
+    let values = bitwarden_list(&bws.config, &bws.program, &token).map_err(failed)?;
+    bws.forget();
+    bws.remember(LISTING, None);
+    for (key, value) in &values {
+        bws.remember(key, Some(value.clone()));
+    }
+    Ok(values)
+}
+
+/// Every secret the Bitwarden project of `config` supplies, by key, fetched
+/// now with `program` (`bws secret list`) and `token`: keys that are
+/// secret names and that `sync --apply` accepted (every key until it
+/// recorded a list); the first claim of a key wins.
+///
+/// # Errors
+///
+/// A one-line reason (it never contains the token).
+pub fn bitwarden_list(
+    config: &BitwardenSourceConfig,
+    program: &Path,
+    token: &SecretString,
+) -> Result<BTreeMap<String, SecretString>, String> {
     let mut args = vec!["secret", "list"];
-    if let Some(project) = &bws.config.project_id {
+    if let Some(project) = &config.project_id {
         args.push(project);
     }
     args.extend(["--output", "json"]);
-    if let Some(url) = &bws.config.server_url {
+    if let Some(url) = &config.server_url {
         args.extend(["--server-url", url]);
     }
-    let out = run(&bws.program, &args, "BWS_ACCESS_TOKEN", &token).map_err(failed)?;
+    let out = run(program, &args, "BWS_ACCESS_TOKEN", token)?;
     let listed: Vec<serde_json::Value> = serde_json::from_slice(&out)
-        .map_err(|_| failed("bws secret list did not print a JSON list".to_owned()))?;
+        .map_err(|_| "bws secret list did not print a JSON list".to_owned())?;
     let mut values = BTreeMap::new();
     for entry in &listed {
         let (Some(key), Some(value)) = (
@@ -241,15 +263,9 @@ fn bitwarden(
         ) else {
             continue;
         };
-        // The first claim of a name wins.
-        if is_secret_name(key) && !values.contains_key(key) {
+        if is_secret_name(key) && accepts(config, key) && !values.contains_key(key) {
             values.insert(key.to_owned(), SecretString::new(value));
         }
-    }
-    bws.forget();
-    bws.remember(LISTING, None);
-    for (key, value) in &values {
-        bws.remember(key, Some(value.clone()));
     }
     Ok(values)
 }

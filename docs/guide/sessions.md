@@ -298,7 +298,10 @@ any size.
   kept in `state.db.salt`.
 
 Each database page is sealed with XChaCha20-Poly1305 in its own reserved
-space, in the database, its write-ahead log and its rollback journal.
+space, in the database, its write-ahead log and its rollback journal, with
+its page number as associated data: a sealed page copied over another page
+does not open. A database page of all zeros reads as a page SQLite never
+wrote (SQLite leaves such holes), as in SQLCipher.
 SQLite's temporary files are encrypted with a random key of their own, so
 no transcript text is written to disk in plaintext. Each blob file is
 sealed whole. A generic SQLite tool cannot read an encrypted `state.db`.

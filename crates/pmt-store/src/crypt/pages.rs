@@ -5,11 +5,14 @@
 //! bytes SQLite leaves alone (its per-page reserved space): a page is
 //! sealed in place as `XChaCha20-Poly1305(page[..PAGE-RESERVE])` followed
 //! by the 24-byte random nonce and the 16-byte tag, so it keeps its size
-//! and every file offset stays what SQLite expects. The same page image
-//! appears in three files: the database (page `n` at `(n-1)*PAGE`), the
-//! write-ahead log (after a 32-byte header, frames of a 24-byte header and
-//! one page) and the rollback journal (page-sized records). A page that is
-//! all zeros was never written and reads as zeros.
+//! and every file offset stays what SQLite expects. The page number is
+//! the associated data: a sealed page moved to another page's place does
+//! not authenticate. The same page image appears in three files: the
+//! database (page `n` at `(n-1)*PAGE`), the write-ahead log (after a
+//! 32-byte header, frames of a 24-byte header starting with the page
+//! number, then the page) and the rollback journal (records of the page
+//! number, the page and a checksum). Whether an all-zero page is a page
+//! SQLite never wrote is the VFS's call ([`is_blank`]).
 
 use chacha20poly1305::{AeadInOut as _, KeyInit as _, Tag, XChaCha20Poly1305, XNonce};
 
@@ -66,12 +69,12 @@ impl std::fmt::Debug for Key {
     }
 }
 
-/// Seals one page in place.
+/// Seals page `number` in place.
 ///
 /// # Errors
 ///
 /// A page of the wrong size or a failed random source.
-pub fn seal(key: &Key, page: &mut [u8]) -> Result<(), String> {
+pub fn seal(key: &Key, page: &mut [u8], number: u32) -> Result<(), String> {
     if page.len() != PAGE {
         return Err(format!("a page is {PAGE} bytes, not {}", page.len()));
     }
@@ -79,31 +82,39 @@ pub fn seal(key: &Key, page: &mut [u8]) -> Result<(), String> {
     getrandom::fill(&mut nonce).map_err(|e| e.to_string())?;
     let (body, reserved) = page.split_at_mut(PAGE - RESERVE);
     let tag = XChaCha20Poly1305::new(&(*key.bytes()).into())
-        .encrypt_inout_detached(&XNonce::from(nonce), b"", body.into())
+        .encrypt_inout_detached(&XNonce::from(nonce), &number.to_be_bytes(), body.into())
         .map_err(|_| "page encryption failed".to_owned())?;
     reserved[..NONCE].copy_from_slice(&nonce);
     reserved[NONCE..].copy_from_slice(&tag);
     Ok(())
 }
 
-/// Opens one sealed page in place; an all-zero page stays zeros.
+/// Whether `page` is all zeros (never written, or zeroed).
+#[must_use]
+pub fn is_blank(page: &[u8]) -> bool {
+    page.iter().all(|b| *b == 0)
+}
+
+/// Opens sealed page `number` in place.
 ///
 /// # Errors
 ///
-/// A page of the wrong size, or one that does not authenticate (another
-/// key, or tampered bytes).
-pub fn open(key: &Key, page: &mut [u8]) -> Result<(), String> {
+/// A page of the wrong size, or one that does not authenticate as page
+/// `number` (another key, another page's place, tampered or blank bytes).
+pub fn open(key: &Key, page: &mut [u8], number: u32) -> Result<(), String> {
     if page.len() != PAGE {
         return Err(format!("a page is {PAGE} bytes, not {}", page.len()));
-    }
-    if page.iter().all(|b| *b == 0) {
-        return Ok(());
     }
     let (body, reserved) = page.split_at_mut(PAGE - RESERVE);
     let nonce: [u8; NONCE] = reserved[..NONCE].try_into().map_err(|_| "short nonce")?;
     let tag: [u8; TAG] = reserved[NONCE..].try_into().map_err(|_| "short tag")?;
     XChaCha20Poly1305::new(&(*key.bytes()).into())
-        .decrypt_inout_detached(&XNonce::from(nonce), b"", body.into(), &Tag::from(tag))
+        .decrypt_inout_detached(
+            &XNonce::from(nonce),
+            &number.to_be_bytes(),
+            body.into(),
+            &Tag::from(tag),
+        )
         .map_err(|_| "page does not authenticate".to_owned())?;
     reserved.fill(0);
     Ok(())
@@ -172,15 +183,28 @@ mod tests {
         let mut page = vec![7u8; PAGE];
         page[PAGE - RESERVE..].fill(0);
         let plain = page.clone();
-        seal(&key, &mut page).unwrap();
+        seal(&key, &mut page, 3).unwrap();
         assert_ne!(page[..64], plain[..64]);
         let mut other = page.clone();
-        assert!(open(&Key::generate().unwrap(), &mut other).is_err());
-        open(&key, &mut page).unwrap();
+        assert!(open(&Key::generate().unwrap(), &mut other, 3).is_err());
+        open(&key, &mut page, 3).unwrap();
         assert_eq!(page, plain);
         let mut zeros = vec![0u8; PAGE];
-        open(&key, &mut zeros).unwrap();
-        assert!(zeros.iter().all(|b| *b == 0));
+        assert!(is_blank(&zeros));
+        assert!(
+            open(&key, &mut zeros, 1).is_err(),
+            "a blank page is no sealed page"
+        );
+    }
+
+    #[test]
+    fn a_sealed_page_does_not_open_in_another_pages_place() {
+        let key = Key::generate().unwrap();
+        let mut page = vec![7u8; PAGE];
+        page[PAGE - RESERVE..].fill(0);
+        seal(&key, &mut page, 3).unwrap();
+        let mut moved = page.clone();
+        assert!(open(&key, &mut moved, 4).is_err());
     }
 
     #[test]

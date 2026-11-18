@@ -41,7 +41,11 @@ impl CodexFeed {
         approvals: Option<Arc<dyn RuntimeApprovals>>,
         limits: Limits,
     ) -> Result<Self, ProviderError> {
-        let server = of_session(program, session.as_deref());
+        let workdir = session
+            .as_deref()
+            .zip(approvals.as_deref())
+            .and_then(|(session, approvals)| approvals.workdir(session));
+        let server = of_session(program, session.as_deref(), workdir);
         let mut server = server.lock_owned().await;
         limits.within(server.start_turn(request)).await??;
         Ok(Self {

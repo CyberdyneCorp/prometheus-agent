@@ -93,6 +93,9 @@ fn create(home: &Home, ctx: &Context<'_>, command: &ProfileCommand) -> Result<u8
     else {
         unreachable!("create is dispatched with a create command")
     };
+    if let Some(text) = description {
+        pmt_config::profiles::checked_description(text)?;
+    }
     let source = match (clone_from, clone_all) {
         (Some(from), _) => Some(ProfileName::parse(from)?),
         (None, true) => Some(home.select_profile(ctx.profile)?),
@@ -124,9 +127,7 @@ fn create(home: &Home, ctx: &Context<'_>, command: &ProfileCommand) -> Result<u8
         pmt_skills::optout::set_included(&profile, false)?;
     }
     if let Some(text) = description {
-        let path = profile.path().join(pmt_config::profiles::DESCRIPTION_FILE);
-        pmt_core::private_fs::write_atomic(&path, text.trim().as_bytes())
-            .map_err(|e| Error::io(&pmt_core::error::codes::HOME_IO, &path, &e))?;
+        pmt_config::profiles::set_description(profile.path(), text)?;
     }
     eprintln!(
         "created profile '{}' at {}",
@@ -169,13 +170,7 @@ fn note_path(launcher: &std::path::Path, ctx: &Context<'_>) {
 }
 
 fn description(home: &Home, name: &ProfileName) -> Option<String> {
-    let path = home
-        .profile_path(name)
-        .join(pmt_config::profiles::DESCRIPTION_FILE);
-    std::fs::read_to_string(path)
-        .ok()
-        .map(|t| t.trim().to_owned())
-        .filter(|t| !t.is_empty())
+    pmt_config::profiles::description(&home.profile_path(name))
 }
 
 fn list(home: &Home, json: bool) -> Result<u8, Error> {

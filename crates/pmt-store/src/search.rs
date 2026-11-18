@@ -6,7 +6,8 @@
 //! (terms under 3 characters match by substring there). When the indexes
 //! are stale or fail, the same filters run over the canonical rows instead
 //! ([`SearchMode::Scan`]). Rewound rows are left out unless asked for;
-//! compaction-archived rows are always searchable.
+//! compaction-archived rows are always searchable. Ephemeral sessions are
+//! never searched.
 
 pub mod hybrid;
 mod query;
@@ -201,6 +202,12 @@ impl Filters {
         if let Some(pinned) = options.pinned {
             filters.push("s.pinned = ?", Value::Integer(i64::from(pinned)));
         }
+        // An ephemeral session's transcript is only on loan to its own turn
+        // loop: no search, from any session or the CLI, may read it.
+        filters.push(
+            "s.source_tag IS NOT ?",
+            Value::Text(crate::ephemeral::TAG.into()),
+        );
         if !options.include_archived {
             filters.clause.push_str(" AND s.archived = 'none'");
         }

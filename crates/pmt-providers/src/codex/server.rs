@@ -30,9 +30,13 @@ pub(crate) fn failed(why: &str) -> ProviderError {
     ProviderError::new(ErrorClass::ServerError, format!("codex app-server: {why}"))
 }
 
-/// The server of `session`, started on first use.
-pub(crate) fn of_session(program: &Path, session: Option<&str>) -> Arc<tokio::sync::Mutex<Server>> {
-    let fresh = || Arc::new(tokio::sync::Mutex::new(Server::new(program)));
+/// The server of `session` working in `workdir`, started on first use.
+pub(crate) fn of_session(
+    program: &Path,
+    session: Option<&str>,
+    workdir: Option<PathBuf>,
+) -> Arc<tokio::sync::Mutex<Server>> {
+    let fresh = || Arc::new(tokio::sync::Mutex::new(Server::new(program, workdir)));
     let Some(session) = session else {
         return fresh();
     };
@@ -71,7 +75,7 @@ pub struct CodexPlugin {
 ///
 /// The server could not be started or answered with an error.
 pub async fn plugins(program: &Path) -> Result<Vec<CodexPlugin>, String> {
-    let mut server = Server::new(program);
+    let mut server = Server::new(program, None);
     let listed = async {
         server.spawn().await?;
         server.call("plugin/list", json!({})).await
@@ -92,6 +96,8 @@ pub async fn plugins(program: &Path) -> Result<Vec<CodexPlugin>, String> {
 #[derive(Debug)]
 pub(crate) struct Server {
     program: PathBuf,
+    /// The session's workspace (`None`: this process's directory).
+    workdir: Option<PathBuf>,
     io: Option<Io>,
     thread: Option<String>,
     /// Transcript messages the thread has seen.
@@ -107,9 +113,10 @@ struct Io {
 }
 
 impl Server {
-    fn new(program: &Path) -> Self {
+    fn new(program: &Path, workdir: Option<PathBuf>) -> Self {
         Self {
             program: program.to_path_buf(),
+            workdir,
             io: None,
             thread: None,
             delivered: 0,
@@ -143,8 +150,17 @@ impl Server {
         Ok(())
     }
 
+    /// Where Codex works: the session's workspace, never the directory a
+    /// daemon serving many sessions happens to run in (when known).
+    fn cwd(&self) -> Result<PathBuf, ProviderError> {
+        match &self.workdir {
+            Some(dir) => Ok(dir.clone()),
+            None => std::env::current_dir().map_err(|e| failed(&e.to_string())),
+        }
+    }
+
     async fn spawn(&mut self) -> Result<(), ProviderError> {
-        let cwd = std::env::current_dir().map_err(|e| failed(&e.to_string()))?;
+        let cwd = self.cwd()?;
         let mut child = tokio::process::Command::new(&self.program)
             .arg("app-server")
             .current_dir(&cwd)
@@ -179,11 +195,17 @@ impl Server {
             .map(|block| block.text.as_str())
             .collect::<Vec<_>>()
             .join("\n\n");
-        let cwd = std::env::current_dir().map_err(|e| failed(&e.to_string()))?;
+        let cwd = self.cwd()?;
+        // Fail closed: under `untrusted` Codex asks before every command
+        // it does not itself deem read-only, so each one reaches the
+        // session's gate (approval mode, deny rules, taint); and its
+        // sandbox is set here, never inherited from the user's own Codex
+        // config (which may grant full access).
         let mut params = json!({
             "cwd": cwd.to_string_lossy(),
             "developerInstructions": instructions,
-            "approvalPolicy": "on-request",
+            "approvalPolicy": "untrusted",
+            "sandbox": "workspace-write",
         });
         if request.model != "default" {
             params["model"] = request.model.clone().into();
