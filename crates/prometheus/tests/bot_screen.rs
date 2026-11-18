@@ -319,3 +319,73 @@ fn a_headed_browser_acts_on_the_running_screen() {
             .join("profiles/default/cache/browser/screen-profile")
     );
 }
+
+/// With `bot_desktop.auto_start` on, the first headed browser launch of a
+/// session starts the screen and the browser runs on its display and
+/// shared profile (the stand-in browser prints both and exits; the
+/// browser's confinement keeps it from writing anywhere else).
+#[test]
+fn the_first_headed_browser_launch_auto_starts_the_screen() {
+    let home = home();
+    let _guard = Stopped(home.path());
+    let browser = home.path().join("fake-browser");
+    std::fs::write(
+        &browser,
+        "#!/bin/sh\necho \"display=$DISPLAY args=$*\" >&2\nexit 1\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&browser, std::fs::Permissions::from_mode(0o755)).unwrap();
+    append_config(
+        home.path(),
+        &format!(
+            "auto_start = true\n\n[browser]\nheaded = true\nexecutable_path = {:?}\n",
+            browser.display().to_string()
+        ),
+    );
+    let script = home.path().join("script.toml");
+    std::fs::write(
+        &script,
+        r#"
+[[rule]]
+user = "browse"
+[[rule.tool_calls]]
+name = "browser_exec"
+arguments = { code = "print(page_info())" }
+
+[[rule]]
+repeat = true
+text = "done"
+"#,
+    )
+    .unwrap();
+    assert_eq!(status(home.path())["running"], false);
+    let out = command(home.path())
+        .current_dir(home.path())
+        .env("PATH", path_with_fakes())
+        .args(["-z", "browse", "--yolo", "--toolsets", "terminal,browser"])
+        .arg("--mock-script")
+        .arg(&script)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    ok(&out);
+    let shown = status(home.path());
+    assert_eq!(shown["running"], true, "the launch started it: {shown}");
+    let display = shown["screen"]["display"].as_str().unwrap();
+
+    let session = common::newest_session(home.path());
+    let messages = common::session_messages(home.path(), &session);
+    let result = messages
+        .iter()
+        .find(|m| m["role"] == "tool")
+        .and_then(|m| m["content"].as_str())
+        .expect("a browser_exec result");
+    assert!(
+        result.contains(&format!("display={display} ")),
+        "the browser ran on the screen's display: {result}"
+    );
+    assert!(
+        result.contains("cache/browser/screen-profile"),
+        "on the screen's shared profile: {result}"
+    );
+}
