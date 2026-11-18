@@ -75,8 +75,36 @@ pub struct ScreenTicket {
     pub path: String,
     /// Seconds until it expires (30).
     pub expires_in_secs: u64,
+    /// Who controls the screen as the ticket is issued.
+    #[serde(default)]
+    pub lease: ScreenLeaseState,
 }
 
 method!(/// `screen.ticket`: a single-use 30-second ticket for the bot
     /// screen's RFB stream.
     ScreenTicketCall = "screen.ticket" (ScreenTicketParams) -> ScreenTicket);
+
+/// `screen.browser` params.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ScreenBrowserParams {
+    /// The profile (the connection's only one when omitted).
+    #[serde(default)]
+    pub profile: Option<String>,
+    /// An `http` or `https` page to open (a blank page when omitted).
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// A browser opened on the bot screen.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ScreenBrowserOpened {
+    /// The persistent browser profile it shares with the agent's headed
+    /// browser.
+    pub user_data_dir: String,
+}
+
+method!(/// `screen.browser`: the desktop's browser launcher, a browser on the
+    /// running bot screen with the profile's shared screen browser profile.
+    ScreenBrowser = "screen.browser" (ScreenBrowserParams) -> ScreenBrowserOpened);

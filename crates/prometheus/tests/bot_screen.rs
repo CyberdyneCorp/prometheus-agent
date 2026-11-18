@@ -247,10 +247,10 @@ async fn a_viewer_streams_the_screen_and_takes_it_over() {
         .send(Message::binary(b"RFB 003.008\n".to_vec()))
         .await
         .unwrap();
-    let Some(Ok(Message::Binary(echo))) = socket.next().await else {
-        panic!("no echo");
+    let Some(Ok(Message::Binary(security))) = socket.next().await else {
+        panic!("no security types");
     };
-    assert_eq!(&echo[..], b"RFB 003.008\n");
+    assert_eq!(&security[..], [1, 1], "one type offered: None");
     socket.close(None).await.unwrap();
 
     // Single use: the same ticket is refused.

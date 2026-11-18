@@ -122,10 +122,18 @@ fn render(body: &Value) -> String {
     let mut out = String::new();
     if body["running"] == true {
         let screen = &body["screen"];
+        let place = match screen["placement"].as_str() {
+            Some("container") => " in the desktop container",
+            Some("ssh") => " on the SSH host",
+            _ => "",
+        };
         let _ = writeln!(
             out,
-            "bot screen: running on display {} ({}), idle {} s",
-            screen["display"].as_str().unwrap_or_default(),
+            "bot screen: running{place} on display {} ({}), idle {} s",
+            screen["backend_display"]
+                .as_str()
+                .or_else(|| screen["display"].as_str())
+                .unwrap_or_default(),
             screen["geometry"].as_str().unwrap_or_default(),
             screen["idle_secs"].as_u64().unwrap_or_default()
         );

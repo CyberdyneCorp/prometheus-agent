@@ -1179,6 +1179,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "image": {
+          "default": "",
+          "description": "The image of a screen placed in the container backend (empty: the\nrelease's desktop sandbox image, `prometheus-sandbox:<version>-desktop`).",
+          "type": "string"
+        },
         "min_free_memory_bytes": {
           "default": 1610612736,
           "description": "The screen refuses to start with less free memory than this on the\nhost or its cgroup (`0`: no check).",
@@ -12873,6 +12878,7 @@
         "auto_start": false,
         "geometry": "1440x900",
         "idle_stop_secs": 1800,
+        "image": "",
         "min_free_memory_bytes": 1610612736,
         "placement": "auto"
       },

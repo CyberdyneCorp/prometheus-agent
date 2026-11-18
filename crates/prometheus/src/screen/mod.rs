@@ -3,6 +3,11 @@
 //! Xfce session) the agent's headed browsers act on and the desktop app
 //! streams over RFB.
 //!
+//! The screen runs on this host, in a desktop container of the container
+//! backend or on the SSH backend's host, as `bot_desktop.placement`
+//! decides ([`placement`]); in every case its RFB socket ends up in the
+//! socket directory below, so the gateway streams all of them alike.
+//!
 //! The screen runs as its own supervisor process (`prometheus
 //! computer-use screen serve`), started by `screen start` or by the first
 //! headed browser launch when `bot_desktop.auto_start` is on, and stopped
@@ -16,11 +21,20 @@
 //! the takeover lease ([`pmt_config::screen_lease`]) is a tool-level fence
 //! on top.
 
+#[cfg(unix)]
+pub mod container;
+#[cfg(unix)]
+mod host;
 pub mod install;
+#[cfg(unix)]
+mod launch;
+pub mod launcher;
 pub mod memory;
 pub mod placement;
 #[cfg(unix)]
 pub mod serve;
+#[cfg(unix)]
+mod ssh;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -41,13 +55,17 @@ const STOP_GRACE: Duration = Duration::from_secs(10);
 pub struct Record {
     /// The supervisor process.
     pub pid: u32,
-    /// The X display (`:51`).
+    /// The X display this host's X clients use: `:51`, or the path of
+    /// the X socket relayed from the container or SSH host.
     pub display: String,
+    /// The display inside the container or on the SSH host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend_display: Option<String>,
     /// The RFB socket.
     pub rfb: PathBuf,
     /// `<width>x<height>`.
     pub geometry: String,
-    /// `host`.
+    /// `host`, `container` or `ssh`.
     pub placement: String,
     /// RFC 3339 start time.
     pub started_at: String,
@@ -63,18 +81,23 @@ fn record_path(scope: &ProfileScope) -> PathBuf {
     dir(scope).join("screen.json")
 }
 
-/// The profile's socket directory: `<temp>/pmt-screen-<hash of the
-/// profile directory>`.
+/// A short digest of the profile directory: names the profile's socket
+/// directory, its desktop container and its directory on the SSH host.
 #[must_use]
-pub fn socket_dir(scope: &ProfileScope) -> PathBuf {
+pub fn short_id(scope: &ProfileScope) -> String {
     use sha2::Digest as _;
     let digest = sha2::Sha256::digest(scope.dir().as_os_str().as_encoded_bytes());
-    let short = digest[..6].iter().fold(String::new(), |mut out, b| {
+    digest[..6].iter().fold(String::new(), |mut out, b| {
         use std::fmt::Write as _;
         let _ = write!(out, "{b:02x}");
         out
-    });
-    std::env::temp_dir().join(format!("pmt-screen-{short}"))
+    })
+}
+
+/// The profile's socket directory: `<temp>/pmt-screen-<short id>`.
+#[must_use]
+pub fn socket_dir(scope: &ProfileScope) -> PathBuf {
+    std::env::temp_dir().join(format!("pmt-screen-{}", short_id(scope)))
 }
 
 fn control_path(scope: &ProfileScope) -> PathBuf {
@@ -159,22 +182,28 @@ pub fn start(scope: &ProfileScope) -> Result<Record, Error> {
     }
     let config = scope.config();
     let desktop = &config.bot_desktop;
-    match placement::resolve(desktop, &config.terminal.backend)? {
-        placement::Where::Host => {}
-        placement::Where::Backend(hosting) => return Err(in_backend(hosting)),
-    }
+    let place = placement::resolve(desktop, &config.terminal.backend)?;
     if cfg!(not(unix)) {
         return Err(unavailable(
             "the bot screen needs a Linux (or other Unix) host",
         ));
     }
-    memory::check(memory::free(), desktop.min_free_memory_bytes)?;
-    let path = std::env::var_os("PATH");
-    for program in ["Xvnc", "xfce4-session"] {
-        if install::find(program, path.as_deref()).is_none() {
-            return Err(unavailable(&format!("{program} is not installed"))
-                .with_hint("prometheus computer-use screen install"));
+    // A screen in the backend checks its own host's memory and programs
+    // (the SSH host), or comes with them (the desktop image).
+    if place == placement::Where::Host {
+        memory::check(memory::free(), desktop.min_free_memory_bytes)?;
+        let path = std::env::var_os("PATH");
+        for program in ["Xvnc", "xfce4-session"] {
+            if install::find(program, path.as_deref()).is_none() {
+                return Err(unavailable(&format!("{program} is not installed"))
+                    .with_hint("prometheus computer-use screen install"));
+            }
         }
+    } else if matches!(
+        place,
+        placement::Where::Backend(placement::Hosting::Container)
+    ) {
+        memory::check(memory::free(), desktop.min_free_memory_bytes)?;
     }
     spawn(scope)
 }
@@ -284,20 +313,6 @@ fn unavailable(why: &str) -> Error {
         &codes::SCREEN_UNAVAILABLE,
         format!("the bot screen cannot start: {why}"),
     )
-}
-
-/// A screen placed inside the terminal backend: not built yet (the
-/// container's desktop image and the SSH host's display are a known gap),
-/// so it is refused with the opt-in that works.
-fn in_backend(hosting: placement::Hosting) -> Error {
-    let backend = match hosting {
-        placement::Hosting::Container => "container",
-        placement::Hosting::Ssh => "ssh",
-    };
-    unavailable(&format!(
-        "running it inside the {backend} backend is not available in this build"
-    ))
-    .with_hint("set bot_desktop.placement = \"gateway\" to run it on the gateway host (outside the terminal sandbox)")
 }
 
 /// The display a headed browser of `scope` uses: the running screen's, or

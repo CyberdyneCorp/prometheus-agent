@@ -87,7 +87,13 @@ issue:
   an OS boundary: the screen (Xvnc's RFB socket), its X display and a
   browser's debugging port (Lightpanda serves DevTools on a loopback port)
   are reachable by any process of the gateway's OS user, so a process of
-  that user that drives them directly is not stopped by the lease.
+  that user that drives them directly is not stopped by the lease. A
+  screen placed in the container backend is reachable the same way by the
+  processes of its desktop container and of the profile's session
+  containers (they share its X socket on purpose); one on the SSH host, by
+  the SSH user's processes there. The desktop's browser launcher
+  (`screen.browser`) starts the person's browser outside the agent's OS
+  sandbox, with no daemon secrets in its environment.
 
 For example, a shell command that evades the dangerous-command patterns but
 is still confined by the sandbox is a public hardening issue, not a private

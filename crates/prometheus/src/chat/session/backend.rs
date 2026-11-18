@@ -322,11 +322,42 @@ fn container(
     if let Some(cover) = &cover {
         egress_mounts(&mut spec, cover);
     }
+    let display = screen_display(scope, &mut spec)?;
     let transport = ContainerTransport::new(Pool::process().container(spec));
-    Ok(Arc::new(match cover {
-        Some(cover) => transport.with_overrides(egress_env(cover)),
-        None => transport,
+    let egress = cover.map(egress_env);
+    Ok(Arc::new(match (egress, display) {
+        (None, None) => transport,
+        (Some(egress), None) => transport.with_overrides(egress),
+        (egress, Some(display)) => transport.with_overrides(Arc::new(move || {
+            let mut vars = egress.as_ref().map(|egress| egress()).unwrap_or_default();
+            vars.push(display.clone());
+            vars
+        })),
     }))
+}
+
+/// The bot screen's X sockets and `DISPLAY` when the screen is placed in
+/// the container backend (spec: execution-environments, Bot screen): the
+/// agent's commands act on it.
+#[cfg(unix)]
+fn screen_display(
+    scope: &ProfileScope,
+    spec: &mut ContainerSpec,
+) -> Result<Option<(String, String)>, Error> {
+    let shared = crate::screen::container::for_sessions(scope)?;
+    Ok(shared.map(|display| {
+        spec.volumes.push(display.volume);
+        display.env
+    }))
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps, reason = "matches the Unix signature")]
+fn screen_display(
+    _scope: &ProfileScope,
+    _spec: &mut ContainerSpec,
+) -> Result<Option<(String, String)>, Error> {
+    Ok(None)
 }
 
 /// The egress CA and bundle, read-only, and the egress-only network

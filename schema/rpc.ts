@@ -2114,6 +2114,20 @@ export interface RosterSource {
   source: string;
 }
 
+/** A browser opened on the bot screen. */
+export interface ScreenBrowserOpened {
+  /** The persistent browser profile it shares with the agent's headed browser. */
+  user_data_dir: string;
+}
+
+/** `screen.browser` params. */
+export interface ScreenBrowserParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** An `http` or `https` page to open (a blank page when omitted). */
+  url?: string | null;
+}
+
 /** `screen.handback` params. */
 export interface ScreenHandbackParams {
   /** Clear the lease whoever holds it. */
@@ -2144,6 +2158,8 @@ export interface ScreenTakeoverParams {
 export interface ScreenTicket {
   /** Seconds until it expires (30). */
   expires_in_secs: number;
+  /** Who controls the screen as the ticket is issued. */
+  lease?: ScreenLeaseState;
   /** The display stream's path on the daemon's listener (`/screen`). */
   path: string;
   /** The secret: offered as the `prometheus-ticket.<ticket>` WebSocket subprotocol next to `prometheus-display.v1`, on `path`. */
@@ -2982,6 +2998,7 @@ export interface Methods {
   "queue.resume": { params: SessionRef; result: QueueState };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
+  "screen.browser": { params: ScreenBrowserParams; result: ScreenBrowserOpened };
   "screen.handback": { params: ScreenHandbackParams; result: ScreenLeaseState };
   "screen.takeover": { params: ScreenTakeoverParams; result: ScreenLeaseState };
   "screen.ticket": { params: ScreenTicketParams; result: ScreenTicket };

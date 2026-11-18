@@ -13,6 +13,18 @@ use serde_json::Value;
 use super::DaemonHost;
 
 impl PanesHost for DaemonHost {
+    fn screen_browser<'a>(
+        &'a self,
+        profile: &'a str,
+        url: Option<&'a str>,
+    ) -> HostFuture<'a, c::ScreenBrowserOpened> {
+        Box::pin(async move {
+            let scope = self.profile(profile)?.scope();
+            let path = self.launch.inherited("PATH").map(ToOwned::to_owned);
+            crate::screen::launcher::open(&scope, url, path.as_deref()).await
+        })
+    }
+
     fn scope(&self, profile: &str) -> Option<ProfileScope> {
         self.profile(profile).ok().map(|p| p.scope())
     }

@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""A stand-in OpenSSH client whose "remote host" is this machine: a command
+runs locally under sh; `-N -L <local>:<remote>` relays each local Unix
+socket to its remote one until killed. Records every call in
+$XDG_RUNTIME_DIR/fake-ssh.log."""
+
+import os
+import socket
+import sys
+import threading
+import time
+
+VALUED = {"-F", "-o", "-p", "-L", "-R", "-l", "-i"}
+
+args = sys.argv[1:]
+forwards, forward_only, rest = [], False, []
+i = 0
+while i < len(args):
+    arg = args[i]
+    if arg == "--":
+        rest = args[i + 1:]
+        break
+    if arg in VALUED:
+        if arg == "-L":
+            forwards.append(args[i + 1])
+        i += 2
+        continue
+    if arg.startswith("-"):
+        forward_only = forward_only or arg == "-N"
+        i += 1
+        continue
+    rest = args[i + 1:]
+    if rest[:1] == ["--"]:
+        rest = rest[1:]
+    break
+
+log = os.environ.get("XDG_RUNTIME_DIR")
+if log:
+    with open(os.path.join(log, "fake-ssh.log"), "a") as out:
+        out.write(" ".join(args) + "\n")
+
+if not forward_only:
+    os.execvp("sh", ["sh", "-c", " ".join(rest)])
+
+
+def pump(src, dst):
+    try:
+        while True:
+            data = src.recv(65536)
+            if not data:
+                break
+            dst.sendall(data)
+    except OSError:
+        pass
+    for s in (src, dst):
+        try:
+            s.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+
+def relay(local, remote):
+    try:
+        os.unlink(local)
+    except FileNotFoundError:
+        pass
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(local)
+    os.chmod(local, 0o600)
+    server.listen(8)
+    while True:
+        conn, _ = server.accept()
+        upstream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            upstream.connect(remote)
+        except OSError:
+            conn.close()
+            continue
+        threading.Thread(target=pump, args=(conn, upstream), daemon=True).start()
+        threading.Thread(target=pump, args=(upstream, conn), daemon=True).start()
+
+
+for spec in forwards:
+    local, remote = spec.split(":", 1)
+    threading.Thread(target=relay, args=(local, remote), daemon=True).start()
+while True:
+    time.sleep(3600)

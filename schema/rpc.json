@@ -6002,6 +6002,43 @@
       ],
       "type": "object"
     },
+    "ScreenBrowserOpened": {
+      "additionalProperties": false,
+      "description": "A browser opened on the bot screen.",
+      "properties": {
+        "user_data_dir": {
+          "description": "The persistent browser profile it shares with the agent's headed\nbrowser.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_data_dir"
+      ],
+      "type": "object"
+    },
+    "ScreenBrowserParams": {
+      "additionalProperties": false,
+      "description": "`screen.browser` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "default": null,
+          "description": "An `http` or `https` page to open (a blank page when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "ScreenHandbackParams": {
       "additionalProperties": false,
       "description": "`screen.handback` params.",
@@ -6085,6 +6122,13 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "lease": {
+          "$ref": "#/$defs/ScreenLeaseState",
+          "default": {
+            "epoch": 0
+          },
+          "description": "Who controls the screen as the ticket is issued."
         },
         "path": {
           "description": "The display stream's path on the daemon's listener (`/screen`).",
@@ -9447,6 +9491,16 @@
       },
       "result": {
         "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "screen.browser": {
+      "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenBrowserParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenBrowserOpened"
       },
       "since": "1.0"
     },

@@ -194,6 +194,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("screen.takeover", "execution-environments"),
     method("screen.handback", "execution-environments"),
     method("screen.ticket", "execution-environments"),
+    method("screen.browser", "execution-environments"),
     // git-worktrees
     method("worktree.new", "git-worktrees"),
     method("worktree.status", "git-worktrees"),

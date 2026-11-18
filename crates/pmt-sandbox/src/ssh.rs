@@ -149,30 +149,10 @@ impl SshTarget {
     /// start, the server refused the forward (`AllowTcpForwarding`), or no
     /// port was granted within 20 s.
     pub fn reverse_forward(&self, local: std::net::SocketAddr) -> Result<ReverseForward, Error> {
-        let mut command = Command::new(&self.program);
+        let mut command = self.forward_client();
+        command.stderr(Stdio::piped());
         command
-            .env_clear()
-            .envs(self.env.iter().map(|(n, v)| (n, v)))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped());
-        if let Some(file) = &self.config_file {
-            command.arg("-F").arg(file);
-        }
-        // INFO: the client reports the allocated port at that level.
-        for option in [
-            "BatchMode=yes",
-            "ConnectTimeout=15",
-            "ServerAliveInterval=15",
-            "ExitOnForwardFailure=yes",
-            "ControlMaster=no",
-            "ControlPath=none",
-            "LogLevel=INFO",
-        ] {
-            command.arg("-o").arg(option);
-        }
-        command
-            .args(["-N", "-T", "-p", &self.port.to_string(), "-R"])
+            .arg("-R")
             .arg(format!("127.0.0.1:0:{local}"))
             .arg(&self.destination);
         let refused = |why: String| {
@@ -223,6 +203,55 @@ impl SshTarget {
         } else {
             why
         }))
+    }
+
+    /// A client that only forwards (`-N`), on a connection of its own (see
+    /// [`ReverseForward`]), failing when a forward cannot be set up.
+    fn forward_client(&self) -> Command {
+        let mut command = Command::new(&self.program);
+        command
+            .env_clear()
+            .envs(self.env.iter().map(|(n, v)| (n, v)))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null());
+        if let Some(file) = &self.config_file {
+            command.arg("-F").arg(file);
+        }
+        // INFO: the client reports the allocated port at that level.
+        for option in [
+            "BatchMode=yes",
+            "ConnectTimeout=15",
+            "ServerAliveInterval=15",
+            "ExitOnForwardFailure=yes",
+            "ControlMaster=no",
+            "ControlPath=none",
+            "LogLevel=INFO",
+        ] {
+            command.arg("-o").arg(option);
+        }
+        command.args(["-N", "-T", "-p", &self.port.to_string()]);
+        command
+    }
+
+    /// The client relaying each local Unix socket of `forwards` to its
+    /// remote Unix socket (`-L <local>:<remote>`), replacing a stale local
+    /// socket; it runs until killed.
+    #[must_use]
+    pub fn socket_forwards(&self, forwards: &[(PathBuf, String)]) -> Command {
+        let mut command = self.forward_client();
+        command.args([
+            "-o",
+            "StreamLocalBindUnlink=yes",
+            "-o",
+            "StreamLocalBindMask=0177",
+        ]);
+        for (local, remote) in forwards {
+            command
+                .arg("-L")
+                .arg(format!("{}:{remote}", local.display()));
+        }
+        command.arg(&self.destination);
+        command
     }
 }
 

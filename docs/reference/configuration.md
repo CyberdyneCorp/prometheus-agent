@@ -186,6 +186,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `bot_desktop.auto_start` | boolean | `false` | any | `live` | Start the screen on the first `computer_use` call or headed browser launch instead of only on `prometheus computer-use screen start`. |
 | `bot_desktop.geometry` | string | `"1440x900"` | any | `live` | The screen's size, `<width>x<height>` in pixels. |
 | `bot_desktop.idle_stop_secs` | integer | `1800` | ≥ 0 | `live` | The screen stops after this long without use (`0`: never). |
+| `bot_desktop.image` | string | `""` | any | `live` | The image of a screen placed in the container backend (empty: the release's desktop sandbox image, `prometheus-sandbox:<version>-desktop`). |
 | `bot_desktop.min_free_memory_bytes` | integer | `1610612736` | ≥ 0 | `live` | The screen refuses to start with less free memory than this on the host or its cgroup (`0`: no check). |
 | `bot_desktop.placement` | one of "auto", "terminal", "gateway" | `"auto"` | `"auto"`, `"terminal"`, `"gateway"` | `live` | Where the screen runs. |
 | `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Envelopes still queued (never drained by a courier) after this many seconds fail with `queued_expired` (`0`: never). |

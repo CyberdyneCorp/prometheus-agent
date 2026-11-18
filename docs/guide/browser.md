@@ -208,15 +208,43 @@ prometheus computer-use screen stop [--force]
 ```
 
 `install` needs root or `sudo`; without either it prints the command to run
-as root. `bot_desktop.placement` decides where the screen goes: `auto` puts
-it on the gateway host for the `local` backend and refuses backends that
-cannot host a display, pointing to `placement = "gateway"` (an explicit
-opt-in to a screen outside the terminal sandbox).
+as root. `bot_desktop.placement` decides where the screen goes:
 
-Xvnc serves RFB on a Unix socket only (mode 0600, in a private directory
-of the system temp), never on TCP. The desktop app streams it through the
-daemon: `screen.ticket` returns a single-use display ticket valid 30
-seconds, offered with the `prometheus-display.v1` subprotocol on `/screen`.
+- `auto` (default) puts it where the terminal runs: on the gateway host for
+  the `local` backend, in a desktop container for the `container` backend,
+  on the SSH host for the `ssh` backend; other backends (Modal, Daytona,
+  Singularity, ...) are refused, pointing to `placement = "gateway"`.
+- `terminal` places it the same way, stating that the screen must stay
+  with the terminal.
+- `gateway` always runs it on the gateway host: an explicit opt-in to a
+  screen outside the terminal sandbox.
+
+In the container backend the screen gets a container of its own
+(`pmt-screen-<id>`, image `bot_desktop.image`, default the release's
+`prometheus-sandbox:<version>-desktop`), without network and with the
+container hardening except the read-only root (Xfce writes its settings).
+The profile's session containers mount its X socket directory read-only
+and get `DISPLAY=:1`, so the agent's commands act on the screen. On the SSH
+backend Xvnc and Xfce run on the SSH host as the SSH user (install them
+there; the free-memory floor is that host's), in a private directory of its
+temp, and a forwarding connection of their own relays the RFB and X sockets
+to this host. Either way the gateway streams the screen as it does a local
+one, and a headed browser on the gateway host draws on it through the
+relayed X socket (`DISPLAY` set to its path; libxcb 1.15 or later).
+
+Xvnc serves RFB on a Unix socket only, never on TCP: mode 0600 on the
+gateway or SSH host, in a private directory; in the desktop container the
+socket directory is mounted from the profile's private directory of the
+gateway's system temp (mode 0700), the only thing that guards it there.
+The desktop app streams it through the daemon: `screen.ticket` returns a
+single-use display ticket valid 30 seconds (and who controls the screen),
+offered with the `prometheus-display.v1` subprotocol on `/screen`.
+
+The desktop's **Screen** pane shows the stream. It is read-only while the
+agent has control; **Take over** makes the agent wait and sends the pane's
+pointer and keys to the screen; **Open browser** (`screen.browser`) starts a
+browser there on the same persistent screen browser profile the agent's
+headed browser uses (sign in once for both); **Hand back** returns control.
 
 A viewer takes the screen over with `screen.takeover` and hands it back
 with `screen.handback`. While a person holds it, every browser tool of the
