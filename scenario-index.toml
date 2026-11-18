@@ -111,6 +111,7 @@ capabilities = [
     "git-worktrees",
     "connectors",
     "i18n",
+    "observability",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -5068,3 +5069,8 @@ capabilities = [
 
 [i18n."Language switchers show endonyms"]
 "RTL layout" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_language_switcher_mirrors_the_window_for_arabic", "crates/prometheus/tests/dashboard_browser.rs::the_dashboard_language_switcher_writes_the_profile_language", "crates/prometheus/tests/tui_language.rs::the_picker_lists_endonyms_and_writes_the_choice", "crates/pmt-tui/src/languages.rs::rows_show_endonyms_with_ids_and_the_current_language_is_highlighted"], note = "desktop-language.spec.ts selects ar in the desktop settings: the document turns dir=rtl and the sessions column moves to the other side in the same window, after one config.patch of display.language; the dashboard and the TUI picker list the same i18n.languages" }
+
+# Group 73.9: Langfuse preset and NeMo Relay files (Relay hosting and the SDKs are not done).
+[observability."NeMo Relay and Langfuse integrations"]
+"Langfuse without keys" = ["crates/prometheus/tests/obs_langfuse.rs::a_langfuse_preset_without_its_secret_key_stops_the_daemon_naming_it", "crates/prometheus/tests/obs_langfuse.rs::langfuse_receives_the_spans_with_basic_authentication"]
+"Relay files reported" = { tests = ["crates/prometheus/tests/obs_langfuse.rs::doctor_lists_the_relay_files_with_the_system_one_last", "crates/pmt-obs/src/relay.rs::the_configured_file_replaces_the_users_and_the_system_file_comes_last"], note = "debug builds point the system file at a test directory (PMT_TEST_RELAY_SYSTEM_DIR); /etc is not writable in tests" }

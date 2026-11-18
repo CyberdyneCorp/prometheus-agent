@@ -268,6 +268,34 @@ Python-bridge calls (a `traceparent` field), and a client may send its
 own in a request's `meta.traceparent`; it is sent to model providers only
 with `propagate_external = true`.
 
+### Langfuse
+
+`observability.otel.preset = "langfuse"` turns export on toward Langfuse:
+spans go to `<observability.langfuse.host>/api/public/otel` (default host
+`https://cloud.langfuse.com`) over OTLP/HTTP with Basic authentication
+built from the secrets `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
+Langfuse takes traces only, so no metrics are sent. A daemon whose preset
+lacks either secret refuses to start (exit 78) naming it. Message content
+reaches Langfuse only with `observability.otel.capture_content = true`.
+
+```toml
+[observability.otel]
+preset = "langfuse"
+
+[observability.langfuse]
+host = "https://cloud.langfuse.com"
+```
+
+### NeMo Relay
+
+NeMo Relay reads its user `plugins.toml` (`~/.config/nemo-relay/plugins.toml`,
+replaced by `observability.nemo_relay.plugins_toml` when set) and then its
+system file (`/etc/nemo-relay/plugins.toml`, `%ProgramData%\nemo-relay\plugins.toml`
+on Windows), which has the highest precedence. `prometheus doctor
+observability` lists the files that apply, the system one marked as the
+highest precedence. Feeding Relay from the daemon
+(`observability.nemo_relay.enabled`) is not part of this build yet.
+
 ## Liveness watchdog and task dumps
 
 A thread outside the daemon's async runtime probes it every

@@ -3609,6 +3609,7 @@ dependencies = [
 name = "pmt-obs"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "jiff",
  "pmt-config",
  "pmt-core",

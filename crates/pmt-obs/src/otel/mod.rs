@@ -26,6 +26,7 @@ pub use context::TraceContext;
 pub use export::{ExportSettings, ExportStats, Exporter};
 pub use spans::{Identity, RedactorLoader, SessionTrace, Standalone};
 
+use pmt_config::schema::OtelPreset;
 use pmt_config::scope::ProfileScope;
 use pmt_core::error::{Error, codes};
 
@@ -66,31 +67,86 @@ pub fn install(exporter: Option<Exporter>) {
         .unwrap_or_else(std::sync::PoisonError::into_inner) = exporter;
 }
 
-/// Starts and installs the exporter `scope`'s `[observability.otel]`
-/// enables; `Ok(None)` (and nothing configured to reach the network) when
-/// export is off.
+/// Langfuse's OTLP path under its host.
+pub const LANGFUSE_PATH: &str = "/api/public/otel";
+
+/// The Langfuse keys of `observability.otel.preset = "langfuse"`.
+pub const LANGFUSE_KEYS: [&str; 2] = ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"];
+
+/// Where export goes, and the preset that chose it: `None` when export is
+/// off (a preset turns it on).
+#[must_use]
+pub fn target(
+    observability: &pmt_config::schema::ObservabilityConfig,
+) -> Option<(String, Option<&'static str>)> {
+    let otel = &observability.otel;
+    match otel.preset {
+        Some(OtelPreset::Langfuse) => Some((
+            format!(
+                "{}{LANGFUSE_PATH}",
+                observability.langfuse.host.trim_end_matches('/')
+            ),
+            Some("langfuse"),
+        )),
+        None if otel.enabled => otel
+            .endpoint
+            .clone()
+            .filter(|e| !e.trim().is_empty())
+            .map(|e| (e, None)),
+        None => None,
+    }
+}
+
+/// The secrets a preset needs, checked before a daemon starts serving.
 ///
 /// # Errors
 ///
-/// `config.invalid` without an endpoint, `secret.missing` for a missing
-/// header secret, HTTP client errors.
+/// `config.invalid` (exit 78) naming the first missing secret.
+pub fn preflight(scope: &ProfileScope) -> Result<(), Error> {
+    preset_headers(scope).map(drop)
+}
+
+/// The headers a preset adds: Langfuse's Basic authentication.
+fn preset_headers(scope: &ProfileScope) -> Result<Vec<(String, String)>, Error> {
+    if scope.config().observability.otel.preset != Some(OtelPreset::Langfuse) {
+        return Ok(Vec::new());
+    }
+    let mut keys = Vec::new();
+    for name in LANGFUSE_KEYS {
+        let value = scope.secrets().resolve(name).map_err(|_| {
+            Error::new(
+                &codes::CONFIG_INVALID,
+                format!("observability.otel.preset = \"langfuse\" needs the secret {name}"),
+            )
+            .with_hint(format!("prometheus secrets set {name}"))
+        })?;
+        keys.push(value.expose().to_owned());
+    }
+    let basic = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, keys.join(":"));
+    Ok(vec![("authorization".to_owned(), format!("Basic {basic}"))])
+}
+
+/// Starts and installs the exporter `scope`'s `[observability.otel]`
+/// enables (or its preset); `Ok(None)` (and nothing configured to reach
+/// the network) when export is off.
+///
+/// # Errors
+///
+/// `config.invalid` without an endpoint or without a preset's secret,
+/// `secret.missing` for a missing header secret, HTTP client errors.
 pub fn start(scope: &ProfileScope, service_instance: &str) -> Result<Option<Exporter>, Error> {
     let config = scope.config();
     let otel = &config.observability.otel;
-    if !otel.enabled {
+    if !otel.enabled && otel.preset.is_none() {
         return Ok(None);
     }
-    let endpoint = otel
-        .endpoint
-        .clone()
-        .filter(|e| !e.trim().is_empty())
-        .ok_or_else(|| {
-            Error::new(
-                &codes::CONFIG_INVALID,
-                "observability.otel.enabled = true requires observability.otel.endpoint",
-            )
-        })?;
-    let headers = otel
+    let (endpoint, preset) = target(&config.observability).ok_or_else(|| {
+        Error::new(
+            &codes::CONFIG_INVALID,
+            "observability.otel.enabled = true requires observability.otel.endpoint",
+        )
+    })?;
+    let mut headers = otel
         .header_secrets
         .iter()
         .map(|name| {
@@ -98,9 +154,14 @@ pub fn start(scope: &ProfileScope, service_instance: &str) -> Result<Option<Expo
             Ok((header_name(name), value.expose().to_owned()))
         })
         .collect::<Result<Vec<_>, Error>>()?;
+    headers.extend(preset_headers(scope)?);
     let exporter = Exporter::start(ExportSettings {
         endpoint,
-        protocol: otel.protocol,
+        protocol: if preset.is_some() {
+            pmt_config::schema::OtelProtocol::HttpProtobuf
+        } else {
+            otel.protocol
+        },
         headers,
         capture_content: otel.capture_content,
         propagate_external: otel.propagate_external,
@@ -120,6 +181,7 @@ pub fn start(scope: &ProfileScope, service_instance: &str) -> Result<Option<Expo
                 service_instance.to_owned(),
             ),
         ],
+        metrics: preset.is_none(),
     })?;
     install(Some(exporter.clone()));
     Ok(Some(exporter))

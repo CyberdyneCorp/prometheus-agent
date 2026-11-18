@@ -83,6 +83,7 @@ pub mod projects_cmd;
 pub mod prompt;
 pub mod prompt_cmd;
 pub mod providers_cmd;
+pub mod relay_host;
 pub mod replay;
 pub mod replay_cmd;
 pub mod rpc_cmd;

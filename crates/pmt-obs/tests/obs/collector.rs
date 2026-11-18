@@ -14,6 +14,7 @@ use pmt_obs::trajectory::writer::Emit;
 
 fn export(endpoint: &str, protocol: OtelProtocol, session: &str) -> String {
     let exporter = Exporter::start(ExportSettings {
+        metrics: true,
         endpoint: endpoint.to_owned(),
         protocol,
         headers: Vec::new(),

@@ -132,11 +132,11 @@ pub use models::{
 };
 pub use operations::{
     BudgetsConfig, CredentialSource, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig,
-    EgressMode, GatewayHealthConfig, HealthListenerConfig, LogLevel, LoggingConfig,
-    MetricsEndpointConfig, NetworkConfig, ObservabilityConfig, OtelConfig, OtelProtocol,
-    PrivacyConfig, SandboxConfig, SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig,
-    SecurityConfig, TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage,
-    VaultSourceConfig, WorktreesConfig,
+    EgressMode, GatewayHealthConfig, HealthListenerConfig, LangfuseConfig, LogLevel, LoggingConfig,
+    MetricsEndpointConfig, NemoRelayConfig, NetworkConfig, ObservabilityConfig, OtelConfig,
+    OtelPreset, OtelProtocol, PrivacyConfig, SandboxConfig, SandboxMode, SecretCommandConfig,
+    SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,

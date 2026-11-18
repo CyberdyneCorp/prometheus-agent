@@ -47,6 +47,9 @@ pub struct ExportSettings {
     pub outbound: pmt_net::OutboundPolicy,
     /// `service.*` resource attributes (name, version, instance).
     pub resource: Vec<(String, String)>,
+    /// Also export metrics (a traces-only collector such as Langfuse
+    /// takes none).
+    pub metrics: bool,
 }
 
 /// Counters of the export posture (`prometheus status --exports`).
@@ -351,6 +354,9 @@ impl Worker {
     }
 
     async fn send_metrics(&self) -> Result<(), String> {
+        if !self.settings.metrics {
+            return Ok(());
+        }
         let request = proto::ExportMetricsServiceRequest {
             resource_metrics: vec![proto::ResourceMetrics {
                 resource: Some(self.resource()),

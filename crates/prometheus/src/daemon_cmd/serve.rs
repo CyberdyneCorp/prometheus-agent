@@ -421,6 +421,9 @@ fn served_profiles(
     if let Some(handle) = pmt_obs::logs::handle() {
         handle.set_level(first.config().logging.level);
     }
+    // A preset missing its keys is a configuration error, not a quiet
+    // loss of telemetry.
+    pmt_obs::otel::preflight(&first)?;
     crate::startup::start_export(&first);
     crate::startup::register_profile(&first);
     if !first.config().gateway.multiplex {

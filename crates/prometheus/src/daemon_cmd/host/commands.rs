@@ -287,7 +287,7 @@ impl Run<'_> {
 
     async fn shared(&self, name: &str, args: &str) -> Dispatched {
         let scope = self.profile.scope();
-        let reply = commands::run(&self.ctx(&scope), name, args).await;
+        let reply = Box::pin(commands::run(&self.ctx(&scope), name, args)).await;
         if AUTOMATION.contains(&name) {
             // What a command set starts at the next idle boundary, and every
             // surface shows it.

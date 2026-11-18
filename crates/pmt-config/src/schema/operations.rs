@@ -24,6 +24,46 @@ pub struct ObservabilityConfig {
     /// The daemon's loopback health listener (`/healthz`, `/readyz`).
     #[schemars(extend("x-apply" = "restart"))]
     pub health: HealthListenerConfig,
+    /// Langfuse, the target of `observability.otel.preset = "langfuse"`.
+    #[schemars(extend("x-apply" = "restart"))]
+    pub langfuse: LangfuseConfig,
+    /// The `NeMo` Relay integration (daemon-wide).
+    #[schemars(extend("x-apply" = "restart"))]
+    pub nemo_relay: NemoRelayConfig,
+}
+
+/// `[observability.langfuse]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct LangfuseConfig {
+    /// The Langfuse host; spans go to `<host>/api/public/otel`, with Basic
+    /// authentication from the secrets `LANGFUSE_PUBLIC_KEY` and
+    /// `LANGFUSE_SECRET_KEY`.
+    pub host: String,
+}
+
+impl Default for LangfuseConfig {
+    fn default() -> Self {
+        Self {
+            host: "https://cloud.langfuse.com".to_owned(),
+        }
+    }
+}
+
+/// `[observability.nemo_relay]`: `NeMo` Relay hosted by the python bridge,
+/// fed every session's lifecycle. Relay reads its user `plugins.toml`
+/// (`~/.config/nemo-relay/plugins.toml`) then its system file
+/// (`/etc/nemo-relay/plugins.toml`), which has the highest precedence.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct NemoRelayConfig {
+    /// Feed `NeMo` Relay. Off by default; this build does not start the
+    /// Relay host yet (`doctor observability` lists the files).
+    pub enabled: bool,
+    /// A `plugins.toml` that replaces Relay's user file (the system file
+    /// still applies above it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugins_toml: Option<String>,
 }
 
 /// The `[observability.otel]` section (spec: observability, Opt-in
@@ -51,6 +91,19 @@ pub struct OtelConfig {
     /// Send `traceparent` to model providers, MCP servers and other
     /// external hosts.
     pub propagate_external: bool,
+    /// A collector preset, which turns export on: `langfuse` sends traces
+    /// to `observability.langfuse.host` with its keys (ignores
+    /// `endpoint`, `protocol` and `enabled`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<OtelPreset>,
+}
+
+/// `observability.otel.preset`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum OtelPreset {
+    /// Langfuse's OTLP endpoint.
+    #[serde(rename = "langfuse")]
+    Langfuse,
 }
 
 /// `observability.otel.protocol`.

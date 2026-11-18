@@ -102,6 +102,7 @@ fn serve(stream: std::net::TcpStream, received: &Received) {
 
 fn exporter(endpoint: &str, capture_content: bool) -> Exporter {
     let exporter = Exporter::start(ExportSettings {
+        metrics: true,
         endpoint: endpoint.to_owned(),
         protocol: OtelProtocol::HttpProtobuf,
         headers: vec![("x-api-key".to_owned(), "k".to_owned())],

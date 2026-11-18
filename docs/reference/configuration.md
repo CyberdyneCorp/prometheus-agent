@@ -713,11 +713,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.gateway_health.endpoint` | string | unset | any | `restart` | The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`. |
 | `observability.gateway_health.interval_secs` | integer | `60` | 1 to 3600 | `restart` | Seconds between two exports. |
 | `observability.health.bind` | string | `"127.0.0.1:0"` | any | `restart` | Loopback listen address; port `0` picks a free port, recorded as `health_url` in `run/gateway.json`. |
+| `observability.langfuse.host` | string | `"https://cloud.langfuse.com"` | any | `restart` | The Langfuse host; spans go to `<host>/api/public/otel`, with Basic authentication from the secrets `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. |
 | `observability.metrics_endpoint.enabled` | boolean | `false` | any | `restart` | Serve `GET /metrics` on the health listener (no authentication, no per-session or per-user labels). Off by default: 404. |
+| `observability.nemo_relay.enabled` | boolean | `false` | any | `restart` | Feed `NeMo` Relay. Off by default; this build does not start the Relay host yet (`doctor observability` lists the files). |
+| `observability.nemo_relay.plugins_toml` | string | unset | any | `restart` | A `plugins.toml` that replaces Relay's user file (the system file still applies above it). |
 | `observability.otel.capture_content` | boolean | `false` | any | `restart` | Attach message content, tool arguments and tool output to spans. |
 | `observability.otel.enabled` | boolean | `false` | any | `restart` | Export traces and metrics over OTLP. Off by default. |
 | `observability.otel.endpoint` | string | unset | any | `restart` | The collector's OTLP base URL (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318`; required when enabled. `/v1/traces` and `/v1/metrics` are appended for `http/protobuf`. |
 | `observability.otel.header_secrets` | array of string | `[]` | any | `restart` | Names of secrets sent as request headers: the secret `NAME` becomes the header `name` with `_` as `-` (`X_API_KEY` -> `x-api-key`). |
+| `observability.otel.preset` | one of "langfuse" | unset | `"langfuse"` | `restart` | A collector preset, which turns export on: `langfuse` sends traces to `observability.langfuse.host` with its keys (ignores `endpoint`, `protocol` and `enabled`). |
 | `observability.otel.propagate_external` | boolean | `false` | any | `restart` | Send `traceparent` to model providers, MCP servers and other external hosts. |
 | `observability.otel.protocol` | one of "http/protobuf", "grpc" | `"http/protobuf"` | `"http/protobuf"`, `"grpc"` | `restart` | Wire protocol. |
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |

@@ -182,7 +182,7 @@ impl Repl {
         let Some(live) = self.live.take() else {
             return Flow::Continue;
         };
-        let reply = commands::run(&self.ctx(&live), name, args).await;
+        let reply = Box::pin(commands::run(&self.ctx(&live), name, args)).await;
         self.live = Some(live);
         match reply {
             Some(Ok(Reply::Send(input))) if name == "learn" => self.user_turn(input.text).await,
@@ -221,7 +221,7 @@ impl Repl {
             }
             "statusbar" => self.status_bar.statusbar(&self.factory.scope, args),
             "battery" => self.status_bar.battery_command(&self.factory.scope, args),
-            other => match commands::run(&self.ctx(live), other, args).await {
+            other => match Box::pin(commands::run(&self.ctx(live), other, args)).await {
                 Some(Ok(Reply::Text(text))) => Ok(text),
                 // Only `/learn`, `/retry` and `/moa` send, and they run with the
                 // session in place (`session_reply`).
