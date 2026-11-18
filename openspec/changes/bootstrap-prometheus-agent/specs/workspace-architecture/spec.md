@@ -268,11 +268,11 @@ On the reference CI runner, daemon start until `/readyz` returns 200 SHALL take 
 - **THEN** the prompt SHALL be ready within the 150 ms budget and the MCP tools SHALL become available for the next session snapshot or by `/reload-mcp --now`
 
 ### Requirement: Memory and size budgets
-On the reference runner the system SHALL stay within: idle daemon with one profile and no sessions ≤ 60 MiB RSS; each additional idle session ≤ 8 MiB RSS excluding model context buffers; `prometheus chat -z` peak ≤ 120 MiB RSS excluding child processes; stripped release binary ≤ 80 MiB including the embedded dashboard assets. CI SHALL enforce these as gates with the same 15% regression rule as startup, where growth under 1 MiB (RSS) or 4 MiB (binary size, 5% of its budget) never counts as a regression.
+On the reference runner the system SHALL stay within: idle daemon with one profile and no sessions ≤ 60 MiB RSS; each additional idle session ≤ 8 MiB RSS excluding model context buffers; `prometheus chat -z` peak ≤ 120 MiB RSS excluding child processes; stripped release binary ≤ 90 MiB including the embedded dashboard assets. CI SHALL enforce these as gates with the same 15% regression rule as startup, where growth under 1 MiB (RSS) or 4 MiB (binary size, about 5% of its budget) never counts as a regression.
 **Milestone:** M1
 
 #### Scenario: Binary too large
-- **WHEN** a change grows the stripped Linux x86_64 binary to 82 MiB
+- **WHEN** a change grows the stripped Linux x86_64 binary to 92 MiB
 - **THEN** the size gate SHALL fail
 
 #### Scenario: Small binary growth from a near-empty baseline

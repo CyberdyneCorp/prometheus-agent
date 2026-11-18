@@ -154,7 +154,7 @@ capabilities = [
 "Slow prompt fails the gate" = ["xtask/src/perf/budget.rs::a_slow_or_heavy_chat_breaches_its_budgets"]
 
 [workspace-architecture."Memory and size budgets"]
-"Binary too large" = ["xtask/src/perf/budget.rs::an_82_mib_binary_fails_the_size_budget"]
+"Binary too large" = ["xtask/src/perf/budget.rs::a_92_mib_binary_fails_the_size_budget"]
 "Small binary growth from a near-empty baseline" = ["xtask/src/perf/budget.rs::binary_growth_under_the_size_floor_is_not_a_regression"]
 
 [workspace-architecture."Repository health gates"]

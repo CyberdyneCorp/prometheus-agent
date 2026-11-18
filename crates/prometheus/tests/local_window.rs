@@ -90,8 +90,10 @@ fn the_gauge_uses_the_served_window_and_the_managed_model_grows() {
         &pmt_config::Config::default(),
         None,
     ));
+    // The daemon's hardware fixture, not this host's GPU and RAM.
     let growth =
-        prometheus::local_cmd::growth::LocalGrowth::new(h, std::sync::Arc::clone(&catalog));
+        prometheus::local_cmd::growth::LocalGrowth::new(h, std::sync::Arc::clone(&catalog))
+            .with_fixtures(&fixtures);
     let route = RouteInfo {
         provider: "llamacpp".to_owned(),
         model: "qwen-x".to_owned(),

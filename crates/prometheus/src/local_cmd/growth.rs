@@ -36,6 +36,10 @@ pub fn on_grown(hook: GrownHook) {
 pub struct LocalGrowth {
     home: PathBuf,
     catalog: Arc<Catalog>,
+    /// The hardware fixture directory of an in-process test (debug
+    /// builds; the daemon reads `PMT_TEST_LOCAL_FIXTURES`).
+    #[cfg(debug_assertions)]
+    fixtures: Option<PathBuf>,
 }
 
 impl LocalGrowth {
@@ -45,6 +49,20 @@ impl LocalGrowth {
         Self {
             home: home.to_path_buf(),
             catalog,
+            #[cfg(debug_assertions)]
+            fixtures: None,
+        }
+    }
+
+    /// The same port reading the machine from the fixtures in `dir`, so
+    /// an in-process test sees the hardware its daemon sees, not the
+    /// host's (debug builds).
+    #[cfg(debug_assertions)]
+    #[must_use]
+    pub fn with_fixtures(self, dir: &Path) -> Self {
+        Self {
+            fixtures: Some(dir.to_path_buf()),
+            ..self
         }
     }
 
@@ -62,6 +80,8 @@ impl LocalGrowth {
         })?;
         let local = Local::for_home(&self.home, pmt_net::OutboundPolicy::default())
             .map_err(|e| e.to_string())?;
+        #[cfg(debug_assertions)]
+        let local = local.with_fixtures(self.fixtures.clone());
         let library = local.library();
         let mut model = library
             .models()
