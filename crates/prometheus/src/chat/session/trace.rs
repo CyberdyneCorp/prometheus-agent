@@ -39,6 +39,24 @@ pub(super) fn open(
     )
 }
 
+/// The trajectory writer of `session` when trajectories are on; an
+/// ephemeral session (spec: workspace-architecture, Embeddable client
+/// SDKs) never has one.
+pub(super) fn trajectory(
+    scope: &pmt_config::ProfileScope,
+    session: &pmt_store::Session,
+) -> Result<Option<Arc<TrajectoryWriter>>, pmt_core::error::Error> {
+    if session.source_tag.as_deref() == Some(pmt_store::ephemeral::TAG) {
+        return Ok(None);
+    }
+    Ok(pmt_obs::trajectory::writer::open_for_session(
+        scope,
+        &session.id.to_string(),
+        &session.root_session_id.to_string(),
+    )?
+    .map(Arc::new))
+}
+
 /// What a session records: its trajectory (when on) and its trace.
 pub(super) struct Recording {
     pub trajectory: Option<Arc<TrajectoryWriter>>,

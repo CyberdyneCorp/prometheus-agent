@@ -666,8 +666,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 73.6 Implement local-model context window and memory placement (window grows before compression) and local resource telemetry; verify with a stub server (spec: local-models)
 - [x] 73.7 Implement `video_generate` (stuck jobs time out) and provider-contributed media tools; verify with mock providers (spec: web-and-media-tools)
 - [x] 73.8 Implement shared install state retention for worktrees, the `/connectors` slash command and language switchers that show endonyms (RTL layout); verify with tests (spec: git-worktrees, spec: connectors, spec: i18n)
-- [ ] 73.9 Implement the NeMo Relay and Langfuse integrations (no export without keys) and the embeddable client SDKs (protocol version negotiation); verify with fixtures (spec: observability, spec: workspace-architecture)
-  - Gap: the Langfuse preset and the Relay file listing (`doctor observability`) are done and tested; hosting NeMo Relay in the python bridge fed from the trajectory stream (`observability.nemo_relay.enabled` is accepted but starts nothing) and the embeddable client SDKs (Rust, Python, TypeScript; protocol negotiation, `system_prompt_overlay`, `ephemeral` sessions kept out of the store) are not built.
+- [x] 73.9 Implement the NeMo Relay and Langfuse integrations (no export without keys) and the embeddable client SDKs (protocol version negotiation); verify with fixtures (spec: observability, spec: workspace-architecture)
 
 ## 74. M3 Agent interop: A2A and peer gateways
 

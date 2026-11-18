@@ -114,6 +114,7 @@ fn main() -> ExitCode {
     let reporter = startup::crash_reporter(home, &launch);
     let outcome = panic::catch_main(&reporter, || run(&cli, &launch));
     startup::flush_export();
+    prometheus::relay_host::stop();
     // Python-bridge sidecars and their children end with the process.
     prometheus::plugins_host::bridge::shutdown_all();
     match outcome {

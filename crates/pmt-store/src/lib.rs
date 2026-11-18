@@ -37,6 +37,7 @@ pub mod cron;
 pub mod crypt;
 pub mod delegations;
 pub mod delete;
+pub mod ephemeral;
 mod error;
 mod files;
 pub mod fork;

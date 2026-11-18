@@ -57,8 +57,10 @@ impl Default for LangfuseConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct NemoRelayConfig {
-    /// Feed `NeMo` Relay. Off by default; this build does not start the
-    /// Relay host yet (`doctor observability` lists the files).
+    /// Feed `NeMo` Relay: a host in a managed python environment (pinned
+    /// `nemo-relay`, built on first use) receives the session, turn,
+    /// model-call and tool lifecycle of every session. Payloads only with
+    /// `observability.otel.capture_content`. Off by default.
     pub enabled: bool,
     /// A `plugins.toml` that replaces Relay's user file (the system file
     /// still applies above it).

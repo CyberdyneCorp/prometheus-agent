@@ -40,10 +40,15 @@ use pmt_store::Store;
 /// configuration the sessions run with (a scheduled run's differs from
 /// the profile's) and the mock script the calls were played from, so a
 /// replay can re-run them.
-fn calls_for(scope: &ProfileScope, mock_flag: Option<&Path>) -> (Calls, Option<Arc<Writer>>) {
+fn calls_for(
+    scope: &ProfileScope,
+    mock_flag: Option<&Path>,
+    unrecorded: bool,
+) -> (Calls, Option<Arc<Writer>>) {
     let config = scope.config();
     let cache = ModelCallCache::for_profile(scope.dir(), &config.replay.cache);
-    let recording = config.observability.trajectories.enabled.then(|| {
+    let recorded = config.observability.trajectories.enabled && !unrecorded;
+    let recording = recorded.then(|| {
         let script = pmt_providers::mock::script_path(mock_flag, config, scope.dir())
             .and_then(|path| std::fs::read_to_string(path).ok());
         let header = serde_json::json!({
@@ -219,6 +224,9 @@ pub struct RouteFlags<'a> {
     pub model: Option<&'a str>,
     /// `--mock-script`.
     pub mock_script: Option<&'a Path>,
+    /// No model-call recording (an ephemeral session keeps no copy of its
+    /// transcript).
+    pub unrecorded: bool,
 }
 
 impl Models {
@@ -239,7 +247,7 @@ impl Models {
         let catalog = Arc::new(Catalog::new(config, Some(scope.path("cache/models"))));
         let accounts = Arc::new(crate::accounts::open(scope, config, &registry, user_home)?);
         let mock = Arc::new(Mock::for_session(flags.mock_script, config, scope.dir())?);
-        let (calls, recording) = calls_for(scope, flags.mock_script);
+        let (calls, recording) = calls_for(scope, flags.mock_script, flags.unrecorded);
         let prices: Arc<dyn Prices> = catalog.clone();
         let client = crate::model_cmd::client(config)?;
         let recorder = Arc::new(UsageRecorder::new(Arc::clone(store), prices));

@@ -2444,6 +2444,7 @@ How a daemon session runs: the session-shaping flags of `prometheus chat`, appli
 | `api_key` | string or null | no | That endpoint's API key (`--api-key-stdin`), held in memory only. |
 | `base_url` | string or null | no | An endpoint for this session only (`--base-url`). |
 | `domain` | string or null | no | The session's experience-library domain (`--domain`). |
+| `ephemeral` | boolean | no | Keep the session's transcript out of the session store and its trajectory (spec: workspace-architecture, Embeddable client SDKs): hidden from listings, no trajectory, transcript removed when the session unloads; its usage still counts against every budget. |
 | `ignore_rules` | boolean | no | No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). |
 | `ignore_user_config` | boolean | no | Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). |
 | `mock_script` | string or null | no | A mock provider script on the daemon's machine (`--mock-script`). |
@@ -2453,6 +2454,7 @@ How a daemon session runs: the session-shaping flags of `prometheus chat`, appli
 | `provider` | string or null | no | The provider instead of the profile's (`--provider`). |
 | `set` | array of string | no | `key=value` configuration overrides for this session only (`--set`, `--approvals`, `--max-iterations`, `--toolsets`). |
 | `skills` | array of string | no | Skills preloaded into the session (`--skills`). |
+| `system_prompt_overlay` | string or null | no | Text sent as a last system block with every model call of this session only (an embedding program's instructions): never part of the frozen prompt, the stored history or the trajectory. |
 | `yolo` | boolean | no | Approval-gated calls run without asking (`--yolo`). |
 
 ### `SessionSummary`

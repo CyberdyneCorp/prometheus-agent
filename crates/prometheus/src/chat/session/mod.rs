@@ -896,12 +896,7 @@ impl Factory {
         child: Option<&delegation::ChildSpec>,
         no_clients: bool,
     ) -> Result<trace::Recording, Error> {
-        let trajectory = pmt_obs::trajectory::writer::open_for_session(
-            &self.scope,
-            &session.id.to_string(),
-            &session.root_session_id.to_string(),
-        )?
-        .map(Arc::new);
+        let trajectory = trace::trajectory(&self.scope, session)?;
         let parent = self.options.cron.as_ref().and_then(|run| run.trace);
         let trace = trace::open(&self.scope_for(child), session, parent);
         let stream = self.stream_for(session, no_clients && child.is_none());

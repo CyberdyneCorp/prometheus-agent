@@ -103,6 +103,7 @@ async fn host(
         provider: None,
         model: None,
         mock_script: None,
+        unrecorded: false,
     };
     let factory = Factory::new(scope, ctx.launch, &flags, None, options)?;
     let mut session = NewSession::new(Source::Cli);

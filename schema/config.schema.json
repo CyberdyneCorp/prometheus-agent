@@ -6922,7 +6922,7 @@
       "properties": {
         "enabled": {
           "default": false,
-          "description": "Feed `NeMo` Relay. Off by default; this build does not start the\nRelay host yet (`doctor observability` lists the files).",
+          "description": "Feed `NeMo` Relay: a host in a managed python environment (pinned\n`nemo-relay`, built on first use) receives the session, turn,\nmodel-call and tool lifecycle of every session. Payloads only with\n`observability.otel.capture_content`. Off by default.",
           "type": "boolean"
         },
         "plugins_toml": {

@@ -137,6 +137,9 @@ pub fn setup_of(args: &ChatArgs, set: &[String], cwd: &Path) -> Result<SessionSe
             .as_deref()
             .map(pmt_evolve::experience::domain::parse)
             .transpose()?,
+        // An embedding program's options (the client SDKs), not the chat's.
+        system_prompt_overlay: None,
+        ephemeral: false,
     })
 }
 

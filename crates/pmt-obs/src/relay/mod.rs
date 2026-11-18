@@ -6,6 +6,10 @@
 //! on Windows), which has the highest precedence. Relay itself reads them;
 //! Prometheus only names them (`prometheus doctor observability`) and
 //! passes the replacement.
+//!
+//! [`feed`]: what the Relay host is fed from every session's trajectory.
+
+pub mod feed;
 
 use std::path::{Path, PathBuf};
 

@@ -425,6 +425,7 @@ fn served_profiles(
     // loss of telemetry.
     pmt_obs::otel::preflight(&first)?;
     crate::startup::start_export(&first);
+    crate::relay_host::start(&first, ctx.launch);
     crate::startup::register_profile(&first);
     if !first.config().gateway.multiplex {
         return Ok(vec![first]);

@@ -13,8 +13,9 @@ use pmt_config::{Launch, Overrides, ProfileScope};
 use pmt_core::error::{Error, codes};
 use pmt_core::id::SessionId;
 use pmt_core::secret::SecretString;
-use pmt_rpc::contracts::{PromptImage, SessionSetup, SubmitParams};
-use pmt_store::Visibility;
+use pmt_rpc::contracts::{PromptImage, SessionCreateParams, SessionSetup, SubmitParams};
+use pmt_store::ephemeral::TAG as EPHEMERAL;
+use pmt_store::{NewSession, Visibility};
 
 use super::{DaemonHost, Profile, busy};
 use crate::chat::attach;
@@ -28,6 +29,7 @@ pub(super) fn flags(setup: &SessionSetup) -> RouteFlags<'_> {
         provider: setup.provider.as_deref(),
         model: setup.model.as_deref(),
         mock_script: setup.mock_script.as_deref().map(Path::new),
+        unrecorded: setup.ephemeral,
     }
 }
 
@@ -42,6 +44,59 @@ pub(super) fn attended(source: pmt_store::Source, origin: &pmt_store::Origin) ->
             source,
             Source::Cli | Source::Tui | Source::Desktop | Source::Dashboard | Source::Acp
         )
+}
+
+/// Tags a new session: the client's source tag, or [`EPHEMERAL`] (hidden
+/// from listings) for an ephemeral session. The onboarding and ephemeral
+/// tags are reserved.
+pub(super) fn tag(params: &SessionCreateParams, new: &mut NewSession) -> Result<(), Error> {
+    let reserved = |tag: &str, why: &str| {
+        Error::new(
+            &codes::SESSION_INVALID_SOURCE_TAG,
+            format!("the source tag '{tag}' is reserved {why}"),
+        )
+    };
+    if let Some(tag) = &params.source_tag {
+        pmt_store::sessions::check_source_tag(tag)?;
+        // Only `onboarding.ensure` makes the onboarding chat, the one
+        // session with `setup_beat`.
+        if tag == crate::chat::session::tools::ONBOARDING_TAG {
+            return Err(reserved(
+                tag,
+                "for the desktop's onboarding chat (onboarding.ensure)",
+            ));
+        }
+        if tag == EPHEMERAL || params.setup.ephemeral {
+            return Err(reserved(
+                EPHEMERAL,
+                "for ephemeral sessions, which take no other tag",
+            ));
+        }
+        new.source_tag = Some(tag.clone());
+    }
+    if params.setup.ephemeral {
+        new.source_tag = Some(EPHEMERAL.to_owned());
+        new.hidden = true;
+    }
+    Ok(())
+}
+
+/// Readies a loaded session for its clients: they render tool progress
+/// from `session.event`, and an embedding program's overlay rides with
+/// every model call.
+pub(super) fn client_rendered(live: &mut Live, setup: &SessionSetup) {
+    drop(live.progress.take());
+    live.agent
+        .set_ephemeral_system(setup.system_prompt_overlay.clone());
+}
+
+/// Removes an ephemeral session's transcript once it leaves memory.
+pub(super) fn forget_if_ephemeral(store: &pmt_store::Store, id: SessionId, setup: &SessionSetup) {
+    if setup.ephemeral
+        && let Err(err) = store.forget_transcript(id)
+    {
+        tracing::error!(session_id = %id, "an ephemeral transcript was not removed: {err}");
+    }
 }
 
 /// Whether a session with `setup` reads anything but the profile's

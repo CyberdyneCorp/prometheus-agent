@@ -48,6 +48,7 @@
 - [Connectors](guide/connectors.md)
 - [The python bridge](guide/python-bridge.md)
 - [The daemon and its client protocol](guide/client-protocol.md)
+- [Embedding Prometheus: the client SDKs](guide/sdks.md)
 - [Editors over ACP](guide/acp.md)
 - [The messaging gateway](guide/gateway.md)
 - [The OpenAI-compatible API server](guide/api-server.md)

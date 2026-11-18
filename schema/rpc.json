@@ -6467,6 +6467,10 @@
             "null"
           ]
         },
+        "ephemeral": {
+          "description": "Keep the session's transcript out of the session store and its\ntrajectory (spec: workspace-architecture, Embeddable client SDKs):\nhidden from listings, no trajectory, transcript removed when the\nsession unloads; its usage still counts against every budget.",
+          "type": "boolean"
+        },
         "ignore_rules": {
           "default": false,
           "description": "No rule files, identity file, memory snapshot or preloaded skills\n(`--ignore-rules`).",
@@ -6526,6 +6530,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "system_prompt_overlay": {
+          "description": "Text sent as a last system block with every model call of this\nsession only (an embedding program's instructions): never part of\nthe frozen prompt, the stored history or the trajectory.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "yolo": {
           "default": false,

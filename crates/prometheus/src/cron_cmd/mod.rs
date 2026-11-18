@@ -47,6 +47,7 @@ impl Env<'_> {
 pub fn run(command: &CronCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     crate::startup::start_export(&scope);
+    crate::relay_host::start(&scope, ctx.launch);
     let store = Arc::new(Store::open(&scope)?);
     let env = Env { ctx, scope, store };
     let now = Timestamp::now();

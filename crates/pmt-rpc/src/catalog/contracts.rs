@@ -414,6 +414,17 @@ pub struct SessionSetup {
     /// The session's experience-library domain (`--domain`).
     #[serde(default)]
     pub domain: Option<String>,
+    /// Text sent as a last system block with every model call of this
+    /// session only (an embedding program's instructions): never part of
+    /// the frozen prompt, the stored history or the trajectory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt_overlay: Option<String>,
+    /// Keep the session's transcript out of the session store and its
+    /// trajectory (spec: workspace-architecture, Embeddable client SDKs):
+    /// hidden from listings, no trajectory, transcript removed when the
+    /// session unloads; its usage still counts against every budget.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ephemeral: bool,
 }
 
 impl std::fmt::Debug for SessionSetup {
@@ -432,6 +443,11 @@ impl std::fmt::Debug for SessionSetup {
             .field("base_url", &self.base_url)
             .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
             .field("domain", &self.domain)
+            .field(
+                "system_prompt_overlay",
+                &self.system_prompt_overlay.as_ref().map(|_| "[OVERLAY]"),
+            )
+            .field("ephemeral", &self.ephemeral)
             .finish()
     }
 }

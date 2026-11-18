@@ -341,6 +341,7 @@ async fn session(
         provider: runner.provider.as_deref(),
         model: runner.model.as_deref(),
         mock_script: unit.mock_script.as_deref(),
+        unrecorded: false,
     };
     let options = Options {
         interactive: false,

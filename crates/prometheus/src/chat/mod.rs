@@ -183,6 +183,7 @@ fn run_recorded(
         ctx.scope()?
     };
     crate::startup::start_export(&scope);
+    crate::relay_host::start(&scope, ctx.launch);
     if scope.config().plugins.safe_mode && !ui.quiet {
         // What every safe-mode start shows (spec: plugin-system, Safe mode).
         let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
@@ -304,6 +305,7 @@ impl Run<'_> {
             provider: args.provider.as_deref(),
             model: args.model.as_deref(),
             mock_script: args.mock_script.as_deref(),
+            unrecorded: false,
         };
         let mut factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?
             .with_config_reread(set.clone());

@@ -2260,6 +2260,8 @@ export interface SessionSetup {
   base_url?: string | null;
   /** The session's experience-library domain (`--domain`). */
   domain?: string | null;
+  /** Keep the session's transcript out of the session store and its trajectory (spec: workspace-architecture, Embeddable client SDKs): hidden from listings, no trajectory, transcript removed when the session unloads; its usage still counts against every budget. */
+  ephemeral?: boolean;
   /** No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). */
   ignore_rules?: boolean;
   /** Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). */
@@ -2278,6 +2280,8 @@ export interface SessionSetup {
   set?: Array<string>;
   /** Skills preloaded into the session (`--skills`). */
   skills?: Array<string>;
+  /** Text sent as a last system block with every model call of this session only (an embedding program's instructions): never part of the frozen prompt, the stored history or the trajectory. */
+  system_prompt_overlay?: string | null;
   /** Approval-gated calls run without asking (`--yolo`). */
   yolo?: boolean;
 }

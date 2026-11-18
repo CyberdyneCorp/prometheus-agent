@@ -266,24 +266,33 @@ pub(crate) fn running_or_start(
     if let Some(record) = wait_running(home, START_TIMEOUT)? {
         return Ok((record, false));
     }
-    let mut child = spawn_detached(home, profile)?;
     let deadline = std::time::Instant::now() + START_TIMEOUT;
     loop {
+        if let Some(running) = spawn_and_wait(home, profile, deadline)? {
+            return Ok(running);
+        }
+        // The holder let the home go without publishing: a daemon on its
+        // way out (an update or a restart stopping it) drops its record
+        // before its process, and with it the lock, is gone.
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// Spawns one daemon and waits for a running one: ours (`true`) or the
+/// one that won the home; `None` when ours lost the home lock and its
+/// holder left without publishing.
+fn spawn_and_wait(
+    home: &Path,
+    profile: Option<&str>,
+    deadline: std::time::Instant,
+) -> Result<Option<(DaemonRecord, bool)>, Error> {
+    let mut child = spawn_detached(home, profile)?;
+    loop {
         if let Discovery::Running(record) = discover(home)? {
-            return Ok((record, true));
+            return Ok(Some((record, true)));
         }
         if let Ok(Some(status)) = child.try_wait() {
-            // Another start won the race: its daemon is the one to use. It
-            // may hold the home lock before it has written its record.
-            let lost_the_lock = status.code() == Some(i32::from(pmt_core::exit::TEMPORARY_FAILURE));
-            if let Some(record) = wait_for_holder(home, lost_the_lock, deadline)? {
-                return Ok((record, false));
-            }
-            let why = match last_stderr_line(home) {
-                Some(line) => format!("the daemon exited with {status}: {line}"),
-                None => format!("the daemon exited with {status}"),
-            };
-            return Err(start_failed(&why));
+            return exited(home, status, deadline);
         }
         if std::time::Instant::now() > deadline {
             return Err(start_failed(
@@ -294,16 +303,41 @@ pub(crate) fn running_or_start(
     }
 }
 
+/// What a spawned daemon that exited leaves: the daemon that won the
+/// race for the home (it may hold the home lock before it has written its
+/// record), `None` when ours lost the lock and its holder left without
+/// publishing, else the failure.
+fn exited(
+    home: &Path,
+    status: std::process::ExitStatus,
+    deadline: std::time::Instant,
+) -> Result<Option<(DaemonRecord, bool)>, Error> {
+    let lost_the_lock = status.code() == Some(i32::from(pmt_core::exit::TEMPORARY_FAILURE));
+    if let Some(record) = wait_for_holder(home, lost_the_lock, deadline)? {
+        return Ok(Some((record, false)));
+    }
+    if lost_the_lock && std::time::Instant::now() < deadline {
+        return Ok(None);
+    }
+    let why = match last_stderr_line(home) {
+        Some(line) => format!("the daemon exited with {status}: {line}"),
+        None => format!("the daemon exited with {status}"),
+    };
+    Err(start_failed(&why))
+}
+
 /// The daemon that won a start race: when ours lost the home lock, the
 /// holder can still be between taking the lock and writing its record, so
-/// "not running" is waited out until `deadline` too.
+/// "not running" is waited out for [`HOLDER_PATIENCE`] at a time (the
+/// caller spawns again, which fails on the lock again while it is held).
 fn wait_for_holder(
     home: &Path,
     lost_the_lock: bool,
     deadline: std::time::Instant,
 ) -> Result<Option<DaemonRecord>, Error> {
+    let until = deadline.min(std::time::Instant::now() + HOLDER_PATIENCE);
     loop {
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let left = until.saturating_duration_since(std::time::Instant::now());
         if let Some(record) = wait_running(home, left)? {
             return Ok(Some(record));
         }
@@ -313,6 +347,10 @@ fn wait_for_holder(
         std::thread::sleep(Duration::from_millis(25));
     }
 }
+
+/// How long a start that lost the home lock waits for the holder to
+/// publish before trying to take the home again.
+const HOLDER_PATIENCE: Duration = Duration::from_secs(1);
 
 fn start_failed(why: &str) -> Error {
     Error::new(

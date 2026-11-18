@@ -13,6 +13,10 @@ use sha2::{Digest as _, Sha256};
 /// The entry script, relative to the shim directory.
 pub const ENTRY: &str = "bridge_main.py";
 
+/// The `NeMo` Relay host's script (spec: observability, `NeMo` Relay and
+/// Langfuse integrations).
+pub const RELAY_HOST: &str = "relay_host.py";
+
 /// Every shim file: path relative to the shim directory, and content.
 pub const FILES: &[(&str, &str)] = &[
     ("bridge_main.py", include_str!("../python/bridge_main.py")),
@@ -132,6 +136,7 @@ pub const FILES: &[(&str, &str)] = &[
         "prometheus_bridge/wire.py",
         include_str!("../python/prometheus_bridge/wire.py"),
     ),
+    ("relay_host.py", include_str!("../python/relay_host.py")),
 ];
 
 /// Lower-case hex SHA-256 over every file's path and content.

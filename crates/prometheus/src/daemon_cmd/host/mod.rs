@@ -244,6 +244,9 @@ impl Profile {
         // Children a previous daemon left running end `interrupted`; their
         // completions are owed to their sessions.
         pmt_delegation::host::deliver::recover(&store);
+        if let Err(err) = store.forget_ephemeral() {
+            tracing::error!("ephemeral transcripts left by a previous daemon stay: {err}");
+        }
         let state = reload::State::new(&scope);
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),
@@ -461,8 +464,7 @@ impl DaemonHost {
         if let Some(prompts) = live.clarify.take() {
             pmt_core::spawn::spawn(clarify(prompts, link.clone()).in_current_span());
         }
-        // Tool progress is rendered by clients from `session.event`.
-        drop(live.progress.take());
+        setup::client_rendered(&mut live, &setup);
         let session = Arc::new(Loaded {
             live,
             factory,
@@ -645,18 +647,7 @@ impl Host for DaemonHost {
             let mut new = NewSession::new(source);
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
-            if let Some(tag) = &params.source_tag {
-                pmt_store::sessions::check_source_tag(tag)?;
-                // Only `onboarding.ensure` makes the onboarding chat, the
-                // one session with `setup_beat`.
-                if tag == crate::chat::session::tools::ONBOARDING_TAG {
-                    return Err(Error::new(
-                        &codes::SESSION_INVALID_SOURCE_TAG,
-                        "the source tag 'onboarding' is reserved for the desktop's onboarding chat (onboarding.ensure)",
-                    ));
-                }
-                new.source_tag = Some(tag.clone());
-            }
+            setup::tag(&params, &mut new)?;
             new.cwd = Some(cwd.to_string_lossy().into_owned());
             let session = profile.store.create_session(&new)?;
             editor::created(&profile.store, session.id, &params.editor_mcp_servers)?;

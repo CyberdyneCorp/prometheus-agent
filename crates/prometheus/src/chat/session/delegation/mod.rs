@@ -75,6 +75,7 @@ impl OwnedFlags {
             provider: self.provider.as_deref(),
             model: self.model.as_deref(),
             mock_script: self.mock_script.as_deref(),
+            unrecorded: false,
         }
     }
 }

@@ -3760,6 +3760,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-sdk"
+version = "0.1.0"
+dependencies = [
+ "pmt-core",
+ "pmt-rpc",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "pmt-skillhub"
 version = "0.1.0"
 dependencies = [
@@ -4184,6 +4194,7 @@ dependencies = [
  "pmt-pybridge",
  "pmt-rpc",
  "pmt-sandbox",
+ "pmt-sdk",
  "pmt-skillhub",
  "pmt-skills",
  "pmt-store",

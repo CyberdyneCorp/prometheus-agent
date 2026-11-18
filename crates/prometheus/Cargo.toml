@@ -171,6 +171,7 @@ jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+pmt-sdk.workspace = true
 # The OpenAI SDK client of the API server tests (and its streams).
 async-openai.workspace = true
 futures-util.workspace = true

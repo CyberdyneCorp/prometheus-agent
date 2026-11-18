@@ -1,0 +1,11 @@
+[project]
+name = "prometheus-sdk"
+version = "0.1.0"
+description = "Embed the Prometheus agent: sessions, prompts and their events over the daemon's RPC protocol"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.prometheus]
+# The daemon RPC protocol majors this release supports (spec:
+# workspace-architecture, Embeddable client SDKs).
+rpc_protocol = [1]

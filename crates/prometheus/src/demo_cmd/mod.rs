@@ -140,6 +140,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         provider: Some(pmt_providers::mock::PROVIDER_ID),
         model: Some(pmt_providers::mock::DEFAULT_MODEL),
         mock_script: Some(&mock_script),
+        unrecorded: false,
     };
     let options = Options {
         interactive: false,

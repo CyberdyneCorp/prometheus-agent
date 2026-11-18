@@ -715,7 +715,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.health.bind` | string | `"127.0.0.1:0"` | any | `restart` | Loopback listen address; port `0` picks a free port, recorded as `health_url` in `run/gateway.json`. |
 | `observability.langfuse.host` | string | `"https://cloud.langfuse.com"` | any | `restart` | The Langfuse host; spans go to `<host>/api/public/otel`, with Basic authentication from the secrets `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. |
 | `observability.metrics_endpoint.enabled` | boolean | `false` | any | `restart` | Serve `GET /metrics` on the health listener (no authentication, no per-session or per-user labels). Off by default: 404. |
-| `observability.nemo_relay.enabled` | boolean | `false` | any | `restart` | Feed `NeMo` Relay. Off by default; this build does not start the Relay host yet (`doctor observability` lists the files). |
+| `observability.nemo_relay.enabled` | boolean | `false` | any | `restart` | Feed `NeMo` Relay: a host in a managed python environment (pinned `nemo-relay`, built on first use) receives the session, turn, model-call and tool lifecycle of every session. Payloads only with `observability.otel.capture_content`. Off by default. |
 | `observability.nemo_relay.plugins_toml` | string | unset | any | `restart` | A `plugins.toml` that replaces Relay's user file (the system file still applies above it). |
 | `observability.otel.capture_content` | boolean | `false` | any | `restart` | Attach message content, tool arguments and tool output to spans. |
 | `observability.otel.enabled` | boolean | `false` | any | `restart` | Export traces and metrics over OTLP. Off by default. |
