@@ -14,6 +14,7 @@ pub mod approvals_cmd;
 pub mod auth_cmd;
 pub mod automation;
 pub mod backup_cmd;
+pub mod bot_host;
 pub mod bridge_cmd;
 pub mod browser_cmd;
 pub mod build_info;

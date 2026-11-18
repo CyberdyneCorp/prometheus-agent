@@ -132,6 +132,9 @@ Options:
   -r, --resume <REF>
           Resume a session by id, id prefix, title or `latest`
 
+      --bot-chat
+          Open the profile's canonical Bot Chat (created when it has none), as the desktop's bot roster does
+
   -c, --continue [<NAME>]
           Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
 
@@ -273,32 +276,35 @@ Options:
   -r, --resume <REF>
           Resume a session by id, id prefix, title or `latest`
 
-  -c, --continue [<NAME>]
-          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+      --bot-chat
+          Open the profile's canonical Bot Chat (created when it has none), as the desktop's bot roster does
 
   -v, --verbose...
           More detail; repeatable
 
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
-
-  -z, --oneshot [<PROMPT>]
-          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
       --query <TEXT>
           Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
-
-      --prompt-file <PATH>
-          Read the prompt verbatim from PATH (`-` for stdin)
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
 
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)

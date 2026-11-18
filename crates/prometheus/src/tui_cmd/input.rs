@@ -269,6 +269,12 @@ impl Tui<'_> {
                 let words = args.split_whitespace().map(str::to_owned).collect();
                 self.ending = Some(Ending::Update(words));
             }
+            // A canonical Bot Chat is compressed instead (spec: bot-mode).
+            Local::New
+                if crate::chat::session::bots::is_bot_chat(self.open.scope, &self.link.session) =>
+            {
+                self.dispatch("compress".to_owned(), String::new());
+            }
             Local::New | Local::Resume | Local::Fork => self.switch(command, args),
             Local::Handoff => self.handoff(args),
             Local::Voice => self.voice_command(args),

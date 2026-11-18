@@ -678,8 +678,8 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [ ] 75.1 Implement bots as profiles with backend metadata, the canonical Bot Chat (`/new` keeps the relationship, headless Bot Chats), creating, duplicating and deleting bots (OAuth never copied, remote creation), avatars and roster presentation with hiding and sections; verify with desktop and CLI tests (spec: bot-mode)
 - [ ] 75.2 Implement bot voices, bot routines delivering into the Bot Chat and the bot protocol in canonical Bot Chats; verify with mock providers (spec: bot-mode)
-- [ ] 75.3 Implement the `message_agent` tool (friendly names cannot hijack profiles, busy targets), typed delivery failures with safe retry, mentions from any chat and agent-to-agent messages from bot chats (forged calls outside a bot chat refused); verify with multi-profile tests (spec: bot-mode, spec: desktop-app)
-- [ ] 75.4 Implement group chats (rooms do not spin, silent rounds settle), room stop directives with held members, the durable room driver, hosted rooms across gateways, room authority transfer and the Bot Mode off switch with CLI parity; verify with multi-profile and two-daemon tests (spec: bot-mode)
+- [x] 75.3 Implement the `message_agent` tool (friendly names cannot hijack profiles, busy targets), typed delivery failures with safe retry, mentions from any chat and agent-to-agent messages from bot chats (forged calls outside a bot chat refused); verify with multi-profile tests (spec: bot-mode, spec: desktop-app)
+- [x] 75.4 Implement group chats (rooms do not spin, silent rounds settle), room stop directives with held members, the durable room driver, hosted rooms across gateways, room authority transfer and the Bot Mode off switch with CLI parity; verify with multi-profile and two-daemon tests (spec: bot-mode)
 
 ## 76. M3 Computer use
 

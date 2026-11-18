@@ -136,6 +136,8 @@ impl Factory {
             spec.shape_prompt(&mut prompt);
         } else if let Some(run) = &self.options.kanban {
             prompt.caller_system = Some(run.guidance());
+        } else if let Some(section) = super::bots::section(&self.scope, &self.store, id) {
+            prompt.caller_system = Some(section);
         } else if let Ok(Some(api)) = self.store.api_session(id) {
             // An API caller's instructions, fixed when the session was
             // created, come after the profile's own prompt and never

@@ -1315,6 +1315,24 @@ error_codes! {
     /// No peer gateway (or agent on it) has the name.
     PEER_NOT_FOUND = ("peer.not_found", NotFound,
         "No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers.");
+    /// No room has this id.
+    ROOM_NOT_FOUND = ("room.not_found", NotFound,
+        "No group chat (room) of this home has this id; `prometheus rpc call groups.list` lists them.");
+    /// Another room already has this name.
+    ROOM_NAME_TAKEN = ("room.name_taken", Conflict,
+        "Room names are unique in a home; pick another name or rename the other room.");
+    /// This gateway is not the room's authority.
+    ROOM_NOT_AUTHORITY = ("room.not_authority", Conflict,
+        "Only the room authority writes the room log; send to the authority named in the message, or promote this gateway after fencing the old one.");
+    /// A promotion without `confirm: true`.
+    ROOM_CONFIRMATION_REQUIRED = ("room.confirmation_required", Usage,
+        "`groups.promote` changes which gateway owns the room log; pass `confirm: true` once the old authority is fenced (stopped or demoted).");
+    /// The replica misses entries of the authority's log.
+    ROOM_REPLICA_INCOMPLETE = ("room.replica_incomplete", Conflict,
+        "This gateway's copy of the room log is behind the authority's (`last_seq < latest_seq`); run `groups.replicate` first, or pass `force_incomplete: true` to promote it anyway.");
+    /// A room member is not reachable.
+    ROOM_MEMBER_REFUSED = ("room.member_refused", PermissionDenied,
+        "The member's gateway refused the room authority: it has not issued a room grant (`groups.grant`), or the grant was revoked.");
     /// The subscription proxy's provider has no usable sign-in.
     PROXY_NOT_LOGGED_IN = ("proxy.not_logged_in", Auth,
         "The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`.");

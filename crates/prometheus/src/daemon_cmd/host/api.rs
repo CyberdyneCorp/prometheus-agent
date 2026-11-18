@@ -410,6 +410,14 @@ impl pmt_api::ApiHost for DaemonHost {
         })
     }
 
+    fn api_bots<'a>(
+        &'a self,
+        profile: &'a str,
+        call: pmt_api::BotsCall,
+    ) -> HostFuture<'a, (u16, Value)> {
+        Box::pin(self.bots_api(profile, call))
+    }
+
     fn api_catalog<'a>(
         &'a self,
         profile: &'a str,

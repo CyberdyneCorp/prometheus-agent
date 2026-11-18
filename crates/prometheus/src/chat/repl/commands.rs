@@ -120,6 +120,9 @@ impl Repl {
                 return Flow::Exit;
             }
             "handoff" => return self.handoff(args).await,
+            "new" if self.in_bot_chat() => {
+                return Box::pin(self.session_reply("compress", "")).await;
+            }
             "new" => self.new_session(None, None).await,
             "clear" => {
                 self.input.print("\x1b[2J\x1b[H");
@@ -178,6 +181,17 @@ impl Repl {
 
     /// A shared command that may send a message or change the session's
     /// tools or model (it runs with the session in place).
+    /// The session is a canonical Bot Chat: `/new` compresses it (spec:
+    /// bot-mode, Canonical Bot Chat).
+    fn in_bot_chat(&self) -> bool {
+        self.live.as_ref().is_some_and(|live| {
+            self.factory
+                .store
+                .session(live.id)
+                .is_ok_and(|row| row.bot_chat)
+        })
+    }
+
     async fn session_reply(&mut self, name: &str, args: &str) -> Flow {
         let Some(live) = self.live.take() else {
             return Flow::Continue;

@@ -47,6 +47,7 @@ pub fn tools() -> Vec<RegisteredTool> {
     .into_iter()
     .chain(crate::agent_level_kanban::tools())
     .chain(crate::agent_level_a2a::tools())
+    .chain(crate::agent_level_bots::tools())
     .collect()
 }
 

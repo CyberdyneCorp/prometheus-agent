@@ -1199,16 +1199,42 @@
       "additionalProperties": false,
       "description": "The `[bot_mode]` section.",
       "properties": {
+        "enabled": {
+          "default": true,
+          "description": "The profile appears as a bot (rosters, bot messages, the bot\nprotocol); `false` leaves its profile, sessions, routines and room\nhistory untouched but refuses incoming bot messages with\n`missing_config`.",
+          "type": "boolean"
+        },
         "envelope_ttl_secs": {
           "default": 900,
-          "description": "Envelopes still queued (never drained by a courier) after this many\nseconds fail with `queued_expired` (`0`: never).",
+          "description": "Bot messages still queued after this many seconds fail with\n`queued_expired` when drained (`0`: never).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
+        "max_hops": {
+          "default": 4,
+          "description": "Consecutive bot-originated hops after which a chain of bot messages\nis cut with `hop_limit`.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "protocol": {
+          "default": true,
+          "description": "Canonical Bot Chats get the bot-messaging protocol section and the\n`message_agent` tool.",
+          "type": "boolean"
+        },
         "relay_turn_timeout_secs": {
           "default": 600,
           "description": "Seconds a relayed bot message's turn may take on the target before\nit fails.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "turn_wait_secs": {
+          "default": 120,
+          "description": "Seconds a bot message waits for a busy target before it fails with\n`target_busy`.",
           "format": "uint64",
           "maximum": 86400,
           "minimum": 1,
@@ -2995,6 +3021,29 @@
           "type": "string"
         }
       ]
+    },
+    "DiscussionConfig": {
+      "additionalProperties": false,
+      "description": "`[hosted_rooms.discussion]`.",
+      "properties": {
+        "max_messages": {
+          "default": 10,
+          "description": "Member messages one user message produces at most.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_rounds": {
+          "default": 3,
+          "description": "Serial rounds one user message drives at most.",
+          "format": "uint32",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "DisplayConfig": {
       "additionalProperties": false,
@@ -4867,6 +4916,22 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "HostedRoomsConfig": {
+      "additionalProperties": false,
+      "description": "The `[hosted_rooms]` section: group chats (rooms) this home drives.",
+      "properties": {
+        "discussion": {
+          "$ref": "#/$defs/DiscussionConfig",
+          "default": {
+            "max_messages": 10,
+            "max_rounds": 3
+          },
+          "description": "The bounds of one user message's discussion."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "HudConfig": {
       "additionalProperties": false,
@@ -12881,10 +12946,14 @@
     "bot_mode": {
       "$ref": "#/$defs/BotModeConfig",
       "default": {
+        "enabled": true,
         "envelope_ttl_secs": 900,
-        "relay_turn_timeout_secs": 600
+        "max_hops": 4,
+        "protocol": true,
+        "relay_turn_timeout_secs": 600,
+        "turn_wait_secs": 120
       },
-      "description": "How bot messages travel between bots (the desktop relay's bounds)."
+      "description": "Bot Mode: the profile as a bot, its protocol and how bot messages\ntravel between bots."
     },
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
@@ -13338,6 +13407,16 @@
         "outbound": []
       },
       "description": "Shell hooks and outbound webhooks."
+    },
+    "hosted_rooms": {
+      "$ref": "#/$defs/HostedRoomsConfig",
+      "default": {
+        "discussion": {
+          "max_messages": 10,
+          "max_rounds": 3
+        }
+      },
+      "description": "Group chats (rooms) this home drives."
     },
     "image_gen": {
       "$ref": "#/$defs/ImageGenConfig",

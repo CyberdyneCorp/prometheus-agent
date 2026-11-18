@@ -69,6 +69,19 @@ pub trait ApiHost: Host {
         pmt_core::secret::Redactor::new(std::iter::empty()).redact_all(text)
     }
 
+    /// A Bot Mode REST call (`/api/bots`, `/api/rooms/...`: spec:
+    /// bot-mode, Creating, duplicating and deleting bots; Hosted rooms
+    /// across gateways); the HTTP status and body.
+    fn api_bots<'a>(&'a self, profile: &'a str, call: BotsCall) -> HostFuture<'a, (u16, Value)> {
+        let _ = (profile, call);
+        Box::pin(async {
+            Ok((
+                404,
+                serde_json::json!({"error": {"message": "no bots here"}}),
+            ))
+        })
+    }
+
     /// What the prompt-injection scanner finds in `text` (pattern ids).
     fn api_scan(&self, text: &str) -> Vec<String> {
         let _ = text;
@@ -199,6 +212,19 @@ pub struct ModelOptions {
     pub reasoning_effort: Option<String>,
     /// `service_tier` (`priority` asks for fast mode).
     pub service_tier: Option<String>,
+}
+
+/// A Bot Mode REST request.
+#[derive(Debug, Clone)]
+pub struct BotsCall {
+    /// `GET`, `POST`, ...
+    pub method: String,
+    /// The path after `/api/` (`["bots"]`, `["rooms", "<id>", "turn"]`).
+    pub path: Vec<String>,
+    /// The `X-Prometheus-Room-Grant` header.
+    pub grant: Option<String>,
+    /// The JSON body (`{}` when none).
+    pub body: Value,
 }
 
 /// A Jobs REST request.

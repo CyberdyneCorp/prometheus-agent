@@ -99,6 +99,33 @@ pub(crate) async fn agents(shared: &Shared, caller: &Caller) -> Reply {
     }
 }
 
+/// `/api/bots` and `/api/rooms/...` (spec: bot-mode): bots created on
+/// this machine for a peer, and the member side of hosted rooms.
+pub(crate) async fn bots(
+    shared: &Arc<Shared>,
+    caller: &Caller,
+    (area, rest): (&str, &[&str]),
+    req: &Req,
+) -> Reply {
+    let body = match req.json() {
+        Ok(body) => body,
+        Err(reply) => return reply,
+    };
+    let call = crate::BotsCall {
+        method: req.method.as_str().to_owned(),
+        path: std::iter::once(area)
+            .chain(rest.iter().copied())
+            .map(str::to_owned)
+            .collect(),
+        grant: req.header("x-prometheus-room-grant").map(str::to_owned),
+        body,
+    };
+    match shared.host.api_bots(&caller.profile, call).await {
+        Ok((status, body)) => json_reply(status, &body),
+        Err(err) => from_error(&err),
+    }
+}
+
 /// `GET /api/model/options`: configured providers and models with
 /// capability hints and pricing.
 pub(crate) async fn model_options(shared: &Shared, caller: &Caller) -> Reply {

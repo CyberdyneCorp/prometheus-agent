@@ -483,6 +483,7 @@ text = "done"
 | `timeout` | class `timeout`, at once |
 | `server_error` (optional `status`, 500-599, default 500) | that status: `server_error`, or `overloaded` for 503 and 529 |
 | `auth_error` | HTTP 401, class `auth` |
+| `quota` | HTTP 402 `insufficient_quota`, class `billing` |
 | `context_overflow` | HTTP 400 `context_length_exceeded`, class `context_overflow` |
 | `malformed_stream` | after the rule's content, a malformed stream event (`server_error`) |
 | `truncated_stream` | after the rule's content, the stream ends early (`network`) |

@@ -71,7 +71,7 @@ pub use agent::{
 pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use bot_desktop::{BotDesktopConfig, ScreenPlacement};
-pub use bot_mode::BotModeConfig;
+pub use bot_mode::{BotModeConfig, DiscussionConfig, HostedRoomsConfig};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{
     ContinuableSurface, CronConfig, CronDeliveryConfig, CronManagedConfig, CronProvider,
@@ -203,8 +203,11 @@ pub struct Config {
     /// The bot screen: the virtual display the agent's headed browsers
     /// and `computer_use` act on.
     pub bot_desktop: BotDesktopConfig,
-    /// How bot messages travel between bots (the desktop relay's bounds).
+    /// Bot Mode: the profile as a bot, its protocol and how bot messages
+    /// travel between bots.
     pub bot_mode: BotModeConfig,
+    /// Group chats (rooms) this home drives.
+    pub hosted_rooms: HostedRoomsConfig,
     /// Side-model (auxiliary) task routing.
     pub auxiliary: AuxiliaryConfig,
     /// Browser tool sessions.
@@ -371,6 +374,7 @@ impl Default for Config {
             auth: AuthConfig::default(),
             bot_desktop: BotDesktopConfig::default(),
             bot_mode: BotModeConfig::default(),
+            hosted_rooms: HostedRoomsConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
             budgets: BudgetsConfig::default(),

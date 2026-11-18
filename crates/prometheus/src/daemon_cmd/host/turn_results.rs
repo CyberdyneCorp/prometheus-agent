@@ -12,7 +12,7 @@ use tokio::sync::oneshot;
 /// How long a result is kept.
 const KEEP: Duration = Duration::from_mins(10);
 
-/// A turn's reply, or why it produced none.
+/// A turn's reply, or why it produced none (`<error code>: <message>`).
 pub(super) type Ended = Result<String, String>;
 
 #[derive(Default)]
@@ -29,7 +29,7 @@ pub(super) fn record(finished: &TurnFinished) {
         (Some(reply), "completed" | "iteration_limit") => Ok(reply.clone()),
         _ => Err(finished.error.as_ref().map_or_else(
             || format!("the turn ended: {}", finished.exit_reason),
-            |e| e.message.clone(),
+            |e| format!("{}: {}", e.code, e.message),
         )),
     };
     let mut results = RESULTS.lock().expect("turn results poisoned");

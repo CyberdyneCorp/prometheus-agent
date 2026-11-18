@@ -20,6 +20,7 @@
 //!
 //! The protocol itself (frames, codes, catalog, client) is `pmt-rpc`.
 
+pub mod bots;
 pub mod cert;
 pub mod connection;
 pub mod control;

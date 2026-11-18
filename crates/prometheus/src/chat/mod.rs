@@ -132,6 +132,17 @@ pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
         crate::plugins_host::dev::allow();
     }
     let ui = ui.with_format(args.output_format);
+    let bot_chat;
+    let args = if args.bot_chat {
+        bot_chat = ChatArgs {
+            resume: Some(crate::chat::session::bots::ensure_bot_chat(&ctx.scope()?)?),
+            bot_chat: false,
+            ..args.clone()
+        };
+        &bot_chat
+    } else {
+        args
+    };
     let record = Arc::new(usage_file::RunRecord::default());
     let mut outcome = run_recorded(args, ctx, ui, &record);
     if offers_setup(args, &outcome) && crate::setup_cmd::offer(ctx)? {

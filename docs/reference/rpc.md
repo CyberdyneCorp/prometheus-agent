@@ -56,12 +56,17 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `artifacts.list` | `desktop-app` | 1.0 | [`ArtifactsListParams`](#artifactslistparams) | [`ArtifactList`](#artifactlist) |
 | `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
 | `bot.chat.ensure` | `bot-mode` | 1.0 | [`ProfileParams`](#profileparams) | [`BotChat`](#botchat) |
-| `bot.create` | `bot-mode` | 1.0 | not served yet | |
-| `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
-| `bot.meta.update` | `bot-mode` | 1.0 | not served yet | |
+| `bot.chat.read` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotDone`](#botdone) |
+| `bot.create` | `bot-mode` | 1.0 | [`BotCreateParams`](#botcreateparams) | [`BotCreated`](#botcreated) |
+| `bot.delete` | `bot-mode` | 1.0 | [`BotDeleteParams`](#botdeleteparams) | [`BotDeleted`](#botdeleted) |
+| `bot.duplicate` | `bot-mode` | 1.0 | [`BotDuplicateParams`](#botduplicateparams) | [`BotCreated`](#botcreated) |
+| `bot.meta.get` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotMeta`](#botmeta) |
+| `bot.meta.update` | `bot-mode` | 1.0 | [`BotMetaUpdateParams`](#botmetaupdateparams) | [`BotMeta`](#botmeta) |
 | `bot.relay.deliver` | `agent-interop` | 1.0 | [`RelayDeliverParams`](#relaydeliverparams) | [`RelayDelivered`](#relaydelivered) |
 | `bot.relay.drain` | `agent-interop` | 1.0 | [`RelayDrainParams`](#relaydrainparams) | [`RelayDrained`](#relaydrained) |
 | `bot.roster.list` | `bot-mode` | 1.0 | [`RosterParams`](#rosterparams) | [`Roster`](#roster) |
+| `bot.routines.list` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotRoutines`](#botroutines) |
+| `bot.sections.delete` | `bot-mode` | 1.0 | [`BotSectionDeleteParams`](#botsectiondeleteparams) | [`BotSectionDeleted`](#botsectiondeleted) |
 | `center.list` | `desktop-app` | 1.0 | [`CenterParams`](#centerparams) | [`CenterList`](#centerlist) |
 | `command.dispatch` | `workspace-architecture` | 1.0 | [`DispatchParams`](#dispatchparams) | [`Dispatched`](#dispatched) |
 | `commands.catalog` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`CommandCatalog`](#commandcatalog) |
@@ -103,10 +108,23 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `git.unstage` | `desktop-app` | 1.0 | [`GitPaths`](#gitpaths) | [`Ack`](#ack) |
 | `grants.list` | `security-boundaries` | 1.0 | not served yet | |
 | `grants.revoke` | `security-boundaries` | 1.0 | not served yet | |
-| `groups.capabilities` | `bot-mode` | 1.0 | not served yet | |
-| `groups.log` | `bot-mode` | 1.0 | not served yet | |
-| `groups.replica_state` | `bot-mode` | 1.0 | not served yet | |
-| `groups.replicate` | `bot-mode` | 1.0 | not served yet | |
+| `groups.capabilities` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`RoomCapabilities`](#roomcapabilities) |
+| `groups.compress_member` | `bot-mode` | 1.0 | [`RoomMemberParams`](#roommemberparams) | [`RoomDone`](#roomdone) |
+| `groups.create` | `bot-mode` | 1.0 | [`RoomCreateParams`](#roomcreateparams) | [`Room`](#room) |
+| `groups.delete` | `bot-mode` | 1.0 | [`RoomDeleteParams`](#roomdeleteparams) | [`RoomDone`](#roomdone) |
+| `groups.demote` | `bot-mode` | 1.0 | [`RoomDemoteParams`](#roomdemoteparams) | [`ReplicaState`](#replicastate) |
+| `groups.get` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`Room`](#room) |
+| `groups.grant` | `bot-mode` | 1.0 | [`RoomGrantParams`](#roomgrantparams) | [`RoomGrant`](#roomgrant) |
+| `groups.list` | `bot-mode` | 1.0 | [`RoomsParams`](#roomsparams) | [`Rooms`](#rooms) |
+| `groups.log` | `bot-mode` | 1.0 | [`RoomLogParams`](#roomlogparams) | [`RoomLog`](#roomlog) |
+| `groups.member_grant` | `bot-mode` | 1.0 | [`RoomMemberGrantParams`](#roommembergrantparams) | [`RoomDone`](#roomdone) |
+| `groups.post` | `bot-mode` | 1.0 | [`RoomPostParams`](#roompostparams) | [`RoomPosted`](#roomposted) |
+| `groups.promote` | `bot-mode` | 1.0 | [`RoomPromoteParams`](#roompromoteparams) | [`RoomAuthority`](#roomauthority) |
+| `groups.replica_state` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`ReplicaState`](#replicastate) |
+| `groups.replicate` | `bot-mode` | 1.0 | [`RoomReplicateParams`](#roomreplicateparams) | [`ReplicaState`](#replicastate) |
+| `groups.revoke` | `bot-mode` | 1.0 | [`RoomRevokeParams`](#roomrevokeparams) | [`RoomDone`](#roomdone) |
+| `groups.stop` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`RoomDone`](#roomdone) |
+| `groups.update` | `bot-mode` | 1.0 | [`RoomUpdateParams`](#roomupdateparams) | [`Room`](#room) |
 | `harness.diff` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `harness.log` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`HarnessVersions`](#harnessversions) |
 | `harness.rollback` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
@@ -193,6 +211,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
 | `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
 | `voice.client_config` | `voice-mode` | 1.0 | not served yet | |
+| `voice.speak` | `voice-mode` | 1.0 | [`VoiceSpeakParams`](#voicespeakparams) | [`VoiceSpoken`](#voicespoken) |
 | `wake.feed` | `voice-mode` | 1.0 | not served yet | |
 | `worktree.list` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeListing`](#worktreelisting) |
 | `worktree.new` | `git-worktrees` | 1.0 | [`WorktreeNewParams`](#worktreenewparams) | [`WorktreeCreated`](#worktreecreated) |
@@ -551,6 +570,18 @@ One slot, as a form field.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `BotAvatar`
+
+A bot's avatar.
+
+| Value | Meaning |
+|---|---|
+| `` | The default soft-body face, derived from the bot's name unless a seed is locked. |
+| `` | One of 7 shapes in one of 10 colours. |
+| `` | An uploaded image, stored content-addressed in the profile's blobs. |
+| `` | An image made by the profile's image-generation backend (update only: it is stored as `image`). |
+| `` | A pets-gallery companion. |
+
 ### `BotChat`
 
 `bot.chat.ensure` result.
@@ -559,6 +590,147 @@ One slot, as a form field.
 |---|---|---|---|
 | `created` | boolean | yes | Whether this call created it. |
 | `session_id` | string | yes | The profile's canonical Bot Chat. |
+
+### `BotCreateParams`
+
+`bot.create` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clone_from` | string or null | no | Clone config, skills, `SOUL.md` and memory from this profile. |
+| `copy_api_keys` | boolean or null | no | Copy the source's static API keys (never OAuth or single-use logins); default true. |
+| `description` | string or null | no | What it does. |
+| `empty` | boolean | no | No bundled skills. |
+| `mcp_servers` | array of string | no | MCP servers to keep enabled. |
+| `model` | string or null | no | Pin this model (`provider/model` or a model name). |
+| `name` | string | no | The new bot's profile name. |
+| `on` | string or null | no | A registered peer (or desktop connection) to create the bot on. |
+| `profile` | string | no | The profile asking (the window's): it must be granted. |
+| `skills` | array of string | no | Skills to enable (the others stay as the profile has them). |
+| `soul` | string or null | no | The bot's `SOUL.md`. |
+| `title` | string or null | no | Its title. |
+| `toolsets` | array of string | no | `tools.enabled_toolsets`. |
+
+### `BotCreated`
+
+`bot.create` / `bot.duplicate` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `copied_secrets` | array of string | no | The secrets copied from the source. |
+| `device` | string | yes | The machine it lives on (`local` or the peer). |
+| `handle` | string | yes | Its roster handle. |
+| `introduction` | string or null | no | Its introduction (the Bot Chat's first message). |
+| `profile` | string | yes | The new bot's profile. |
+| `session_id` | string | yes | Its canonical Bot Chat. |
+
+### `BotDeleteParams`
+
+`bot.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | boolean | no | Must be true. |
+| `profile` | string | yes | The bot. |
+
+### `BotDeleted`
+
+`bot.delete` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The deleted profile. |
+
+### `BotDone`
+
+An empty result.
+
+
+### `BotDuplicateParams`
+
+`bot.duplicate` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The copy's profile name. |
+| `profile` | string | yes | The bot to duplicate. |
+
+### `BotMeta`
+
+A bot's metadata.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `avatar` | [`BotAvatar`](#botavatar) | no | Its avatar. |
+| `description` | string or null | no | What it does. |
+| `groups` | array of string | no | The rooms it is a member of (read only). |
+| `hidden` | boolean | no | Left out of the default roster and toasts (still reachable). |
+| `section` | [`BotSection`](#botsection) or null | no | Its roster section. |
+| `title` | string or null | no | The bot's title (the profile name when unset). |
+
+### `BotMetaParams`
+
+`bot.meta.get` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The bot. |
+
+### `BotMetaUpdateParams`
+
+`bot.meta.update` params: each key of `changes` (`title`, `description`, `avatar`, `hidden`, `section`) replaces that field; `null` clears it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `changes` | object | yes | The fields to change. |
+| `profile` | string | yes | The bot. |
+
+### `BotRoutine`
+
+One routine: a scheduled job of the bot named `[bot:<name>] <routine>`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | yes | The job id (`prometheus -p <bot> cron ...` takes it). |
+| `last_status` | string or null | no | How the last run ended. |
+| `next_run_at` | string or null | no | The next run (RFC 3339). |
+| `routine` | string | yes | The routine's name (after the `[bot:<name>]` prefix). |
+| `schedule` | string | yes | The schedule string. |
+| `state` | string | yes | `active`, `paused`, ... |
+
+### `BotRoutines`
+
+`bot.routines.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `routines` | array of [`BotRoutine`](#botroutine) | yes | The bot's routines. |
+
+### `BotSection`
+
+A roster section heading, stored on each member.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Stable id. |
+| `name` | string | yes | Heading. |
+
+### `BotSectionDeleteParams`
+
+`bot.sections.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile asking (the window's). |
+| `section_id` | string | yes | The section. |
+
+### `BotSectionDeleted`
+
+`bot.sections.delete` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `moved` | array of string | yes | The bots moved to unassigned. |
 
 ### `BudgetStanding`
 
@@ -2186,6 +2358,19 @@ The target's answer to an envelope, carried back to the sender.
 | `reply` | string or null | no | The reply, when the turn completed. |
 | `signature` | string | yes | The envelope's signature (proves the courier holds the envelope). |
 
+### `ReplicaState`
+
+`groups.replica_state` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority_epoch` | integer | yes | Its lineage. |
+| `authority_gateway_id` | string | yes | The authority. |
+| `last_seq` | integer | yes | The last entry this gateway holds. |
+| `latest_seq` | integer | yes | The last entry the authority reported. |
+| `role` | string | yes | `authority`, `replica` or `demoted`. |
+| `room_id` | string | yes | The room. |
+
 ### `RepoRow`
 
 A repository offered for project creation.
@@ -2255,6 +2440,259 @@ What `session.resolve` looks up.
 | `session_id` | string | yes | The session. |
 | `to_turn` | integer | yes | The last turn the branch keeps (from 1). |
 
+### `Room`
+
+A room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority_epoch` | integer | yes | The authority's lineage. |
+| `authority_gateway_id` | string | yes | The gateway that owns the log. |
+| `detect_stop_directives` | boolean | yes | `stop`/`halt`/`pause` next to a mention holds that member. |
+| `latest_seq` | integer | yes | The last log entry. |
+| `members` | array of [`RoomMember`](#roommember) | yes | The members. |
+| `name` | string | yes | Unique display name. |
+| `needs_you` | boolean | yes | A member asked for the user (`@user`). |
+| `picture` | string or null | no | A picture (data URL or blob reference). |
+| `role` | string | yes | `authority`, `replica` or `demoted`. |
+| `room_id` | string | yes | Stable id. |
+| `running` | boolean | yes | A discussion is running. |
+
+### `RoomAuthority`
+
+`groups.promote` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority_epoch` | integer | yes | Its lineage. |
+| `authority_gateway_id` | string | yes | The authority now. |
+
+### `RoomCapabilities`
+
+`groups.capabilities` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `driver` | boolean | yes | This daemon drives the room's discussions itself (every member lives here, or it is the authority of a hosted room). |
+| `hosted` | boolean | yes | Members on other gateways take part. |
+| `max_messages` | integer | yes | `hosted_rooms.discussion.max_messages`. |
+| `max_rounds` | integer | yes | `hosted_rooms.discussion.max_rounds`. |
+
+### `RoomCreateParams`
+
+`groups.create` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `detect_stop_directives` | boolean or null | no | Default true. |
+| `members` | array of string | yes | 2 to 6 members: profiles of this home, or `<peer>/<agent>`. |
+| `name` | string | yes | Unique display name. |
+| `picture` | string or null | no | A picture. |
+| `profile` | string or null | no | The profile asking (the window's). |
+
+### `RoomDeleteParams`
+
+`groups.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | boolean | no | Must be true. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomDemoteParams`
+
+`groups.demote` params (all required).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `observed_epoch` | integer | yes | Its lineage. |
+| `observed_gateway_id` | string | yes | The new authority. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomDone`
+
+An empty result.
+
+
+### `RoomEntry`
+
+One room log entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `at` | string | yes | When (RFC 3339). |
+| `author` | string or null | no | `user`, a member, or `room`. |
+| `data` | any | no | Details (outcome, failure reason, round). |
+| `kind` | string | yes | `message`, `turn.started`, `turn.settled`, `pass`, `held`, `released`, `settled`, `stopped`, `authority.lost`, ... |
+| `seq` | integer | yes | Its sequence number. |
+| `text` | string or null | no | Its text. |
+
+### `RoomGrant`
+
+`groups.grant` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | yes | The grant token (shown once; give it to the authority's owner). |
+
+### `RoomGrantParams`
+
+`groups.grant` params: lets a room authority drive a member of this home.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority` | string | yes | The authority's gateway id. |
+| `member` | string | yes | The member (a profile of this home). |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+| `scopes` | array of string | yes | `post`, `stop`, `approve`. |
+
+### `RoomLog`
+
+`groups.log` result: one page of the log.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `activity` | array of string | no | The member error summary ("<member> hit an error — <first line>"). |
+| `entries` | array of [`RoomEntry`](#roomentry) | yes | The page. |
+| `latest_seq` | integer | yes | The last entry of the log. |
+| `room` | [`Room`](#room) | yes | The room (with its members). |
+
+### `RoomLogParams`
+
+`groups.log` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `after_seq` | integer | no | Entries after this one. |
+| `limit` | integer or null | no | At most this many (default 200). |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomMember`
+
+A room member.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `gateway` | string or null | no | The peer gateway it lives on (none: this home). |
+| `held` | boolean | yes | Held by a stop directive: no turns until mentioned again. |
+| `member` | string | yes | Its handle in the room (`<profile>`, or `<peer>/<agent>`). |
+| `profile` | string | yes | Its profile on its own machine. |
+| `reason` | string or null | no | Why it is unreachable (a failure reason code). |
+| `state` | string | yes | `ok` or `unreachable`. |
+
+### `RoomMemberGrantParams`
+
+`groups.member_grant` params: the authority keeps a member gateway's grant.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `member` | string | yes | The remote member (`<peer>/<agent>`). |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+| `token` | string | yes | The token its gateway issued. |
+
+### `RoomMemberParams`
+
+`groups.compress_member` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `member` | string | yes | The member. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomParams`
+
+Params naming a room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomPostParams`
+
+`groups.post` params: a user message to the room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+| `text` | string | yes | The message. |
+
+### `RoomPosted`
+
+`groups.post` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `held` | array of string | no | The members a stop directive in it holds now. |
+| `seq` | integer | yes | The message's log entry. |
+
+### `RoomPromoteParams`
+
+`groups.promote` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | boolean | no | Must be true. |
+| `force_incomplete` | boolean | no | Promote a replica that is missing entries. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `reason` | string or null | no | Why (kept in the log). |
+| `room_id` | string | yes | The room. |
+
+### `RoomReplicateParams`
+
+`groups.replicate` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `from` | string | yes | The authority, a registered peer. |
+| `profile` | string or null | no | The profile whose peer registry names the authority. |
+| `room_id` | string | yes | The room. |
+
+### `RoomRevokeParams`
+
+`groups.revoke` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority` | string | yes | The authority. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomUpdateParams`
+
+`groups.update` params: rename (history and sessions stay), picture, stop directive detection.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `detect_stop_directives` | boolean or null | no | Stop directive detection. |
+| `name` | string or null | no | A new unique name. |
+| `picture` | string or null | no | A new picture. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `Rooms`
+
+`groups.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `rooms` | array of [`Room`](#room) | yes | Every room. |
+
+### `RoomsParams`
+
+`groups.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile asking (the window's). |
+
 ### `Roster`
 
 `bot.roster.list` result.
@@ -2271,11 +2709,24 @@ An agent as a source reports it.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `accepts_bot_messages` | boolean | no | Whether it accepts bot messages. |
-| `avatar` | string or null | no | An avatar reference. |
+| `avatar` | [`BotAvatar`](#botavatar) or null | no | Its avatar (a `BotAvatar`). |
 | `description` | string or null | no | What it does. |
 | `model` | string or null | no | Its model. |
 | `name` | string | yes | The profile name on its machine. |
 | `title` | string or null | no | The bot's title. |
+
+### `RosterChat`
+
+A local bot's Bot Chat as the roster shows it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active` | boolean | no | It owns a running turn, wrote within the last 90 seconds, or has a worker heartbeat. |
+| `hidden` | boolean | no | Hidden from the default roster. |
+| `last_message_at` | string or null | no | When that message was written (RFC 3339). |
+| `preview` | string or null | no | The latest message of its Bot Chat, shortened. |
+| `section` | [`BotSection`](#botsection) or null | no | Its section. |
+| `unread` | integer | no | Messages since the Bot Chat was last read. |
 
 ### `RosterParams`
 
@@ -2283,6 +2734,7 @@ An agent as a source reports it.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `include_hidden` | boolean | no | Also list hidden bots. |
 | `include_remote` | boolean | no | Also list registered peers' agents and the agents attached desktops reported for their other connections. |
 | `profile` | string | yes | The window's profile (its peers are the ones listed). |
 | `refresh` | boolean | no | Ask every peer again now instead of using rows younger than 300 s. |
@@ -2294,6 +2746,7 @@ One roster row.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `agent` | [`RosterAgent`](#rosteragent) | yes | The agent. |
+| `chat` | [`RosterChat`](#rosterchat) or null | no | A local bot's Bot Chat and presentation. |
 | `device` | string | yes | `local`, the peer's name or the connection's label. |
 | `error` | string or null | no | Why the source could not be reached. |
 | `handle` | string | yes | `@<name>`, or `@<name>-<device>` when several sources serve the name. |
@@ -2956,6 +3409,25 @@ A `<major>.<minor>` protocol version on the wire.
 |---|---|---|---|
 | `major` | integer | yes | Incompatible revisions. |
 | `minor` | integer | yes | Backward-compatible additions. |
+
+### `VoiceSpeakParams`
+
+`voice.speak` params: read a message of a session aloud.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile that owns the session (a bot speaks with its own voice). |
+| `session_id` | string | yes | The session the text belongs to. |
+| `text` | string | yes | What to say. |
+
+### `VoiceSpoken`
+
+`voice.speak` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio` | string | yes | The audio, base64. |
+| `mime` | string | yes | The audio's media type. |
 
 ### `WorktreeArchiveInfo`
 
