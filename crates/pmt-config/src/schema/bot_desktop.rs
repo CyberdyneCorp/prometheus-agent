@@ -23,6 +23,9 @@ pub struct BotDesktopConfig {
     pub idle_stop_secs: u64,
     /// Where the screen runs.
     pub placement: ScreenPlacement,
+    /// The image of a screen placed in the container backend (empty: the
+    /// release's desktop sandbox image, `prometheus-sandbox:<version>-desktop`).
+    pub image: String,
 }
 
 impl Default for BotDesktopConfig {
@@ -33,6 +36,7 @@ impl Default for BotDesktopConfig {
             min_free_memory_bytes: 1_610_612_736,
             idle_stop_secs: 1800,
             placement: ScreenPlacement::Auto,
+            image: String::new(),
         }
     }
 }

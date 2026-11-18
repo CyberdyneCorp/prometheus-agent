@@ -151,6 +151,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::ScreenTakeover>()
         .method::<c::ScreenHandback>()
         .method::<c::ScreenTicketCall>()
+        .method::<c::ScreenBrowser>()
         .method::<c::LspStatusCall>()
         .method::<c::MemorySummaryCall>()
         .method::<c::AutopruneOfferCall>()

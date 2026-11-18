@@ -129,3 +129,27 @@ body { font-family: var(--ui-font,) system-ui, -apple-system, "Segoe UI", sans-s
 :root[data-ui-mode="simple"] .pane[data-pane="review"],
 :root[data-ui-mode="simple"] .transcript .tool,
 :root[data-ui-mode="simple"] pre.inline-diff { display: none; }
+
+/* The bot screen pane: the remote display scaled to the pane's width. */
+.screen-pane .screen-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.screen-pane .screen-status {
+  flex: 1 1 12rem;
+  margin: 0;
+}
+.screen-pane .screen-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #000;
+  outline-offset: 2px;
+}
+.screen-pane[data-control="agent"] .screen-canvas,
+.screen-pane[data-control="other"] .screen-canvas {
+  cursor: not-allowed;
+}

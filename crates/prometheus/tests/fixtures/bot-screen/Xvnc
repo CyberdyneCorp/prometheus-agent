@@ -1,34 +1,97 @@
 #!/usr/bin/env python3
-"""A stand-in for TigerVNC's Xvnc: serves RFB on the -rfbunixpath socket
-(mode -rfbunixmode), greets with the RFB version and echoes what a viewer
-sends; records its command line beside the socket."""
+"""A stand-in for TigerVNC's Xvnc: a minimal RFB 3.8 server (security type
+None) on the -rfbunixpath socket (mode -rfbunixmode). Its framebuffer
+(-geometry) is red; a full (non-incremental) update request gets the whole
+screen as one Raw rectangle in the client's pixel format. It records its
+command line in <socket>.argv and each key and pointer event the viewer
+sends as a JSON line in <socket>.input."""
 
 import json
 import os
 import socket
+import struct
 import sys
 import threading
 
 args = sys.argv[1:]
 path = args[args.index("-rfbunixpath") + 1]
 mode = int(args[args.index("-rfbunixmode") + 1], 8)
+width, height = (int(n) for n in args[args.index("-geometry") + 1].split("x"))
 with open(path + ".argv", "w") as out:
     json.dump(args, out)
 server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 server.bind(path)
 os.chmod(path, mode)
 server.listen(4)
+lock = threading.Lock()
+
+
+def exact(conn, n):
+    data = b""
+    while len(data) < n:
+        chunk = conn.recv(n - len(data))
+        if not chunk:
+            raise EOFError
+        data += chunk
+    return data
+
+
+def record(event):
+    with lock, open(path + ".input", "a") as out:
+        out.write(json.dumps(event) + "\n")
+
+
+def red(fmt):
+    big, shift = fmt
+    return struct.pack(">I" if big else "<I", 255 << shift)
 
 
 def serve(conn):
     conn.sendall(b"RFB 003.008\n")
+    exact(conn, 12)
+    conn.sendall(bytes([1, 1]))
+    exact(conn, 1)
+    conn.sendall(struct.pack(">I", 0))
+    exact(conn, 1)  # ClientInit
+    name = b"prometheus-fake"
+    pixel = struct.pack(">BBBBHHHBBB3x", 32, 24, 0, 1, 255, 255, 255, 16, 8, 0)
+    conn.sendall(struct.pack(">HH", width, height) + pixel + struct.pack(">I", len(name)) + name)
+    fmt = (False, 16)
     while True:
-        data = conn.recv(4096)
-        if not data:
+        kind = exact(conn, 1)[0]
+        if kind == 0:  # SetPixelFormat
+            body = exact(conn, 19)
+            big = body[3 + 2] != 0
+            fmt = (big, body[3 + 10])
+        elif kind == 2:  # SetEncodings
+            _, count = struct.unpack(">BH", exact(conn, 3))
+            exact(conn, 4 * count)
+        elif kind == 3:  # FramebufferUpdateRequest
+            incremental = exact(conn, 9)[0]
+            if not incremental:
+                header = struct.pack(">BxH", 0, 1) + struct.pack(">HHHHi", 0, 0, width, height, 0)
+                conn.sendall(header + red(fmt) * (width * height))
+        elif kind == 4:  # KeyEvent
+            down, keysym = struct.unpack(">B2xI", exact(conn, 7))
+            record({"key": keysym, "down": bool(down)})
+        elif kind == 5:  # PointerEvent
+            mask, x, y = struct.unpack(">BHH", exact(conn, 5))
+            record({"pointer": [x, y], "buttons": mask})
+        elif kind == 6:  # ClientCutText
+            (length,) = struct.unpack(">3xI", exact(conn, 7))
+            exact(conn, length)
+        else:
             return
-        conn.sendall(data)
+
+
+def run(conn):
+    try:
+        serve(conn)
+    except (EOFError, OSError):
+        pass
+    conn.close()
 
 
 while True:
     conn, _ = server.accept()
-    threading.Thread(target=serve, args=(conn,), daemon=True).start()
+    threading.Thread(target=run, args=(conn,), daemon=True).start()

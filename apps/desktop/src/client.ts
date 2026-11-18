@@ -59,6 +59,10 @@ export class DesktopClient {
   onTruncated: (sessionId: string) => void = () => {};
   private readonly listeners = new Map<string, Set<(envelope: Envelope) => void>>();
 
+  /** The daemon's RPC URL on the current (or last) connection; its other
+   *  endpoints (`/screen`) live beside it. */
+  url = "";
+
   /** Why dialing stopped, while latched. */
   latch: Latch | null = null;
   onLatched: (latch: Latch) => void = () => {};
@@ -138,6 +142,7 @@ export class DesktopClient {
       void shell("settle_dial", { dial: dial.dial }).catch(() => {});
     }
     this.backoff.opened();
+    this.url = dial.url;
     this.rpc = rpc;
     rpc.onClose = () => this.lost(rpc);
     this.setState("connected");

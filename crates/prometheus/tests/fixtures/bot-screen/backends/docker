@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""A stand-in Docker CLI whose containers are this machine: `run -d`
+records the container's `--volume` mappings (or rejects the flag named in
+$XDG_RUNTIME_DIR/reject), `exec` runs the command
+locally with container paths mapped to their host directories, `rm -f`
+ends what ran in it. State and a call log live in $XDG_RUNTIME_DIR."""
+
+import json
+import os
+import signal
+import sys
+
+root = os.environ["XDG_RUNTIME_DIR"]
+state_path = os.path.join(root, "fake-docker.json")
+
+
+def load():
+    try:
+        with open(state_path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def save(state):
+    with open(state_path, "w") as f:
+        json.dump(state, f)
+
+
+args = sys.argv[1:]
+with open(os.path.join(root, "fake-docker.log"), "a") as out:
+    out.write(json.dumps(args) + "\n")
+state = load()
+verb = args[0] if args else ""
+
+if verb == "run":
+    flags = [a for a in args[1:] if a.startswith("-")]
+    positional = [a for a in args[1:] if not a.startswith("-")]
+    name = next(f.split("=", 1)[1] for f in flags if f.startswith("--name="))
+    # A flag this "runtime" rejects, named in $XDG_RUNTIME_DIR/reject.
+    try:
+        with open(os.path.join(root, "reject")) as f:
+            reject = f.read().strip()
+    except FileNotFoundError:
+        reject = ""
+    if reject and any(f.startswith(reject) for f in flags):
+        sys.stderr.write("Error: unknown flag: " + reject + "\n")
+        sys.exit(125)
+    volumes = {}
+    for f in flags:
+        if f.startswith("--volume="):
+            host, container = f.split("=", 1)[1].split(":")[:2]
+            volumes[container] = host
+    state[name] = {"volumes": volumes, "image": positional[0], "flags": flags, "pids": []}
+    save(state)
+    print("0123456789ab")
+elif verb == "exec":
+    env = dict(os.environ)
+    rest = args[1:]
+    while rest[0].startswith("-"):
+        if rest[0].startswith("--env="):
+            key, value = rest[0].split("=", 2)[1:]
+            env[key] = value
+        rest = rest[1:]
+    name, command = rest[0], rest[1:]
+    container = state[name]
+
+    def mapped(arg):
+        for inside, host in container["volumes"].items():
+            if arg == inside or arg.startswith(inside + "/"):
+                return host + arg[len(inside):]
+        return arg
+
+    container["pids"].append(os.getpid())
+    save(state)
+    os.execvpe(command[0], [command[0]] + [mapped(a) for a in command[1:]], env)
+elif verb == "rm":
+    name = args[-1]
+    for pid in state.pop(name, {}).get("pids", []):
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    save(state)
+else:
+    sys.stderr.write("fake docker: unsupported " + verb + "\n")
+    sys.exit(2)

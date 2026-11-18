@@ -1,7 +1,8 @@
 //! `screen.takeover` and `screen.handback` (spec: execution-environments,
 //! Bot screen takeover lease): a viewer takes the profile's bot screen
 //! from the agent, which then waits (`human_has_control`), and hands it
-//! back. The lease is the profile's `run/screen-lease.json`, shared with
+//! back; `screen.ticket` admits a viewer to the display stream and
+//! `screen.browser` is the desktop's browser launcher on the screen. The lease is the profile's `run/screen-lease.json`, shared with
 //! every process of the profile ([`pmt_config::screen_lease`]).
 
 use pmt_config::screen_lease::{self, Refused, ScreenLease, State};
@@ -22,7 +23,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     router
         .register::<c::ScreenTakeover, _, _>(catalog, takeover)?
         .register::<c::ScreenHandback, _, _>(catalog, handback)?
-        .register::<c::ScreenTicketCall, _, _>(catalog, ticket)?;
+        .register::<c::ScreenTicketCall, _, _>(catalog, ticket)?
+        .register::<c::ScreenBrowser, _, _>(catalog, browser)?;
     Ok(())
 }
 
@@ -97,10 +99,12 @@ async fn handback(
     }
 }
 
-/// A single-use display ticket for the profile's screen stream; an
-/// observer gets one too (watching is not taking over).
+/// A single-use display ticket for the profile's screen stream, with who
+/// controls the screen now; an observer gets one too (watching is not
+/// taking over).
 async fn ticket(call: Call, params: c::ScreenTicketParams) -> Result<c::ScreenTicket, RpcError> {
     let profile = profile_for(&call, params.profile.as_deref())?;
+    let state = lease(&call, Some(profile.as_str()))?.read(screen_lease::now());
     let grant = crate::tickets::Grant {
         profiles: vec![profile],
         purpose: pmt_rpc::control::Purpose::Display,
@@ -117,5 +121,24 @@ async fn ticket(call: Call, params: c::ScreenTicketParams) -> Result<c::ScreenTi
         ticket: issued.ticket,
         path: crate::screen_stream::PATH.to_owned(),
         expires_in_secs: issued.expires_in_secs,
+        lease: reply(state),
     })
+}
+
+/// Opens a browser on the profile's screen; an observer cannot.
+async fn browser(
+    call: Call,
+    params: c::ScreenBrowserParams,
+) -> Result<c::ScreenBrowserOpened, RpcError> {
+    if call.conn.grant.observer_only {
+        return Err(rpc(&Error::new(
+            &codes::RPC_NOT_SERVED,
+            "an observer cannot open a browser on the bot screen",
+        )));
+    }
+    let profile = profile_for(&call, params.profile.as_deref())?;
+    crate::panes::panes(&call)?
+        .screen_browser(&profile, params.url.as_deref())
+        .await
+        .map_err(|e| rpc(&e))
 }

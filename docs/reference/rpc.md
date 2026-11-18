@@ -154,6 +154,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `queue.resume` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
+| `screen.browser` | `execution-environments` | 1.0 | [`ScreenBrowserParams`](#screenbrowserparams) | [`ScreenBrowserOpened`](#screenbrowseropened) |
 | `screen.handback` | `execution-environments` | 1.0 | [`ScreenHandbackParams`](#screenhandbackparams) | [`ScreenLeaseState`](#screenleasestate) |
 | `screen.takeover` | `execution-environments` | 1.0 | [`ScreenTakeoverParams`](#screentakeoverparams) | [`ScreenLeaseState`](#screenleasestate) |
 | `screen.ticket` | `execution-environments` | 1.0 | [`ScreenTicketParams`](#screenticketparams) | [`ScreenTicket`](#screenticket) |
@@ -2312,6 +2313,23 @@ One source of the roster.
 | `ok` | boolean | yes | Whether its last listing succeeded. |
 | `source` | string | yes | `local`, `peer` or `connection`. |
 
+### `ScreenBrowserOpened`
+
+A browser opened on the bot screen.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `user_data_dir` | string | yes | The persistent browser profile it shares with the agent's headed browser. |
+
+### `ScreenBrowserParams`
+
+`screen.browser` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `url` | string or null | no | An `http` or `https` page to open (a blank page when omitted). |
+
 ### `ScreenHandbackParams`
 
 `screen.handback` params.
@@ -2347,6 +2365,7 @@ A single-use display ticket.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `expires_in_secs` | integer | yes | Seconds until it expires (30). |
+| `lease` | [`ScreenLeaseState`](#screenleasestate) | no | Who controls the screen as the ticket is issued. |
 | `path` | string | yes | The display stream's path on the daemon's listener (`/screen`). |
 | `ticket` | string | yes | The secret: offered as the `prometheus-ticket.<ticket>` WebSocket subprotocol next to `prometheus-display.v1`, on `path`. |
 
