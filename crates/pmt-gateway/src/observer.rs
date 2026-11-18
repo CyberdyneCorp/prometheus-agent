@@ -13,6 +13,7 @@ use pmt_rpc::RpcError;
 const READS: &[&str] = &[
     "rpc.hello",
     "ui.prefs.get",
+    "i18n.languages",
     "rpc.ping",
     "session.attach",
     "session.detach",

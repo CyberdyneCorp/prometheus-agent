@@ -410,6 +410,7 @@ provider = "Sağlayıcı eklentisi ve [providers.*] değişikliklerini bu oturum
 reasoning = "Akıl yürütme düzeyini gösterir ya da ayarlar"
 fast = "Hızlı modu gösterir ya da ayarlar: sağlayıcının öncelik katmanı (--global agent.fast_mode'u kaydeder)"
 codex_runtime = "OpenAI sağlayıcılarında turları kimin çalıştıracağını gösterir ya da ayarlar: Prometheus veya Codex uygulama sunucusu (sonraki oturumdan itibaren)"
+connectors = "Bağlayıcı hesaplarını listeler; bağlar, yeniden bağlar, yeniden adlandırır veya bağlantısını keser"
 personality = "Kişiliği gösterir ya da ayarlar"
 tools = "Araçları listeler ya da bir araç setini açar/kapatır"
 plugins = "Eklentileri listeler ya da yeniden yükler (--now yoksa araçlar ve istem bölümleri bir sonraki oturumda)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "geri eşitleme {path} dosyasını kopyalayamadı: {why}"
 
 [tips]
 slash_help = "İpucu: komutlar için /help, bu oturum için /status yazın"
+
+[slash.connectors]
+none = "Bu hesap için kullanılabilir bağlayıcı yok."
+retired = "{count} emekli"
+open = "{connector} bağlamak için bu bağlantıyı açın, ardından hesabı görmek için /connectors çalıştırın: {url}"
+already = "{connector} hesabı '{name}' zaten bağlı."
+renamed = "{connector} hesabı '{name}' '{to}' olarak yeniden adlandırıldı."
+confirm = "{connector} hesabı '{name}' bağlantısı kesilsin mi? Onaylamak için çalıştırın: {command}"
+disconnected = "{connector} hesabı '{name}' bağlantısı kesildi."
+disconnect_elsewhere = "Bir hesabın bağlantısını kesmek için terminal arayüzü veya masaüstü uygulaması gerekir (ya da prometheus connectors disconnect)."

@@ -281,6 +281,10 @@ pub struct WorktreesConfig {
     /// Seconds an archive is kept before the sweep deletes it (`0` =
     /// forever).
     pub archive_retention_secs: u64,
+    /// Seconds install state kept per checkout outside the tree (such as
+    /// language-server caches) may go unused, once its checkout no longer
+    /// exists, before the sweep deletes it (`0` = forever).
+    pub install_state_retention_secs: u64,
 }
 
 impl Default for WorktreesConfig {
@@ -291,6 +295,7 @@ impl Default for WorktreesConfig {
             archive_max_file_bytes: 52_428_800,
             max_total_bytes: 0,
             archive_retention_secs: 2_592_000,
+            install_state_retention_secs: 1_209_600,
         }
     }
 }

@@ -410,6 +410,7 @@ provider = "プロバイダープラグインと [providers.*] の変更をこ�
 reasoning = "推論の強度を表示・設定"
 fast = "高速モードを表示・設定: プロバイダーの優先枠（--global で agent.fast_mode を保存）"
 codex_runtime = "OpenAI プロバイダーのターンを誰が実行するかを表示・設定: Prometheus または Codex アプリサーバー（次のセッションから）"
+connectors = "コネクタのアカウントを一覧表示し、接続・再接続・名前変更・切断する"
 personality = "パーソナリティを表示・設定"
 tools = "ツールを一覧表示、またはツールセットを有効化・無効化"
 plugins = "プラグインを一覧表示、または再読み込み（--now がなければツールとプロンプト部分は次のセッションから）"
@@ -1063,3 +1064,13 @@ sync_not_copied = "同期戻しで {path} をコピーできませんでした: 
 
 [tips]
 slash_help = "ヒント: /help でコマンド一覧、/status でこのセッションの情報を表示します"
+
+[slash.connectors]
+none = "このアカウントで利用できるコネクタはありません。"
+retired = "{count} 件は廃止済み"
+open = "このリンクを開いて {connector} を接続し、/connectors を実行してアカウントを確認してください: {url}"
+already = "{connector} のアカウント '{name}' はすでに接続されています。"
+renamed = "{connector} のアカウント '{name}' の名前を '{to}' に変更しました。"
+confirm = "{connector} のアカウント '{name}' を切断しますか? 確認するには次を実行: {command}"
+disconnected = "{connector} のアカウント '{name}' を切断しました。"
+disconnect_elsewhere = "アカウントの切断にはターミナル UI かデスクトップアプリが必要です (または prometheus connectors disconnect)。"

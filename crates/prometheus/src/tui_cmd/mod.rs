@@ -14,6 +14,7 @@ mod clipboard;
 mod display;
 mod exit_delete;
 mod input;
+mod language;
 mod link;
 mod masked;
 mod overlays;

@@ -10827,21 +10827,6 @@
         }
       ]
     },
-    "ToolProviderConfig": {
-      "additionalProperties": false,
-      "description": "A media tool category's provider selection (`[image_gen]`,\n`[video_gen]`, `[tts]`, `[stt]`).",
-      "properties": {
-        "provider": {
-          "description": "The provider serving the category (`nous` routes it through the\nsubscription tool gateway); unset picks one automatically.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object",
-      "x-apply": "next_session"
-    },
     "ToolSearchConfig": {
       "additionalProperties": false,
       "description": "The `[tools.tool_search]` section (spec: tool-system, Tool search\nprogressive disclosure; Tool search listing, ranking and limits).",
@@ -11729,6 +11714,35 @@
       ],
       "description": "`agent.verify_on_stop`: a switch or `\"auto\"`."
     },
+    "VideoGenConfig": {
+      "additionalProperties": false,
+      "description": "The `[video_gen]` section (the `video_generate` tool, toolset\n`video_gen`).",
+      "properties": {
+        "model": {
+          "description": "The model (unset: the provider's default). The agent never picks\nit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "The provider generating videos: `fal`, `xai`, `openrouter`,\n`deepinfra`, `nous` (the subscription tool gateway) or a plugin's;\nunset picks one by the keys present (`fal` when none).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 900,
+          "description": "How long a generation job is polled (every 5 seconds) before the\ncall returns `status = \"timeout\"` with the provider's job id.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
     "VisionConfig": {
       "additionalProperties": false,
       "description": "The `[vision]` section.",
@@ -12496,6 +12510,13 @@
         "archive_retention_secs": {
           "default": 2592000,
           "description": "Seconds an archive is kept before the sweep deletes it (`0` =\nforever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "install_state_retention_secs": {
+          "default": 1209600,
+          "description": "Seconds install state kept per checkout outside the tree (such as\nlanguage-server caches) may go unused, once its checkout no longer\nexists, before the sweep deletes it (`0` = forever).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -13868,8 +13889,10 @@
       "description": "The credential vault."
     },
     "video_gen": {
-      "$ref": "#/$defs/ToolProviderConfig",
-      "default": {},
+      "$ref": "#/$defs/VideoGenConfig",
+      "default": {
+        "timeout_secs": 900
+      },
       "description": "Video generation's provider selection."
     },
     "vision": {
@@ -13934,6 +13957,7 @@
         "archive_dirty": true,
         "archive_max_file_bytes": 52428800,
         "archive_retention_secs": 2592000,
+        "install_state_retention_secs": 1209600,
         "max_total_bytes": 0,
         "sync_remote": true
       },

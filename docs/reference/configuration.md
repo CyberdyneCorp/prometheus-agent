@@ -1109,7 +1109,9 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
 | `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
-| `video_gen.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
+| `video_gen.model` | string | unset | any | `next_session` | The model (unset: the provider's default). The agent never picks it. |
+| `video_gen.provider` | string | unset | any | `next_session` | The provider generating videos: `fal`, `xai`, `openrouter`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present (`fal` when none). |
+| `video_gen.timeout_secs` | integer | `900` | ≥ 1 | `next_session` | How long a generation job is polled (every 5 seconds) before the call returns `status = "timeout"` with the provider's job id. |
 | `vision.embed_target_bytes` | integer | `262144` | ≥ 0 | `next_session` | Largest natively embedded image in bytes (clamped to 65,536..4,194,304); bigger or wider images are downscaled. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
@@ -1144,6 +1146,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `worktrees.archive_dirty` | boolean | `true` | any | `live` | Archive dirty or unpushed trees past their idle tier before removing them; `false` keeps such trees. |
 | `worktrees.archive_max_file_bytes` | integer | `52428800` | ≥ 0 | `live` | Untracked files larger than this keep a tree from the sweep (`keep-large-untracked`) and are left out of archives. |
 | `worktrees.archive_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds an archive is kept before the sweep deletes it (`0` = forever). |
+| `worktrees.install_state_retention_secs` | integer | `1209600` | ≥ 0 | `live` | Seconds install state kept per checkout outside the tree (such as language-server caches) may go unused, once its checkout no longer exists, before the sweep deletes it (`0` = forever). |
 | `worktrees.max_total_bytes` | integer | `0` | ≥ 0 | `live` | Total bytes of trees above which the oldest idle ones past their tier are archived and removed first (`0` = off). |
 | `worktrees.sync_remote` | boolean | `true` | any | `live` | Fetch the default remote before creating a tree (a failed fetch falls back to the local tip). |
 | `x_search.model` | string | `"grok-4.5"` | any | `next_session` | The xAI model answering X searches. |

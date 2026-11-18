@@ -10,6 +10,7 @@ mod agents;
 mod background;
 mod blueprint;
 mod browser;
+pub(crate) mod connectors;
 mod context;
 pub mod cron;
 mod delegation;
@@ -176,6 +177,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,
+        "connectors" => connectors::connectors(ctx, args).await,
         "browser" => browser::browser(ctx, args).await,
         "worktree" => worktree::worktree(ctx, args).await,
         other => {

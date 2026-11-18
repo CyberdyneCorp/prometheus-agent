@@ -15,7 +15,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `vision` | `vision_analyze` |  |  | Image analysis |
 | `video` | `video_analyze` |  | default-off | Video analysis |
 | `image_gen` | `image_generate` |  |  | Image generation |
-| `video_gen` | `video_generate` |  | default-off | Video generation |
+| `video_gen` | `video_generate`, `xai_video_edit`, `xai_video_extend` |  | default-off | Video generation |
 | `computer_use` | `computer_use` |  |  | Desktop control |
 | `terminal` | `terminal`, `process` |  |  | Shell commands and background processes |
 | `process` | `process` |  |  | Background process management |
@@ -177,6 +177,14 @@ Toolsets: `x_search`.
 Toolsets: `video`.
 
 ### `video_generate`
+
+Toolsets: `video_gen`.
+
+### `xai_video_edit`
+
+Toolsets: `video_gen`.
+
+### `xai_video_extend`
 
 Toolsets: `video_gen`.
 

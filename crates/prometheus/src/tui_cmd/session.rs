@@ -390,6 +390,8 @@ impl Tui<'_> {
             Done::Rewound(rewound) => self.rewound(rewound),
             Done::Restored(Ok(output)) => self.notice(output),
             Done::Children(list) => self.children_listed(list),
+            Done::Languages(listed) => self.languages_listed(listed),
+            Done::LanguageSet(set) => self.language_set(set),
         }
     }
 

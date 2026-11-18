@@ -22,6 +22,7 @@ pmt-net.workspace = true
 pmt-sandbox.workspace = true
 # browser_vault: the profile's credential vault.
 pmt-vault.workspace = true
+pmt-worktrees.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 resvg.workspace = true

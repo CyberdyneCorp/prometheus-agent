@@ -121,4 +121,25 @@ and `disconnect` asks for confirmation and, without a terminal and without
 cannot rename accounts yet answers `this Nous portal cannot rename
 connector accounts yet`.
 
-The `/connectors` slash command arrives later (M3).
+## In a session: `/connectors`
+
+On the line interface, the TUI and the desktop, `/connectors` lists every
+connector with its accounts (alias, label, state; retired accounts are
+folded into a count) and, on each account, the commands of the actions it
+offers:
+
+```text
+/connectors
+gmail (1 retired)
+  home  me@home.example  connected  [/connectors rename gmail home --to <new>]
+  work  me@work.example  expired  [/connectors reconnect gmail work]  [/connectors rename gmail work --to <new>]
+```
+
+`/connectors connect <app> [--alias <name>]` and `/connectors reconnect
+<app> [<name>]` print the authorization link (run `/connectors` again to
+see the account once it is connected), and `/connectors rename <app>
+<name> --to <new>` renames. Disconnecting is offered only in the TUI and
+the desktop, and only with an explicit confirmation: `/connectors
+disconnect gmail work` answers with the command that confirms it (`...
+--yes`) and removes nothing until that runs. On the line interface use
+`prometheus connectors disconnect`.

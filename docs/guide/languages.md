@@ -45,6 +45,16 @@ profile within a few seconds, without restarting the daemon, the TUI or a
 chat: a language change, an overlay edit, or enabling or disabling a
 language pack.
 
+The interactive surfaces have a switcher listing every selectable language
+(bundled, overlays and enabled packs) by its own name and id, such as
+`Deutsch (de)` or `العربية (ar)`: `/language` in the TUI, the Language
+select of the desktop settings and of the dashboard header. The choice is
+written to `display.language` (the daemon's `config.patch`), so every
+surface of the profile follows it. Choosing a right-to-left language
+(bundled `ar`) mirrors the desktop window and the dashboard page at once,
+without a restart. A surface without a catalog for the language shows its
+English text.
+
 ## Changing single strings: overlays
 
 Each string has a dotted key (`approval.denied`, `gateway.nothing_to_stop`,

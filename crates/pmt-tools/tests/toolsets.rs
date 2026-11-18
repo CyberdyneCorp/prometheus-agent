@@ -124,7 +124,10 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         ("vision", strings(&["vision_analyze"])),
         ("video", strings(&["video_analyze"])),
         ("image_gen", strings(&["image_generate"])),
-        ("video_gen", strings(&["video_generate"])),
+        (
+            "video_gen",
+            strings(&["video_generate", "xai_video_edit", "xai_video_extend"]),
+        ),
         ("computer_use", strings(&["computer_use"])),
         ("terminal", strings(&["terminal", "process"])),
         ("process", strings(&["process"])),

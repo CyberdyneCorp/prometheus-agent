@@ -48,6 +48,8 @@ pub enum Local {
     Pane,
     /// Open the session timeline.
     Timeline,
+    /// Choose the profile's language (`display.language`).
+    Language,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -198,6 +200,12 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "timeline",
         aliases: &[],
         key: "tui.cmd_timeline",
+    },
+    LocalCommand {
+        command: Local::Language,
+        name: "language",
+        aliases: &[],
+        key: "tui.cmd_language",
     },
 ];
 

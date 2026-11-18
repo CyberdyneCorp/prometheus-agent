@@ -26,6 +26,7 @@ pub mod composer;
 pub mod diff;
 pub mod history;
 pub mod keys;
+pub mod languages;
 pub mod math;
 pub mod palette;
 pub mod panes;

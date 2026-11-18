@@ -410,6 +410,7 @@ provider = "Aplica a esta sessão as mudanças de plugins de provedor e de [prov
 reasoning = "Mostra ou define o esforço de raciocínio"
 fast = "Mostra ou define o modo rápido: o nível prioritário do provedor (--global salva agent.fast_mode)"
 codex_runtime = "Mostra ou define quem executa os turnos nos provedores OpenAI: o Prometheus ou o servidor de aplicativo do Codex (a partir da próxima sessão)"
+connectors = "Lista as contas dos conectores e as conecta, reconecta, renomeia ou desconecta"
 personality = "Mostra ou define a personalidade"
 tools = "Lista as ferramentas, ou ativa/desativa um conjunto"
 plugins = "Lista os plugins, ou os recarrega (ferramentas e seções do prompt na próxima sessão, salvo --now)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "a sincronização de volta não conseguiu copiar {path}: {why
 
 [tips]
 slash_help = "Dica: digite /help para ver os comandos, /status para esta sessão"
+
+[slash.connectors]
+none = "Nenhum conector está disponível para esta conta."
+retired = "{count} aposentadas"
+open = "Abra este link para conectar {connector} e depois execute /connectors para ver a conta: {url}"
+already = "A conta {connector} '{name}' já está conectada."
+renamed = "Conta {connector} '{name}' renomeada para '{to}'."
+confirm = "Desconectar a conta {connector} '{name}'? Para confirmar, execute: {command}"
+disconnected = "Conta {connector} '{name}' desconectada."
+disconnect_elsewhere = "Desconectar uma conta exige a interface do terminal ou o aplicativo de desktop (ou prometheus connectors disconnect)."

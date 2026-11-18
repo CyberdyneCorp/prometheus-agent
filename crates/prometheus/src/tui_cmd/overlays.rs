@@ -47,6 +47,11 @@ impl Tui<'_> {
                 self.app.overlay = Some(Overlay::Timeline(timeline));
                 step
             }
+            Some(Overlay::Languages(mut picker)) => {
+                let step = self.language_key(&mut picker, key);
+                self.app.overlay = Some(Overlay::Languages(picker));
+                step
+            }
             None => return self.banner_key(key),
         };
         if matches!(step, Step::Close) {

@@ -410,6 +410,7 @@ provider = "공급자 플러그인과 [providers.*] 변경을 이 세션에 적�
 reasoning = "추론 강도 표시 또는 설정"
 fast = "빠른 모드 표시 또는 설정: 공급자의 우선 처리 등급(--global은 agent.fast_mode 저장)"
 codex_runtime = "OpenAI 공급자의 턴을 누가 실행할지 표시 또는 설정: Prometheus 또는 Codex 앱 서버(다음 세션부터)"
+connectors = "커넥터 계정을 나열하고 연결, 재연결, 이름 변경 또는 연결 해제합니다"
 personality = "성격 표시 또는 설정"
 tools = "도구 목록, 또는 도구 모음 켜기/끄기"
 plugins = "플러그인 목록 또는 다시 불러오기(--now가 없으면 도구와 프롬프트 섹션은 다음 세션부터)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "역동기화가 {path}을(를) 복사하지 못했습니다: 
 
 [tips]
 slash_help = "팁: /help로 명령을, /status로 이 세션 정보를 확인하세요"
+
+[slash.connectors]
+none = "이 계정에서 사용할 수 있는 커넥터가 없습니다."
+retired = "{count}개 폐기됨"
+open = "이 링크를 열어 {connector}을(를) 연결한 뒤 /connectors를 실행해 계정을 확인하세요: {url}"
+already = "{connector} 계정 '{name}'은(는) 이미 연결되어 있습니다."
+renamed = "{connector} 계정 '{name}'의 이름을 '{to}'(으)로 바꿨습니다."
+confirm = "{connector} 계정 '{name}'의 연결을 해제할까요? 확인하려면 실행: {command}"
+disconnected = "{connector} 계정 '{name}'의 연결을 해제했습니다."
+disconnect_elsewhere = "계정 연결 해제에는 터미널 UI나 데스크톱 앱이 필요합니다(또는 prometheus connectors disconnect)."

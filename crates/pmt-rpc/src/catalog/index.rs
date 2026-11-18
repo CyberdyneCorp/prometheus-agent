@@ -139,6 +139,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("ui.prefs.patch", "desktop-app"),
     method("config.patch", "desktop-app"),
     method("config.reload", "desktop-app"),
+    method("i18n.languages", "i18n"),
     method("queue.list", "desktop-app"),
     method("queue.edit", "desktop-app"),
     method("queue.delete", "desktop-app"),

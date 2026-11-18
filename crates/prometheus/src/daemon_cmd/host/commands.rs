@@ -320,7 +320,12 @@ impl Run<'_> {
             live: &self.session.live,
             scope,
             registry: self.registry,
-            surface: self.surface,
+            // A client's commands resolve as the line interface's, but
+            // what they show follows the client that asked.
+            surface: match (self.surface, self.link.client()) {
+                (Surface::Cli, Some(client)) => super::discovery::surface(client),
+                (surface, _) => surface,
+            },
             timestamps: scope.config().display.timestamps,
             running: self.session.busy.load(Ordering::Acquire),
             post: self.poster(),

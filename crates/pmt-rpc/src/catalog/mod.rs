@@ -225,6 +225,7 @@ fn declare_desktop(d: &mut Declarations) {
     use self::contracts as c;
     d.method::<c::ConfigPatch>()
         .method::<c::ConfigReload>()
+        .method::<c::I18nLanguages>()
         .method::<c::BotChatEnsure>()
         .method::<c::BotRosterList>()
         .method::<c::BotRelayDrain>()

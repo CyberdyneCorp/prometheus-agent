@@ -410,6 +410,7 @@ provider = "يطبّق تغييرات إضافات المزودين و[providers
 reasoning = "يعرض جهد التفكير أو يعيّنه"
 fast = "يعرض الوضع السريع أو يعيّنه: فئة أولوية المزود (--global يحفظ agent.fast_mode)"
 codex_runtime = "يعرض أو يعيّن من يشغّل الأدوار على مزودي OpenAI: Prometheus أو خادم تطبيق Codex (بدءًا من الجلسة التالية)"
+connectors = "يسرد حسابات الموصلات ويربطها أو يعيد ربطها أو يعيد تسميتها أو يفصلها"
 personality = "يعرض الشخصية أو يعيّنها"
 tools = "يسرد الأدوات، أو يفعّل/يعطّل مجموعة أدوات"
 plugins = "يسرد الإضافات، أو يعيد تحميلها (الأدوات وأقسام الموجّه في الجلسة التالية ما لم يُستخدم --now)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "تعذر على المزامنة العكسية نسخ {path}
 
 [tips]
 slash_help = "تلميح: اكتب /help للأوامر، و/status لهذه الجلسة"
+
+[slash.connectors]
+none = "لا تتوفر موصلات لهذا الحساب."
+retired = "{count} متقاعد"
+open = "افتح هذا الرابط لربط {connector}، ثم شغّل /connectors لرؤية الحساب: {url}"
+already = "حساب {connector} ‏'{name}' مرتبط بالفعل."
+renamed = "أُعيدت تسمية حساب {connector} ‏'{name}' إلى '{to}'."
+confirm = "هل تريد فصل حساب {connector} ‏'{name}'؟ للتأكيد شغّل: {command}"
+disconnected = "فُصل حساب {connector} ‏'{name}'."
+disconnect_elsewhere = "يتطلب فصل حساب واجهة الطرفية أو تطبيق سطح المكتب (أو prometheus connectors disconnect)."

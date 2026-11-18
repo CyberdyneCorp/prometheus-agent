@@ -412,6 +412,7 @@ provider = "Apply provider plugin and [providers.*] changes to this session (--n
 reasoning = "Show or set the reasoning effort"
 fast = "Show or set fast mode: the provider's priority tier (--global saves agent.fast_mode)"
 codex_runtime = "Show or set who runs turns on the OpenAI providers: Prometheus or the Codex app-server (from the next session)"
+connectors = "List connector accounts and connect, reconnect, rename or disconnect them"
 personality = "Show or set the personality"
 tools = "List tools, or enable/disable a toolset"
 plugins = "List plugins, or reload them (tools and prompt sections next session unless --now)"
@@ -1065,3 +1066,13 @@ sync_not_copied = "sync-back could not copy {path}: {why}"
 
 [tips]
 slash_help = "Tip: type /help for the commands, /status for this session"
+
+[slash.connectors]
+none = "No connectors are available for this account."
+retired = "{count} retired"
+open = "Open this link to connect {connector}, then run /connectors to see the account: {url}"
+already = "{connector} account '{name}' is already connected."
+renamed = "Renamed {connector} account '{name}' to '{to}'."
+confirm = "Disconnect {connector} account '{name}'? To confirm, run: {command}"
+disconnected = "Disconnected {connector} account '{name}'."
+disconnect_elsewhere = "Disconnecting an account needs the terminal UI or the desktop app (or prometheus connectors disconnect)."

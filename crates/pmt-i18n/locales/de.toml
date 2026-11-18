@@ -410,6 +410,7 @@ provider = "Änderungen an Anbieter-Plugins und [providers.*] auf diese Sitzung 
 reasoning = "Den Denkaufwand anzeigen oder setzen"
 fast = "Den Schnellmodus anzeigen oder setzen: die Prioritätsstufe des Anbieters (--global speichert agent.fast_mode)"
 codex_runtime = "Anzeigen oder festlegen, wer Züge bei den OpenAI-Anbietern ausführt: Prometheus oder der Codex-App-Server (ab der nächsten Sitzung)"
+connectors = "Connector-Konten auflisten und verbinden, neu verbinden, umbenennen oder trennen"
 personality = "Die Persönlichkeit anzeigen oder setzen"
 tools = "Werkzeuge auflisten oder ein Toolset aktivieren/deaktivieren"
 plugins = "Plugins auflisten oder neu laden (Werkzeuge und Promptabschnitte ab der nächsten Sitzung, außer mit --now)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "Rücksynchronisierung konnte {path} nicht kopieren: {why}"
 
 [tips]
 slash_help = "Tipp: gib /help für die Befehle ein, /status für diese Sitzung"
+
+[slash.connectors]
+none = "Für dieses Konto sind keine Connectors verfügbar."
+retired = "{count} stillgelegt"
+open = "Öffne diesen Link, um {connector} zu verbinden, und führe dann /connectors aus, um das Konto zu sehen: {url}"
+already = "{connector}-Konto '{name}' ist bereits verbunden."
+renamed = "{connector}-Konto '{name}' in '{to}' umbenannt."
+confirm = "{connector}-Konto '{name}' trennen? Zum Bestätigen ausführen: {command}"
+disconnected = "{connector}-Konto '{name}' getrennt."
+disconnect_elsewhere = "Zum Trennen eines Kontos braucht es die Terminal-Oberfläche oder die Desktop-App (oder prometheus connectors disconnect)."

@@ -274,6 +274,7 @@ impl Tui<'_> {
             Local::Voice => self.voice_command(args),
             Local::Pane => self.pane_command(args),
             Local::Timeline => self.open_timeline(),
+            Local::Language => self.open_languages(),
         }
     }
 

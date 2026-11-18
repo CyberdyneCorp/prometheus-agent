@@ -410,6 +410,7 @@ provider = "将提供方插件和 [providers.*] 的更改应用到此会话（--
 reasoning = "显示或设置推理强度"
 fast = "显示或设置快速模式：提供方的优先级层（--global 保存 agent.fast_mode）"
 codex_runtime = "显示或设置由谁执行 OpenAI 提供方上的回合：Prometheus 或 Codex 应用服务器（从下一个会话起）"
+connectors = "列出连接器账户，并连接、重新连接、重命名或断开它们"
 personality = "显示或设置个性"
 tools = "列出工具，或启用/禁用工具集"
 plugins = "列出插件，或重新加载（除非 --now，否则工具和提示词部分在下一会话生效）"
@@ -1063,3 +1064,13 @@ sync_not_copied = "回同步无法复制 {path}：{why}"
 
 [tips]
 slash_help = "提示：输入 /help 查看命令，输入 /status 查看此会话"
+
+[slash.connectors]
+none = "此账户没有可用的连接器。"
+retired = "{count} 个已停用"
+open = "打开此链接以连接 {connector}，然后运行 /connectors 查看该账户：{url}"
+already = "{connector} 账户 '{name}' 已连接。"
+renamed = "已将 {connector} 账户 '{name}' 重命名为 '{to}'。"
+confirm = "断开 {connector} 账户 '{name}'？如需确认，请运行：{command}"
+disconnected = "已断开 {connector} 账户 '{name}'。"
+disconnect_elsewhere = "断开账户需要终端界面或桌面应用（或 prometheus connectors disconnect）。"

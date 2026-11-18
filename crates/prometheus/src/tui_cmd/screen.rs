@@ -102,6 +102,10 @@ pub(super) enum Done {
     Restored(Result<String, Error>),
     /// `subagent.list` answered (the subagents pane's rows).
     Children(pmt_rpc::contracts::SubagentList),
+    /// `i18n.languages` answered (the language picker).
+    Languages(Result<pmt_rpc::contracts::Languages, Error>),
+    /// `config.patch` wrote the chosen `display.language`.
+    LanguageSet(Result<String, Error>),
 }
 
 /// The TUI's state.

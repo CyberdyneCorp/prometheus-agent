@@ -4,14 +4,16 @@
 //! The commands act on the repositories the profile recorded (and on the
 //! repository of the current directory): `list` shows live trees and
 //! archives, `prune` runs the sweep (`--dry-run` prints every decision
-//! and changes nothing), `restore` recreates an archived tree.
+//! and changes nothing) and reclaims the install state of deleted
+//! checkouts, `restore` recreates an archived tree.
 
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
-use pmt_worktrees::{Repo, archive, registry};
+use pmt_worktrees::sweep::Mode;
+use pmt_worktrees::{Repo, archive, install_state, registry, tree};
 use serde::Serialize;
 
 use crate::chat::commands::worktree::{listing, pruned, render_listing, render_pruned};
@@ -111,6 +113,8 @@ fn list(scope: &ProfileScope, only: Option<&Path>, json: bool) -> Result<u8, Err
 #[derive(Serialize)]
 struct Pruned {
     repos: Vec<pmt_rpc::contracts::WorktreePruned>,
+    /// Install state of deleted checkouts the sweep removed (or would).
+    install_state: Vec<install_state::Reclaimed>,
 }
 
 fn prune(
@@ -123,14 +127,39 @@ fn prune(
         .iter()
         .map(|repo| pruned(repo, scope, dry_run))
         .collect::<Result<Vec<_>, _>>()?;
+    // Install state is the profile's, not a repository's.
+    let reclaimed = if only.is_none() {
+        let mode = if dry_run { Mode::DryRun } else { Mode::Apply };
+        let retention = scope.config().worktrees.install_state_retention_secs;
+        install_state::sweep(scope.dir(), retention, tree::now_secs(), mode)
+    } else {
+        Vec::new()
+    };
     if json {
-        return document("worktrees prune", &Pruned { repos: swept });
+        let pruned = Pruned {
+            repos: swept,
+            install_state: reclaimed,
+        };
+        return document("worktrees prune", &pruned);
     }
-    if swept.is_empty() {
+    if swept.is_empty() && reclaimed.is_empty() {
         return print_raw("no recorded repositories\n");
     }
     let english = pmt_i18n::Strings::english(pmt_i18n::Surface::Core);
-    let text: Vec<String> = swept.iter().map(|p| render_pruned(&english, p)).collect();
+    let mut text: Vec<String> = swept.iter().map(|p| render_pruned(&english, p)).collect();
+    text.extend(reclaimed.iter().map(|state| {
+        let done = if state.removed {
+            "removed"
+        } else {
+            "would remove"
+        };
+        format!(
+            "install state {} of deleted checkout {} (unused {} days): {done}",
+            state.path.display(),
+            state.checkout.display(),
+            state.idle_secs / 86_400
+        )
+    }));
     print_raw(&format!("{}\n", text.join("\n")))
 }
 

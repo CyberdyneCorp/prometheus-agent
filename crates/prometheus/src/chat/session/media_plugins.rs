@@ -1,6 +1,6 @@
 //! The plugin provider registry as the media tools see it (spec:
 //! plugin-system, Provider-object plugins fail closed when unregistered):
-//! `image_gen.provider`, `tts.provider` and `stt.provider` names that are
+//! `image_gen.provider`, `video_gen.provider`, `tts.provider` and `stt.provider` names that are
 //! not built in resolve through [`ProviderRegistry::require`].
 
 use std::sync::Arc;
@@ -38,6 +38,7 @@ impl PluginMedia {
 fn category(kind: Kind) -> Category {
     match kind {
         Kind::ImageGen => Category::ImageGen,
+        Kind::VideoGen => Category::VideoGen,
         Kind::Tts => Category::Tts,
         Kind::Stt => Category::Stt,
     }

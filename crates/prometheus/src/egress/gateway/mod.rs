@@ -102,6 +102,23 @@ pub fn running(scope: &ProfileScope) -> Option<(Record, Value)> {
     (status["pid"].as_u64() == Some(u64::from(record.pid))).then_some((record, status))
 }
 
+/// The daemon owns the egress proxy of a profile that injects
+/// credentials (spec: security-boundaries, Egress proxy operation and
+/// status): it ends when the daemon drops the child (its stdin closes).
+#[must_use]
+pub fn own(scope: &ProfileScope) -> Option<std::process::Child> {
+    if !covers(scope) || running(scope).is_some() {
+        return None;
+    }
+    match start(scope, true) {
+        Ok((_, child)) => Some(child),
+        Err(err) => {
+            tracing::error!(profile = %scope.name(), "{}", err.message());
+            None
+        }
+    }
+}
+
 /// Starts the proxy of `scope`; `owned`: it ends when the returned child's
 /// stdin closes (the daemon keeps it).
 ///

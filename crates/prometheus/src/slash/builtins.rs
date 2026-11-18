@@ -56,19 +56,38 @@ const CHATS: &[Surface] = &[
 /// The subcommands of built-ins, for the per-surface palette (spec:
 /// desktop-app, Slash palette from one command registry; skills, Skill
 /// write approval and the hub commands in chat).
-pub(super) const SUBCOMMANDS: &[(&str, &[super::Subcommand])] = &[(
-    "skills",
-    &[
-        sub("pending"),
-        sub("diff"),
-        sub("approve"),
-        sub("reject"),
-        sub("approval"),
-        sub("search"),
-        sub("install"),
-        sub("inspect"),
-    ],
-)];
+pub(super) const SUBCOMMANDS: &[(&str, &[super::Subcommand])] = &[
+    (
+        "skills",
+        &[
+            sub("pending"),
+            sub("diff"),
+            sub("approve"),
+            sub("reject"),
+            sub("approval"),
+            sub("search"),
+            sub("install"),
+            sub("inspect"),
+        ],
+    ),
+    (
+        "connectors",
+        &[
+            on("list", TERMINALS),
+            on("connect", TERMINALS),
+            on("reconnect", TERMINALS),
+            on("rename", TERMINALS),
+            // Removing an account needs an explicit confirmation, which
+            // only the TUI and the desktop carry.
+            on("disconnect", &[Surface::Tui, Surface::Desktop]),
+        ],
+    ),
+];
+
+/// A subcommand of `surfaces`.
+const fn on(name: &'static str, surfaces: &'static [Surface]) -> super::Subcommand {
+    super::Subcommand { name, surfaces }
+}
 
 /// A chat-surface subcommand.
 const fn sub(name: &'static str) -> super::Subcommand {
@@ -667,6 +686,23 @@ pub static BUILTINS: &[Command] = &[
         &[
             arg("action", ArgKind::Choice(&["status", "reload"]), false),
             NOW,
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
+        "connectors",
+        &[],
+        Tools,
+        "slash.desc.connectors",
+        &[
+            arg(
+                "action",
+                ArgKind::Choice(&["list", "connect", "reconnect", "rename", "disconnect"]),
+                false,
+            ),
+            text("args"),
         ],
         TERMINALS,
         BusyPolicy::Reject,

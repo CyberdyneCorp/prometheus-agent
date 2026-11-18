@@ -3718,6 +3718,57 @@
       ],
       "type": "object"
     },
+    "LanguageEntry": {
+      "additionalProperties": false,
+      "description": "One selectable language.",
+      "properties": {
+        "endonym": {
+          "description": "The language's own name for itself (`Deutsch`).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The `display.language` id (`de`, `zh-hant`).",
+          "type": "string"
+        },
+        "origin": {
+          "description": "`bundled`, `overlay` or `pack:<plugin>`.",
+          "type": "string"
+        },
+        "rtl": {
+          "description": "Written right to left: surfaces mirror their layout.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "endonym",
+        "rtl",
+        "origin"
+      ],
+      "type": "object"
+    },
+    "Languages": {
+      "additionalProperties": false,
+      "description": "`i18n.languages` result.",
+      "properties": {
+        "current": {
+          "description": "The profile's `display.language`.",
+          "type": "string"
+        },
+        "languages": {
+          "description": "Every selectable language, by id.",
+          "items": {
+            "$ref": "#/$defs/LanguageEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "current",
+        "languages"
+      ],
+      "type": "object"
+    },
     "Lineage": {
       "additionalProperties": false,
       "description": "`session.tree` / `session.siblings` result.",
@@ -8829,6 +8880,16 @@
       },
       "result": {
         "$ref": "#/$defs/EvolveReply"
+      },
+      "since": "1.0"
+    },
+    "i18n.languages": {
+      "owner": "i18n",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Languages"
       },
       "since": "1.0"
     },

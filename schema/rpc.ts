@@ -1298,6 +1298,26 @@ export interface JourneyNode {
   uses?: number;
 }
 
+/** One selectable language. */
+export interface LanguageEntry {
+  /** The language's own name for itself (`Deutsch`). */
+  endonym: string;
+  /** The `display.language` id (`de`, `zh-hant`). */
+  id: string;
+  /** `bundled`, `overlay` or `pack:<plugin>`. */
+  origin: string;
+  /** Written right to left: surfaces mirror their layout. */
+  rtl: boolean;
+}
+
+/** `i18n.languages` result. */
+export interface Languages {
+  /** The profile's `display.language`. */
+  current: string;
+  /** Every selectable language, by id. */
+  languages: Array<LanguageEntry>;
+}
+
 /** `session.tree` / `session.siblings` result. */
 export interface Lineage {
   /** The related sessions, by depth then age. */
@@ -2872,6 +2892,7 @@ export interface Methods {
   "harness.diff": { params: EvolveParams; result: EvolveReply };
   "harness.log": { params: EvolveParams; result: HarnessVersions };
   "harness.rollback": { params: EvolveParams; result: EvolveReply };
+  "i18n.languages": { params: ProfileParams; result: Languages };
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "local.add": { params: LocalParams; result: LocalReply };
   "local.catalog": { params: LocalParams; result: LocalReply };

@@ -94,14 +94,20 @@ pub struct Swept {
     pub decisions: Result<Vec<Decision>, pmt_core::error::Error>,
 }
 
-/// Sweeps every recorded repository of `profile` at `now`.
+/// Sweeps every recorded repository of `profile` at `now`, then the
+/// profile's install state of deleted checkouts.
 #[must_use]
 pub fn sweep_all(profile: &Path, settings: &Settings, now: u64, mode: Mode) -> Vec<Swept> {
-    repos(profile)
+    let swept = repos(profile)
         .into_iter()
         .map(|repo| {
             let decisions = sweep::sweep(&repo, settings, now, mode);
             Swept { repo, decisions }
         })
-        .collect()
+        .collect();
+    let retention = settings.install_state_retention_secs;
+    for state in crate::install_state::sweep(profile, retention, now, mode) {
+        tracing::info!(dir = %state.path.display(), checkout = %state.checkout.display(), removed = state.removed, "install state of a deleted checkout swept");
+    }
+    swept
 }

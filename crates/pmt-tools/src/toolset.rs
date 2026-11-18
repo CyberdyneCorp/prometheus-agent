@@ -109,6 +109,11 @@ impl Toolset {
     }
 }
 
+/// The `video_gen` toolset: `video_generate` plus the tools video
+/// providers contribute (present only while their provider is the
+/// configured one).
+const VIDEO_GEN: &[&str] = &["video_generate", "xai_video_edit", "xai_video_extend"];
+
 /// The `browser` toolset.
 const BROWSER: &[&str] = &[
     "browser_exec",
@@ -223,7 +228,7 @@ pub fn builtin() -> Vec<Toolset> {
         Toolset::new("vision", "Image analysis", &["vision_analyze"]),
         Toolset::new("video", "Video analysis", &["video_analyze"]).default_off(),
         Toolset::new("image_gen", "Image generation", &["image_generate"]),
-        Toolset::new("video_gen", "Video generation", &["video_generate"]).default_off(),
+        Toolset::new("video_gen", "Video generation", VIDEO_GEN).default_off(),
         Toolset::new("computer_use", "Desktop control", &["computer_use"]),
         Toolset::new(
             "terminal",

@@ -107,6 +107,10 @@ capabilities = [
     "configuration-and-profiles",
     "api-server",
     "local-models",
+    "web-and-media-tools",
+    "git-worktrees",
+    "connectors",
+    "i18n",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -5047,3 +5051,20 @@ capabilities = [
 
 [local-models."Local resource telemetry"]
 "Gauge shows real window" = ["crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-providers/src/metadata/window.rs::each_source_wins_over_every_later_one"]
+
+# Group 73.7: video_generate and provider-contributed media tools.
+[web-and-media-tools."video_generate tool"]
+"Stuck job times out" = { tests = ["crates/pmt-media/tests/video_gen.rs::a_stuck_job_times_out_with_the_provider_job_id"], note = "a fake clock advances only on the 5 s poll sleeps: 180 polls of a job stuck IN_QUEUE end at 900 s with status timeout and the fal request id" }
+
+[web-and-media-tools."Provider-contributed media tools"]
+"Tools absent for another provider" = ["crates/pmt-media/tests/video_gen.rs::provider_tools_are_absent_for_another_provider"]
+
+# Group 73.8: install state retention, /connectors, language switchers.
+[git-worktrees."Shared install state retention"]
+"Deleted checkout" = { tests = ["crates/pmt-worktrees/src/install_state.rs::state_of_a_checkout_deleted_20_days_ago_is_removed", "crates/prometheus/tests/worktree_chat.rs::prune_removes_the_install_state_of_a_checkout_deleted_20_days_ago"], note = "the state is a language-server cache directory under <profile>/cache/lsp whose record names a checkout that no longer exists, last used 20 days ago (retention 14 days)" }
+
+[connectors."Connectors slash command"]
+"TUI list view" = { tests = ["crates/prometheus/tests/connectors_slash.rs::the_tui_lists_accounts_with_states_and_offers_reconnect_for_an_expired_one", "crates/prometheus/tests/connectors_slash.rs::the_line_interface_offers_no_disconnect", "crates/prometheus/src/chat/commands/connectors.rs::a_broken_account_offers_reconnect_and_only_tui_and_desktop_offer_disconnect"], note = "the TUI runs /connectors through command.dispatch with its tui client kind (the daemon test connects as a tui client against the fake Nous connector gateway)" }
+
+[i18n."Language switchers show endonyms"]
+"RTL layout" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_language_switcher_mirrors_the_window_for_arabic", "crates/prometheus/tests/dashboard_browser.rs::the_dashboard_language_switcher_writes_the_profile_language", "crates/prometheus/tests/tui_language.rs::the_picker_lists_endonyms_and_writes_the_choice", "crates/pmt-tui/src/languages.rs::rows_show_endonyms_with_ids_and_the_current_language_is_highlighted"], note = "desktop-language.spec.ts selects ar in the desktop settings: the document turns dir=rtl and the sessions column moves to the other side in the same window, after one config.patch of display.language; the dashboard and the TUI picker list the same i18n.languages" }

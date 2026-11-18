@@ -110,6 +110,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `harness.diff` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `harness.log` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`HarnessVersions`](#harnessversions) |
 | `harness.rollback` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `i18n.languages` | `i18n` | 1.0 | [`ProfileParams`](#profileparams) | [`Languages`](#languages) |
 | `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
 | `local.add` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `local.catalog` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
@@ -1492,6 +1493,26 @@ One learned skill or memory entry.
 | `title` | string | yes | The skill's name or the entry's text (one line, shortened). |
 | `updated_at` | string | yes | When it last changed (RFC 3339). |
 | `uses` | integer | no | How often it was used: a skill's loads, an entry's recalls (the memory graph's `used` filter). |
+
+### `LanguageEntry`
+
+One selectable language.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `endonym` | string | yes | The language's own name for itself (`Deutsch`). |
+| `id` | string | yes | The `display.language` id (`de`, `zh-hant`). |
+| `origin` | string | yes | `bundled`, `overlay` or `pack:<plugin>`. |
+| `rtl` | boolean | yes | Written right to left: surfaces mirror their layout. |
+
+### `Languages`
+
+`i18n.languages` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `current` | string | yes | The profile's `display.language`. |
+| `languages` | array of [`LanguageEntry`](#languageentry) | yes | Every selectable language, by id. |
 
 ### `Lineage`
 

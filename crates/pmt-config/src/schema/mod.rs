@@ -119,7 +119,7 @@ pub use media::{
     CommandSttConfig, CommandTtsConfig, EdgeTtsConfig, ElevenLabsSttConfig, ElevenLabsTtsConfig,
     GeminiTtsConfig, ImageGenConfig, ImageOpenAiConfig, LocalSttConfig, OpenAiTtsConfig,
     SpeechProviderType, SttConfig, SttVendorConfig, TranscriptFormat, TtsConfig, TtsOutputFormat,
-    VoiceModelConfig, WhisperCppConfig, WhisperModel, XSearchConfig, XaiTtsConfig,
+    VideoGenConfig, VoiceModelConfig, WhisperCppConfig, WhisperModel, XSearchConfig, XaiTtsConfig,
 };
 pub use moa::{
     DEFAULT_PRESET, MoaConfig, MoaFanout, MoaPreset, MoaPrivacyFilter, MoaSlot, TRACE_DIR,
@@ -156,7 +156,7 @@ pub use state::{
     ReviewDefer, SessionSearchConfig, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
     StorageEncryption,
 };
-pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
+pub use tool_gateway::ToolGatewayConfig;
 pub use tools::{
     ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
     FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ProviderTier,
@@ -342,7 +342,7 @@ pub struct Config {
     /// Voice conversations on the CLI, TUI and desktop.
     pub voice: VoiceModeConfig,
     /// Video generation's provider selection.
-    pub video_gen: ToolProviderConfig,
+    pub video_gen: VideoGenConfig,
     /// Image input routing.
     pub vision: VisionConfig,
     /// Web tools.
@@ -433,7 +433,7 @@ impl Default for Config {
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
             voice: VoiceModeConfig::default(),
-            video_gen: ToolProviderConfig::default(),
+            video_gen: VideoGenConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
             x_search: XSearchConfig::default(),

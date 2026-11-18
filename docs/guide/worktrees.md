@@ -100,6 +100,14 @@ Archives older than `worktrees.archive_retention_secs` (30 days; `0`
 keeps them forever) are deleted. A removed tree's branch is kept when it
 exists on a remote and deleted otherwise (its commits are in the archive).
 
+State kept per checkout outside the tree, such as a language server's
+cache under `<profile>/cache/lsp/<server>/`, survives a removed tree. Each
+such directory records its checkout and when it was last used; the sweep
+(and `worktrees prune` without `--repo`) deletes it once the checkout no
+longer exists and it has gone unused for
+`worktrees.install_state_retention_secs` (14 days; `0` keeps it forever).
+State of a checkout that still exists is never deleted.
+
 ```console
 $ prometheus worktrees prune --dry-run
 no recorded repositories

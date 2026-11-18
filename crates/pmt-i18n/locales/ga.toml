@@ -410,6 +410,7 @@ provider = "Cuir athruithe ar bhreiseáin soláthraí agus ar [providers.*] i bh
 reasoning = "Taispeáin nó socraigh an iarracht réasúnaíochta"
 fast = "Taispeáin nó socraigh an mód tapa: leibhéal tosaíochta an tsoláthraí (sábhálann --global agent.fast_mode)"
 codex_runtime = "Taispeáin nó socraigh cé a ritheann sealanna ar sholáthraithe OpenAI: Prometheus nó freastalaí aipe Codex (ón gcéad seisiún eile)"
+connectors = "Liostaigh cuntais nascóirí agus ceangail, athcheangail, athainmnigh nó dícheangail iad"
 personality = "Taispeáin nó socraigh an phearsantacht"
 tools = "Liostaigh uirlisí, nó cumasaigh/díchumasaigh tacar uirlisí"
 plugins = "Liostaigh breiseáin, nó athluchtaigh iad (uirlisí agus codanna leide sa chéad seisiún eile murach --now)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "níorbh fhéidir leis an sioncronú ar ais {path} a chóipeá
 
 [tips]
 slash_help = "Leid: clóscríobh /help le haghaidh na n-orduithe, /status don seisiún seo"
+
+[slash.connectors]
+none = "Níl aon nascóir ar fáil don chuntas seo."
+retired = "{count} scortha"
+open = "Oscail an nasc seo chun {connector} a cheangal, ansin rith /connectors chun an cuntas a fheiceáil: {url}"
+already = "Tá cuntas {connector} '{name}' ceangailte cheana."
+renamed = "Athainmníodh cuntas {connector} '{name}' go '{to}'."
+confirm = "Dícheangail cuntas {connector} '{name}'? Chun é a dhearbhú, rith: {command}"
+disconnected = "Dícheanglaíodh cuntas {connector} '{name}'."
+disconnect_elsewhere = "Teastaíonn comhéadan an teirminéil nó an aip deisce chun cuntas a dhícheangal (nó prometheus connectors disconnect)."

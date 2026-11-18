@@ -410,6 +410,7 @@ provider = "Pas verskaffer-plugin- en [providers.*]-veranderinge op hierdie sess
 reasoning = "Wys of stel die redeneringspoging"
 fast = "Wys of stel vinnige modus: die verskaffer se prioriteitsvlak (--global stoor agent.fast_mode)"
 codex_runtime = "Wys of stel wie beurte op die OpenAI-verskaffers uitvoer: Prometheus of die Codex-app-bediener (vanaf die volgende sessie)"
+connectors = "Lys konnektor-rekeninge en koppel, herkoppel, hernoem of ontkoppel hulle"
 personality = "Wys of stel die persoonlikheid"
 tools = "Lys gereedskap, of skakel 'n gereedskapstel aan/af"
 plugins = "Lys plugins, of herlaai hulle (gereedskap en promptafdelings volgende sessie tensy --now)"
@@ -1063,3 +1064,13 @@ sync_not_copied = "terugsinkronisering kon {path} nie kopieer nie: {why}"
 
 [tips]
 slash_help = "Wenk: tik /help vir die opdragte, /status vir hierdie sessie"
+
+[slash.connectors]
+none = "Geen konnektors is vir hierdie rekening beskikbaar nie."
+retired = "{count} uitgetree"
+open = "Maak hierdie skakel oop om {connector} te koppel en voer dan /connectors uit om die rekening te sien: {url}"
+already = "{connector}-rekening '{name}' is reeds gekoppel."
+renamed = "{connector}-rekening '{name}' is hernoem na '{to}'."
+confirm = "Ontkoppel {connector}-rekening '{name}'? Voer uit om te bevestig: {command}"
+disconnected = "{connector}-rekening '{name}' is ontkoppel."
+disconnect_elsewhere = "Om 'n rekening te ontkoppel is die terminaal-UI of die rekenaartoep nodig (of prometheus connectors disconnect)."

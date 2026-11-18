@@ -45,6 +45,8 @@ pub enum Overlay {
     Switcher(Switcher),
     /// The session timeline.
     Timeline(Timeline),
+    /// The language picker.
+    Languages(crate::languages::LanguagePicker),
 }
 
 /// Overlay rows shown at most.
@@ -211,6 +213,9 @@ impl App {
             Some(Overlay::Timeline(t)) => t
                 .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
                 .len(),
+            Some(Overlay::Languages(l)) => l
+                .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
+                .len(),
             None => self.completions.len().min(COMPLETION_ROWS),
         }
     }
@@ -221,6 +226,7 @@ impl App {
             Some(Overlay::Palette(p)) => p.lines(area.width, rows, &self.theme, &self.strings),
             Some(Overlay::Switcher(s)) => s.lines(area.width, rows, &self.theme, &self.strings),
             Some(Overlay::Timeline(t)) => t.lines(area.width, rows, &self.theme, &self.strings),
+            Some(Overlay::Languages(l)) => l.lines(area.width, rows, &self.theme, &self.strings),
             None => return self.render_completions(frame, area),
         };
         frame.render_widget(Paragraph::new(lines), area);

@@ -519,6 +519,10 @@ impl Inner {
             .cache_root()
             .join(&server.id)
             .join(root_key(root));
+        // The cache outlives a removed worktree; the record lets the
+        // worktree sweep reclaim it (git-worktrees, Shared install state
+        // retention).
+        pmt_worktrees::install_state::record(&cache_dir, root, pmt_worktrees::tree::now_secs());
         let mut reads = Vec::new();
         if resolved.source == Source::Managed {
             reads.push(self.setup.installs.dir(&server.id));
