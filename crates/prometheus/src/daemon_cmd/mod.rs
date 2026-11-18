@@ -286,10 +286,22 @@ fn spawn_and_wait(
     profile: Option<&str>,
     deadline: std::time::Instant,
 ) -> Result<Option<(DaemonRecord, bool)>, Error> {
-    let mut child = spawn_detached(home, profile)?;
+    let child = spawn_detached(home, profile)?;
+    wait_for_spawned(home, child, deadline)
+}
+
+/// [`spawn_and_wait`] once `child` runs. A published daemon is ours only
+/// when it is our child: on a slow machine the daemon that won the home
+/// can publish before ours has even reached the lock and exited.
+fn wait_for_spawned(
+    home: &Path,
+    mut child: std::process::Child,
+    deadline: std::time::Instant,
+) -> Result<Option<(DaemonRecord, bool)>, Error> {
     loop {
         if let Discovery::Running(record) = discover(home)? {
-            return Ok(Some((record, true)));
+            let ours = record.process.pid == child.id();
+            return Ok(Some((record, ours)));
         }
         if let Ok(Some(status)) = child.try_wait() {
             return exited(home, status, deadline);
@@ -597,4 +609,50 @@ fn status(home: &Path, json: bool) -> Result<u8, Error> {
         }
     }
     crate::output::print(&text)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use pmt_core::runtime::{Role, WriterLock};
+    use pmt_rpc::discovery::Endpoint;
+
+    use super::wait_for_spawned;
+
+    #[test]
+    fn a_daemon_published_by_another_process_is_not_reported_as_started() {
+        let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
+        let home = tempfile::tempdir_in(target).unwrap();
+        // The daemon that won the home (this test process) published while
+        // our spawned one is still on its way to the lock.
+        let lock = WriterLock::acquire(home.path(), Role::Daemon, vec!["default".into()]).unwrap();
+        lock.publish(&Endpoint {
+            instance_id: "winner".into(),
+            build_id: "b".into(),
+            rpc_url: "ws://127.0.0.1:9/rpc".into(),
+            control: "unused".into(),
+            rpc_protocol: "1.0".into(),
+            started_at: "2026-11-18T00:00:00Z".into(),
+            health_url: None,
+            features: Vec::new(),
+        })
+        .unwrap();
+        let ours = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--list")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let ours_pid = ours.id();
+        let (record, started) =
+            wait_for_spawned(home.path(), ours, Instant::now() + Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
+        assert_eq!(record.process.pid, lock.record().pid);
+        assert_ne!(record.process.pid, ours_pid);
+        assert!(
+            !started,
+            "another daemon's record is not ours to report as started"
+        );
+    }
 }
