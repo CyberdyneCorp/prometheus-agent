@@ -218,10 +218,19 @@ never through a link) with a nonce of its own start; every command reaches
 it over its loopback control port with that nonce, so a recycled pid is
 never signalled (`stop` is graceful and kills only after 5 seconds, and only
 a process that just answered with the nonce). It serves an ephemeral
-loopback listener and the container bridge listener on
-`security.egress.proxy_port` (9090; the runtime's bridge gateway on Linux,
-loopback where Docker Desktop or a Podman machine forwards the host alias);
-a listener that does not bind within 5 seconds fails the start. `status`
+loopback listener and the container listener on
+`security.egress.proxy_port` (9090), bound where containers of
+`terminal.container.runtime` reach the host: loopback where Docker Desktop
+or a Podman machine forwards the host alias; a rootful runtime's bridge
+gateway on Linux, bound even before the bridge exists (Podman creates it
+with its first container); for a rootless runtime on Linux, whose bridge
+lives in its own network namespace and which reaches the host at the
+host's own address (slirp4netns, pasta), that address, where the listener
+serves only connections coming from the host itself and the relay maps the
+host alias to it. Never `0.0.0.0`. If the host no longer holds the address
+when the proxy binds, the listener falls back to loopback with a warning
+(containers cannot reach it then); any other listener that does not bind
+within 5 seconds fails the start. `status`
 shows the listeners, the mode, each mapping with its placeholder cut to
 its first and last characters (`--show-tokens` shows them whole), the
 denied connections, and the provider secrets the profile holds that are
@@ -243,7 +252,9 @@ no route off it, whose only other member is the relay container
 image (it uses the image's `socat`, `python3` or busybox `nc -e`), without
 capabilities and read-only, and forwards every connection to the proxy's
 bridge port on the host (`host.docker.internal` or
-`host.containers.internal`); `prometheus egress stop` removes it. The
+`host.containers.internal`; under Podman it joins the `podman` network by
+name, since a rootless Podman's implicit network cannot join another);
+`prometheus egress stop` removes it. The
 container gets `HTTP(S)_PROXY=http://prometheus-egress:<bridge port>`, the
 profile's egress CA mounted read-only at `/etc/prometheus/egress/ca.crt`
 and a bundle of the platform roots, `network.extra_ca_file` and that CA at

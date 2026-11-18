@@ -174,17 +174,24 @@ impl Proxy {
     ///
     /// When the listener cannot bind or the thread cannot start.
     pub fn start(rules: Rules) -> io::Result<Self> {
-        Self::start_at(rules, SocketAddr::from(([127, 0, 0, 1], 0)))
+        let listener = std::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
+        Self::start_on(rules, listener, None)
     }
 
-    /// Starts a proxy listening on `addr` (a container bridge listener
-    /// binds a fixed port).
+    /// Starts a proxy serving `listener` (a container bridge listener the
+    /// caller bound). With `only_from`, connections from any other peer
+    /// address are closed unread: a listener on an address the network
+    /// can reach (rootless container runtimes reach the host at its own
+    /// address) serves this host's processes only.
     ///
     /// # Errors
     ///
-    /// When the listener cannot bind or the thread cannot start.
-    pub fn start_at(rules: Rules, addr: SocketAddr) -> io::Result<Self> {
-        let listener = std::net::TcpListener::bind(addr)?;
+    /// When the listener cannot be served or the thread cannot start.
+    pub fn start_on(
+        rules: Rules,
+        listener: std::net::TcpListener,
+        only_from: Option<IpAddr>,
+    ) -> io::Result<Self> {
         listener.set_nonblocking(true)?;
         let addr = listener.local_addr()?;
         let denied = Arc::new(AtomicU64::new(0));
@@ -204,7 +211,7 @@ impl Proxy {
                         return;
                     };
                     tokio::select! {
-                        () = accept(listener, served, counter) => {}
+                        () = accept(listener, served, counter, only_from) => {}
                         _ = stopped => {}
                     }
                 });
@@ -295,7 +302,7 @@ impl Attacher {
                 return;
             };
             tokio::select! {
-                () = accept(listener, rules, denied) => {}
+                () = accept(listener, rules, denied, None) => {}
                 () = closed(alive) => {}
             }
         }));
@@ -309,11 +316,19 @@ async fn closed(mut alive: tokio::net::UnixStream) {
     while matches!(alive.read(&mut byte).await, Ok(n) if n > 0) {}
 }
 
-async fn accept(listener: TcpListener, shared: Shared, denied: Arc<AtomicU64>) {
+async fn accept(
+    listener: TcpListener,
+    shared: Shared,
+    denied: Arc<AtomicU64>,
+    only_from: Option<IpAddr>,
+) {
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
+        let Ok((stream, peer)) = listener.accept().await else {
             continue;
         };
+        if only_from.is_some_and(|only| only != peer.ip().to_canonical()) {
+            continue;
+        }
         let (rules, denied) = (current(&shared), Arc::clone(&denied));
         pmt_core::spawn::spawn(async move {
             if let Err(Some(denial)) = serve(stream, &rules).await {
@@ -589,6 +604,28 @@ mod tests {
         assert_eq!(seen[0].port, 443);
         assert_eq!(seen[0].requester, "plugin:demo");
         assert_eq!(seen[0].reason, Reason::NotGranted);
+    }
+
+    /// A listener restricted to one peer address closes every other
+    /// peer's connection unread (spec: security-boundaries, Egress
+    /// enforcement for child processes: the bridge listener of a rootless
+    /// runtime faces the network).
+    #[test]
+    fn a_listener_restricted_to_a_peer_serves_only_that_peer() {
+        let rules = || {
+            let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()));
+            Rules::new(hosts, DestinationPolicy::default(), "terminal")
+        };
+        let bind = || std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let elsewhere = IpAddr::from([192, 0, 2, 1]);
+        let closed = Proxy::start_on(rules(), bind(), Some(elsewhere)).unwrap();
+        let answer = ask(&closed, "CONNECT example.com:443 HTTP/1.1\r\n\r\n");
+        assert_eq!(answer, "");
+        assert_eq!(closed.denied(), 0);
+        let local = IpAddr::from([127, 0, 0, 1]);
+        let open = Proxy::start_on(rules(), bind(), Some(local)).unwrap();
+        let answer = ask(&open, "CONNECT localhost:443 HTTP/1.1\r\n\r\n");
+        assert!(answer.starts_with("HTTP/1.1 403"), "{answer}");
     }
 
     #[test]

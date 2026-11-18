@@ -5013,6 +5013,7 @@ capabilities = [
 
 [security-boundaries."Egress proxy operation and status"]
 "Proxy down with enforcement" = ["crates/prometheus/tests/egress_proxy.rs::proxy_down_with_enforcement", "crates/prometheus/tests/egress_proxy.rs::start_status_rotate_reload_and_stop"]
+"Rootless runtime listener" = { tests = ["crates/prometheus/src/egress/gateway/bridge.rs::a_rootless_reach_serves_only_the_host_and_maps_the_relay_to_it", "crates/prometheus/src/egress/gateway/bridge.rs::the_host_address_is_a_local_one", "crates/prometheus/src/egress/gateway/bridge.rs::a_gateway_binds_before_its_bridge_exists", "crates/pmt-net/src/egress/mod.rs::a_listener_restricted_to_a_peer_serves_only_that_peer", "crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"], note = "the Linux CI runners have rootless Podman (gateway 10.88.0.1 is no host address): every egress_proxy test starts the proxy there" }
 
 [security-boundaries."Egress proxy coverage of containers and remote sandboxes"]
 "CA inside the container" = { tests = ["crates/prometheus/tests/egress_proxy.rs::ca_inside_the_container", "crates/prometheus/tests/egress_proxy.rs::the_proxy_injects_the_real_key_only_toward_the_mapped_host"], note = "a real container session (curl image) through the proxy: curl verifies TLS against the mounted bundle (CURL_CA_BUNDLE, the same contract python requests uses via REQUESTS_CA_BUNDLE); on the egress-only network curl reaches neither the host nor the internet without the proxy; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }

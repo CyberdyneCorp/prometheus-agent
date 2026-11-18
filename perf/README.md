@@ -159,6 +159,23 @@ budgeted quantities, do not regress. On the reference runner (CI run
 `--version` median at 3.57 -> 3.90 ms (inside the 1 ms floor), the chat
 prompt median at 39.62 -> 39.35 ms and peak RSS at 12.11 -> 12.42 MiB.
 
+The remaining and additional upgrades (m3-upgrades: hybrid search and
+encryption at rest, TUI panes and diff review, routing, the egress proxy,
+the Codex runtime, video and media tools, and more; no heavy new crate)
+took the stripped binary on the reference runner from 79.21 to 82.23 MiB,
+over the 80 MiB absolute budget (CI run 44225781244). The release profile
+now uses `opt-level = "z"`: measured on macOS in alternating rounds against
+the `"s"` build of the same tree, the stripped binary went from 71.29 to
+53.75 MiB (-25%), the `--version` median from 5.77 to 5.92 ms (inside the
+1 ms floor), the chat prompt median from 136.29 to 143.56 ms (+5%) and chat
+peak RSS from 48.62 to 47.91 MiB. The `--version` peak RSS rose from 13.69
+to 15.53 MiB (+13%): its dirty footprint is unchanged (7.7 MB both); the
+growth is clean pages of the binary's text faulted in (284 -> 400 faults
+on 16 KiB pages), so it is code layout, not allocation. SQLite, zstd and
+ring keep `opt-level = "s"` through package overrides: their C objects are
+native code outside the LTO unit, so the override keeps the C compiler's
+level they had.
+
 The checked-in `perf/baseline.json` starts empty; it holds entries only when
 someone records them deliberately with `--update-baseline`.
 

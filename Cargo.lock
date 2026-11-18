@@ -4212,6 +4212,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "shlex",
+ "socket2",
  "sysinfo",
  "tar",
  "tempfile",

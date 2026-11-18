@@ -176,6 +176,9 @@ seccompiler = "0.5"
 libc = "0.2"
 # flock(2) on Android, where std's File::try_lock is unsupported.
 rustix = { version = "1.1", default-features = false, features = ["std", "fs"] }
+# Socket options std lacks (IP_FREEBIND for the egress proxy's container
+# listener); already in the tree through tokio.
+socket2 = { version = "0.6", features = ["all"] }
 # Plain (non-`\\?\`) Windows paths for shells that mishandle verbatim ones.
 dunce = "1.0"
 windows-sys = "0.61"
@@ -314,11 +317,22 @@ opt-level = 3
 # (perf/README.md).
 lto = "fat"
 codegen-units = 1
-# Size-optimized code: the stripped binary is 28% smaller with unchanged
-# startup, chat prompt and peak RSS; the agent's time goes to network and
-# model latency, not to tight loops (perf/README.md).
-opt-level = "s"
+# Size-optimized code ("z" since m3-upgrades; "s" before): each step cut the
+# stripped binary by a quarter with startup, chat prompt and peak RSS inside
+# the perf gate; the agent's time goes to network and model latency, not to
+# tight loops (perf/README.md).
+opt-level = "z"
 strip = "symbols"
+
+# The C libraries on the store, compression and TLS paths keep the code
+# they had under "s" (their objects are native, outside the LTO unit, so
+# this sets the C compiler's level only).
+[profile.release.package.libsqlite3-sys]
+opt-level = "s"
+[profile.release.package.zstd-sys]
+opt-level = "s"
+[profile.release.package.ring]
+opt-level = "s"
 
 # The profile cargo-dist builds the release archives with (dist-workspace.toml).
 [profile.dist]

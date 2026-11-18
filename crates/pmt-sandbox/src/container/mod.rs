@@ -95,6 +95,9 @@ pub struct Runtime {
 pub struct Probe {
     /// The daemon cannot act as host root: rootless, or inside a VM.
     pub rootless: bool,
+    /// The daemon runs in a VM of its own (Docker Desktop), which
+    /// forwards the host alias to the host's loopback.
+    pub vm: bool,
     /// How that was decided.
     pub how: String,
 }
@@ -240,16 +243,19 @@ impl Runtime {
         let probe = if security_info.contains("rootless") || security_info == "true" {
             Probe {
                 rootless: true,
+                vm: false,
                 how: "rootless".to_owned(),
             }
         } else if os.contains("Docker Desktop") {
             Probe {
                 rootless: true,
+                vm: true,
                 how: "Docker Desktop VM".to_owned(),
             }
         } else {
             Probe {
                 rootless: false,
+                vm: false,
                 how: "rootful daemon".to_owned(),
             }
         };

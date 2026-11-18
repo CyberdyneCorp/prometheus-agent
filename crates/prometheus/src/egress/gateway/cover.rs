@@ -115,7 +115,7 @@ pub fn container_cover(
         return Ok(None);
     };
     // The container reaches nothing but the relay to the proxy.
-    let egress = egress_network(scope, record.bridge.port());
+    let egress = egress_network(scope, record.bridge.port()).reaching(record.relay_host);
     let network = if scope.config().terminal.container.network {
         egress.ensure(runtime, scope.name().as_str(), image)?;
         Some(egress.network.clone())

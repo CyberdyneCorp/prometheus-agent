@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
 use pmt_config::ProfileScope;
@@ -37,9 +37,17 @@ pub fn serve(scope: &ProfileScope, owned: bool) -> Result<u8, Error> {
     let rules = rules(scope)?;
     let config = scope.config();
     let loopback = Proxy::start(rules.0.clone()).map_err(|e| bind_error("loopback", &e))?;
-    let bridge_addr = SocketAddr::new(bridge_ip(scope), config.security.egress.proxy_port);
-    let bridge = Proxy::start_at(rules.0, bridge_addr)
-        .map_err(|e| bind_error(&bridge_addr.to_string(), &e))?;
+    let wanted = super::bridge::Reach::of(scope);
+    let port = config.security.egress.proxy_port;
+    let (reach, bridge) = wanted
+        .listen(port)
+        .and_then(|(reach, listener)| {
+            Ok((
+                reach,
+                Proxy::start_on(rules.0, listener, reach.only_from())?,
+            ))
+        })
+        .map_err(|e| bind_error(&wanted.addr(port).to_string(), &e))?;
     let control = TcpListener::bind(("127.0.0.1", 0)).map_err(|e| bind_error("control", &e))?;
     let record = Record {
         pid: std::process::id(),
@@ -50,6 +58,7 @@ pub fn serve(scope: &ProfileScope, owned: bool) -> Result<u8, Error> {
             .map_err(|e| bind_error("control", &e))?,
         loopback: loopback.addr(),
         bridge: bridge.addr(),
+        relay_host: reach.relay_host(),
     };
     write_record(scope, &record)?;
     if owned {
@@ -143,32 +152,6 @@ fn write_record(scope: &ProfileScope, record: &Record) -> Result<(), Error> {
 
 fn bind_error(what: &str, e: &std::io::Error) -> Error {
     super::start_error(&format!("cannot listen on {what}: {e}"))
-}
-
-/// The container bridge address: the runtime's bridge gateway on Linux
-/// (where containers reach the host), loopback elsewhere (Docker Desktop
-/// and Podman machines forward the host alias to it).
-fn bridge_ip(scope: &ProfileScope) -> std::net::IpAddr {
-    let loopback = std::net::IpAddr::from([127, 0, 0, 1]);
-    if !cfg!(target_os = "linux") {
-        return loopback;
-    }
-    let setting = &scope.config().terminal.container.runtime;
-    let Ok(runtime) = pmt_sandbox::container::Runtime::detect(setting) else {
-        return loopback;
-    };
-    let (network, format) = match runtime.flavor() {
-        pmt_sandbox::container::Flavor::Docker => ("bridge", "{{(index .IPAM.Config 0).Gateway}}"),
-        pmt_sandbox::container::Flavor::Podman => ("podman", "{{(index .Subnets 0).Gateway}}"),
-    };
-    runtime
-        .command()
-        .args(["network", "inspect", network, "--format", format])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
-        .unwrap_or(loopback)
 }
 
 /// The proxy's rules and placeholders: the profile's host policy, private

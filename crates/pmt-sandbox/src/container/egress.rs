@@ -13,6 +13,7 @@
 
 use pmt_core::error::{Error, codes};
 use std::fmt::Write as _;
+use std::net::IpAddr;
 
 use sha2::Digest as _;
 
@@ -87,6 +88,10 @@ pub struct EgressNetwork {
     pub port: u16,
     /// The home the profile belongs to (a label of the relay).
     pub home: String,
+    /// The address the relay maps the runtime's host alias to, when the
+    /// runtime's own mapping does not lead to the proxy (a rootless
+    /// runtime reaches the host at the host's own address).
+    pub host: Option<IpAddr>,
 }
 
 impl EgressNetwork {
@@ -115,7 +120,15 @@ impl EgressNetwork {
             relay: format!("pmt-egress-relay-{clean}-{home}"),
             port,
             home: home_key.to_owned(),
+            host: None,
         }
+    }
+
+    /// The same network with the relay mapping the host alias to `host`
+    /// (`None`: the runtime's own mapping).
+    #[must_use]
+    pub fn reaching(self, host: Option<IpAddr>) -> Self {
+        Self { host, ..self }
     }
 
     /// Removes the relay (the proxy stopped: nothing is left to relay
@@ -139,14 +152,26 @@ impl EgressNetwork {
     /// `terminal.container_runtime` naming the runtime call that failed.
     pub fn ensure(&self, runtime: &Runtime, profile: &str, image: &str) -> Result<(), Error> {
         self.ensure_network(runtime, profile)?;
-        let (alias, add_host) = match runtime.flavor() {
-            Flavor::Podman => ("host.containers.internal", None),
-            Flavor::Docker => (
-                "host.docker.internal",
-                Some("--add-host=host.docker.internal:host-gateway".to_owned()),
+        let (alias, mut options) = match runtime.flavor() {
+            // Named, not implied: a rootless Podman's implicit network
+            // (slirp4netns, pasta) cannot join another network.
+            Flavor::Podman => (
+                "host.containers.internal",
+                vec!["--network=podman".to_owned()],
             ),
+            Flavor::Docker => ("host.docker.internal", Vec::new()),
         };
-        let target = format!("{alias}:{}|{image}", self.port);
+        let mapped = match (self.host, runtime.flavor()) {
+            (Some(ip), _) => Some(ip.to_string()),
+            (None, Flavor::Docker) => Some("host-gateway".to_owned()),
+            (None, Flavor::Podman) => None,
+        };
+        options.extend(mapped.iter().map(|to| format!("--add-host={alias}:{to}")));
+        let target = format!(
+            "{alias}={}:{}|{image}",
+            mapped.as_deref().unwrap_or("default"),
+            self.port
+        );
         if self.relay_current(runtime, &target)? {
             return Ok(());
         }
@@ -165,7 +190,7 @@ impl EgressNetwork {
             "--user=65534:65534".to_owned(),
             "--entrypoint=sh".to_owned(),
         ];
-        args.extend(add_host);
+        args.extend(options);
         args.extend([
             image.to_owned(),
             "-c".to_owned(),

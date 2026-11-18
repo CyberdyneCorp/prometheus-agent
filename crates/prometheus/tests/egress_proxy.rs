@@ -8,10 +8,12 @@ mod common;
 
 use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
+
 use std::process::Command;
 
 use common::tls_upstream::upstream;
 use common::{append_config, mock_home, ok, run, run_with_stdin, stderr};
+use pmt_sandbox::container::{Flavor, Runtime};
 
 const KEY: &str = "sk-real-openai-key-0123456789";
 
@@ -298,35 +300,42 @@ fn a_backend_the_proxy_cannot_cover_is_refused() {
 /// An image with `sh` and `curl`, pinned by digest.
 const CURL_IMAGE: &str = "docker.io/curlimages/curl@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69";
 
-/// Whether a container runtime answers (else the test skips, unless
+/// The container runtime the tests use (`PMT_TEST_CONTAINER_RUNTIME`,
+/// default `auto`), or `None` when none answers (the test skips, unless
 /// `PMT_TEST_CONTAINERS=require`).
-fn containers() -> bool {
-    let found = ["docker", "podman"].iter().any(|cli| {
-        Command::new(cli)
+fn containers() -> Option<(String, Runtime)> {
+    let setting = std::env::var("PMT_TEST_CONTAINER_RUNTIME").unwrap_or_else(|_| "auto".to_owned());
+    let answers = |runtime: &Runtime| {
+        runtime
+            .command()
             .arg("info")
             .output()
             .is_ok_and(|o| o.status.success())
-    });
+    };
+    let found = Runtime::detect(&setting).ok().filter(answers);
     assert!(
-        found || std::env::var("PMT_TEST_CONTAINERS").as_deref() != Ok("require"),
+        found.is_some() || std::env::var("PMT_TEST_CONTAINERS").as_deref() != Ok("require"),
         "PMT_TEST_CONTAINERS=require but no container runtime answers"
     );
-    found
+    found.map(|runtime| (setting, runtime))
+}
+
+/// The runtime's output for `args`.
+fn runtime_out(runtime: &Runtime, args: &[&str]) -> std::process::Output {
+    runtime.command().args(args).output().unwrap()
 }
 
 /// Removes the test home's egress networks with their containers.
-fn remove_egress_networks(home: &Path) {
-    let docker = |args: &[&str]| {
-        let out = Command::new("docker").args(args).output().unwrap();
-        String::from_utf8_lossy(&out.stdout).into_owned()
-    };
+fn remove_egress_networks(runtime: &Runtime, home: &Path) {
+    let out =
+        |args: &[&str]| String::from_utf8_lossy(&runtime_out(runtime, args).stdout).into_owned();
     let label = format!("label=prometheus.egress-home={}", home.display());
-    for network in docker(&["network", "ls", "-q", "--filter", &label]).split_whitespace() {
+    for network in out(&["network", "ls", "-q", "--filter", &label]).split_whitespace() {
         let filter = format!("network={network}");
-        for container in docker(&["ps", "-aq", "--filter", &filter]).split_whitespace() {
-            docker(&["rm", "-f", container]);
+        for container in out(&["ps", "-aq", "--filter", &filter]).split_whitespace() {
+            out(&["rm", "-f", container]);
         }
-        docker(&["network", "rm", network]);
+        out(&["network", "rm", network]);
     }
 }
 
@@ -336,10 +345,10 @@ fn remove_egress_networks(home: &Path) {
 /// reaches nothing directly.
 #[test]
 fn ca_inside_the_container() {
-    if !containers() {
+    let Some((setting, runtime)) = containers() else {
         eprintln!("skipping: no container runtime");
         return;
-    }
+    };
     let home = mock_home();
     let ca_file = home.path().join("upstream-ca.pem");
     let (port, heads) = upstream(&ca_file);
@@ -351,7 +360,7 @@ fn ca_inside_the_container() {
     append_config(
         home.path(),
         &format!(
-            "\n[terminal]\nbackend = \"container\"\n\n[terminal.container]\nimage = \"{CURL_IMAGE}\"\nmount_workspace = false\n\n\
+            "\n[terminal]\nbackend = \"container\"\n\n[terminal.container]\nruntime = \"{setting}\"\nimage = \"{CURL_IMAGE}\"\nmount_workspace = false\n\n\
              [security.sandbox]\nallow_degraded = [\"all\"]\n"
         ),
     );
@@ -379,15 +388,18 @@ fn ca_inside_the_container() {
     .unwrap();
     // The runtime client of this user (Docker Desktop keeps its socket
     // under the real home, which the test's environment does not use).
-    let docker_host = Command::new("docker")
-        .args([
-            "context",
-            "inspect",
-            "--format",
-            "{{.Endpoints.docker.Host}}",
-        ])
-        .output()
-        .ok()
+    let docker_host = (runtime.flavor() == Flavor::Docker)
+        .then(|| {
+            runtime_out(
+                &runtime,
+                &[
+                    "context",
+                    "inspect",
+                    "--format",
+                    "{{.Endpoints.docker.Host}}",
+                ],
+            )
+        })
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
         .filter(|h| !h.is_empty());
     let docker = |args: &[&str]| {
@@ -415,17 +427,14 @@ fn ca_inside_the_container() {
     let stopped = docker(&["egress", "stop"]).output().unwrap();
     assert!(stopped.status.success(), "{}", stderr(&stopped));
     assert!(out.status.success(), "{}", stderr(&out));
-    let relays = Command::new("docker")
-        .args(["ps", "-a", "--format", "{{.Names}}", "--filter"])
-        .arg(format!(
-            "label=prometheus.egress-home={}",
-            home.path().display()
-        ))
-        .output()
-        .unwrap();
+    let label = format!("label=prometheus.egress-home={}", home.path().display());
+    let relays = runtime_out(
+        &runtime,
+        &["ps", "-a", "--format", "{{.Names}}", "--filter", &label],
+    );
     assert!(relays.status.success());
     assert_eq!(String::from_utf8_lossy(&relays.stdout).trim(), "");
-    remove_egress_networks(home.path());
+    remove_egress_networks(&runtime, home.path());
     let seen = heads.lock().unwrap().join("\n");
     let id = common::newest_session(home.path());
     let messages = format!("{:?}", common::session_messages(home.path(), &id));

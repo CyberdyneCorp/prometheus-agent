@@ -161,6 +161,11 @@ zstd.workspace = true
 # `daemon install-service --system` and the launchd GUI domain.
 nix = { workspace = true, features = ["term", "process", "signal", "user", "fs"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# The egress proxy's container listener bound ahead of its bridge
+# (IP_FREEBIND).
+socket2.workspace = true
+
 [build-dependencies]
 jiff.workspace = true
 sha2.workspace = true

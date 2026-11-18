@@ -14,6 +14,7 @@
 //! [`super::mappings`] and always refuses private and metadata addresses
 //! upstream.
 
+pub mod bridge;
 pub mod cover;
 pub mod serve;
 
@@ -53,6 +54,10 @@ pub struct Record {
     pub loopback: SocketAddr,
     /// The container bridge listener.
     pub bridge: SocketAddr,
+    /// The address the relay maps the host alias to (rootless runtimes;
+    /// see [`bridge`]).
+    #[serde(default)]
+    pub relay_host: Option<std::net::IpAddr>,
 }
 
 /// The record file of `scope`.
