@@ -81,6 +81,13 @@ issue:
 - **Provenance markers**: labels that mark tool output and fetched content
   as untrusted data in the model's context.
 - **Taint tracking**: following untrusted content through the session.
+- **The bot screen takeover lease**: while a person holds the profile's bot
+  screen (`screen.takeover`) the browser and `computer_use` tools are
+  refused with `human_has_control`. The lease is a tool-level fence, not
+  an OS boundary: the screen (Xvnc's RFB socket), its X display and a
+  browser's debugging port (Lightpanda serves DevTools on a loopback port)
+  are reachable by any process of the gateway's OS user, so a process of
+  that user that drives them directly is not stopped by the lease.
 
 For example, a shell command that evades the dangerous-command patterns but
 is still confined by the sandbox is a public hardening issue, not a private

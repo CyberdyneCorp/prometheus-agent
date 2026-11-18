@@ -51,6 +51,6 @@ mod platform;
 pub use launcher::LAUNCH_ARG;
 pub use locations::credential_stores;
 pub use policy::{Paths, Policy, Ports, ResourceLimits};
-pub use relay::{Attached, Relay};
+pub use relay::{Attached, Inbound, Relay};
 pub use report::{Enforcement, Feature, FeatureReport, Gap, Level, StrengthReport};
 pub use sandbox::{Options, Sandbox};

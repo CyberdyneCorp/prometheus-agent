@@ -682,6 +682,10 @@ pub struct BrowserConfig {
     /// The agent may offer `prometheus browser close-profile` (run only
     /// after approval) when the real browser holds the profile.
     pub real_profile_autoclose: bool,
+    /// The local browser engine: `auto` (Chromium) or `lightpanda`
+    /// (lighter; no screenshots, one page). Lowest precedence: an explicit
+    /// CDP endpoint, a cloud provider or real-profile browsing shadow it.
+    pub engine: BrowserEngine,
 }
 
 impl Default for BrowserConfig {
@@ -701,8 +705,39 @@ impl Default for BrowserConfig {
             use_real_profile: false,
             real_profile_pin: String::new(),
             real_profile_autoclose: false,
+            engine: BrowserEngine::Auto,
         }
     }
+}
+
+impl BrowserConfig {
+    /// The setting that shadows `browser.engine = "lightpanda"`, when one
+    /// does (spec: execution-environments, Lightpanda engine): an explicit
+    /// CDP endpoint, a cloud provider, then real-profile browsing.
+    #[must_use]
+    pub fn engine_shadowed_by(&self) -> Option<&'static str> {
+        if self.engine != BrowserEngine::Lightpanda {
+            None
+        } else if self.cdp_url.as_deref().is_some_and(|url| !url.is_empty()) {
+            Some("browser.cdp_url")
+        } else if self.provider != "local" {
+            Some("browser.provider")
+        } else if self.use_real_profile {
+            Some("browser.use_real_profile")
+        } else {
+            None
+        }
+    }
+}
+
+/// Local browser engines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BrowserEngine {
+    /// Chromium (the managed runtime or a host browser).
+    Auto,
+    /// Lightpanda (`lightpanda serve`).
+    Lightpanda,
 }
 
 /// Dialog policies.

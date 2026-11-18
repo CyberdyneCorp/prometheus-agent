@@ -27,7 +27,9 @@ pub mod cloud;
 pub mod confine;
 pub mod connect;
 pub mod exec;
+pub mod fence;
 pub mod launch;
+pub mod lightpanda;
 mod local;
 pub mod managers;
 pub mod options;
@@ -53,7 +55,10 @@ use serde_json::{Value, json};
 pub use exec::{BrowserExec, ExecArgs, ExecSetup};
 pub use launch::{NoRuntimes, RuntimePolicy, Runtimes};
 pub use safety::UrlSafety;
-pub use session::{BrowserManager, BrowserSession, BrowserSetup, CloudProvider, Origin, Request};
+pub use session::{
+    BrowserManager, BrowserSession, BrowserSetup, CloudProvider, Origin, Request, ScreenDisplay,
+    ScreenHook,
+};
 
 use crate::descriptor::{
     CallContext, HandlerFuture, Owner, RegisteredTool, ResourceClaims, ToolDescriptor, ToolHandler,
@@ -104,12 +109,30 @@ pub fn tools(environments: &Arc<Environments>) -> Vec<RegisteredTool> {
             Owner::Builtin,
             Arc::new(Handler(Arc::clone(environments))),
         )
-        .with_parameters(Arc::new(local_parameter)),
+        .with_parameters(Arc::new(local_parameter))
+        .with_description(Arc::new(engine_description)),
     ];
     tools.extend(cdp_tools::tools(environments));
     tools.push(vault::tool(environments));
     tools.push(close_profile::tool(environments));
     tools
+        .into_iter()
+        .map(|tool| fence::fenced(tool, environments))
+        .collect()
+}
+
+/// `browser_exec`'s description, telling the model what Lightpanda cannot
+/// do when the profile browses on it (spec: execution-environments,
+/// Lightpanda engine).
+fn engine_description(text: &str, config: &pmt_config::schema::Config) -> String {
+    let browser = &config.browser;
+    if browser.engine == pmt_config::schema::BrowserEngine::Lightpanda
+        && browser.engine_shadowed_by().is_none()
+    {
+        format!("{text} {}", lightpanda::LIMITS)
+    } else {
+        text.to_owned()
+    }
 }
 
 /// `browser_exec`'s schema without `local` unless real-profile browsing is

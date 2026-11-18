@@ -67,6 +67,7 @@ pub mod reload;
 pub mod remote;
 pub mod schema;
 pub mod scope;
+pub mod screen_lease;
 pub mod secrets;
 pub mod validate;
 mod validate_platforms;

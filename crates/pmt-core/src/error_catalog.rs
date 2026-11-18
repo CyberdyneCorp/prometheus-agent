@@ -119,6 +119,12 @@ error_codes! {
     /// The egress proxy could not start.
     EGRESS_PROXY_START = ("egress.proxy_start", Unavailable,
         "The egress proxy did not start: its listener did not bind within 5 seconds (or the proxy exited before serving), the credential source is missing mapped secrets, or a proxy of the profile is already running.");
+    /// A person holds the bot screen.
+    SCREEN_HUMAN_HAS_CONTROL = ("screen.human_has_control", Conflict,
+        "A person took the profile's bot screen over (`screen.takeover`): the browser and `computer_use` tools wait until it is handed back (`screen.handback`), the lease expires unused, or `prometheus computer-use screen stop --force` clears it. A call that started before the takeover has its result voided.");
+    /// The bot screen cannot run here.
+    SCREEN_UNAVAILABLE = ("screen.unavailable", Unavailable,
+        "The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`).");
     /// A profile distribution's manifest or content is invalid.
     PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
         "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");

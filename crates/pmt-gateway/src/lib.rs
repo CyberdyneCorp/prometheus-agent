@@ -46,6 +46,8 @@ pub mod pty;
 pub mod queue;
 pub mod remote;
 pub mod router;
+pub mod screen;
+pub mod screen_stream;
 pub mod server;
 pub mod slots;
 pub mod terminals;

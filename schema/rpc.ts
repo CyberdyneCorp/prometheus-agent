@@ -2114,6 +2114,48 @@ export interface RosterSource {
   source: string;
 }
 
+/** `screen.handback` params. */
+export interface ScreenHandbackParams {
+  /** Clear the lease whoever holds it. */
+  force?: boolean;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** The viewer handing it back (the client kind when omitted). */
+  viewer?: string | null;
+}
+
+/** The lease after a takeover or hand-back. */
+export interface ScreenLeaseState {
+  /** Bumped by every takeover; results of agent calls started under an older epoch are void. */
+  epoch: number;
+  /** The viewer holding the screen; `None`: the agent has it. */
+  holder?: string | null;
+}
+
+/** `screen.takeover` params. */
+export interface ScreenTakeoverParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Who takes it over, as shown to the agent and other viewers (the client kind when omitted); the same name hands it back after a reconnect. */
+  viewer?: string | null;
+}
+
+/** A single-use display ticket. */
+export interface ScreenTicket {
+  /** Seconds until it expires (30). */
+  expires_in_secs: number;
+  /** The display stream's path on the daemon's listener (`/screen`). */
+  path: string;
+  /** The secret: offered as the `prometheus-ticket.<ticket>` WebSocket subprotocol next to `prometheus-display.v1`, on `path`. */
+  ticket: string;
+}
+
+/** `screen.ticket` params. */
+export interface ScreenTicketParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+}
+
 /** `secret.request` result. */
 export interface SecretAnswer {
   /** The value; `None` declines. */
@@ -2940,6 +2982,9 @@ export interface Methods {
   "queue.resume": { params: SessionRef; result: QueueState };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
+  "screen.handback": { params: ScreenHandbackParams; result: ScreenLeaseState };
+  "screen.takeover": { params: ScreenTakeoverParams; result: ScreenLeaseState };
+  "screen.ticket": { params: ScreenTicketParams; result: ScreenTicket };
   "session.attach": { params: AttachParams; result: Attached };
   "session.banner": { params: SessionRef; result: BannerInfo };
   "session.compact": { params: CompactParams; result: Compacted };
@@ -3032,8 +3077,6 @@ export const UNDECLARED = [
   "groups.log",
   "groups.replica_state",
   "groups.replicate",
-  "screen.handback",
-  "screen.takeover",
   "tools.call",
   "tools.list",
   "voice.client_config",

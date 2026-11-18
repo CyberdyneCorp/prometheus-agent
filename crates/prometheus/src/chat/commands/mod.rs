@@ -156,7 +156,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "curator" => {
             crate::curator_cmd::slash::run(ctx.scope, ctx.factory.launch(), args, &ctx.post)
         }
-        "background" => background::background(ctx, args).await,
+        "background" => Box::pin(background::background(ctx, args)).await,
         "agents" => agents::agents(ctx, args).await,
         "review" => review::review(ctx, args).await,
         "delegation" => delegation::delegation(ctx, args).await,

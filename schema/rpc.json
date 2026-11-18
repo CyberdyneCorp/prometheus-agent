@@ -6002,6 +6002,121 @@
       ],
       "type": "object"
     },
+    "ScreenHandbackParams": {
+      "additionalProperties": false,
+      "description": "`screen.handback` params.",
+      "properties": {
+        "force": {
+          "default": false,
+          "description": "Clear the lease whoever holds it.",
+          "type": "boolean"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewer": {
+          "default": null,
+          "description": "The viewer handing it back (the client kind when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ScreenLeaseState": {
+      "additionalProperties": false,
+      "description": "The lease after a takeover or hand-back.",
+      "properties": {
+        "epoch": {
+          "description": "Bumped by every takeover; results of agent calls started under an\nolder epoch are void.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "holder": {
+          "description": "The viewer holding the screen; `None`: the agent has it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "epoch"
+      ],
+      "type": "object"
+    },
+    "ScreenTakeoverParams": {
+      "additionalProperties": false,
+      "description": "`screen.takeover` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewer": {
+          "default": null,
+          "description": "Who takes it over, as shown to the agent and other viewers (the\nclient kind when omitted); the same name hands it back after a\nreconnect.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ScreenTicket": {
+      "additionalProperties": false,
+      "description": "A single-use display ticket.",
+      "properties": {
+        "expires_in_secs": {
+          "description": "Seconds until it expires (30).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "path": {
+          "description": "The display stream's path on the daemon's listener (`/screen`).",
+          "type": "string"
+        },
+        "ticket": {
+          "description": "The secret: offered as the `prometheus-ticket.<ticket>` WebSocket\nsubprotocol next to `prometheus-display.v1`, on `path`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticket",
+        "path",
+        "expires_in_secs"
+      ],
+      "type": "object"
+    },
+    "ScreenTicketParams": {
+      "additionalProperties": false,
+      "description": "`screen.ticket` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "SecretAnswer": {
       "additionalProperties": false,
       "description": "`secret.request` result.",
@@ -9336,13 +9451,33 @@
       "since": "1.0"
     },
     "screen.handback": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenHandbackParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenLeaseState"
+      },
       "since": "1.0"
     },
     "screen.takeover": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenTakeoverParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenLeaseState"
+      },
+      "since": "1.0"
+    },
+    "screen.ticket": {
+      "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenTicketParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenTicket"
+      },
       "since": "1.0"
     },
     "session.attach": {

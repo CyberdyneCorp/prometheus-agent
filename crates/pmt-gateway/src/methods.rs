@@ -70,6 +70,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     crate::live::register(router, catalog)?;
     crate::ui_prefs::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
+    crate::screen::register(router, catalog)?;
     crate::moa::register(router, catalog)?;
     crate::observability::register(router, catalog)?;
     crate::local::register(router, catalog)?;

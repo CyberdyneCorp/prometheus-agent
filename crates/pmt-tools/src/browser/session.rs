@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::time::Duration;
 
-use pmt_config::schema::BrowserConfig;
+use pmt_config::schema::{BrowserConfig, BrowserEngine};
 use pmt_core::capability::CapabilitySet;
 use pmt_net::egress::{HostPolicy, Mode, Proxy, Rules};
 use serde_json::{Value, json};
@@ -27,6 +27,7 @@ use tokio::time::Instant;
 use super::cdp::Cdp;
 pub use super::cloud::CloudProvider;
 use super::launch::{self, RuntimePolicy};
+use super::lightpanda;
 use super::local::LocalBrowser;
 use super::options::{self, Display};
 use super::real_profile::{self, Choice, Detect};
@@ -62,7 +63,25 @@ pub struct BrowserSetup {
     pub display: Display,
     /// Finds the user's default browser (real-profile browsing).
     pub detect: Arc<dyn Detect>,
+    /// The profile's bot screen, for headed browsers (`None`: none).
+    pub screen: Option<ScreenHook>,
 }
+
+/// The bot screen a headed browser acts on (spec: execution-environments,
+/// Bot screen): its display, and the persistent profile directory the
+/// bot's browser shares with the desktop's browser launcher while the
+/// screen runs.
+#[derive(Debug, Clone)]
+pub struct ScreenDisplay {
+    /// The variables that reach it (`DISPLAY`).
+    pub env: Vec<(String, std::ffi::OsString)>,
+    /// The shared browser profile.
+    pub user_data_dir: PathBuf,
+}
+
+/// The running bot screen (started on demand when the profile allows it);
+/// called off the async runtime.
+pub type ScreenHook = Arc<dyn Fn() -> Option<ScreenDisplay> + Send + Sync>;
 
 /// What one session asks of its browser.
 #[derive(Debug, Clone, Default)]
@@ -80,6 +99,16 @@ pub enum Origin {
     Cloud(String),
     /// A local Chromium.
     Local,
+}
+
+/// The engine a local session resolved to.
+enum Engine {
+    /// Chromium: Lightpanda was not asked for, or is shadowed.
+    Chromium,
+    /// Lightpanda was asked for but is not available.
+    Missing,
+    /// A running Lightpanda session.
+    Lightpanda(Box<BrowserSession>),
 }
 
 /// A cloud browser to release when the session ends.
@@ -285,6 +314,12 @@ impl BrowserManager {
             told_headless: AtomicBool::new(false),
             reaper: Mutex::default(),
         })
+    }
+
+    /// The profile directory (its `run/` holds the bot screen lease).
+    #[must_use]
+    pub fn profile_dir(&self) -> &std::path::Path {
+        &self.setup.profile_dir
     }
 
     /// The live `[browser]` configuration.
@@ -611,11 +646,17 @@ impl BrowserManager {
         request: &Request,
     ) -> Result<BrowserSession, String> {
         let config = self.config();
+        let engine_missing = match self.lightpanda(&config, fallback_from_cloud, key).await? {
+            Engine::Lightpanda(session) => return Ok(*session),
+            Engine::Missing => true,
+            Engine::Chromium => false,
+        };
+        let (config, display) = self.screen(config).await;
         let (mut launch_options, notice) = options::resolve(
             &config,
             &self.setup.profile_dir,
             &self.setup.confinement.sandbox.allow_degraded,
-            &self.setup.display,
+            &display,
         )?;
         let choice = real_profile::prepare(
             &config,
@@ -669,6 +710,12 @@ impl BrowserManager {
         {
             session.note("notice", json!(notice));
         }
+        if engine_missing {
+            session.note(
+                "engine_unavailable",
+                json!("browser.engine is lightpanda but no lightpanda executable is installed or allowed to install: this session uses Chromium"),
+            );
+        }
         if let Choice::Unavailable(why) = choice {
             // With `real_profile_autoclose` the agent may offer to end the
             // browser holding the profile; the tool asks the user first.
@@ -681,6 +728,70 @@ impl BrowserManager {
             session.note("real_profile_unavailable", json!(why));
         }
         Ok(session)
+    }
+
+    /// A headed browser acts on the bot screen when one runs (or starts
+    /// on demand), on the profile it shares with the desktop's launcher;
+    /// anything else keeps the host's display and its configured profile.
+    async fn screen(&self, mut config: BrowserConfig) -> (BrowserConfig, Display) {
+        let host = self.setup.display.clone();
+        let Some(hook) = self.setup.screen.clone().filter(|_| config.headed) else {
+            return (config, host);
+        };
+        match pmt_core::spawn::blocking(move || hook()).await {
+            Ok(Some(screen)) => {
+                config.user_data_dir = screen.user_data_dir.display().to_string();
+                let display = Display {
+                    available: true,
+                    env: screen.env,
+                };
+                (config, display)
+            }
+            _ => (config, host),
+        }
+    }
+
+    /// A Lightpanda session when `browser.engine` asks for one, nothing
+    /// shadows it and its executable is available (spec:
+    /// execution-environments, Lightpanda engine).
+    async fn lightpanda(
+        &self,
+        config: &BrowserConfig,
+        fallback_from_cloud: bool,
+        key: &str,
+    ) -> Result<Engine, String> {
+        if config.engine != BrowserEngine::Lightpanda || config.engine_shadowed_by().is_some() {
+            return Ok(Engine::Chromium);
+        }
+        let path = self.setup.env.get("PATH").map(std::ffi::OsStr::to_owned);
+        let Some(executable) = lightpanda::executable(&self.setup.runtime, path.as_deref()).await
+        else {
+            return Ok(Engine::Missing);
+        };
+        let proxy = self.egress_proxy(key)?;
+        let launched = lightpanda::launch(
+            &executable,
+            &self.setup.cache_dir.join("profiles"),
+            &self.setup.env,
+            &proxy,
+            &self.setup.confinement,
+            Duration::from_secs(config.launch_timeout_secs),
+        )
+        .await?;
+        let record = self
+            .records
+            .add(
+                launched.pid,
+                &launched.profile_dir,
+                &launched.temp_dir,
+                false,
+            )
+            .map_err(|err| format!("cannot record the browser: {err}"))?;
+        let cdp = Arc::clone(&launched.cdp);
+        let local = LocalBrowser::new(launched, record, proxy);
+        let mut session = self.session_over(cdp, Origin::Local, Some(local), fallback_from_cloud);
+        session.profile = Some(lightpanda::RUNTIME.to_owned());
+        Ok(Engine::Lightpanda(Box::new(session)))
     }
 
     /// The egress proxy of session `key`'s local browser: the session's

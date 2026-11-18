@@ -196,6 +196,10 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "egress status",
     },
     JsonShape {
+        schema: "prometheus.screen_status.v1",
+        command: "computer-use screen status",
+    },
+    JsonShape {
         schema: "prometheus.security_scan.v1",
         command: "security scan",
     },

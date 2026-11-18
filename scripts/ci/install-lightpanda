@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Installs the Lightpanda this binary pins (crates/pmt-update/runtimes/index.json),
+# verified against its SHA-256, into DEST (default: target/tools/lightpanda),
+# so the browser tests run the real engine confined (spec:
+# execution-environments, Lightpanda engine). On GitHub Actions the
+# executable's path is exported as PMT_TEST_LIGHTPANDA.
+#
+# usage: scripts/ci/install-lightpanda [DEST]
+set -euo pipefail
+
+root=$(cd "$(dirname "$0")/../.." && pwd)
+dest=${1:-$root/target/tools/lightpanda}
+
+case "$(uname -s)-$(uname -m)" in
+    Darwin-arm64) platform=darwin-arm64 ;;
+    Darwin-x86_64) platform=darwin-x64 ;;
+    Linux-x86_64) platform=linux-x64 ;;
+    Linux-aarch64) platform=linux-arm64 ;;
+    *) echo "install-lightpanda: no pinned build for $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+
+read -r url sha < <(python3 - "$root/crates/pmt-update/runtimes/index.json" "$platform" <<'PY'
+import json, sys
+artifact = json.load(open(sys.argv[1]))["runtimes"]["lightpanda"]["artifacts"][sys.argv[2]]
+print(artifact["url"], artifact["sha256"])
+PY
+)
+
+mkdir -p "$dest"
+curl --fail --location --silent --show-error --retry 3 -o "$dest/lightpanda.part" "$url"
+if command -v sha256sum >/dev/null; then
+    actual=$(sha256sum "$dest/lightpanda.part" | cut -d' ' -f1)
+else
+    actual=$(shasum -a 256 "$dest/lightpanda.part" | cut -d' ' -f1)
+fi
+if [ "$actual" != "$sha" ]; then
+    rm -f "$dest/lightpanda.part"
+    echo "install-lightpanda: $url has SHA-256 $actual, the index pins $sha" >&2
+    exit 1
+fi
+chmod 755 "$dest/lightpanda.part"
+mv "$dest/lightpanda.part" "$dest/lightpanda"
+"$dest/lightpanda" version || true
+if [ -n "${GITHUB_ENV:-}" ]; then
+    echo "PMT_TEST_LIGHTPANDA=$dest/lightpanda" >> "$GITHUB_ENV"
+fi

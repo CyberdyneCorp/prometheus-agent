@@ -154,8 +154,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `queue.resume` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
-| `screen.handback` | `execution-environments` | 1.0 | not served yet | |
-| `screen.takeover` | `execution-environments` | 1.0 | not served yet | |
+| `screen.handback` | `execution-environments` | 1.0 | [`ScreenHandbackParams`](#screenhandbackparams) | [`ScreenLeaseState`](#screenleasestate) |
+| `screen.takeover` | `execution-environments` | 1.0 | [`ScreenTakeoverParams`](#screentakeoverparams) | [`ScreenLeaseState`](#screenleasestate) |
+| `screen.ticket` | `execution-environments` | 1.0 | [`ScreenTicketParams`](#screenticketparams) | [`ScreenTicket`](#screenticket) |
 | `session.attach` | `workspace-architecture` | 1.0 | [`AttachParams`](#attachparams) | [`Attached`](#attached) |
 | `session.banner` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`BannerInfo`](#bannerinfo) |
 | `session.compact` | `workspace-architecture` | 1.0 | [`CompactParams`](#compactparams) | [`Compacted`](#compacted) |
@@ -2310,6 +2311,52 @@ One source of the roster.
 | `listed_at` | string or null | no | When it was last listed (RFC 3339). |
 | `ok` | boolean | yes | Whether its last listing succeeded. |
 | `source` | string | yes | `local`, `peer` or `connection`. |
+
+### `ScreenHandbackParams`
+
+`screen.handback` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `force` | boolean | no | Clear the lease whoever holds it. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `viewer` | string or null | no | The viewer handing it back (the client kind when omitted). |
+
+### `ScreenLeaseState`
+
+The lease after a takeover or hand-back.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `epoch` | integer | yes | Bumped by every takeover; results of agent calls started under an older epoch are void. |
+| `holder` | string or null | no | The viewer holding the screen; `None`: the agent has it. |
+
+### `ScreenTakeoverParams`
+
+`screen.takeover` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `viewer` | string or null | no | Who takes it over, as shown to the agent and other viewers (the client kind when omitted); the same name hands it back after a reconnect. |
+
+### `ScreenTicket`
+
+A single-use display ticket.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `expires_in_secs` | integer | yes | Seconds until it expires (30). |
+| `path` | string | yes | The display stream's path on the daemon's listener (`/screen`). |
+| `ticket` | string | yes | The secret: offered as the `prometheus-ticket.<ticket>` WebSocket subprotocol next to `prometheus-display.v1`, on `path`. |
+
+### `ScreenTicketParams`
+
+`screen.ticket` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `SecretAnswer`
 

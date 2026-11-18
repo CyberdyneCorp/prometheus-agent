@@ -41,7 +41,20 @@ struct Status {
     cdp_url: Option<String>,
     use_real_profile: bool,
     headed: bool,
+    /// `browser.engine`.
+    engine: &'static str,
+    /// The setting that shadows `browser.engine`, when one does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    engine_shadowed_by: Option<&'static str>,
     sessions: Vec<Entry>,
+}
+
+/// `browser.engine` as configured.
+fn engine_name(engine: pmt_config::schema::BrowserEngine) -> &'static str {
+    match engine {
+        pmt_config::schema::BrowserEngine::Auto => "auto",
+        pmt_config::schema::BrowserEngine::Lightpanda => "lightpanda",
+    }
 }
 
 /// Runs one `browser` subcommand.
@@ -64,12 +77,22 @@ fn status(scope: &ProfileScope, json: bool) -> Result<u8, Error> {
         cdp_url: config.cdp_url.clone().filter(|u| !u.trim().is_empty()),
         use_real_profile: config.use_real_profile,
         headed: config.headed,
+        engine: engine_name(config.engine),
+        engine_shadowed_by: config.engine_shadowed_by(),
         sessions: Sessions::new(&scope.path("cache/browser")).live(),
     };
     if json {
         return document("browser status", &body);
     }
     print_raw(&render(&body))
+}
+
+/// `engine: <name>`, with what shadows it.
+fn engine_line(status: &Status) -> String {
+    match status.engine_shadowed_by {
+        Some(by) => format!("engine: {} (shadowed by {by})\n", status.engine),
+        None => format!("engine: {}\n", status.engine),
+    }
 }
 
 fn render(status: &Status) -> String {
@@ -83,6 +106,7 @@ fn render(status: &Status) -> String {
         if status.use_real_profile { "on" } else { "off" },
         status.headed
     );
+    out.push_str(&engine_line(status));
     if status.sessions.is_empty() {
         out.push_str("no live browser sessions\n");
         return out;

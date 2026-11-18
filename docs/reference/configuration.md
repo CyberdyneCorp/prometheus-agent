@@ -183,6 +183,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `bot_desktop.auto_start` | boolean | `false` | any | `live` | Start the screen on the first `computer_use` call or headed browser launch instead of only on `prometheus computer-use screen start`. |
+| `bot_desktop.geometry` | string | `"1440x900"` | any | `live` | The screen's size, `<width>x<height>` in pixels. |
+| `bot_desktop.idle_stop_secs` | integer | `1800` | ≥ 0 | `live` | The screen stops after this long without use (`0`: never). |
+| `bot_desktop.min_free_memory_bytes` | integer | `1610612736` | ≥ 0 | `live` | The screen refuses to start with less free memory than this on the host or its cgroup (`0`: no check). |
+| `bot_desktop.placement` | one of "auto", "terminal", "gateway" | `"auto"` | `"auto"`, `"terminal"`, `"gateway"` | `live` | Where the screen runs. |
 | `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Envelopes still queued (never drained by a courier) after this many seconds fail with `queued_expired` (`0`: never). |
 | `bot_mode.relay_turn_timeout_secs` | integer | `600` | 1 to 86400 | `live` | Seconds a relayed bot message's turn may take on the target before it fails. |
 | `browser.auto_local_for_private_urls` | boolean | `true` | any | `next_session` | With a cloud provider, private and LAN URLs open in a local sidecar browser instead of being refused or sent to the provider. |
@@ -190,6 +195,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `browser.chromium_args` | array of string | unset | any | `next_session` | Extra local browser arguments; ones that disable the Chromium sandbox or web security need the matching `security.sandbox.allow_degraded` entry. |
 | `browser.dialog_policy` | one of "must_respond", "auto_dismiss", "auto_accept" | `"must_respond"` | `"must_respond"`, `"auto_dismiss"`, `"auto_accept"` | `next_session` | JavaScript dialog handling. |
 | `browser.dialog_timeout_secs` | integer | `300` | ≥ 0 | `next_session` | Unanswered dialogs are dismissed after this long. |
+| `browser.engine` | one of "auto", "lightpanda" | `"auto"` | `"auto"`, `"lightpanda"` | `next_session` | The local browser engine: `auto` (Chromium) or `lightpanda` (lighter; no screenshots, one page). Lowest precedence: an explicit CDP endpoint, a cloud provider or real-profile browsing shadow it. |
 | `browser.executable_path` | string | `""` | any | `next_session` | The local browser executable; empty uses the managed `chromium` runtime, then a Chromium-family browser of the host. |
 | `browser.headed` | boolean | `false` | any | `next_session` | Open a visible window (headless with a notice without a display); kept between turns, idle reaping still applies. |
 | `browser.inactivity_timeout_secs` | integer | `120` | ≥ 0 | `live` | Idle browser sessions are closed after this long. |

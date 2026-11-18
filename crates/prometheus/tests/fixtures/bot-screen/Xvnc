@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""A stand-in for TigerVNC's Xvnc: serves RFB on the -rfbunixpath socket
+(mode -rfbunixmode), greets with the RFB version and echoes what a viewer
+sends; records its command line beside the socket."""
+
+import json
+import os
+import socket
+import sys
+import threading
+
+args = sys.argv[1:]
+path = args[args.index("-rfbunixpath") + 1]
+mode = int(args[args.index("-rfbunixmode") + 1], 8)
+with open(path + ".argv", "w") as out:
+    json.dump(args, out)
+server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+server.bind(path)
+os.chmod(path, mode)
+server.listen(4)
+
+
+def serve(conn):
+    conn.sendall(b"RFB 003.008\n")
+    while True:
+        data = conn.recv(4096)
+        if not data:
+            return
+        conn.sendall(data)
+
+
+while True:
+    conn, _ = server.accept()
+    threading.Thread(target=serve, args=(conn,), daemon=True).start()

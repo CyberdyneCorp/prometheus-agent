@@ -20,6 +20,7 @@ mod a2a;
 mod agent;
 mod api_server;
 mod automation;
+mod bot_desktop;
 mod bot_mode;
 mod connectors;
 mod cron;
@@ -69,6 +70,7 @@ pub use agent::{
 };
 pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
+pub use bot_desktop::{BotDesktopConfig, ScreenPlacement};
 pub use bot_mode::BotModeConfig;
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{
@@ -158,12 +160,12 @@ pub use state::{
 };
 pub use tool_gateway::ToolGatewayConfig;
 pub use tools::{
-    ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ProviderTier,
-    ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig,
-    SurfaceToolsets, TaintPolicy, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
-    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WebXaiConfig,
-    WindowsShell,
+    ApprovalMode, ApprovalsConfig, BrowserConfig, BrowserEngine, ContainerConfig, DegradedMode,
+    DialogPolicy, FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode,
+    ProviderTier, ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal,
+    SshConfig, SurfaceToolsets, TaintPolicy, TerminalConfig, ToolListing, ToolOutputConfig,
+    ToolSearchConfig, ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
+    WebXaiConfig, WindowsShell,
 };
 pub use voice::VoiceModeConfig;
 pub use webhook::{
@@ -198,6 +200,9 @@ pub struct Config {
     pub attachments: AttachmentsConfig,
     /// Sign-in behaviour.
     pub auth: AuthConfig,
+    /// The bot screen: the virtual display the agent's headed browsers
+    /// and `computer_use` act on.
+    pub bot_desktop: BotDesktopConfig,
     /// How bot messages travel between bots (the desktop relay's bounds).
     pub bot_mode: BotModeConfig,
     /// Side-model (auxiliary) task routing.
@@ -364,6 +369,7 @@ impl Default for Config {
             approvals: ApprovalsConfig::default(),
             attachments: AttachmentsConfig::default(),
             auth: AuthConfig::default(),
+            bot_desktop: BotDesktopConfig::default(),
             bot_mode: BotModeConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),

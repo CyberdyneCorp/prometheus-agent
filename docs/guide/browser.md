@@ -161,6 +161,73 @@ switch. Switches Prometheus sets itself (profile directory,
 DevTools transport, proxy, `--headless`) are refused. A browser on a kept
 profile is asked to close before it is ended, so it writes what it holds.
 
+### The Lightpanda engine
+
+`browser.engine = "lightpanda"` browses on [Lightpanda](https://lightpanda.io)
+instead of Chromium: a lighter engine without screenshots that serves one
+page. Each browser session gets its own `lightpanda serve --host 127.0.0.1
+--port <free>` process, from the managed `lightpanda` runtime (`prometheus
+runtimes install lightpanda`; Linux and macOS), else `lightpanda` on `PATH`,
+else a lazy install when `runtimes.allow_lazy_install` allows one. Without
+any, the session uses Chromium and its first result says so
+(`engine_unavailable`). The model is told in the [`browser_exec`](../reference/tools.md#browser_exec) description
+that screenshots are unavailable and only one page is supported.
+
+Lightpanda runs under the same OS sandbox as Chromium, with its CA bundle
+written next to it (it cannot read the system keychain there) and the
+session's egress proxy as its only way out. It serves DevTools on TCP only,
+so its sandbox lets it listen on that one loopback port: on Linux, where it
+has a network namespace of its own, Prometheus reaches the port through
+sockets the browser created in that namespace. It is reaped like Chromium
+(idle timeout, crash replaced on next use).
+
+The engine has the lowest precedence: an explicit CDP endpoint
+(`browser.cdp_url` or `/browser connect`), a cloud provider
+(`browser.provider`) or real-profile browsing (`browser.use_real_profile`)
+shadow it. `prometheus browser status` prints `engine: lightpanda (shadowed
+by <setting>)` and `prometheus doctor terminal` warns about it.
+
+### The bot screen
+
+On a Linux host without a display, `prometheus computer-use screen start`
+runs the profile's bot screen: Xvnc with a minimal Xfce session
+(`bot_desktop.geometry`, default `1440x900`). While it runs, a headed
+browser (`browser.headed = true`) opens on it, on a persistent profile
+(`<profile>/cache/browser/screen-profile`) shared with anything else that
+launches a browser there. With `bot_desktop.auto_start = true` the first
+headed browser launch starts it. It refuses to start with less than
+`bot_desktop.min_free_memory_bytes` free (default 1536 MB, `0` turns the
+check off) and stops after `bot_desktop.idle_stop_secs` without use
+(default 1800, `0` never).
+
+```text
+prometheus computer-use screen install      # shows the packages, then runs the package manager
+prometheus computer-use screen start
+prometheus computer-use screen status
+prometheus computer-use screen stop [--force]
+```
+
+`install` needs root or `sudo`; without either it prints the command to run
+as root. `bot_desktop.placement` decides where the screen goes: `auto` puts
+it on the gateway host for the `local` backend and refuses backends that
+cannot host a display, pointing to `placement = "gateway"` (an explicit
+opt-in to a screen outside the terminal sandbox).
+
+Xvnc serves RFB on a Unix socket only (mode 0600, in a private directory
+of the system temp), never on TCP. The desktop app streams it through the
+daemon: `screen.ticket` returns a single-use display ticket valid 30
+seconds, offered with the `prometheus-display.v1` subprotocol on `/screen`.
+
+A viewer takes the screen over with `screen.takeover` and hands it back
+with `screen.handback`. While a person holds it, every browser tool of the
+profile fails with `human_has_control` (and so will `computer_use`); a call
+that started before the takeover has its result voided. The most recent
+takeover wins, a dropped viewer keeps the lease, and a lease unused for four
+idle windows of 150 seconds (at least ten minutes) returns to the agent.
+`screen.handback {force: true}` and `prometheus computer-use screen stop
+--force` clear it; a plain `stop` refuses while a person holds the screen.
+The lease is a tool-level fence, not an OS boundary (see `SECURITY.md`).
+
 ## Cloud browsers
 
 Set `browser.provider` to one of the first-party providers; a provider

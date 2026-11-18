@@ -99,30 +99,46 @@ fn probe() -> bool {
 }
 
 /// Makes `command`'s child run in its own network namespace whose only
-/// way out is a listener on `127.0.0.1:port`, handed to `relay`.
+/// way out is a listener on `127.0.0.1:port`, handed to `relay`. With an
+/// [`crate::Inbound`] on the relay, the child also hands over
+/// [`crate::relay::INBOUND_SOCKETS`] unconnected sockets created in the
+/// namespace, so the parent can reach a port the child listens on.
 ///
 /// # Errors
 ///
-/// The socket pair cannot be created, or the receiving thread cannot
+/// The socket pairs cannot be created, or a receiving thread cannot
 /// start.
 pub(super) fn isolate(command: &mut Command, port: u16, relay: &Relay) -> io::Result<()> {
     let (parent, child) = UnixStream::pair()?;
     let channel = child.as_raw_fd();
+    let inbound = relay.inbound().cloned();
+    let (inbound_parent, inbound_child) = match &inbound {
+        Some(_) => {
+            let (parent, child) = UnixStream::pair()?;
+            (Some(parent), Some(child))
+        }
+        None => (None, None),
+    };
+    let inbound_channel = inbound_child.as_ref().map(AsRawFd::as_raw_fd);
     let maps = Maps::current();
     let hook = move || -> io::Result<()> {
-        // The closure owns `child`, so the descriptor stays open until the
-        // command is dropped; the forked copy is the one used here.
-        let _keep = &child;
+        // The closure owns `child` (and `inbound_child`), so the
+        // descriptors stay open until the command is dropped; the forked
+        // copies are the ones used here.
+        let _keep = (&child, &inbound_child);
         enter(&maps)?;
         let listener = listen(port)?;
         let sent = send_fd(channel, listener);
         // SAFETY: close(2) of our own copy; the parent holds the sent one.
         unsafe { libc::close(listener) };
         sent?;
+        if let Some(inbound) = inbound_channel {
+            hand_sockets(inbound)?;
+        }
         inherit(channel)
     };
     // SAFETY: as in `probe`, plus sendmsg(2) and fcntl(2) on the
-    // inherited socket pair.
+    // inherited socket pairs.
     unsafe {
         command.pre_exec(hook);
     }
@@ -130,6 +146,34 @@ pub(super) fn isolate(command: &mut Command, port: u16, relay: &Relay) -> io::Re
     std::thread::Builder::new()
         .name("sandbox-netns".into())
         .spawn(move || receive(&parent, &relay))?;
+    if let (Some(inbound), Some(parent)) = (inbound, inbound_parent) {
+        inbound.isolate();
+        std::thread::Builder::new()
+            .name("sandbox-inbound".into())
+            .spawn(move || {
+                loop {
+                    match recv_owned(&parent) {
+                        Ok(Some(socket)) => inbound.add(socket),
+                        Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
+                        Ok(None) | Err(_) => break,
+                    }
+                }
+                inbound.close();
+            })?;
+    }
+    Ok(())
+}
+
+/// Sends [`crate::relay::INBOUND_SOCKETS`] fresh TCP sockets of this
+/// namespace over `channel`.
+fn hand_sockets(channel: RawFd) -> io::Result<()> {
+    for _ in 0..crate::relay::INBOUND_SOCKETS {
+        let socket = socket(libc::SOCK_STREAM)?;
+        let sent = send_fd(channel, socket);
+        // SAFETY: close(2) of our own copy; the parent holds the sent one.
+        unsafe { libc::close(socket) };
+        sent?;
+    }
     Ok(())
 }
 
@@ -274,9 +318,15 @@ fn send_fd(channel: RawFd, fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-/// Receives the descriptor [`send_fd`] sent; `None` when the child closed
+/// Receives the listener [`send_fd`] sent; `None` when the child closed
 /// the channel without sending one (the spawn failed or never happened).
 fn recv_fd(channel: &UnixStream) -> io::Result<Option<TcpListener>> {
+    Ok(recv_owned(channel)?.map(TcpListener::from))
+}
+
+/// Receives one descriptor [`send_fd`] sent; `None` once the sender closed
+/// the channel.
+fn recv_owned(channel: &UnixStream) -> io::Result<Option<OwnedFd>> {
     let mut byte = [0u8; 1];
     let mut iov = libc::iovec {
         iov_base: byte.as_mut_ptr().cast(),
@@ -308,7 +358,7 @@ fn recv_fd(channel: &UnixStream) -> io::Result<Option<TcpListener>> {
             return Ok(None);
         }
         let fd = std::ptr::read_unaligned(libc::CMSG_DATA(header).cast::<RawFd>());
-        Ok(Some(TcpListener::from(OwnedFd::from_raw_fd(fd))))
+        Ok(Some(OwnedFd::from_raw_fd(fd)))
     }
 }
 

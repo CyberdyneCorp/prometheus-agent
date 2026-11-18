@@ -38,6 +38,7 @@ Commands:
   vault          The credential vault: logins, cards and addresses the browser fills by handle
   security       Security records of the profile: verify the tamper-evident audit log
   codex-runtime  Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+  computer-use   The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
   egress         The profile's egress proxy for container and remote sandboxes
   backup         Back up the whole home to a .tar.zst archive, or restore one
   replay         Session recordings: export one, replay it (detecting divergence), or re-record it with this build
@@ -19111,6 +19112,433 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus codex-runtime help help
 ```
 
+## `prometheus computer-use`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
+
+Usage: prometheus computer-use [OPTIONS] <COMMAND>
+
+Commands:
+  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on
+
+Usage: prometheus computer-use screen [OPTIONS] <COMMAND>
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus computer-use screen status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen start`
+
+```text
+Start the screen
+
+Usage: prometheus computer-use screen start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen stop`
+
+```text
+Stop the screen
+
+Usage: prometheus computer-use screen stop [OPTIONS]
+
+Options:
+      --force
+          Also take it back from a person holding it
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus computer-use screen install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -y, --yes
+          Do not ask before installing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus computer-use screen serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use screen help [COMMAND]
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use screen help status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus computer-use screen help status
+```
+
+## `prometheus computer-use screen help start`
+
+```text
+Start the screen
+
+Usage: prometheus computer-use screen help start
+```
+
+## `prometheus computer-use screen help stop`
+
+```text
+Stop the screen
+
+Usage: prometheus computer-use screen help stop
+```
+
+## `prometheus computer-use screen help install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus computer-use screen help install
+```
+
+## `prometheus computer-use screen help serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus computer-use screen help serve
+```
+
+## `prometheus computer-use screen help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use screen help help
+```
+
+## `prometheus computer-use help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use help [COMMAND]
+
+Commands:
+  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use help screen`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on
+
+Usage: prometheus computer-use help screen [COMMAND]
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+```
+
+## `prometheus computer-use help screen status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus computer-use help screen status
+```
+
+## `prometheus computer-use help screen start`
+
+```text
+Start the screen
+
+Usage: prometheus computer-use help screen start
+```
+
+## `prometheus computer-use help screen stop`
+
+```text
+Stop the screen
+
+Usage: prometheus computer-use help screen stop
+```
+
+## `prometheus computer-use help screen install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus computer-use help screen install
+```
+
+## `prometheus computer-use help screen serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus computer-use help screen serve
+```
+
+## `prometheus computer-use help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use help help
+```
+
 ## `prometheus egress`
 
 ```text
@@ -37137,6 +37565,7 @@ Commands:
   vault          The credential vault: logins, cards and addresses the browser fills by handle
   security       Security records of the profile: verify the tamper-evident audit log
   codex-runtime  Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+  computer-use   The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
   egress         The profile's egress proxy for container and remote sandboxes
   backup         Back up the whole home to a .tar.zst archive, or restore one
   replay         Session recordings: export one, replay it (detecting divergence), or re-record it with this build
@@ -40056,6 +40485,71 @@ Write the profile's MCP servers, the enabled Codex plugins and the Prometheus ca
 Usage: prometheus help codex-runtime migrate
 ```
 
+## `prometheus help computer-use`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
+
+Usage: prometheus help computer-use [COMMAND]
+
+Commands:
+  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+```
+
+## `prometheus help computer-use screen`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on
+
+Usage: prometheus help computer-use screen [COMMAND]
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+```
+
+## `prometheus help computer-use screen status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus help computer-use screen status
+```
+
+## `prometheus help computer-use screen start`
+
+```text
+Start the screen
+
+Usage: prometheus help computer-use screen start
+```
+
+## `prometheus help computer-use screen stop`
+
+```text
+Stop the screen
+
+Usage: prometheus help computer-use screen stop
+```
+
+## `prometheus help computer-use screen install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus help computer-use screen install
+```
+
+## `prometheus help computer-use screen serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus help computer-use screen serve
+```
+
 ## `prometheus help egress`
 
 ```text
@@ -42936,6 +43430,7 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.profile.v1` | `prometheus profile show` |
 | `prometheus.profile_info.v1` | `prometheus profile info` |
 | `prometheus.egress_status.v1` | `prometheus egress status` |
+| `prometheus.screen_status.v1` | `prometheus computer-use screen status` |
 | `prometheus.security_scan.v1` | `prometheus security scan` |
 | `prometheus.sessions.v1` | `prometheus sessions list` |
 | `prometheus.session.v1` | `prometheus sessions show` |

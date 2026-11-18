@@ -99,6 +99,7 @@ impl Shared {
             },
             profile_dir: scope.dir().to_path_buf(),
             display: Display::of(launch),
+            screen: Some(screen_hook(current)),
             detect: Arc::new(HostDetect {
                 user_home: launch.user_home().cloned().unwrap_or_default(),
                 path_var: launch.inherited("PATH").map(ToOwned::to_owned),
@@ -184,6 +185,22 @@ fn confirm(asks: mpsc::UnboundedSender<InstallAsk>) -> Box<Confirm> {
                 return false;
             }
             answer.await.unwrap_or(false)
+        })
+    })
+}
+
+/// The profile's bot screen for headed browsers (spec:
+/// execution-environments, Bot screen): the running one, or one started
+/// when `bot_desktop.auto_start` is on and the placement puts it on this
+/// host.
+fn screen_hook(current: &SharedScope) -> pmt_tools::browser::ScreenHook {
+    let current = current.clone();
+    Arc::new(move || {
+        let scope = current.get();
+        let record = crate::screen::for_headed_browser(&scope)?;
+        Some(pmt_tools::browser::ScreenDisplay {
+            env: vec![("DISPLAY".to_owned(), record.display.into())],
+            user_data_dir: crate::screen::browser_profile(&scope),
         })
     })
 }

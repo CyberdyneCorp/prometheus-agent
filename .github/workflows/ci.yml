@@ -155,6 +155,12 @@ jobs:
       - name: Install uv and the python-bridge test interpreter
         run: scripts/ci/install-uv "$RUNNER_TEMP/uv"
 
+      # The browser tests run the pinned Lightpanda confined (macOS
+      # Seatbelt; Linux network namespace reached through its sockets).
+      - name: Install Lightpanda for the browser tests
+        if: runner.os == 'macOS' || (runner.os == 'Linux' && endsWith(matrix.target, '-gnu'))
+        run: scripts/ci/install-lightpanda "$RUNNER_TEMP/lightpanda"
+
       - name: scripts/check
         # The budgets apply to the reference runner only; the perf job runs them.
         run: scripts/check --no-perf

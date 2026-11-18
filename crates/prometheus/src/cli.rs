@@ -249,6 +249,13 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::codex_runtime_cmd::CodexRuntimeCommand,
     },
+    /// The bot screen: the virtual desktop the agent's headed browsers
+    /// act on and the desktop app streams.
+    ComputerUse {
+        /// The computer-use subcommand.
+        #[command(subcommand)]
+        command: crate::computer_use_cmd::ComputerUseCommand,
+    },
     /// The profile's egress proxy for container and remote sandboxes.
     Egress {
         /// The egress subcommand.

@@ -88,7 +88,31 @@ pub(super) fn terminal(inputs: &Inputs<'_>) -> Vec<Check> {
     if cfg!(windows) {
         checks.push(install_on_path(inputs));
     }
+    checks.extend(browser_engine(&inputs.scope.config().browser));
     checks
+}
+
+/// `browser.engine = "lightpanda"` and whatever shadows it (spec:
+/// execution-environments, Lightpanda engine).
+fn browser_engine(browser: &pmt_config::schema::BrowserConfig) -> Option<Check> {
+    if browser.engine != pmt_config::schema::BrowserEngine::Lightpanda {
+        return None;
+    }
+    Some(match browser.engine_shadowed_by() {
+        Some(by) => Check::new(
+            "terminal",
+            "browser_engine",
+            Status::Warn,
+            format!("browser.engine (lightpanda) is shadowed by {by}"),
+        )
+        .with_hint(format!("unset {by} to browse on Lightpanda")),
+        None => Check::new(
+            "terminal",
+            "browser_engine",
+            Status::Ok,
+            "browser.engine: lightpanda (no screenshots, one page)",
+        ),
+    })
 }
 
 /// Whether the directory of this binary is on `path` (`PATH`'s value).
