@@ -251,6 +251,37 @@ fn bitwarden_missing_a_secret() {
     ok(&run(home.path(), &["egress", "stop"]));
 }
 
+/// A start on a loaded host: the proxy's own setup (here a Bitwarden fetch
+/// that takes 7 s, longer than the old fixed 6 s start window; on CI the
+/// container runtime probe under parallel container tests) delays the
+/// start but never fails it. `start` waits for the proxy's ready line.
+#[test]
+fn a_slow_setup_delays_the_start_without_failing_it() {
+    let home = mock_home();
+    let dir = home.path().join("runtimes/bws/9.9.9-test");
+    std::fs::create_dir_all(&dir).unwrap();
+    let bws = dir.join("bws");
+    std::fs::write(
+        &bws,
+        "#!/bin/sh\nsleep 7\necho '[{\"key\":\"OPENAI_API_KEY\",\"value\":\"sk-from-bws\"}]'\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&bws, std::fs::Permissions::from_mode(0o755)).unwrap();
+    injecting(
+        home.path(),
+        "\"localhost\"",
+        "credential_source = \"bitwarden\"\n[secrets.bitwarden]\nproject_id = \"p1\"\n",
+    );
+    ok(&run_with_stdin(
+        home.path(),
+        &["secrets", "set", "BWS_ACCESS_TOKEN"],
+        "bws-token",
+    ));
+    ok(&run(home.path(), &["egress", "start"]));
+    assert_eq!(status(home.path())["running"], true);
+    ok(&run(home.path(), &["egress", "stop"]));
+}
+
 #[test]
 fn bitwarden_keys_not_accepted_by_sync_are_never_injected() {
     let home = mock_home();

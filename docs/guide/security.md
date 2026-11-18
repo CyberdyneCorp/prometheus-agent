@@ -232,8 +232,11 @@ host's own address (slirp4netns, pasta), that address, where the listener
 serves only connections coming from the host itself and the relay maps the
 host alias to it. Never `0.0.0.0`. If the host no longer holds the address
 when the proxy binds, the listener falls back to loopback with a warning
-(containers cannot reach it then); any other listener that does not bind
-within 5 seconds fails the start. `status`
+(containers cannot reach it then); a port still in use is retried for 5
+seconds, and any listener that does not bind then fails the start. `start`
+returns once the proxy reports that it serves (or exits with its reason):
+its container runtime probe and credential fetch are bounded by their own
+timeouts, so a loaded host delays a start instead of failing it. `status`
 shows the listeners, the mode, each mapping with its placeholder cut to
 its first and last characters (`--show-tokens` shows them whole), the
 denied connections, and the provider secrets the profile holds that are

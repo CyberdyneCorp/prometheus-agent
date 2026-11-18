@@ -28,8 +28,13 @@ use pmt_core::error::{Error, codes};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-/// How long a start may take to bind its listeners.
+/// How long the proxy retries a container listener port still in use (a
+/// proxy that just stopped) before the start fails.
 pub const BIND_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The line the proxy prints on its stdout once it serves and its record
+/// is written.
+pub const READY: &str = "egress-proxy-ready";
 
 /// How long a graceful stop may take before the process is killed.
 pub const STOP_GRACE: Duration = Duration::from_secs(5);
@@ -127,10 +132,16 @@ pub fn own(scope: &ProfileScope) -> Option<std::process::Child> {
 /// Starts the proxy of `scope`; `owned`: it ends when the returned child's
 /// stdin closes (the daemon keeps it).
 ///
+/// It returns once the proxy says it serves ([`READY`] on its stdout) or
+/// has exited. There is no wall-clock deadline here: the proxy's slow
+/// steps (the container runtime probe, a Bitwarden fetch) are bounded by
+/// their own call timeouts, so a loaded host delays the start instead of
+/// failing it.
+///
 /// # Errors
 ///
-/// `egress.proxy_start` when it is already running or did not come up
-/// within [`BIND_TIMEOUT`] (its own error is included).
+/// `egress.proxy_start` when it is already running or exited before
+/// serving (its own error is included).
 pub fn start(scope: &ProfileScope, owned: bool) -> Result<(Record, std::process::Child), Error> {
     if let Some((record, _)) = running(scope) {
         return Err(start_error(&format!(
@@ -145,7 +156,7 @@ pub fn start(scope: &ProfileScope, owned: bool) -> Result<(Record, std::process:
         .arg("--home")
         .arg(scope.home())
         .args(["-p", scope.name().as_str(), "egress", "serve"])
-        .stdout(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
     if owned {
         command.arg("--owned").stdin(std::process::Stdio::piped());
@@ -153,31 +164,42 @@ pub fn start(scope: &ProfileScope, owned: bool) -> Result<(Record, std::process:
         command.stdin(std::process::Stdio::null());
     }
     let mut child = command.spawn().map_err(|e| start_error(&e.to_string()))?;
-    let deadline = Instant::now() + BIND_TIMEOUT + Duration::from_secs(1);
-    while Instant::now() < deadline {
-        if let Ok(Some(_)) = child.try_wait() {
-            let mut why = String::new();
-            if let Some(mut stderr) = child.stderr.take() {
-                let _ = std::io::Read::read_to_string(&mut stderr, &mut why);
-            }
-            let why = why.trim().trim_start_matches("error: ");
-            let why = why
-                .strip_prefix("the egress proxy did not start: ")
-                .unwrap_or(why);
-            return Err(start_error(why));
-        }
-        if let Some((record, _)) = running(scope)
-            && record.pid == child.id()
-        {
-            return Ok((record, child));
-        }
-        std::thread::sleep(Duration::from_millis(50));
+    // Drained all along: a proxy that logs a lot must never block on a
+    // full pipe while we wait for its ready line.
+    let stderr = child.stderr.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            let _ = std::io::Read::read_to_string(&mut pipe, &mut text);
+            text
+        })
+    });
+    // Until the ready line, or end of file: the proxy exited.
+    let ready = child.stdout.take().is_some_and(|stdout| {
+        BufReader::new(stdout)
+            .lines()
+            .map_while(Result::ok)
+            .any(|line| line.trim() == READY)
+    });
+    if ready
+        && let Some(record) = record(scope)
+        && record.pid == child.id()
+    {
+        return Ok((record, child));
     }
     let _ = child.kill();
-    Err(start_error(&format!(
-        "it did not come up within {} s",
-        BIND_TIMEOUT.as_secs()
-    )))
+    let _ = child.wait();
+    let why = stderr
+        .and_then(|reader| reader.join().ok())
+        .unwrap_or_default();
+    let why = why.trim().trim_start_matches("error: ");
+    let why = why
+        .strip_prefix("the egress proxy did not start: ")
+        .unwrap_or(why);
+    Err(start_error(if why.is_empty() {
+        "it exited before serving"
+    } else {
+        why
+    }))
 }
 
 /// Stops the proxy of `scope` (graceful, killed after [`STOP_GRACE`]);

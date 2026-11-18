@@ -141,10 +141,9 @@ fn gateway(runtime: &pmt_sandbox::container::Runtime) -> Option<IpAddr> {
         pmt_sandbox::container::Flavor::Docker => ("bridge", "{{(index .IPAM.Config 0).Gateway}}"),
         pmt_sandbox::container::Flavor::Podman => ("podman", "{{(index .Subnets 0).Gateway}}"),
     };
+    let args = ["network", "inspect", network, "--format", format].map(String::from);
     runtime
-        .command()
-        .args(["network", "inspect", network, "--format", format])
-        .output()
+        .run(&args)
         .ok()
         .filter(|o| o.status.success())
         .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())

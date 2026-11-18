@@ -40,8 +40,7 @@ pub fn serve(scope: &ProfileScope, owned: bool) -> Result<u8, Error> {
     let loopback = Proxy::start(rules.0.clone()).map_err(|e| bind_error("loopback", &e))?;
     let wanted = super::bridge::Reach::of(scope);
     let port = config.security.egress.proxy_port;
-    let (reach, bridge) = wanted
-        .listen(port)
+    let (reach, bridge) = listen_within(wanted, port, super::BIND_TIMEOUT)
         .and_then(|(reach, listener)| {
             Ok((
                 reach,
@@ -62,6 +61,12 @@ pub fn serve(scope: &ProfileScope, owned: bool) -> Result<u8, Error> {
         relay_host: reach.relay_host(),
     };
     write_record(scope, &record)?;
+    // `start` waits for this line (on a terminal it is harmless).
+    {
+        let mut stdout = std::io::stdout().lock();
+        let _ = writeln!(stdout, "{}", super::READY);
+        let _ = stdout.flush();
+    }
     if owned {
         // The daemon holds our stdin: its end is our end.
         std::thread::spawn(|| {
@@ -159,6 +164,27 @@ fn write_record(scope: &ProfileScope, record: &Record) -> Result<(), Error> {
         .map_err(|e| Error::io(&codes::HOME_IO, &path, &e))?;
     file.write_all(&serde_json::to_vec(record).expect("a record serializes"))
         .map_err(|e| Error::io(&codes::HOME_IO, &path, &e))
+}
+
+/// Binds the container listener, retrying while its port is still held
+/// (by a proxy that is just going away) for up to `limit`.
+fn listen_within(
+    reach: super::bridge::Reach,
+    port: u16,
+    limit: Duration,
+) -> std::io::Result<(super::bridge::Reach, TcpListener)> {
+    let deadline = std::time::Instant::now() + limit;
+    loop {
+        match reach.listen(port) {
+            Err(e)
+                if e.kind() == std::io::ErrorKind::AddrInUse
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            bound => return bound,
+        }
+    }
 }
 
 fn bind_error(what: &str, e: &std::io::Error) -> Error {
