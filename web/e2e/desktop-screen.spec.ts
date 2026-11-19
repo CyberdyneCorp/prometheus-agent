@@ -9,15 +9,15 @@ import { expect, test } from "@playwright/test";
 import { openDesktop } from "./desktop";
 import { env } from "./helpers";
 
-/** The input events the screen received. */
+/** The input events the screen received. The stand-in appends to its log
+ * while this polls, so a read can end mid-line (or see the file created but
+ * still empty): only newline-terminated lines are complete events. */
 function inputs(): Record<string, unknown>[] {
   const record = JSON.parse(readFileSync(join(env("PMT_HOME"), "profiles/default/run/screen/screen.json"), "utf8")) as { rfb: string };
   const log = `${record.rfb}.input`;
   if (!existsSync(log)) return [];
-  return readFileSync(log, "utf8")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  const lines = readFileSync(log, "utf8").split("\n");
+  return lines.slice(0, -1).map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 /** Who the CLI says holds the screen. */
@@ -61,7 +61,8 @@ test("the screen pane streams the bot screen and takes it over", async ({ page }
   await page.click("button[name=screen-browser]");
   await expect(page.locator(".screen-status")).toContainText("Opened a browser");
   const launched = join(env("PMT_USER_HOME"), "fake-chromium.log");
-  await expect.poll(() => existsSync(launched)).toBe(true);
+  // The launcher's shell creates the log before its line lands in it.
+  await expect.poll(() => existsSync(launched) && readFileSync(launched, "utf8").endsWith("\n")).toBe(true);
   const [display, ...args] = readFileSync(launched, "utf8").trim().split(" ");
   const record = JSON.parse(readFileSync(join(env("PMT_HOME"), "profiles/default/run/screen/screen.json"), "utf8")) as { display: string };
   expect(display).toBe(record.display);
