@@ -388,11 +388,13 @@ pub(crate) fn agent(
     }
 }
 
-/// Fast lease timing for tests.
+/// Fast lease timing for tests: quick renewal and admission, but a TTL no
+/// CI runner stall outlasts (a 6 s host-wide pause once expired a 5 s lease
+/// mid-turn); no test here relies on a lease expiring by itself.
 pub(crate) fn options() -> TurnOptions {
     TurnOptions {
         lease: LeaseTiming {
-            ttl: Duration::from_secs(5),
+            ttl: Duration::from_mins(1),
             renew_every: Duration::from_millis(100),
             admission_wait: Duration::from_millis(300),
         },
