@@ -131,6 +131,10 @@ fn auto_places_the_screen_in_a_desktop_container() {
         run.iter().any(|a| a.ends_with(":/tmp/.X11-unix")),
         "{run:?}"
     );
+    assert!(
+        run.iter().any(|a| a.ends_with("/xauth:/run/pmt-xauth:ro")),
+        "{run:?}"
+    );
 
     // Xvnc serves RFB inside it, reached on this host.
     let record: serde_json::Value = serde_json::from_str(
@@ -149,6 +153,9 @@ fn auto_places_the_screen_in_a_desktop_container() {
         serde_json::from_str(&std::fs::read_to_string(format!("{rfb}.argv")).unwrap()).unwrap();
     assert_eq!(argv[0], ":1");
     assert!(argv.windows(2).any(|w| w == ["-rfbport", "-1"]), "{argv:?}");
+    let auth = argv.iter().position(|a| a == "-auth").expect("-auth");
+    assert!(argv[auth + 1].ends_with("/xauth/Xauthority"), "{argv:?}");
+    assert!(Path::new(&argv[auth + 1]).is_file());
 
     ok(&backend.screen(&["stop"]));
     assert_eq!(backend.status()["running"], false);
@@ -194,10 +201,21 @@ fn session_containers_share_the_screen_display() {
     let shared = prometheus::screen::container::for_sessions(&scope)
         .unwrap()
         .unwrap();
-    assert_eq!(shared.volume.container, "/tmp/.X11-unix");
-    assert!(shared.volume.read_only);
-    assert!(shared.volume.host.ends_with("x11"));
-    assert_eq!(shared.env, ("DISPLAY".to_owned(), ":1".to_owned()));
+    assert_eq!(shared.volumes[0].container, "/tmp/.X11-unix");
+    assert!(shared.volumes[0].host.ends_with("x11"));
+    assert_eq!(shared.volumes[1].container, "/run/pmt-xauth");
+    assert!(shared.volumes[1].host.ends_with("xauth"));
+    assert!(shared.volumes.iter().all(|v| v.read_only));
+    assert_eq!(
+        shared.env,
+        [
+            ("DISPLAY".to_owned(), ":1".to_owned()),
+            (
+                "XAUTHORITY".to_owned(),
+                "/run/pmt-xauth/Xauthority".to_owned()
+            )
+        ]
+    );
 }
 
 const SSH: &str =
@@ -236,6 +254,26 @@ fn auto_places_the_screen_on_the_ssh_host() {
     assert!(calls.contains("agent@bot.example"), "{calls}");
     let forward = calls.lines().find(|l| l.contains(" -N ")).unwrap();
     assert!(forward.contains(&format!("-L {rfb}:")), "{forward}");
+    // Xvnc on the SSH host admits X clients by the cookie written there;
+    // this host's clients get a private copy.
+    let remote_rfb = forward
+        .split("-L ")
+        .nth(1)
+        .unwrap()
+        .split([':', ' '])
+        .nth(1)
+        .unwrap();
+    let argv: Vec<String> =
+        serde_json::from_str(&std::fs::read_to_string(format!("{remote_rfb}.argv")).unwrap())
+            .unwrap();
+    let auth = argv.iter().position(|a| a == "-auth").expect("-auth");
+    let remote_auth = Path::new(&argv[auth + 1]);
+    assert!(remote_auth.ends_with("Xauthority"), "{argv:?}");
+    let local_auth = record["xauthority"].as_str().unwrap();
+    assert_eq!(
+        std::fs::read(remote_auth).unwrap(),
+        std::fs::read(local_auth).unwrap()
+    );
 
     ok(&backend.screen(&["stop"]));
     assert_eq!(backend.status()["running"], false);

@@ -22,6 +22,8 @@ pub(super) struct Launched {
     pub(super) display: String,
     /// The display inside the backend (`None` on the gateway host).
     pub(super) backend_display: Option<String>,
+    /// The Xauthority file this host's X clients use.
+    pub(super) xauthority: PathBuf,
     /// `host`, `container` or `ssh`.
     pub(super) placement: &'static str,
     /// Removes the screen's remains in the backend.
@@ -29,13 +31,15 @@ pub(super) struct Launched {
 }
 
 impl Launched {
-    /// A screen of `placement` whose RFB socket will be `rfb`.
-    pub(super) fn new(placement: &'static str, rfb: PathBuf) -> Self {
+    /// A screen of `placement` whose RFB socket will be `rfb` and whose
+    /// X clients on this host authorize with `xauthority`.
+    pub(super) fn new(placement: &'static str, rfb: PathBuf, xauthority: PathBuf) -> Self {
         Self {
             children: Vec::new(),
             rfb,
             display: String::new(),
             backend_display: None,
+            xauthority,
             placement,
             cleanup: None,
         }
@@ -133,10 +137,13 @@ pub(super) fn failed(why: &str) -> Error {
     )
 }
 
-/// The Xvnc arguments after the display: RFB only on the Unix socket
-/// `rfb` with `mode`, never on TCP, shared between viewers.
-pub(super) fn xvnc_args(geometry: &str, rfb: &str, mode: &str) -> Vec<String> {
+/// The Xvnc arguments after the display: X clients only with the cookie
+/// in the Xauthority file `auth`, RFB only on the Unix socket `rfb` with
+/// `mode`, never on TCP, shared between viewers.
+pub(super) fn xvnc_args(geometry: &str, rfb: &str, mode: &str, auth: &str) -> Vec<String> {
     [
+        "-auth",
+        auth,
         "-geometry",
         geometry,
         "-depth",
@@ -160,3 +167,19 @@ pub(super) fn xvnc_args(geometry: &str, rfb: &str, mode: &str) -> Vec<String> {
 /// The desktop session started on `$DISPLAY`: Xfce under its own D-Bus
 /// session bus when `dbus-launch` is installed.
 pub(super) const SESSION_SCRIPT: &str = "if command -v dbus-launch >/dev/null 2>&1; then exec dbus-launch --exit-with-session xfce4-session; else exec xfce4-session; fi";
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn x_clients_need_the_screens_cookie() {
+        let args = super::xvnc_args("800x600", "/s/rfb.sock", "0600", "/s/Xauthority");
+        assert!(
+            args.windows(2).any(|w| w == ["-auth", "/s/Xauthority"]),
+            "{args:?}"
+        );
+        assert!(
+            args.windows(2).any(|w| w == ["-nolisten", "tcp"]),
+            "{args:?}"
+        );
+    }
+}

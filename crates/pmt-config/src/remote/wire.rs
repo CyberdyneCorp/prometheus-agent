@@ -74,6 +74,9 @@ pub struct Layered {
     pub text: String,
     /// Locked key to the lowest level locking it.
     pub locks: BTreeMap<String, String>,
+    /// Each leaf key to the level whose value it holds (the highest level
+    /// setting it), for diagnostics about served values.
+    pub origins: BTreeMap<String, String>,
 }
 
 /// Merges `fetched`'s layers in [`LEVELS`] order.
@@ -96,8 +99,14 @@ pub fn layer(fetched: &Fetched) -> Result<Layered, String> {
     layers.sort_by_key(|l| LEVELS.iter().position(|level| *level == l.level));
     let mut merged = Map::new();
     let mut locks = BTreeMap::new();
+    let mut origins = BTreeMap::new();
     for layer in layers {
         merge(&mut merged, &layer.values);
+        let mut leaves = BTreeMap::new();
+        flatten("", &Value::Object(layer.values.clone()), &mut leaves);
+        for key in leaves.into_keys() {
+            origins.insert(key, layer.level.clone());
+        }
         for key in &layer.locked {
             locks
                 .entry(key.clone())
@@ -120,6 +129,7 @@ pub fn layer(fetched: &Fetched) -> Result<Layered, String> {
     Ok(Layered {
         text: format!("schema_version = {}\n{body}", crate::SCHEMA_VERSION),
         locks,
+        origins,
     })
 }
 
@@ -193,6 +203,21 @@ fn flatten(prefix: &str, value: &Value, out: &mut BTreeMap<String, Value>) {
             out.insert(prefix.to_owned(), other.clone());
         }
     }
+}
+
+/// The level that supplied `key`: its own leaf, else the nearest leaf
+/// under it (a diagnostic may name a table).
+#[must_use]
+pub fn origin_of<'a>(origins: &'a BTreeMap<String, String>, key: &str) -> Option<&'a str> {
+    if let Some(level) = origins.get(key) {
+        return Some(level);
+    }
+    let prefix = format!("{key}.");
+    origins
+        .range(prefix.clone()..)
+        .take_while(|(k, _)| k.starts_with(&prefix))
+        .map(|(_, level)| level.as_str())
+        .next()
 }
 
 /// The level locking `key` (the key itself or a parent table of it).

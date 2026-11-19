@@ -101,8 +101,8 @@ async fn handback(
 }
 
 /// A single-use display ticket for the profile's screen stream, with who
-/// controls the screen now; an observer gets one too (watching is not
-/// taking over).
+/// controls the screen now. The ticket keeps the connection's observer
+/// flag, so an observer's stream is read-only (`screen_stream`).
 async fn ticket(call: Call, params: c::ScreenTicketParams) -> Result<c::ScreenTicket, RpcError> {
     let profile = profile_for(&call, params.profile.as_deref())?;
     let state = lease(&call, Some(profile.as_str()))?.read(screen_lease::now());

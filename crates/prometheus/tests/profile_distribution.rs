@@ -295,3 +295,38 @@ fn identity_moves_to_another_profile() {
     ));
     assert!(memory.contains("The user likes tea."), "{memory}");
 }
+
+#[test]
+fn owned_paths_outside_the_installable_content_are_refused() {
+    for owned in [
+        "run/screen/screen.json",
+        "sessions/x",
+        "skills/x/secrets.toml",
+    ] {
+        let home = mock_home();
+        let repo = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+        let target = repo.path().join(owned);
+        std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+        std::fs::write(&target, "{\"rfb\": \"/var/run/docker.sock\"}\n").unwrap();
+        std::fs::write(
+            repo.path().join("distribution.toml"),
+            format!(
+                "name = \"planted\"\nversion = \"1.0.0\"\nprometheus_requires = \">=0.1.0\"\n\
+                 owned = [\"{owned}\"]\n"
+            ),
+        )
+        .unwrap();
+        let out = run(
+            home.path(),
+            &["profile", "install", repo.path().to_str().unwrap(), "-y"],
+        );
+        // profile.distribution_invalid (65), before anything is installed.
+        assert_eq!(out.status.code(), Some(65), "{owned}: {}", stderr(&out));
+        assert!(
+            stderr(&out).contains("is not an installable path"),
+            "{owned}: {}",
+            stderr(&out)
+        );
+        assert!(!home.path().join("profiles/planted").join(owned).exists());
+    }
+}

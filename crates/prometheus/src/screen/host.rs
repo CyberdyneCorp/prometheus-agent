@@ -1,6 +1,7 @@
 //! The bot screen on the gateway host (the `local` backend, or
 //! `bot_desktop.placement = "gateway"`): Xvnc on a free display with RFB
-//! on a 0600 Unix socket only, then the Xfce session on that display.
+//! on a 0600 Unix socket only and X clients admitted by a private cookie,
+//! then the Xfce session on that display.
 
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -20,13 +21,16 @@ const DISPLAYS: std::ops::Range<u32> = 50..100;
 ///
 /// `screen.unavailable`: Xvnc or the session did not start.
 pub(super) fn launch(sockets: &Path, geometry: &str) -> Result<Launched, Error> {
-    let mut launched = Launched::new("host", sockets.join("rfb.sock"));
-    let (xvnc, display) = start_xvnc(&launched.rfb, geometry)?;
+    let auth = sockets.join(super::xauth::FILE);
+    super::xauth::write(&auth, &super::xauth::fresh()?, false)?;
+    let mut launched = Launched::new("host", sockets.join("rfb.sock"), auth);
+    let (xvnc, display) = start_xvnc(&launched.rfb, geometry, &launched.xauthority)?;
     launched.children.push(("Xvnc", xvnc));
     let mut session = Command::new("sh");
     session
         .args(["-c", SESSION_SCRIPT])
         .env("DISPLAY", &display)
+        .env("XAUTHORITY", &launched.xauthority)
         .env_remove("WAYLAND_DISPLAY")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -47,16 +51,21 @@ fn free_displays() -> impl Iterator<Item = u32> {
 }
 
 /// Starts Xvnc on the first free display that it accepts.
-fn start_xvnc(rfb: &Path, geometry: &str) -> Result<(std::process::Child, String), Error> {
+fn start_xvnc(
+    rfb: &Path,
+    geometry: &str,
+    auth: &Path,
+) -> Result<(std::process::Child, String), Error> {
     let mut last = String::from("no free display between :50 and :99");
     let rfb_text = rfb.to_string_lossy();
+    let auth = auth.to_string_lossy();
     for number in free_displays().take(5) {
         let display = format!(":{number}");
         let _ = std::fs::remove_file(rfb);
         let mut command = Command::new("Xvnc");
         command
             .arg(&display)
-            .args(xvnc_args(geometry, &rfb_text, "0600"))
+            .args(xvnc_args(geometry, &rfb_text, "0600", &auth))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());

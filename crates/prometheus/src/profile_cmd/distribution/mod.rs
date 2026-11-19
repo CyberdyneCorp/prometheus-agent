@@ -165,9 +165,15 @@ pub fn update(home: &Home, ctx: &Context<'_>, args: &UpdateArgs) -> Result<u8, E
     if args.force_config && fetched.root.join(manifest::CONFIG).is_file() {
         replace_config(&scope, &fetched.root)?;
     }
-    // Paths the old version owned and the new one no longer does go too.
+    // Paths the old version owned and the new one no longer does go too;
+    // a recorded path outside the installable content (written by an older
+    // build) is profile state and is left alone.
     let new_owned = manifest.owned_paths(&fetched.root);
-    for path in old.owned.iter().filter(|p| !new_owned.contains(p)) {
+    for path in old
+        .owned
+        .iter()
+        .filter(|p| !new_owned.contains(p) && manifest::installable(p))
+    {
         apply::replace_path(&fetched.root, profile.path(), path)?;
     }
     let record = Record {
@@ -205,7 +211,7 @@ fn place(
         .iter()
         .filter(|p| *p != manifest::MCP && *p != manifest::CRON)
     {
-        check_relative(path)?;
+        manifest::check_installable(path)?;
         apply::replace_path(root, profile.path(), path)?;
     }
     let scope = open(profile)?;
@@ -220,20 +226,6 @@ fn place(
     }
     record.owned = owned;
     Ok(record)
-}
-
-/// An owned path must stay inside the profile.
-fn check_relative(path: &str) -> Result<(), Error> {
-    let p = Path::new(path);
-    let inside = p.is_relative()
-        && p.components()
-            .all(|c| matches!(c, std::path::Component::Normal(_)));
-    if inside && !manifest::never_installed(path) && path != manifest::CONFIG {
-        return Ok(());
-    }
-    Err(manifest::invalid(format!(
-        "owned path '{path}' is not an installable path of the profile"
-    )))
 }
 
 fn open(profile: &ProfileDir) -> Result<ProfileScope, Error> {

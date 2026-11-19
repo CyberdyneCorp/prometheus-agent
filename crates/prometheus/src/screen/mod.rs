@@ -35,6 +35,8 @@ pub mod placement;
 pub mod serve;
 #[cfg(unix)]
 mod ssh;
+#[cfg(unix)]
+mod xauth;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -63,6 +65,10 @@ pub struct Record {
     pub backend_display: Option<String>,
     /// The RFB socket.
     pub rfb: PathBuf,
+    /// The Xauthority file with the cookie this host's X clients present
+    /// (`XAUTHORITY`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub xauthority: Option<PathBuf>,
     /// `<width>x<height>`.
     pub geometry: String,
     /// `host`, `container` or `ssh`.

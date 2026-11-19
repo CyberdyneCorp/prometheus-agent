@@ -156,7 +156,10 @@ changed, at the `profile` level, as
 refused with `config key '<key>' is locked by the <level> level`, and a
 document that changed since it was read fails with
 `config.remote_conflict` (exit 75). A credential is refused in remote
-values exactly as in `config.toml`. `profile create --clone-from` (or
+values exactly as in `config.toml`; this and every other validation error
+about a served value names the plane URL, the profile and the level that
+served the key (fix it on the plane; the local `config.toml` is not
+read). `profile create --clone-from` (or
 `--clone-all`) clones the source's plane configuration the same way: the
 keys that differ are written at the new profile's level (without
 `gateway.platforms` unless `--clone-channels`), and the plane token is
@@ -411,7 +414,10 @@ Beside it: `SOUL.md`, an initial `config.toml`, `skills/<entry>/`,
 (`[[jobs]]` with `id`, `name`, `schedule`, `prompt`). Nothing else is
 installed: credential stores, `state.db`, sessions, memory, logs and
 snapshots are never copied even when the repository holds them (the
-preview lists them as `never installed`).
+preview lists them as `never installed`). `owned` may name only
+`SOUL.md`, `mcp.toml`, `cron.toml` and `skills/<entry>[/...]`; any other
+path (`run/...`, `sessions/...`, a nested `secrets.toml`) makes the
+manifest invalid (`profile.distribution_invalid`, exit 65).
 `prometheus profile install <git-url|dir> [--name N] [--alias] [--force] [-y]`
 previews the files and secrets, asks (exit 4 without a terminal and
 without `-y`), refuses an incompatible `prometheus_requires` with exit 78,

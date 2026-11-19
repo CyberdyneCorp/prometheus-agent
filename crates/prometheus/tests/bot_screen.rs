@@ -100,6 +100,17 @@ fn start_status_and_stop_the_screen() {
     let rfbport = argv.iter().position(|a| a == "-rfbport").unwrap();
     assert_eq!(argv[rfbport + 1], "-1");
     assert!(argv.windows(2).any(|w| w == ["-geometry", "1440x900"]));
+    // X clients need the screen's private cookie (no other OS user of the
+    // host reaches the display through /tmp/.X11-unix).
+    let auth = argv.iter().position(|a| a == "-auth").expect("-auth");
+    let auth = PathBuf::from(&argv[auth + 1]);
+    assert_eq!(record["xauthority"].as_str(), auth.to_str());
+    let mode = std::fs::metadata(&auth).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600);
+    assert_eq!(
+        std::fs::metadata(&auth).unwrap().len(),
+        2 + 2 + 2 + 2 + 18 + 2 + 16
+    );
 
     // A second start returns the running screen.
     ok(&screen(home.path(), &["start"]));

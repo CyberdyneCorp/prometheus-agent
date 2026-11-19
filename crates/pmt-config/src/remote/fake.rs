@@ -19,13 +19,10 @@ impl Transport for Documents {
             .and_then(|u| u.rsplit('/').next())
             .unwrap_or_default();
         Ok(match self.0.get(profile) {
-            Some(values) => Reply {
+            Some(layers) => Reply {
                 status: 200,
-                body: serde_json::to_vec(&json!({
-                    "version": "1",
-                    "layers": [{"level": "profile", "values": values}],
-                }))
-                .unwrap_or_default(),
+                body: serde_json::to_vec(&json!({"version": "1", "layers": layers}))
+                    .unwrap_or_default(),
             },
             None => Reply {
                 status: 404,
@@ -46,6 +43,20 @@ impl Transport for Documents {
 ///
 /// When the home cannot be written.
 pub(crate) fn serve(home: &Path, values: &[(&str, serde_json::Value)]) {
+    let layers: Vec<_> = values
+        .iter()
+        .map(|(p, v)| (*p, json!([{"level": "profile", "values": v}])))
+        .collect();
+    serve_layers(home, &layers);
+}
+
+/// Makes `home` use a plane serving each profile's `layers` (the wire's
+/// `layers` array).
+///
+/// # Panics
+///
+/// When the home cannot be written.
+pub(crate) fn serve_layers(home: &Path, values: &[(&str, serde_json::Value)]) {
     for (profile, _) in values {
         let dir = home.join("profiles").join(profile);
         std::fs::create_dir_all(&dir).unwrap();

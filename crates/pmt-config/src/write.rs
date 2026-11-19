@@ -103,7 +103,7 @@ impl ConfigFile {
     /// `config.parse`, `config.too_new` or `home.io`.
     pub fn read(&self) -> Result<(String, Option<Migrated>), Error> {
         let text = self.raw()?.unwrap_or_default();
-        migrate::upgrade(&self.path, &text, &self.backups)
+        self.labelled(migrate::upgrade(&self.path, &text, &self.backups))
     }
 
     /// The file's bytes as they are on disk, without migrating.
@@ -151,8 +151,10 @@ impl ConfigFile {
     /// only: nothing on disk changes.
     pub(crate) fn load_unmigrated(&self, overrides: &Overrides) -> Result<Layered, Error> {
         let text = self.raw()?.unwrap_or_default();
-        let (_, migrated) = migrate::in_memory(&self.path, &text)?;
-        Layered::build(&self.path, &migrated, overrides)
+        self.labelled(
+            migrate::in_memory(&self.path, &text)
+                .and_then(|(_, migrated)| Layered::build(&self.path, &migrated, overrides)),
+        )
     }
 
     /// Reads, migrates, validates and layers the file under `overrides`.
@@ -163,7 +165,16 @@ impl ConfigFile {
     /// invalid overrides (exit 2).
     pub(crate) fn load(&self, overrides: &Overrides) -> Result<Layered, Error> {
         let (text, _) = self.read()?;
-        Layered::build(&self.path, &text, overrides)
+        self.labelled(Layered::build(&self.path, &text, overrides))
+    }
+
+    /// `result` with a validation error about a remote profile's served
+    /// values naming the plane instead of this (unread) local path.
+    fn labelled<T>(&self, result: Result<T, Error>) -> Result<T, Error> {
+        result.map_err(|error| match self.plane() {
+            Ok(Some((plane, profile))) => plane.relabel(profile, &self.path, error),
+            _ => error,
+        })
     }
 
     /// Schema defaults plus `overrides`, without reading the file
@@ -465,10 +476,10 @@ impl ConfigFile {
         change: impl FnOnce(&mut DocumentMut) -> Result<(), Error>,
     ) -> Result<(), Error> {
         let (old, _) = self.read()?;
-        let mut doc = parse::document(&self.path, &old)?.into_mut();
+        let mut doc = self.labelled(parse::document(&self.path, &old))?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        let config = parse::config(&self.path, &new)?;
+        let config = self.labelled(parse::config(&self.path, &new))?;
         crate::essential::semantic(&config, profile_dir(&self.path))?;
         crate::language::check_change(&old, &config, profile_dir(&self.path))?;
         if new == old {

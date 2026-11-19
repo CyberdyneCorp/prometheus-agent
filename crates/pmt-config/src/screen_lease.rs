@@ -163,24 +163,6 @@ impl ScreenLease {
         Ok(refused.map_or(Ok(state), Err))
     }
 
-    /// The holder's input keeps the lease from expiring.
-    ///
-    /// # Errors
-    ///
-    /// `home.io`.
-    pub fn touch(&self, viewer: &str, now: i64) -> Result<(), Error> {
-        self.update(
-            |state| {
-                if let Some(holder) = state.holder.as_mut().filter(|h| h.viewer == viewer) {
-                    holder.used_at = now;
-                }
-                Ok(())
-            },
-            now,
-        )
-        .map(|_| ())
-    }
-
     /// Input on the screen's display stream: whoever holds the lease is
     /// using it.
     ///
@@ -321,7 +303,7 @@ mod tests {
         let limit = i64::try_from(expiry().as_secs()).unwrap();
         assert!(limit >= 600);
         lease.take("desktop", 0).unwrap();
-        lease.touch("desktop", 100).unwrap();
+        lease.touch_holder(100).unwrap();
         assert!(lease.guard(100 + limit - 1).is_err());
         assert!(lease.guard(100 + limit).is_ok());
     }

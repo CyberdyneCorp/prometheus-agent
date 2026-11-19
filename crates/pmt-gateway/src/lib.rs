@@ -47,6 +47,7 @@ pub mod queue;
 pub mod remote;
 pub mod router;
 pub mod screen;
+mod screen_observer;
 pub mod screen_stream;
 pub mod server;
 pub mod slots;

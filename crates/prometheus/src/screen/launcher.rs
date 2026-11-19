@@ -17,7 +17,8 @@ use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
 use pmt_rpc::contracts as c;
 
-/// Variables the browser gets from the daemon besides `DISPLAY`.
+/// Variables the browser gets from the daemon besides `DISPLAY` and
+/// `XAUTHORITY`.
 const ENV: &[&str] = &[
     "PATH",
     "HOME",
@@ -69,6 +70,7 @@ pub async fn open(
                 .filter_map(|n| std::env::var_os(n).map(|v| (*n, v))),
         )
         .env("DISPLAY", &record.display)
+        .envs(record.xauthority.iter().map(|path| ("XAUTHORITY", path)))
         .arg(format!("--user-data-dir={}", profile.display()))
         .args(["--no-first-run", "--no-default-browser-check", &page])
         .stdin(Stdio::null())

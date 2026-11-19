@@ -185,3 +185,39 @@ fn a_failed_first_fetch_is_not_repeated_within_the_retry_window() {
     assert_eq!(second.message(), first.message());
     assert_eq!(*fake.0.lock().unwrap(), 1);
 }
+
+/// Spec: configuration-and-profiles, Remote configuration backend:
+/// credentials are never accepted as remote values, and the refusal names
+/// the plane and the level that served the value, not a local file.
+#[test]
+fn a_credential_served_by_the_plane_is_refused_naming_the_plane() {
+    let home = tempfile::tempdir().unwrap();
+    super::fake::serve_layers(
+        home.path(),
+        &[(
+            "default",
+            json!([
+                {"level": "tenant", "values": {"mcp": {"servers": {"gh": {
+                    "command": "gh-mcp",
+                    "env": {"GITHUB_TOKEN": "ghp_abcdefghijklmnopqrstuvwxyz"}
+                }}}}},
+                {"level": "profile", "values": {"model": {"default": "m"}}}
+            ]),
+        )],
+    );
+    let dir = home.path().join("profiles/default");
+    let file = crate::ConfigFile::of_profile_dir(&dir);
+    let err = file.load(&crate::layers::Overrides::default()).unwrap_err();
+    let message = err.message();
+    assert!(message.contains("looks like a credential"), "{message}");
+    assert!(
+        message.contains("https://plane.example") && message.contains("tenant level"),
+        "{message}"
+    );
+    assert!(!message.contains("config.toml"), "{message}");
+    assert!(
+        err.hint().unwrap().contains("configuration plane"),
+        "{:?}",
+        err.hint()
+    );
+}

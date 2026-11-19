@@ -11,10 +11,14 @@
 //! whatever uid it maps to; the socket directory around them is 0700, so
 //! no other user of this host reaches them.
 //!
-//! The session containers of the profile mount the same `x11/` read-only
-//! and get `DISPLAY=:1` ([`for_sessions`]): commands the agent runs there
-//! act on the screen. Headed browsers on this host use the X socket by
-//! path.
+//! X clients need the screen's cookie: `xauth/Xauthority` (readable by
+//! the container's user, private through the socket directory) is mounted
+//! read-only at `/run/pmt-xauth` and named by `XAUTHORITY`.
+//!
+//! The session containers of the profile mount the same `x11/` and
+//! `xauth/` read-only and get `DISPLAY=:1` and `XAUTHORITY`
+//! ([`for_sessions`]): commands the agent runs there act on the screen.
+//! Headed browsers on this host use the X socket by path.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -33,6 +37,8 @@ pub const DISPLAY: &str = ":1";
 const X11_MOUNT: &str = "/tmp/.X11-unix";
 /// Where `rfb/` is mounted.
 const RFB_MOUNT: &str = "/run/pmt-screen";
+/// Where `xauth/` is mounted.
+const XAUTH_MOUNT: &str = "/run/pmt-xauth";
 /// The label naming the profile whose screen a container is.
 const SCREEN_LABEL: &str = "prometheus.screen";
 
@@ -69,10 +75,14 @@ pub(super) fn launch(
     let runtime = Runtime::detect(&config.terminal.container.runtime)?;
     let x11 = shared_dir(&sockets.join("x11"))?;
     let rfb_dir = shared_dir(&sockets.join("rfb"))?;
+    let xauth_dir = readable_dir(&sockets.join("xauth"))?;
+    let auth = xauth_dir.join(super::xauth::FILE);
+    super::xauth::write(&auth, &super::xauth::fresh()?, true)?;
     let name = name(scope);
     remove(&runtime, &name);
-    create(scope, &runtime, &name, &x11, &rfb_dir)?;
-    let mut launched = Launched::new("container", rfb_dir.join("rfb.sock"));
+    create(scope, &runtime, &name, &[&x11, &rfb_dir, &xauth_dir])?;
+    let mut launched = Launched::new("container", rfb_dir.join("rfb.sock"), auth);
+    let inside_auth = format!("{XAUTH_MOUNT}/{}", super::xauth::FILE);
     let cleanup_runtime = runtime.clone();
     let cleanup_name = name.clone();
     launched.cleanup = Some(Box::new(move || remove(&cleanup_runtime, &cleanup_name)));
@@ -84,6 +94,7 @@ pub(super) fn launch(
             geometry,
             &format!("{RFB_MOUNT}/rfb.sock"),
             "0666",
+            &inside_auth,
         ))
         .stdout(Stdio::null())
         .stderr(Stdio::piped());
@@ -97,7 +108,12 @@ pub(super) fn launch(
 
     let mut session = runtime.command();
     session
-        .args(["exec", &format!("--env=DISPLAY={DISPLAY}"), &name])
+        .args([
+            "exec",
+            &format!("--env=DISPLAY={DISPLAY}"),
+            &format!("--env=XAUTHORITY={inside_auth}"),
+            &name,
+        ])
         .args(["sh", "-c", SESSION_SCRIPT])
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -111,12 +127,12 @@ pub(super) fn launch(
 
 /// Creates and starts the desktop container, dropping a hardening flag
 /// the runtime rejects only when `allow_degraded` waives it.
+/// `dirs` are the `x11/`, `rfb/` and `xauth/` directories.
 fn create(
     scope: &ProfileScope,
     runtime: &Runtime,
     name: &str,
-    x11: &Path,
-    rfb_dir: &Path,
+    [x11, rfb_dir, xauth_dir]: &[&Path; 3],
 ) -> Result<(), Error> {
     let config = scope.config();
     let allowed = &config.security.sandbox.allow_degraded;
@@ -133,6 +149,7 @@ fn create(
             "--network=none".to_owned(),
             format!("--volume={}:{X11_MOUNT}", x11.display()),
             format!("--volume={}:{RFB_MOUNT}", rfb_dir.display()),
+            format!("--volume={}:{XAUTH_MOUNT}:ro", xauth_dir.display()),
         ];
         args.extend(flags.iter().flat_map(|f| f.args.iter().cloned()));
         args.extend([image(scope), "sleep".to_owned(), "infinity".to_owned()]);
@@ -182,12 +199,30 @@ fn shared_dir(dir: &Path) -> Result<PathBuf, Error> {
     Ok(dir.to_path_buf())
 }
 
+/// `dir` created readable (not writable) by every user: the cookie's
+/// directory, private through the socket directory around it.
+fn readable_dir(dir: &Path) -> Result<PathBuf, Error> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let io = |e: std::io::Error| Error::io(&pmt_core::error::codes::HOME_IO, dir, &e);
+    match std::fs::create_dir(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(io(e)),
+    }
+    if !std::fs::symlink_metadata(dir).map_err(io)?.is_dir() {
+        return Err(failed(&format!("{} is not a directory", dir.display())));
+    }
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o755)).map_err(io)?;
+    Ok(dir.to_path_buf())
+}
+
 /// What a session container needs to act on the screen.
 pub struct SessionDisplay {
-    /// The X socket directory, read-only at `/tmp/.X11-unix`.
-    pub volume: Volume,
-    /// `DISPLAY=:1`.
-    pub env: (String, String),
+    /// The X socket directory at `/tmp/.X11-unix` and the cookie's
+    /// directory, both read-only.
+    pub volumes: Vec<Volume>,
+    /// `DISPLAY=:1` and `XAUTHORITY`.
+    pub env: Vec<(String, String)>,
 }
 
 /// What a session container of `scope` needs to act on the screen when
@@ -207,12 +242,20 @@ pub fn for_sessions(scope: &ProfileScope) -> Result<Option<SessionDisplay>, Erro
     let sockets = super::socket_dir(scope);
     super::serve::private_socket_dir(&sockets)?;
     let x11 = shared_dir(&sockets.join("x11"))?;
+    let xauth = readable_dir(&sockets.join("xauth"))?;
+    let read_only = |host: PathBuf, container: &str| Volume {
+        host,
+        container: container.to_owned(),
+        read_only: true,
+    };
     Ok(Some(SessionDisplay {
-        volume: Volume {
-            host: x11,
-            container: X11_MOUNT.to_owned(),
-            read_only: true,
-        },
-        env: ("DISPLAY".to_owned(), DISPLAY.to_owned()),
+        volumes: vec![read_only(x11, X11_MOUNT), read_only(xauth, XAUTH_MOUNT)],
+        env: vec![
+            ("DISPLAY".to_owned(), DISPLAY.to_owned()),
+            (
+                "XAUTHORITY".to_owned(),
+                format!("{XAUTH_MOUNT}/{}", super::xauth::FILE),
+            ),
+        ],
     }))
 }

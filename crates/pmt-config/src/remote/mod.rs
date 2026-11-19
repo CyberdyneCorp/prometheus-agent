@@ -334,6 +334,46 @@ impl Plane {
         wire::locked_by(&snapshot.layered.locks, key).map(str::to_owned)
     }
 
+    /// `error`, raised while validating `profile`'s served text under the
+    /// stand-in name `path`, relabelled with where the values came from:
+    /// the plane, the profile and the level that supplied the key, never a
+    /// local file and a position in text nobody can open.
+    #[must_use]
+    pub fn relabel(&self, profile: &str, path: &Path, error: Error) -> Error {
+        let stand_in = path.display().to_string();
+        if !error.message().contains(&stand_in) {
+            return error;
+        }
+        let origins = self
+            .cached(profile)
+            .map(|snapshot| snapshot.layered.origins)
+            .unwrap_or_default();
+        let source = format!(
+            "remote configuration from {} (profile {profile}",
+            self.url()
+        );
+        let lines: Vec<String> = error
+            .message()
+            .lines()
+            .map(|line| match line.strip_prefix(&stand_in) {
+                Some(rest) => {
+                    let rest = without_position(rest);
+                    let level = rest
+                        .split_once(": ")
+                        .and_then(|(key, _)| wire::origin_of(&origins, key))
+                        .map(|level| format!(", {level} level"))
+                        .unwrap_or_default();
+                    format!("{source}{level}): {rest}")
+                }
+                None => line.to_owned(),
+            })
+            .collect();
+        Error::new(error.code(), lines.join("\n")).with_hint(format!(
+            "fix it on the configuration plane ({}); the local config.toml is not read",
+            self.url()
+        ))
+    }
+
     /// Writes the keys `new` changes relative to `old` at the profile
     /// level, then re-fetches.
     ///
@@ -563,6 +603,21 @@ fn locked(key: &str, level: &str) -> Error {
         &codes::CONFIG_REMOTE_LOCKED,
         format!("config key '{key}' is locked by the {level} level of the remote configuration"),
     )
+}
+
+/// `rest` of a `path:line:column: message` diagnostic without its
+/// `:line:column` and the separator.
+fn without_position(rest: &str) -> &str {
+    let mut rest = rest;
+    for _ in 0..2 {
+        if let Some(after) = rest.strip_prefix(':') {
+            let digits = after.len() - after.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+            if digits > 0 {
+                rest = &after[digits..];
+            }
+        }
+    }
+    rest.strip_prefix(": ").unwrap_or(rest)
 }
 
 #[cfg(test)]

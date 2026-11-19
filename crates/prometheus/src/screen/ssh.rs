@@ -3,11 +3,13 @@
 //!
 //! Xvnc and the Xfce session run on the SSH host as the SSH user, in a
 //! private directory `${TMPDIR:-/tmp}/pmt-bot-<short id>` there (0700,
-//! owned by that user) that holds the RFB socket (0600) and their pids. A
-//! forwarding client of its own relays that RFB socket and the display's X
-//! socket to the profile's private socket directory here, so the gateway
-//! streams it and headed browsers on this host draw on it. The SSH host
-//! decides the free-memory floor and must have Xvnc and Xfce installed.
+//! owned by that user) that holds the RFB socket (0600), the screen's X
+//! cookie (`Xauthority`, 0600; X clients on the SSH host need it) and their
+//! pids. A forwarding client of its own relays that RFB socket and the
+//! display's X socket to the profile's private socket directory here, so
+//! the gateway streams it and headed browsers on this host draw on it with
+//! a copy of the cookie. The SSH host decides the free-memory floor and
+//! must have Xvnc and Xfce installed.
 
 use std::io::{BufRead as _, BufReader};
 use std::path::Path;
@@ -54,7 +56,10 @@ echo "no free display between :50 and :99" >&2
 exit 1"#;
 
 /// Starts the session on `$2` recording its pid in `$1`.
-const SESSION: &str = r#"echo $$ > "$1/session.pid"; DISPLAY="$2"; export DISPLAY; "#;
+const SESSION: &str = r#"echo $$ > "$1/session.pid"; DISPLAY="$2"; XAUTHORITY="$1/Xauthority"; export DISPLAY XAUTHORITY; "#;
+
+/// Writes stdin to the cookie file in `$1`, private to the SSH user.
+const WRITE_COOKIE: &str = r#"umask 077; cat > "$1/Xauthority""#;
 
 /// Ends what the screen left on the SSH host (`$1`: the directory).
 const CLEANUP: &str =
@@ -106,7 +111,11 @@ pub(super) fn launch(
     }
     super::memory::check(prepared.free, config.bot_desktop.min_free_memory_bytes)?;
     let remote = prepared.dir;
-    let mut launched = Launched::new("ssh", sockets.join("rfb.sock"));
+    let cookie = super::xauth::fresh()?;
+    write_remote_cookie(&target, &remote, &cookie)?;
+    let local_auth = sockets.join(super::xauth::FILE);
+    super::xauth::write(&local_auth, &cookie, false)?;
+    let mut launched = Launched::new("ssh", sockets.join("rfb.sock"), local_auth);
     let cleanup_target = target.clone();
     let cleanup_dir = remote.clone();
     launched.cleanup = Some(Box::new(move || {
@@ -123,7 +132,12 @@ pub(super) fn launch(
         "sh".to_owned(),
         remote.clone(),
     ];
-    argv.extend(xvnc_args(geometry, &remote_rfb, "0600"));
+    argv.extend(xvnc_args(
+        geometry,
+        &remote_rfb,
+        "0600",
+        &format!("{remote}/{}", super::xauth::FILE),
+    ));
     let mut xvnc = target.command(&argv);
     xvnc.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut xvnc = spawn(xvnc, &format!("Xvnc on {host}"))?;
@@ -174,6 +188,31 @@ pub(super) fn launch(
     launched.display = local_x.display().to_string();
     launched.backend_display = Some(display);
     Ok(launched)
+}
+
+/// Writes `cookie` to the screen's directory `remote` on the SSH host.
+fn write_remote_cookie(target: &SshTarget, remote: &str, cookie: &[u8]) -> Result<(), Error> {
+    use std::io::Write as _;
+    let mut command = target.command(&["sh", "-c", WRITE_COOKIE, "sh", remote]);
+    command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    let why = |e: &dyn std::fmt::Display| {
+        failed(&format!(
+            "cannot write the X cookie on {}: {e}",
+            target.destination()
+        ))
+    };
+    let mut child = command.spawn().map_err(|e| why(&e))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(cookie).map_err(|e| why(&e))?;
+    }
+    let output = child.wait_with_output().map_err(|e| why(&e))?;
+    if !output.status.success() {
+        return Err(why(&last_line(&String::from_utf8_lossy(&output.stderr))));
+    }
+    Ok(())
 }
 
 /// Runs [`PREPARE`] for the directory `name`.

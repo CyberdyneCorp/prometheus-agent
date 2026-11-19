@@ -59,6 +59,7 @@ pub fn serve(scope: &ProfileScope) -> Result<u8, Error> {
         display: launched.display.clone(),
         backend_display: launched.backend_display.clone(),
         rfb: launched.rfb.clone(),
+        xauthority: Some(launched.xauthority.clone()),
         geometry,
         placement: launched.placement.to_owned(),
         started_at: jiff::Timestamp::now().to_string(),

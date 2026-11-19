@@ -1,7 +1,9 @@
 //! The takeover fence of the browser tools (spec: execution-environments,
 //! Bot screen takeover lease): while a person holds the profile's bot
 //! screen every browser tool is refused with `human_has_control`, and a
-//! call that started before a takeover has its result voided.
+//! call that started before a takeover has its result voided. Every call
+//! also counts as use of the bot screen (its idle stop): an agent driving
+//! a headed browser on the screen is using it even with no viewer.
 
 use std::sync::Arc;
 
@@ -40,9 +42,13 @@ impl ToolHandler for Fenced {
             let exec = part(&self.environments, context, "browser", |env| {
                 env.browser.clone()
             })?;
-            let lease = ScreenLease::of(exec.manager().profile_dir());
+            let profile_dir = exec.manager().profile_dir();
+            let lease = ScreenLease::of(profile_dir);
             let epoch = lease.guard(screen_lease::now()).map_err(|e| refused(&e))?;
+            screen_lease::mark_screen_used(profile_dir);
             let result = self.inner.call(context, arguments).await;
+            // Again after: a long call counts from its end.
+            screen_lease::mark_screen_used(profile_dir);
             lease
                 .still(epoch, screen_lease::now())
                 .map_err(|e| refused(&e))?;

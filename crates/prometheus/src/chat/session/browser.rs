@@ -198,8 +198,14 @@ fn screen_hook(current: &SharedScope) -> pmt_tools::browser::ScreenHook {
     Arc::new(move || {
         let scope = current.get();
         let record = crate::screen::for_headed_browser(&scope)?;
+        let mut env = vec![("DISPLAY".to_owned(), record.display.into())];
+        env.extend(
+            record
+                .xauthority
+                .map(|path| ("XAUTHORITY".to_owned(), path.into_os_string())),
+        );
         Some(pmt_tools::browser::ScreenDisplay {
-            env: vec![("DISPLAY".to_owned(), record.display.into())],
+            env,
             user_data_dir: crate::screen::browser_profile(&scope),
         })
     })

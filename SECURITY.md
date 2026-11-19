@@ -87,7 +87,11 @@ issue:
   an OS boundary: the screen (Xvnc's RFB socket), its X display and a
   browser's debugging port (Lightpanda serves DevTools on a loopback port)
   are reachable by any process of the gateway's OS user, so a process of
-  that user that drives them directly is not stopped by the lease. A
+  that user that drives them directly is not stopped by the lease. The X
+  display admits only clients with the screen's random X cookie (Xvnc
+  `-auth`, a 0600 Xauthority file in the profile's private socket
+  directory), so other OS users of the host do not reach it through
+  `/tmp/.X11-unix`. A
   screen placed in the container backend is reachable the same way by the
   processes of its desktop container and of the profile's session
   containers (they share its X socket on purpose); one on the SSH host, by

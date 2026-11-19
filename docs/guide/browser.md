@@ -232,6 +232,12 @@ to this host. Either way the gateway streams the screen as it does a local
 one, and a headed browser on the gateway host draws on it through the
 relayed X socket (`DISPLAY` set to its path; libxcb 1.15 or later).
 
+Xvnc admits X clients only with the screen's random X cookie (`-auth`, an
+Xauthority file readable by the screen's user only, written fresh at every
+start; `XAUTHORITY` points the session, the agent's headed browsers, the
+browser launcher and the session containers at it), so another OS user of
+the host cannot reach the display through `/tmp/.X11-unix`.
+
 Xvnc serves RFB on a Unix socket only, never on TCP: mode 0600 on the
 gateway or SSH host, in a private directory; in the desktop container the
 socket directory is mounted from the profile's private directory of the
@@ -240,7 +246,9 @@ The desktop app streams it through the daemon: `screen.ticket` returns a
 single-use display ticket valid 30 seconds (and who controls the screen),
 offered with the `prometheus-display.v1` subprotocol on `/screen`.
 
-The desktop's **Screen** pane shows the stream. It is read-only while the
+The desktop's **Screen** pane shows the stream. A stream opened by an
+observer connection stays read-only: its key, pointer and clipboard
+messages never reach the screen. The pane is read-only while the
 agent has control; **Take over** makes the agent wait and sends the pane's
 pointer and keys to the screen; **Open browser** (`screen.browser`) starts a
 browser there on the same persistent screen browser profile the agent's

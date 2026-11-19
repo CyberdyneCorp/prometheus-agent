@@ -330,23 +330,23 @@ fn container(
         (Some(egress), None) => transport.with_overrides(egress),
         (egress, Some(display)) => transport.with_overrides(Arc::new(move || {
             let mut vars = egress.as_ref().map(|egress| egress()).unwrap_or_default();
-            vars.push(display.clone());
+            vars.extend(display.iter().cloned());
             vars
         })),
     }))
 }
 
-/// The bot screen's X sockets and `DISPLAY` when the screen is placed in
-/// the container backend (spec: execution-environments, Bot screen): the
-/// agent's commands act on it.
+/// The bot screen's X sockets, cookie, `DISPLAY` and `XAUTHORITY` when
+/// the screen is placed in the container backend (spec:
+/// execution-environments, Bot screen): the agent's commands act on it.
 #[cfg(unix)]
 fn screen_display(
     scope: &ProfileScope,
     spec: &mut ContainerSpec,
-) -> Result<Option<(String, String)>, Error> {
+) -> Result<Option<Vec<(String, String)>>, Error> {
     let shared = crate::screen::container::for_sessions(scope)?;
     Ok(shared.map(|display| {
-        spec.volumes.push(display.volume);
+        spec.volumes.extend(display.volumes);
         display.env
     }))
 }
@@ -356,7 +356,7 @@ fn screen_display(
 fn screen_display(
     _scope: &ProfileScope,
     _spec: &mut ContainerSpec,
-) -> Result<Option<(String, String)>, Error> {
+) -> Result<Option<Vec<(String, String)>>, Error> {
     Ok(None)
 }
 

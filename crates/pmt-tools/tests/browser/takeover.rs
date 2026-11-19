@@ -118,3 +118,64 @@ async fn a_result_from_before_the_takeover_is_voided() {
     assert!(failure.message.contains("void"), "{}", failure.message);
     manager.shutdown().await;
 }
+
+/// A handler standing in for a browser tool driving an already-launched
+/// headed browser.
+struct Clicks;
+
+impl ToolHandler for Clicks {
+    fn call<'a>(&'a self, _: &'a CallContext, _: serde_json::Value) -> HandlerFuture<'a> {
+        Box::pin(async { Ok(ToolResult::ok("clicked")) })
+    }
+}
+
+/// Spec: execution-environments, Bot screen: the screen stops only after
+/// `idle_stop_secs` without use, and the agent's browser calls are use
+/// (they refresh the marker the screen's idle stop counts from), not only
+/// a viewer's input or a browser launch.
+#[tokio::test]
+async fn every_browser_call_counts_as_use_of_the_screen() {
+    let fixture = Fixture::new();
+    let manager = fixture.manager();
+    let environments = Arc::new(Environments::default());
+    let _attached = environments.attach(
+        SESSION,
+        SessionEnv {
+            browser: Some(Arc::new(fixture.exec(&manager, false))),
+            ..SessionEnv::default()
+        },
+    );
+    let marker = fixture.profile.join("run/screen/used");
+    std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+    let file = std::fs::File::create(&marker).unwrap();
+    let long_ago = std::time::SystemTime::now() - std::time::Duration::from_hours(1);
+    file.set_modified(long_ago).unwrap();
+    let tool = fenced(
+        RegisteredTool::new(
+            ToolDescriptor::new(
+                "browser_probe",
+                "browser",
+                "test",
+                json!({"type": "object"}),
+            ),
+            Owner::Builtin,
+            Arc::new(Clicks),
+        ),
+        &environments,
+    );
+    let Executor::Handler(handler) = &tool.executor else {
+        unreachable!("a handler tool");
+    };
+    let context = CallContext {
+        call_id: "call_1".to_owned(),
+        session_id: SESSION.to_owned(),
+        cancel: CancelToken::new(),
+    };
+    handler.call(&context, json!({})).await.unwrap();
+    let used = std::fs::metadata(&marker).unwrap().modified().unwrap();
+    assert!(
+        used.elapsed().unwrap() < std::time::Duration::from_mins(1),
+        "the call refreshed the screen's use"
+    );
+    manager.shutdown().await;
+}

@@ -8,7 +8,7 @@
 //! `state.db`, sessions, logs, snapshots, a stray `secrets.toml`) is never
 //! copied, inside skill directories included.
 
-use std::path::Path;
+use std::path::{Component, Path};
 
 use pmt_core::error::{Error, codes};
 use serde::{Deserialize, Serialize};
@@ -56,6 +56,45 @@ pub fn never_installed(name: &str) -> bool {
             .extension()
             .is_some_and(|e| e == "db" || e == "key")
         || lower.starts_with(".env")
+}
+
+/// Whether `path` (relative to the profile) is content a distribution may
+/// own: the identity file, `mcp.toml`, `cron.toml` or something under a
+/// skill entry (`skills/<entry>[/...]`) with no component that is never
+/// installed. Anything else (`run/...`, `sessions/...`, `../x`, a nested
+/// `secrets.toml`) is profile state a distribution must not write or
+/// delete.
+#[must_use]
+pub fn installable(path: &str) -> bool {
+    if [IDENTITY, MCP, CRON].contains(&path) {
+        return true;
+    }
+    let mut parts = Path::new(path).components();
+    if !matches!(parts.next(), Some(Component::Normal(n)) if n == SKILLS) {
+        return false;
+    }
+    let rest: Vec<_> = parts.collect();
+    let entry_ok =
+        matches!(rest.first(), Some(Component::Normal(n)) if !n.to_string_lossy().starts_with('.'));
+    entry_ok
+        && rest
+            .iter()
+            .all(|c| matches!(c, Component::Normal(n) if !never_installed(&n.to_string_lossy())))
+}
+
+/// Refuses an owned path that is not [`installable`].
+///
+/// # Errors
+///
+/// `profile.distribution_invalid`.
+pub fn check_installable(path: &str) -> Result<(), Error> {
+    if installable(path) {
+        return Ok(());
+    }
+    Err(invalid(format!(
+        "owned path '{path}' is not an installable path of the profile \
+         (only {IDENTITY}, {MCP}, {CRON} and {SKILLS}/<entry>)"
+    )))
 }
 
 /// The manifest.
@@ -120,6 +159,9 @@ impl Manifest {
             .map_err(|e| invalid(format!("name: {}", e.message())))?;
         for need in &manifest.secrets_required {
             pmt_config::secrets::check_name(&need.name)?;
+        }
+        for path in manifest.owned.iter().flatten() {
+            check_installable(path)?;
         }
         Ok(manifest)
     }
@@ -201,4 +243,40 @@ pub fn refused_files(root: &Path) -> Vec<String> {
 
 pub(super) fn invalid(message: String) -> Error {
     Error::new(&codes::PROFILE_DISTRIBUTION_INVALID, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::installable;
+
+    #[test]
+    fn only_known_content_is_installable() {
+        for ok in [
+            "SOUL.md",
+            "mcp.toml",
+            "cron.toml",
+            "skills/web",
+            "skills/web/SKILL.md",
+        ] {
+            assert!(installable(ok), "{ok}");
+        }
+        for refused in [
+            "config.toml",
+            "run/screen/screen.json",
+            "sessions/x",
+            "memories/MEMORY.md",
+            "logs/a.log",
+            "snapshots/s",
+            "sub/secrets.toml",
+            "skills",
+            "skills/.git",
+            "skills/web/secrets.toml",
+            "skills/web/../../run",
+            "../SOUL.md",
+            "/etc/passwd",
+            "state.db",
+        ] {
+            assert!(!installable(refused), "{refused}");
+        }
+    }
 }
