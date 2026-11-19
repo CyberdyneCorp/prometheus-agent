@@ -11,7 +11,11 @@
 //! the next command's manifest first records what changed since the last
 //! one, and its exit records what it changed since then (a command
 //! running at that moment records it when it ends). A file whose size and
-//! modification time match the previous manifest is not read again. A
+//! modification time match the previous manifest is not read again, unless
+//! that time was within [`RACY_WINDOW_NANOS`] of the previous manifest: a
+//! filesystem clock that ticks coarsely (Windows ~16 ms, FAT 2 s) gives a
+//! same-size rewrite in the same tick an unchanged time (git's "racy
+//! clean" rule). A
 //! workspace larger than `files.snapshot.max_workspace_bytes` (or with
 //! more files than a checkpoint records) is not checkpointed: the command
 //! runs, and the session is told once.
@@ -25,6 +29,11 @@ use super::checkpoint::MAX_FILES;
 use super::store::SnapshotStore;
 use super::tree::Tree;
 
+/// How far a file's modification time must predate a manifest for an
+/// equal time later to prove the file unchanged; it covers the coarsest
+/// filesystem clock (FAT's 2 s) and a mount's small clock skew.
+const RACY_WINDOW_NANOS: i128 = 3_000_000_000;
+
 /// One file of a manifest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -33,6 +42,9 @@ pub struct Entry {
     /// Its modification time (nanoseconds since the epoch), when the tree
     /// knows it.
     pub modified: Option<i128>,
+    /// `modified` predates the manifest by [`RACY_WINDOW_NANOS`], so a
+    /// write after the manifest cannot share it.
+    pub settled: bool,
     /// Its content's object in the store.
     pub hash: String,
 }
@@ -200,6 +212,9 @@ impl Checkpoints {
 /// (same size and modification time, its object still stored) keeps its
 /// hash; every other file is read and its content stored.
 fn manifest(workspace: &Workspace<'_>, previous: &Manifest) -> Result<Manifest, Skipped> {
+    // Taken before any file is looked at: a write during the walk is
+    // newer than this, so it is never settled.
+    let settled_before = now_nanos().map(|now| now - RACY_WINDOW_NANOS);
     let (files, truncated) = workspace
         .tree
         .walk(workspace.root, workspace.excluded, MAX_FILES);
@@ -222,8 +237,8 @@ fn manifest(workspace: &Workspace<'_>, previous: &Manifest) -> Result<Manifest, 
     for (path, size) in sized {
         let modified = workspace.tree.modified(&path);
         let known = previous.get(&path).filter(|e| {
-            e.size == size
-                && modified.is_some()
+            e.settled
+                && e.size == size
                 && e.modified == modified
                 && workspace.store.contains(&e.hash)
         });
@@ -243,11 +258,21 @@ fn manifest(workspace: &Workspace<'_>, previous: &Manifest) -> Result<Manifest, 
             Entry {
                 size,
                 modified,
+                settled: modified.zip(settled_before).is_some_and(|(m, s)| m < s),
                 hash,
             },
         );
     }
     Ok(taken)
+}
+
+/// This host's clock, in nanoseconds since the epoch (the clock host file
+/// modification times come from; only host trees report them).
+fn now_nanos() -> Option<i128> {
+    let since = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?;
+    i128::try_from(since.as_nanos()).ok()
 }
 
 /// The files whose content differs between `before` and `after`.
@@ -329,6 +354,33 @@ mod tests {
         assert_eq!(fx.store.get(notes.after.as_ref().unwrap()).unwrap(), b"b\n");
         assert_eq!(changes[0].before, None);
         assert_eq!(changes[2].after, None);
+    }
+
+    /// A filesystem with a coarse clock (Windows' ~16 ms tick, FAT's 2 s)
+    /// gives a same-size rewrite the modification time the file had
+    /// before; the change must still be found.
+    #[test]
+    fn a_same_size_rewrite_within_the_clock_tick_is_found() {
+        let fx = Fixture::new();
+        let path = fx.root.join("notes.txt");
+        std::fs::write(&path, "a\n").unwrap();
+        let tick = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let checkpoints = Checkpoints::default();
+        let ws = fx.workspace(1 << 20);
+        checkpoints.before(&ws);
+        std::fs::write(&path, "b\n").unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(tick)
+            .unwrap();
+        let (changes, _) = checkpoints.after(&ws);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(
+            fx.store.get(changes[0].after.as_ref().unwrap()).unwrap(),
+            b"b\n"
+        );
     }
 
     #[test]
