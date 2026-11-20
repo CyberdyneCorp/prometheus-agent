@@ -33,7 +33,12 @@ fn value(result: impl serde::Serialize) -> Value {
     serde_json::to_value(result).unwrap_or(Value::Null)
 }
 
-/// Runs one call for `scope`'s profile (`store`: its session store).
+/// Called with the tiers a page-triggered achievements scan reached, so
+/// the host can celebrate them as the post-turn rescan does.
+pub type OnUnlock = Box<dyn FnOnce(Vec<pmt_pets::achievements::Unlock>) + Send>;
+
+/// Runs one call for `scope`'s profile (`store`: its session store;
+/// `on_unlock`: what to do with tiers its achievements scan reaches).
 ///
 /// # Errors
 ///
@@ -42,6 +47,7 @@ pub async fn handle(
     scope: &ProfileScope,
     store: &Arc<pmt_store::Store>,
     call: PetsCall,
+    on_unlock: OnUnlock,
 ) -> Result<Value, Error> {
     match call.method {
         "pets.state" => Ok(value(state(scope, None))),
@@ -51,7 +57,7 @@ pub async fn handle(
         "pets.set" => Ok(value(set(scope, &params(&call)?)?)),
         "pets.hatch.start" => Ok(value(hatch_start(scope, &params(&call)?)?)),
         "pets.hatch.answer" => Ok(value(hatch_answer(&params(&call)?).await?)),
-        "achievements.list" => Ok(value(achievements(scope, store))),
+        "achievements.list" => Ok(value(achievements(scope, store, on_unlock))),
         other => Err(Error::new(
             &codes::RPC_NOT_SERVED,
             format!("{other} is not a pets method"),
@@ -273,8 +279,14 @@ async fn hatch_answer(params: &HatchAnswerParams) -> Result<HatchStep, Error> {
 
 /// The snapshot now; an incremental scan starts in the background when
 /// none runs and the last is not recent (spec: pets, First scan does not
-/// block).
-fn achievements(scope: &ProfileScope, store: &Arc<pmt_store::Store>) -> Achievements {
+/// block). Tiers that scan reaches go to `on_unlock` (spec: pets,
+/// Achievement unlocks celebrate): whichever scan records a tier first
+/// is the one that announces it.
+fn achievements(
+    scope: &ProfileScope,
+    store: &Arc<pmt_store::Store>,
+    on_unlock: OnUnlock,
+) -> Achievements {
     let profile = super::achievements::profile(scope);
     // What is known now, taken before a scan starts so the answer never
     // waits for it.
@@ -284,12 +296,10 @@ fn achievements(scope: &ProfileScope, store: &Arc<pmt_store::Store>) -> Achievem
     if !snapshot.scanning && profile.stale(std::time::Duration::from_secs(30)) {
         pmt_pets::achievements::scan::mark_running(scope.dir());
         snapshot.scanning = true;
-        let (profile, store) = (profile.clone(), Arc::clone(store));
+        let (scope, store) = (scope.clone(), Arc::clone(store));
         // Detached: the page polls while `scanning` is set.
         drop(pmt_core::spawn::blocking(move || {
-            if let Err(err) = profile.scan(&store) {
-                tracing::warn!("achievements scan failed: {}", err.message());
-            }
+            on_unlock(super::achievements::rescan(&scope, &store));
         }));
     }
     serde_json::from_value(value(snapshot)).unwrap_or(Achievements {

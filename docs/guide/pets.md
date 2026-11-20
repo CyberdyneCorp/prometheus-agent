@@ -134,8 +134,10 @@ $ prometheus achievements --unlocked
 <...> sessions (<...> analysed now)
 ```
 
-After each turn the daemon rescans in the background; a tier reached
-then is announced to the attached clients as `achievement.unlocked`: the
+After each turn the daemon rescans in the background, and so does an
+achievements page that finds the last scan more than 30 s old (sessions
+from an in-process `prometheus chat` count too); a tier reached by
+either scan is announced to the attached clients as `achievement.unlocked`: the
 TUI and the desktop show a toast (Esc or × dismisses it) and the pet
 jumps; the line interface prints a line. The event never reaches a model
 or a session. A profile scanned for the first time records the tiers it

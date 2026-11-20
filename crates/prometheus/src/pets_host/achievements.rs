@@ -1,7 +1,8 @@
 //! Achievements on this machine (spec: pets, Achievements from session
 //! history; Achievement unlocks celebrate): the profile's achievements in
 //! its time zone, and the rescan the daemon runs off the turn's path
-//! after each finished turn, whose newly reached tiers become
+//! after each finished turn (and for a page's `achievements.list`), whose
+//! newly reached tiers become
 //! `achievement.unlocked` events. Unlocks are never sent to a model and
 //! never touch a session.
 
@@ -16,8 +17,9 @@ pub fn profile(scope: &ProfileScope) -> Profile {
     Profile::new(scope.dir(), zone)
 }
 
-/// Rescans after a turn; the tiers to celebrate. A profile never scanned
-/// before records its past unlocks without a celebration.
+/// Rescans (after a turn, or for a page that asked); the tiers to
+/// celebrate. A profile never scanned before records its past unlocks
+/// without a celebration.
 #[must_use]
 pub fn rescan(scope: &ProfileScope, store: &pmt_store::Store) -> Vec<Unlock> {
     match profile(scope).scan(store) {

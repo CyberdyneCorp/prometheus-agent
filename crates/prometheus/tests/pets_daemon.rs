@@ -440,3 +440,60 @@ fn a_turn_that_reaches_a_tier_announces_it_and_the_session_never_hears_of_it() {
         }
     }
 }
+
+/// Scenario: Unlock during a session (a tier first reached by the scan a
+/// page's `achievements.list` starts, from sessions no daemon turn
+/// rescanned, still reaches the attached clients).
+#[test]
+fn a_tier_found_by_a_page_scan_is_announced() {
+    let home = mock_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "cron.timezone", &night_zone()],
+    ));
+    let store = pmt_store::Store::open(&common_scope(home.path())).unwrap();
+    let new_session = || {
+        store
+            .create_session(&pmt_store::NewSession::new(pmt_store::Source::Cli))
+            .unwrap();
+    };
+    for _ in 0..8 {
+        new_session();
+    }
+    // The first scan records night-owl copper without a celebration.
+    ok(&run(home.path(), &["achievements"]));
+    // That scan finished long ago, so the page asks for a fresh one.
+    let unlocks = home.path().join("profiles/default/achievements.json");
+    let mut recorded: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&unlocks).unwrap()).unwrap();
+    recorded["scanned_at"] = json!("2026-01-01T00:00:00Z");
+    std::fs::write(&unlocks, recorded.to_string()).unwrap();
+    // Two sessions from outside the daemon (an in-process chat) make ten.
+    new_session();
+    new_session();
+    drop(store);
+    let _daemon = daemon::start(home.path(), &[]);
+    runtime().block_on(async {
+        let (client, mut inbox) = daemon::connect(home.path(), "default").await;
+        session(&client).await;
+        let listed = client
+            .call("achievements.list", json!({"profile": "default"}))
+            .await
+            .unwrap();
+        assert_eq!(listed["scanning"], true, "{listed}");
+        let unlocked = loop {
+            let event = tokio::time::timeout(Duration::from_secs(30), inbox.events.recv())
+                .await
+                .expect("the unlock arrives")
+                .unwrap();
+            if event.event == "achievement.unlocked" {
+                break event;
+            }
+        };
+        assert_eq!(
+            unlocked.data,
+            json!({"profile": "default", "id": "night-owl", "tier": "silver"})
+        );
+        assert!(unlocked.session_id.is_none());
+    });
+}

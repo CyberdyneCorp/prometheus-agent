@@ -213,6 +213,8 @@ pub(super) struct DaemonHost {
     /// The host itself, for work that outlives the request that started it
     /// (a desktop pairing flow).
     me: std::sync::OnceLock<std::sync::Weak<DaemonHost>>,
+    /// The RPC server, for daemon-level events outside a turn.
+    server: std::sync::OnceLock<std::sync::Weak<pmt_gateway::Server>>,
     /// The adapters' interactive pairing flows, shared by the dashboard
     /// and the desktop's Messaging pane.
     #[cfg(feature = "dashboard")]
@@ -319,6 +321,7 @@ impl DaemonHost {
             wake: wake::Listeners::default(),
             api: std::sync::OnceLock::new(),
             me: std::sync::OnceLock::new(),
+            server: std::sync::OnceLock::new(),
             #[cfg(feature = "dashboard")]
             pairing_flows: Arc::default(),
         })
