@@ -1,5 +1,6 @@
 //! The media tools (spec: web-and-media-tools): `image_generate`
-//! ([`image`]), `video_analyze` ([`video`]), `text_to_speech` and the
+//! ([`image`]), `video_analyze` ([`video`]), `video_generate` and the
+//! tools video providers contribute ([`video_gen`]), `text_to_speech` and the
 //! speech-to-text service of voice input ([`speech`]) and `x_search`
 //! ([`x_search`]).
 //!
@@ -18,6 +19,7 @@ pub mod plugin;
 pub mod probe;
 pub mod speech;
 pub mod video;
+pub mod video_gen;
 pub mod x_search;
 
 use std::collections::{BTreeMap, HashMap};
@@ -112,6 +114,7 @@ pub struct MediaSession {
     setup: MediaSetup,
     image_slots: tokio::sync::Semaphore,
     speech: speech::SpeechState,
+    timer: Arc<dyn video_gen::Timer>,
 }
 
 impl MediaSession {
@@ -125,7 +128,15 @@ impl MediaSession {
             setup,
             image_slots: tokio::sync::Semaphore::new(slots),
             speech,
+            timer: Arc::new(video_gen::SystemTimer::default()),
         }
+    }
+
+    /// The same session polling video jobs on `timer` (tests).
+    #[must_use]
+    pub fn with_timer(mut self, timer: Arc<dyn video_gen::Timer>) -> Self {
+        self.timer = timer;
+        self
     }
 
     /// The same session converting audio with `ffmpeg` (default: the one
@@ -241,18 +252,22 @@ impl Drop for Attachment {
     }
 }
 
-/// `image_generate`, `video_analyze`, `text_to_speech` and `x_search`,
-/// their handlers bound to `sessions` (and, for the files they read, the
+/// `image_generate`, `video_analyze`, `video_generate` (and the tools
+/// video providers contribute), `text_to_speech` and `x_search`, their
+/// handlers bound to `sessions` (and, for the files they read, the
 /// sessions' environments in `environments`).
 #[must_use]
 pub fn tools(
     sessions: &Arc<MediaSessions>,
     environments: &Arc<pmt_tools::environments::Environments>,
 ) -> Vec<RegisteredTool> {
-    vec![
+    let mut tools = vec![
         image::tool::registered(sessions),
         video::registered(sessions, environments),
+        video_gen::tool::registered(sessions),
         speech::tool::registered(sessions),
         x_search::registered(sessions),
-    ]
+    ];
+    tools.extend(video_gen::xai::registered(sessions));
+    tools
 }

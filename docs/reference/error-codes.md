@@ -71,6 +71,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `config.credential_in_file` | `config` | 78 | A profile `config.toml` holds a value that looks like a credential (API key, token, private key) in a non-secret key; move it into the secrets store with `prometheus secrets set <NAME>` and reference it by name. |
 | `config.too_new` | `config` | 78 | `config.toml` has a `schema_version` newer than this binary supports; upgrade prometheus. |
 | `config.managed_key` | `permission_denied` | 77 | The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it. |
+| `config.remote_unreachable` | `config` | 78 | `config_backend.kind = "remote"` and the configuration plane could not be reached within 30 s, refused the token or answered something that is not a configuration document. Prometheus never falls back to `config.toml` or defaults; fix the plane, the URL or the token secret. |
+| `config.remote_locked` | `permission_denied` | 77 | A level of the remote configuration plane (global, tenant, group, owner or agent) locks the key; writes land on the profile level and may not change it. |
+| `config.remote_conflict` | `conflict` | 75 | The profile's configuration changed on the remote plane after it was read, so the write was refused (optimistic concurrency); run the command again. |
 | `config.managed_invalid` | `config` | 78 | `managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it. |
 | `config.editor` | `unavailable` | 69 | The editor for `prometheus config edit` (`VISUAL`, `EDITOR`, else `vi` / `notepad`) could not be started or exited with an error. |
 | `profile.invalid_name` | `usage` | 2 | A profile name does not match `^[a-z0-9][a-z0-9_-]{0,63}$` after lowercasing. |
@@ -84,7 +87,18 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `secret.managed` | `permission_denied` | 77 | The secret comes from the administrator-managed `managed-secrets.toml`, which takes precedence over every profile store and the environment; it cannot be set or unset per profile. |
 | `secret.reveal_refused` | `permission_denied` | 77 | `prometheus secrets get --reveal` prints a value only to an interactive terminal, never into a pipe or file. |
 | `secret.surface_only` | `permission_denied` | 77 | The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own. |
+| `secret.source_failed` | `config` | 78 | An enabled external secret source (`secrets.bitwarden`, `secrets.onepassword`) failed: its CLI is missing, its access token is not set or was refused, or it answered something unreadable. Cached values are not used instead; fix the source or disable it. |
 | `profile.reserved` | `usage` | 2 | A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`). |
+| `security.osv_unreachable` | `unavailable` | 69 | `prometheus security scan` could not reach the OSV database (`security.scan.osv_url`); nothing was checked. |
+| `egress.proxy_down` | `unavailable` | 69 | Credential injection is on and `security.egress.enforce_on_container` is set, but the profile's egress proxy is not running: start it with `prometheus egress start` (or the daemon) before a container or remote session. |
+| `egress.proxy_unreachable` | `unavailable` | 69 | Credential injection is on, but the terminal backend cannot be kept to the profile's egress proxy (a plugin remote sandbox runs outside this host; a singularity instance shares its network): use the container or ssh backend, or turn `security.egress.credential_injection` off. |
+| `egress.proxy_start` | `unavailable` | 69 | The egress proxy did not start: its listener did not bind within 5 seconds (or the proxy exited before serving), the credential source is missing mapped secrets, or a proxy of the profile is already running. |
+| `screen.human_has_control` | `conflict` | 75 | A person took the profile's bot screen over (`screen.takeover`): the browser and `computer_use` tools wait until it is handed back (`screen.handback`), the lease expires unused, or `prometheus computer-use screen stop --force` clears it. A call that started before the takeover has its result voided. |
+| `screen.unavailable` | `unavailable` | 69 | The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`). |
+| `profile.distribution_invalid` | `invalid_input` | 65 | A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`. |
+| `profile.distribution_incompatible` | `config` | 78 | The distribution's `prometheus_requires` range does not include this Prometheus version; install a compatible version of the distribution or of Prometheus. |
+| `profile.distribution_fetch` | `unavailable` | 69 | The distribution's git repository could not be cloned (network, URL or credentials). |
+| `profile.not_distribution` | `not_found` | 66 | `profile update` and `profile info` need a profile installed with `profile install`. |
 | `profile.exists` | `usage` | 2 | `prometheus profile create` or `rename` names a profile that already exists. |
 | `profile.protected` | `usage` | 2 | The `default` profile cannot be deleted or renamed. |
 | `profile.alias_refused` | `usage` | 2 | `profile alias` refuses a launcher name that is reserved, is a `prometheus` subcommand, would shadow an existing executable on `PATH`, or is not a valid profile-style name. |
@@ -116,6 +130,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `session.ambiguous` | `usage` | 2 | A session id prefix matches several sessions; give more characters or the full id. |
 | `store.busy` | `conflict` | 75 | Another process held `state.db`'s write lock for longer than the write's time budget (20 s metadata, 60 s transcript, 0.5 s activity); retry later. |
 | `store.replaced` | `conflict` | 75 | `state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file. |
+| `store.key_unavailable` | `config` | 78 | `state.db` is encrypted (`storage.encryption`) and its key is unavailable: the OS keychain has no `STATE_DB_KEY` for the profile, or the `STATE_DB_PASSPHRASE` secret is missing or wrong. Nothing was opened or created. |
+| `store.encryption_mismatch` | `config` | 78 | `state.db` is plaintext while `storage.encryption` asks for an encrypted store (or the reverse); convert it offline with `prometheus sessions encrypt` or `prometheus sessions decrypt`. |
 | `store.corrupt` | `io` | 74 | `state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`). |
 | `store.rewind_target_invalid` | `invalid_input` | 65 | Rewind targets an active user message of the session; the given message is missing, inactive or not a user message. |
 | `import.id_collision` | `conflict` | 75 | A session, message or usage id of the import file already exists in this profile; nothing was imported. Rerun with `--remap-ids` to import under new ids. |
@@ -129,6 +145,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `migrate.source_busy` | `conflict` | 75 | The other agent is running and holds the directory `migrate cleanup` would archive (exit 75); stop it and rerun. Nothing was renamed. |
 | `migrate.destination` | `io` | 74 | The Prometheus home or profile cannot be created or written (permissions, read-only file system); nothing of that profile was imported (exit 73). |
 | `migrate.component` | `invalid_input` | 65 | A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause. |
+| `migrate.run_not_found` | `not_found` | 66 | No profile of the home holds a rollback journal for that run id (see the `run_id` of the migration report; a rolled-back run has none left). |
+| `migrate.rollback_order` | `conflict` | 75 | A later migration run of the same source wrote into the profile after this one; roll that run back first. Nothing was changed. |
 | `store.fork_target_invalid` | `invalid_input` | 65 | `session.fork` names an `at_message_id` that is not an active message of the forked session. |
 | `store.rewind_conflict` | `conflict` | 75 | The messages the rewind or restore expected changed in the meantime; nothing changed. Look at the transcript again and retry. |
 | `session.in_use` | `conflict` | 75 | A live turn lease or compaction lock is held on the session; retry when the turn or compaction finished. |
@@ -476,6 +494,8 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `kanban.invalid_archive` | `invalid_input` | 65 | The file is not a board archive written by `prometheus kanban boards export`, or its format version is newer than this build reads. |
 | `peer.invalid_name` | `usage` | 2 | A peer name must match `^[a-z][a-z0-9-]{0,31}$`: 1-32 characters, lowercase letters, digits or `-`, starting with a letter. |
 | `peer.not_found` | `not_found` | 66 | No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers. |
+| `proxy.not_logged_in` | `auth` | 78 | The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`. |
+| `proxy.lan_refused` | `permission_denied` | 77 | `prometheus gateway proxy start --host` names a non-loopback address without `--allow-lan`; with it, LAN clients must present the `PMT_PROXY_CLIENT_KEY` bearer. |
 | `peer.unreachable` | `unavailable` | 69 | The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right. |
 | `peer.key_rejected` | `auth` | 78 | The peer answered 401, or the secret `PEER_<NAME>_KEY` is missing: register the peer again with `prometheus gateway peer add <name> --url <url>` and paste the key of the peer profile's `api_server.key_secret` on stdin. |
 | `peer.rejected` | `tool` | 1 | The peer's API server refused the request; the message carries its answer (an unknown run, a run that cannot be stopped, a paused home, a busy profile). |

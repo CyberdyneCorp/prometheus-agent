@@ -52,6 +52,15 @@ error_codes! {
     /// A writer tried to change a key the administrator locked.
     CONFIG_MANAGED_KEY = ("config.managed_key", PermissionDenied,
         "The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it.");
+    /// The remote configuration plane could not be reached or answered badly.
+    CONFIG_REMOTE_UNREACHABLE = ("config.remote_unreachable", Config,
+        "`config_backend.kind = \"remote\"` and the configuration plane could not be reached within 30 s, refused the token or answered something that is not a configuration document. Prometheus never falls back to `config.toml` or defaults; fix the plane, the URL or the token secret.");
+    /// A key is locked by a level of the remote configuration plane.
+    CONFIG_REMOTE_LOCKED = ("config.remote_locked", PermissionDenied,
+        "A level of the remote configuration plane (global, tenant, group, owner or agent) locks the key; writes land on the profile level and may not change it.");
+    /// The remote configuration changed between read and write.
+    CONFIG_REMOTE_CONFLICT = ("config.remote_conflict", Conflict,
+        "The profile's configuration changed on the remote plane after it was read, so the write was refused (optimistic concurrency); run the command again.");
     /// The administrator-managed configuration layer is invalid.
     CONFIG_MANAGED_INVALID = ("config.managed_invalid", Config,
         "`managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it.");
@@ -92,9 +101,42 @@ error_codes! {
     /// A secret owned by a surface was requested by a tool, child, skill or plugin.
     SECRET_SURFACE_ONLY = ("secret.surface_only", PermissionDenied,
         "The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own.");
+    /// An enabled external secret source could not be read.
+    SECRET_SOURCE_FAILED = ("secret.source_failed", Config,
+        "An enabled external secret source (`secrets.bitwarden`, `secrets.onepassword`) failed: its CLI is missing, its access token is not set or was refused, or it answered something unreadable. Cached values are not used instead; fix the source or disable it.");
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");
+    /// The OSV database could not be queried.
+    SECURITY_OSV_UNREACHABLE = ("security.osv_unreachable", Unavailable,
+        "`prometheus security scan` could not reach the OSV database (`security.scan.osv_url`); nothing was checked.");
+    /// The profile's egress proxy is not running.
+    EGRESS_PROXY_DOWN = ("egress.proxy_down", Unavailable,
+        "Credential injection is on and `security.egress.enforce_on_container` is set, but the profile's egress proxy is not running: start it with `prometheus egress start` (or the daemon) before a container or remote session.");
+    /// A sandbox cannot reach the profile's egress proxy.
+    EGRESS_PROXY_UNREACHABLE = ("egress.proxy_unreachable", Unavailable,
+        "Credential injection is on, but the terminal backend cannot be kept to the profile's egress proxy (a plugin remote sandbox runs outside this host; a singularity instance shares its network): use the container or ssh backend, or turn `security.egress.credential_injection` off.");
+    /// The egress proxy could not start.
+    EGRESS_PROXY_START = ("egress.proxy_start", Unavailable,
+        "The egress proxy did not start: its listener did not bind within 5 seconds (or the proxy exited before serving), the credential source is missing mapped secrets, or a proxy of the profile is already running.");
+    /// A person holds the bot screen.
+    SCREEN_HUMAN_HAS_CONTROL = ("screen.human_has_control", Conflict,
+        "A person took the profile's bot screen over (`screen.takeover`): the browser and `computer_use` tools wait until it is handed back (`screen.handback`), the lease expires unused, or `prometheus computer-use screen stop --force` clears it. A call that started before the takeover has its result voided.");
+    /// The bot screen cannot run here.
+    SCREEN_UNAVAILABLE = ("screen.unavailable", Unavailable,
+        "The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`).");
+    /// A profile distribution's manifest or content is invalid.
+    PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
+        "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");
+    /// A distribution needs another Prometheus version.
+    PROFILE_DISTRIBUTION_INCOMPATIBLE = ("profile.distribution_incompatible", Config,
+        "The distribution's `prometheus_requires` range does not include this Prometheus version; install a compatible version of the distribution or of Prometheus.");
+    /// A distribution could not be fetched.
+    PROFILE_DISTRIBUTION_FETCH = ("profile.distribution_fetch", Unavailable,
+        "The distribution's git repository could not be cloned (network, URL or credentials).");
+    /// The profile was not installed from a distribution.
+    PROFILE_NOT_DISTRIBUTION = ("profile.not_distribution", NotFound,
+        "`profile update` and `profile info` need a profile installed with `profile install`.");
     /// The profile to create already exists.
     PROFILE_EXISTS = ("profile.exists", Usage,
         "`prometheus profile create` or `rename` names a profile that already exists.");
@@ -188,6 +230,12 @@ error_codes! {
     /// `state.db` was replaced underneath an open store.
     STORE_REPLACED = ("store.replaced", Conflict,
         "`state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file.");
+    /// An encrypted store whose key cannot be had.
+    STORE_KEY_UNAVAILABLE = ("store.key_unavailable", Config,
+        "`state.db` is encrypted (`storage.encryption`) and its key is unavailable: the OS keychain has no `STATE_DB_KEY` for the profile, or the `STATE_DB_PASSPHRASE` secret is missing or wrong. Nothing was opened or created.");
+    /// The store's file does not match `storage.encryption`.
+    STORE_ENCRYPTION_MISMATCH = ("store.encryption_mismatch", Config,
+        "`state.db` is plaintext while `storage.encryption` asks for an encrypted store (or the reverse); convert it offline with `prometheus sessions encrypt` or `prometheus sessions decrypt`.");
     /// The store hit structural corruption and stopped writing.
     STORE_CORRUPT = ("store.corrupt", Io,
         "`state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`).");
@@ -227,6 +275,12 @@ error_codes! {
     /// A Hermes component could not be read or imported.
     MIGRATE_COMPONENT = ("migrate.component", InvalidInput,
         "A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause.");
+    /// `migrate rollback --run` named a run with no journal in the home.
+    MIGRATE_RUN_NOT_FOUND = ("migrate.run_not_found", NotFound,
+        "No profile of the home holds a rollback journal for that run id (see the `run_id` of the migration report; a rolled-back run has none left).");
+    /// `migrate rollback` of a run a later run of the same source followed.
+    MIGRATE_ROLLBACK_ORDER = ("migrate.rollback_order", Conflict,
+        "A later migration run of the same source wrote into the profile after this one; roll that run back first. Nothing was changed.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");
@@ -1261,6 +1315,12 @@ error_codes! {
     /// No peer gateway (or agent on it) has the name.
     PEER_NOT_FOUND = ("peer.not_found", NotFound,
         "No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers.");
+    /// The subscription proxy's provider has no usable sign-in.
+    PROXY_NOT_LOGGED_IN = ("proxy.not_logged_in", Auth,
+        "The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`.");
+    /// The subscription proxy was asked to listen beyond loopback.
+    PROXY_LAN_REFUSED = ("proxy.lan_refused", PermissionDenied,
+        "`prometheus gateway proxy start --host` names a non-loopback address without `--allow-lan`; with it, LAN clients must present the `PMT_PROXY_CLIENT_KEY` bearer.");
     /// The peer gateway could not be reached.
     PEER_UNREACHABLE = ("peer.unreachable", Unavailable,
         "The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right.");

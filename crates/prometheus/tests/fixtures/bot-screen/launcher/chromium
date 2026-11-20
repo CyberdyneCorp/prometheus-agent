@@ -1,0 +1,4 @@
+#!/bin/sh
+# A stand-in browser for the bot screen's launcher: records its display and
+# arguments in $HOME/fake-chromium.log, then exits.
+printf '%s %s\n' "$DISPLAY" "$*" >> "$HOME/fake-chromium.log"

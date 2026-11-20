@@ -21,6 +21,7 @@ mod confirm;
 mod controls;
 mod history;
 mod hook_events;
+mod identity;
 mod input;
 mod lifecycle;
 mod models;
@@ -35,6 +36,7 @@ mod resume;
 mod topic;
 mod turns;
 pub(crate) mod update_relay;
+mod upstream;
 mod watchdog;
 
 use std::collections::VecDeque;

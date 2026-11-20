@@ -26,6 +26,10 @@ pub fn run(command: &SecretsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         SecretsCommand::Get { name, reveal } => get(ctx, name, *reveal),
         SecretsCommand::Unset { name } => unset(ctx, name),
         SecretsCommand::Migrate { to } => migrate(ctx, backend(*to)),
+        SecretsCommand::Bitwarden { command } => crate::secret_sources_cmd::bitwarden(command, ctx),
+        SecretsCommand::Onepassword { command } => {
+            crate::secret_sources_cmd::onepassword(command, ctx)
+        }
     }
 }
 

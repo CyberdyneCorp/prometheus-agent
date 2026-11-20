@@ -28,6 +28,7 @@ pub fn language_packs(config: &Config, profile_dir: &Path) -> Vec<PackLocale> {
         running: &running,
         blocked: &blocked,
         profile_config: Some(config),
+        dev: &[],
     };
     pmt_plugins::locales::packs(&survey(&inputs))
 }

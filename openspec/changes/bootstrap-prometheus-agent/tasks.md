@@ -642,30 +642,31 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 72. M3 Remaining upgrades
 
-- [ ] 72.1 Implement memory decay/expiry/dormancy and consolidation proposals; verify with fake-clock tests (spec: memory)
-- [ ] 72.2 Implement hybrid semantic + full-text session search and the encryption-at-rest option; verify search ranking fixtures and that an encrypted db is unreadable without the key (spec: session-storage)
-- [ ] 72.3 Implement TUI split panes, inline diff review, the timeline scrubber and shared live sessions; verify with pty snapshot tests (spec: tui)
-- [ ] 72.4 Implement skill evals and eval-gated skill edits; verify that a regressing edit is blocked (spec: skills)
-- [ ] 72.5 Implement cost- and latency-aware routing policy; verify with routing table tests (spec: model-providers)
-- [ ] 72.6 Implement surface toolsets from the session and taint-aware escalation; verify that tainted content raises the approval floor (spec: tool-system)
-- [ ] 72.7 Implement terminal workspace checkpoints; verify that a checkpoint restores the workspace (spec: execution-environments)
-- [ ] 72.8 Implement credential injection at the egress proxy and opt-in external secret sources; verify that injected credentials never reach the child process (spec: security-boundaries)
-- [ ] 72.9 Implement natural-language schedule translation and the managed scheduler contract; verify against a mock managed scheduler (spec: scheduled-jobs)
-- [ ] 72.10 Implement cross-platform identity linking, delivery/read receipts and busy acknowledgement via reactions; verify with the mock platform (spec: messaging-gateway, spec: platform-adapters)
-- [ ] 72.11 Implement fan-in join modes for delegation; verify with mock-provider tests (spec: subagent-delegation)
-- [ ] 72.12 Implement migration rollback and the plugin development loop; verify rollback restores the pre-migration home (spec: hermes-migration, spec: plugin-system)
+- [x] 72.1 Implement memory decay/expiry/dormancy and consolidation proposals; verify with fake-clock tests (spec: memory)
+- [x] 72.2 Implement hybrid semantic + full-text session search and the encryption-at-rest option; verify search ranking fixtures and that an encrypted db is unreadable without the key (spec: session-storage)
+- [x] 72.3 Implement TUI split panes, inline diff review, the timeline scrubber and shared live sessions; verify with pty snapshot tests (spec: tui)
+- [x] 72.4 Implement skill evals and eval-gated skill edits; verify that a regressing edit is blocked (spec: skills)
+- [x] 72.5 Implement cost- and latency-aware routing policy; verify with routing table tests (spec: model-providers)
+- [x] 72.6 Implement surface toolsets from the session and taint-aware escalation; verify that tainted content raises the approval floor (spec: tool-system)
+- [x] 72.7 Implement terminal workspace checkpoints; verify that a checkpoint restores the workspace (spec: execution-environments)
+- [x] 72.8 Implement credential injection at the egress proxy and opt-in external secret sources; verify that injected credentials never reach the child process (spec: security-boundaries)
+- [x] 72.9 Implement natural-language schedule translation and the managed scheduler contract; verify against a mock managed scheduler (spec: scheduled-jobs)
+- [x] 72.10 Implement cross-platform identity linking, delivery/read receipts and busy acknowledgement via reactions; verify with the mock platform (spec: messaging-gateway, spec: platform-adapters)
+- [x] 72.11 Implement fan-in join modes for delegation; verify with mock-provider tests (spec: subagent-delegation)
+- [x] 72.12 Implement migration rollback and the plugin development loop; verify rollback restores the pre-migration home (spec: hermes-migration, spec: plugin-system)
 
 ## 73. M3 Additional upgrades: configuration, egress, runtimes and providers
 
-- [ ] 73.1 Implement the remote configuration backend (unreachable plane fails closed), profile descriptions, profile distributions (updates keep user config, credentials never installed), identity migration and purge (purge snapshotted) and external secret source commands; verify with fixtures (spec: configuration-and-profiles)
-- [ ] 73.2 Implement egress proxy operation and status, egress proxy coverage of containers and remote sandboxes (CA inside the container), the egress credential source with placeholder rotation, password manager login sources and the dependency vulnerability scan CI gate; verify with proxy integration tests (spec: security-boundaries)
-- [ ] 73.3 Implement the Lightpanda browser engine, the bot screen (virtual display for the agent) and the bot screen takeover lease; verify that the agent waits during a user takeover (spec: execution-environments)
-- [ ] 73.4 Implement the Codex app-server runtime (switch deferred to the next session) and the Codex runtime migration (user text preserved); verify with a stub Codex binary (spec: model-providers)
-- [ ] 73.5 Implement API gateway proxy mode (container relays to the host agent) and the subscription proxy on `8645` (path allowlist, client bearer replaced, LAN clients need a key); verify with HTTP tests (spec: api-server)
-- [ ] 73.6 Implement local-model context window and memory placement (window grows before compression) and local resource telemetry; verify with a stub server (spec: local-models)
-- [ ] 73.7 Implement `video_generate` (stuck jobs time out) and provider-contributed media tools; verify with mock providers (spec: web-and-media-tools)
-- [ ] 73.8 Implement shared install state retention for worktrees, the `/connectors` slash command and language switchers that show endonyms (RTL layout); verify with tests (spec: git-worktrees, spec: connectors, spec: i18n)
-- [ ] 73.9 Implement the NeMo Relay and Langfuse integrations (no export without keys) and the embeddable client SDKs (protocol version negotiation); verify with fixtures (spec: observability, spec: workspace-architecture)
+- [x] 73.1 Implement the remote configuration backend (unreachable plane fails closed), profile descriptions, profile distributions (updates keep user config, credentials never installed), identity migration and purge (purge snapshotted) and external secret source commands; verify with fixtures (spec: configuration-and-profiles)
+- [x] 73.2 Implement egress proxy operation and status, egress proxy coverage of containers and remote sandboxes (CA inside the container), the egress credential source with placeholder rotation, password manager login sources and the dependency vulnerability scan CI gate; verify with proxy integration tests (spec: security-boundaries)
+- [x] 73.3 Implement the Lightpanda browser engine, the bot screen (virtual display for the agent) and the bot screen takeover lease; verify that the agent waits during a user takeover (spec: execution-environments)
+  - Note: the screen runs on the gateway host, in a desktop container of the container backend or on the SSH backend's host; the desktop's Screen pane streams it with take over / hand back and the browser launcher. The scenario's `computer_use` tool is task 76.1 and must call the same lease guard the browser tools call.
+- [x] 73.4 Implement the Codex app-server runtime (switch deferred to the next session) and the Codex runtime migration (user text preserved); verify with a stub Codex binary (spec: model-providers)
+- [x] 73.5 Implement API gateway proxy mode (container relays to the host agent) and the subscription proxy on `8645` (path allowlist, client bearer replaced, LAN clients need a key); verify with HTTP tests (spec: api-server)
+- [x] 73.6 Implement local-model context window and memory placement (window grows before compression) and local resource telemetry; verify with a stub server (spec: local-models)
+- [x] 73.7 Implement `video_generate` (stuck jobs time out) and provider-contributed media tools; verify with mock providers (spec: web-and-media-tools)
+- [x] 73.8 Implement shared install state retention for worktrees, the `/connectors` slash command and language switchers that show endonyms (RTL layout); verify with tests (spec: git-worktrees, spec: connectors, spec: i18n)
+- [x] 73.9 Implement the NeMo Relay and Langfuse integrations (no export without keys) and the embeddable client SDKs (protocol version negotiation); verify with fixtures (spec: observability, spec: workspace-architecture)
 
 ## 74. M3 Agent interop: A2A and peer gateways
 

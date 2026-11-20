@@ -27,6 +27,7 @@ fn machine() -> Hardware {
             integrated: false,
             cuda: Some(13),
             bandwidth_gbps: None,
+            utilization_percent: None,
         }],
     }
 }

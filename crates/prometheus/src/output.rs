@@ -188,6 +188,22 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "profile show",
     },
     JsonShape {
+        schema: "prometheus.profile_info.v1",
+        command: "profile info",
+    },
+    JsonShape {
+        schema: "prometheus.egress_status.v1",
+        command: "egress status",
+    },
+    JsonShape {
+        schema: "prometheus.screen_status.v1",
+        command: "computer-use screen status",
+    },
+    JsonShape {
+        schema: "prometheus.security_scan.v1",
+        command: "security scan",
+    },
+    JsonShape {
         schema: "prometheus.sessions.v1",
         command: "sessions list",
     },

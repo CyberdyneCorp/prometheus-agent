@@ -24,6 +24,48 @@ pub struct ObservabilityConfig {
     /// The daemon's loopback health listener (`/healthz`, `/readyz`).
     #[schemars(extend("x-apply" = "restart"))]
     pub health: HealthListenerConfig,
+    /// Langfuse, the target of `observability.otel.preset = "langfuse"`.
+    #[schemars(extend("x-apply" = "restart"))]
+    pub langfuse: LangfuseConfig,
+    /// The `NeMo` Relay integration (daemon-wide).
+    #[schemars(extend("x-apply" = "restart"))]
+    pub nemo_relay: NemoRelayConfig,
+}
+
+/// `[observability.langfuse]`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct LangfuseConfig {
+    /// The Langfuse host; spans go to `<host>/api/public/otel`, with Basic
+    /// authentication from the secrets `LANGFUSE_PUBLIC_KEY` and
+    /// `LANGFUSE_SECRET_KEY`.
+    pub host: String,
+}
+
+impl Default for LangfuseConfig {
+    fn default() -> Self {
+        Self {
+            host: "https://cloud.langfuse.com".to_owned(),
+        }
+    }
+}
+
+/// `[observability.nemo_relay]`: `NeMo` Relay hosted by the python bridge,
+/// fed every session's lifecycle. Relay reads its user `plugins.toml`
+/// (`~/.config/nemo-relay/plugins.toml`) then its system file
+/// (`/etc/nemo-relay/plugins.toml`), which has the highest precedence.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct NemoRelayConfig {
+    /// Feed `NeMo` Relay: a host in a managed python environment (pinned
+    /// `nemo-relay`, built on first use) receives the session, turn,
+    /// model-call and tool lifecycle of every session. Payloads only with
+    /// `observability.otel.capture_content`. Off by default.
+    pub enabled: bool,
+    /// A `plugins.toml` that replaces Relay's user file (the system file
+    /// still applies above it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plugins_toml: Option<String>,
 }
 
 /// The `[observability.otel]` section (spec: observability, Opt-in
@@ -51,6 +93,19 @@ pub struct OtelConfig {
     /// Send `traceparent` to model providers, MCP servers and other
     /// external hosts.
     pub propagate_external: bool,
+    /// A collector preset, which turns export on: `langfuse` sends traces
+    /// to `observability.langfuse.host` with its keys (ignores
+    /// `endpoint`, `protocol` and `enabled`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<OtelPreset>,
+}
+
+/// `observability.otel.preset`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum OtelPreset {
+    /// Langfuse's OTLP endpoint.
+    #[serde(rename = "langfuse")]
+    Langfuse,
 }
 
 /// `observability.otel.protocol`.
@@ -281,6 +336,10 @@ pub struct WorktreesConfig {
     /// Seconds an archive is kept before the sweep deletes it (`0` =
     /// forever).
     pub archive_retention_secs: u64,
+    /// Seconds install state kept per checkout outside the tree (such as
+    /// language-server caches) may go unused, once its checkout no longer
+    /// exists, before the sweep deletes it (`0` = forever).
+    pub install_state_retention_secs: u64,
 }
 
 impl Default for WorktreesConfig {
@@ -291,6 +350,7 @@ impl Default for WorktreesConfig {
             archive_max_file_bytes: 52_428_800,
             max_total_bytes: 0,
             archive_retention_secs: 2_592_000,
+            install_state_retention_secs: 1_209_600,
         }
     }
 }
@@ -357,6 +417,10 @@ pub struct SecretsConfig {
     pub backend: SecretsBackend,
     /// A helper command printing `NAME=VALUE` lines (POSIX only).
     pub command: SecretCommandConfig,
+    /// Bitwarden Secrets Manager (off by default).
+    pub bitwarden: super::BitwardenSourceConfig,
+    /// 1Password (off by default).
+    pub onepassword: super::OnePasswordSourceConfig,
 }
 
 /// The `[secrets.command]` section: a helper run once per process start,
@@ -421,6 +485,26 @@ pub struct SecurityConfig {
     /// Supply-chain advisory ids whose startup warning is silenced
     /// (`prometheus doctor --ack <id>`); `doctor security` still shows them.
     pub acked_advisories: Vec<String>,
+    /// `prometheus security scan`.
+    pub scan: ScanConfig,
+}
+
+/// The `[security.scan]` section (spec: security-boundaries, Dependency
+/// vulnerability scan).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ScanConfig {
+    /// The OSV API `security scan` queries (a mirror may stand in); it is
+    /// contacted only when the command runs.
+    pub osv_url: String,
+}
+
+impl Default for ScanConfig {
+    fn default() -> Self {
+        Self {
+            osv_url: "https://api.osv.dev".to_owned(),
+        }
+    }
 }
 
 impl Default for SecurityConfig {
@@ -433,6 +517,7 @@ impl Default for SecurityConfig {
             protected_instruction_files: true,
             protected_instruction_extra_patterns: Vec::new(),
             acked_advisories: Vec::new(),
+            scan: ScanConfig::default(),
         }
     }
 }
@@ -542,8 +627,9 @@ impl EgressMode {
 }
 
 /// The `[security.egress]` section.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
+#[allow(clippy::struct_excessive_bools)] // independent switches of one config section
 pub struct EgressConfig {
     /// Which hosts tools, sandboxed children, plugins and browsers may
     /// reach: any public address (`public`), only the `allow` patterns
@@ -563,6 +649,64 @@ pub struct EgressConfig {
     /// Absolute paths of shared blocklist files: one pattern per line, `#`
     /// comments; re-read when a file changes.
     pub deny_files: Vec<String>,
+    /// Sandboxed children (a session's processes, stdio MCP servers,
+    /// plugin sidecars) hold a placeholder, fresh per session or start,
+    /// instead of each secret mapped in `inject`; their egress proxy puts the
+    /// real value in only on TLS requests to the mapped hosts and refuses
+    /// the placeholder anywhere else (`credential_misdirected`).
+    pub credential_injection: bool,
+    /// Secret name to the host patterns (`host`, `host:port`,
+    /// `*.suffix`) its value may be sent to, under `credential_injection`.
+    /// For the egress proxy of container and remote sandboxes, an empty
+    /// list means the built-in provider hosts plus `inject_extra_hosts`.
+    pub inject: std::collections::BTreeMap<String, Vec<String>>,
+    /// Hosts added to the built-in provider hosts injected credentials of
+    /// container and remote sandboxes may go to.
+    pub inject_extra_hosts: Vec<String>,
+    /// The egress proxy's container bridge listener port (`prometheus
+    /// egress status` shows it).
+    pub proxy_port: u16,
+    /// Container and remote sandboxes refuse to start while credential
+    /// injection is on but the egress proxy is down.
+    pub enforce_on_container: bool,
+    /// Where the egress proxy reads the mapped secrets: the profile's
+    /// secrets store, or Bitwarden Secrets Manager (refetched every start).
+    pub credential_source: CredentialSource,
+    /// With `credential_source = "bitwarden"`, take a secret missing from
+    /// the project from the store instead of refusing to start.
+    pub allow_store_fallback: bool,
+}
+
+impl Default for EgressConfig {
+    fn default() -> Self {
+        Self {
+            mode: EgressMode::default(),
+            allow: Vec::new(),
+            allow_private: false,
+            fake_ip_ranges: Vec::new(),
+            deny: Vec::new(),
+            deny_files: Vec::new(),
+            credential_injection: false,
+            inject: std::collections::BTreeMap::new(),
+            inject_extra_hosts: Vec::new(),
+            proxy_port: 9090,
+            enforce_on_container: true,
+            credential_source: CredentialSource::Store,
+            allow_store_fallback: false,
+        }
+    }
+}
+
+/// Where the egress proxy reads injected credentials.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CredentialSource {
+    /// The profile's secrets store.
+    #[default]
+    Store,
+    /// Bitwarden Secrets Manager (`secrets.bitwarden`), fetched on every
+    /// proxy start.
+    Bitwarden,
 }
 
 /// The `[network]` section.

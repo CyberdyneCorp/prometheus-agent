@@ -352,6 +352,7 @@ async fn open_session(
         provider: task.provider.as_deref(),
         model: task.model.as_deref(),
         mock_script: None,
+        unrecorded: false,
     };
     let factory = Factory::with_store(
         scope.clone(),

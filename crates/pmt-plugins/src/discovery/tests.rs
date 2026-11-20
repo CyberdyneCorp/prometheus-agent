@@ -34,6 +34,7 @@ fn run_with(
         config,
         embedded,
         running: &Version::new(0, 1, 0),
+        dev: &[],
     })
 }
 
@@ -125,4 +126,29 @@ fn a_directory_must_carry_its_own_id() {
         found[0].manifest.as_ref().unwrap_err().message(),
         "plugin id 'notes' does not match its directory name 'other'"
     );
+}
+
+#[test]
+fn a_dev_directory_is_enabled_as_dev_id_and_hides_the_installed_copy() {
+    let home = tempfile::tempdir().unwrap();
+    place(&home.path().join("plugins"), "notes");
+    // Any directory name: the id is the manifest's.
+    let work = tempfile::tempdir().unwrap();
+    let src = work.path().join("my-checkout");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("plugin.toml"), manifest("notes")).unwrap();
+    let config = PluginsConfig::default();
+    let found = discover(&Inputs {
+        profile_dir: home.path(),
+        cwd: None,
+        config: &config,
+        embedded: &[],
+        running: &Version::new(0, 1, 0),
+        dev: std::slice::from_ref(&src),
+    });
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].id, "dev:notes");
+    assert_eq!(found[0].source, Source::Dev);
+    assert_eq!(found[0].shadowed, [home.path().join("plugins/notes")]);
+    assert_eq!(Enablement::of(&found[0], &config), Enablement::Enabled);
 }

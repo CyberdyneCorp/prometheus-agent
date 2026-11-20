@@ -222,7 +222,7 @@
       "properties": {
         "accepted_hunks": {
           "default": null,
-          "description": "For a diff approval: the hunks accepted.",
+          "description": "For a diff approval: the hunks to apply (numbered from 1, as the\nrequest's `diff.hunks`); absent: all of them.",
           "items": {
             "format": "uint32",
             "minimum": 0,
@@ -239,7 +239,7 @@
         },
         "replacement": {
           "default": null,
-          "description": "An edited command to run instead.",
+          "description": "For a diff approval: the file content to write instead of the\nproposed one (`edit then accept`).",
           "type": [
             "string",
             "null"
@@ -355,7 +355,7 @@
       "properties": {
         "accepted_hunks": {
           "default": null,
-          "description": "For a diff approval: the hunks accepted.",
+          "description": "For a diff approval: the hunks to apply (numbered from 1, as the\nrequest's `diff.hunks`); absent: all of them.",
           "items": {
             "format": "uint32",
             "minimum": 0,
@@ -376,7 +376,7 @@
         },
         "replacement": {
           "default": null,
-          "description": "An edited command to run instead.",
+          "description": "For a diff approval: the file content to write instead of the\nproposed one (`edit then accept`).",
           "type": [
             "string",
             "null"
@@ -564,6 +564,13 @@
       "additionalProperties": false,
       "description": "`session.attach` / `session.resume` result.",
       "properties": {
+        "client_id": {
+          "description": "This connection's client id, as `session.presence` lists it and\nits inputs are stamped with.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "epoch": {
           "description": "The daemon epoch the sequence numbers belong to.",
           "type": "string"
@@ -1766,6 +1773,17 @@
             "null"
           ]
         },
+        "local_resources": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalResources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The local runtime's resource use while the session's local model\nis resident (sampled at most once every 2 seconds)."
+        },
         "subscription": {
           "anyOf": [
             {
@@ -1968,6 +1986,13 @@
       "additionalProperties": false,
       "description": "A file edit an approval asks about.",
       "properties": {
+        "hunks": {
+          "description": "The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what\n`accepted_hunks` refers to.",
+          "items": {
+            "$ref": "#/$defs/EditHunk"
+          },
+          "type": "array"
+        },
         "new_text": {
           "description": "The content after the edit.",
           "type": "string"
@@ -1987,6 +2012,28 @@
       "required": [
         "path",
         "new_text"
+      ],
+      "type": "object"
+    },
+    "EditHunk": {
+      "additionalProperties": false,
+      "description": "One hunk of a file edit.",
+      "properties": {
+        "header": {
+          "description": "`@@ -<old start>,<old lines> +<new start>,<new lines> @@`.",
+          "type": "string"
+        },
+        "lines": {
+          "description": "Its lines, each starting with ` `, `-` or `+`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "header",
+        "lines"
       ],
       "type": "object"
     },
@@ -3671,6 +3718,57 @@
       ],
       "type": "object"
     },
+    "LanguageEntry": {
+      "additionalProperties": false,
+      "description": "One selectable language.",
+      "properties": {
+        "endonym": {
+          "description": "The language's own name for itself (`Deutsch`).",
+          "type": "string"
+        },
+        "id": {
+          "description": "The `display.language` id (`de`, `zh-hant`).",
+          "type": "string"
+        },
+        "origin": {
+          "description": "`bundled`, `overlay` or `pack:<plugin>`.",
+          "type": "string"
+        },
+        "rtl": {
+          "description": "Written right to left: surfaces mirror their layout.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "endonym",
+        "rtl",
+        "origin"
+      ],
+      "type": "object"
+    },
+    "Languages": {
+      "additionalProperties": false,
+      "description": "`i18n.languages` result.",
+      "properties": {
+        "current": {
+          "description": "The profile's `display.language`.",
+          "type": "string"
+        },
+        "languages": {
+          "description": "Every selectable language, by id.",
+          "items": {
+            "$ref": "#/$defs/LanguageEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "current",
+        "languages"
+      ],
+      "type": "object"
+    },
     "Lineage": {
       "additionalProperties": false,
       "description": "`session.tree` / `session.siblings` result.",
@@ -3724,6 +3822,44 @@
         "parent_session_id",
         "kind",
         "depth"
+      ],
+      "type": "object"
+    },
+    "LocalModelContextGrown": {
+      "additionalProperties": false,
+      "description": "`local_model.context_grown` payload: a session's local model was\nrelaunched at a larger window instead of compressing (spec:\nlocal-models, Context window and memory placement).",
+      "properties": {
+        "from": {
+          "description": "The window before, tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "model": {
+          "description": "The library model.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "`llamacpp`.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "to": {
+          "description": "The window now, tokens.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "provider",
+        "model",
+        "from",
+        "to"
       ],
       "type": "object"
     },
@@ -3789,6 +3925,52 @@
       },
       "required": [
         "message"
+      ],
+      "type": "object"
+    },
+    "LocalResources": {
+      "additionalProperties": false,
+      "description": "GPU and RAM use of the local model runtime (spec: local-models, Local\nresource telemetry).",
+      "properties": {
+        "gpu_memory_total": {
+          "description": "GPU memory, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpu_memory_used": {
+          "description": "GPU memory in use, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpu_utilization_percent": {
+          "default": null,
+          "description": "How busy the GPU is, percent, when the driver reports it.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ram_total": {
+          "description": "System RAM, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ram_used": {
+          "description": "System RAM in use, bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "gpu_memory_used",
+        "gpu_memory_total",
+        "ram_used",
+        "ram_total"
       ],
       "type": "object"
     },
@@ -3969,6 +4151,31 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "MessageDeliveryPayload": {
+      "additionalProperties": false,
+      "description": "`message.delivery` payload: an outbound message of the session moved\nto `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery\nreceipts surfaced).",
+      "properties": {
+        "outbox_id": {
+          "description": "Its outbox entry.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "session_id": {
+          "description": "The session the message belongs to.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`delivered`, `read` or `failed`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "outbox_id",
+        "state"
+      ],
       "type": "object"
     },
     "MessageReaction": {
@@ -4577,6 +4784,35 @@
       "required": [
         "target",
         "tier"
+      ],
+      "type": "object"
+    },
+    "PresenceClient": {
+      "additionalProperties": false,
+      "description": "One client attached to a session.",
+      "properties": {
+        "client_id": {
+          "description": "The client's id within the daemon (`<kind>-<connection>`), the one\nits inputs are stamped with.",
+          "type": "string"
+        },
+        "client_kind": {
+          "description": "Its kind from `rpc.hello` (`tui`, `desktop`, ...).",
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/AttachRole",
+          "description": "Driver or observer."
+        },
+        "since": {
+          "description": "When it attached (RFC 3339).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_id",
+        "client_kind",
+        "role",
+        "since"
       ],
       "type": "object"
     },
@@ -5563,6 +5799,27 @@
       ],
       "type": "object"
     },
+    "RewindParams": {
+      "additionalProperties": false,
+      "description": "`session.rewind` params.",
+      "properties": {
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        },
+        "to_turn": {
+          "description": "The last turn the branch keeps (from 1).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "to_turn"
+      ],
+      "type": "object"
+    },
     "Roster": {
       "additionalProperties": false,
       "description": "`bot.roster.list` result.",
@@ -5743,6 +6000,165 @@
         "device",
         "ok"
       ],
+      "type": "object"
+    },
+    "ScreenBrowserOpened": {
+      "additionalProperties": false,
+      "description": "A browser opened on the bot screen.",
+      "properties": {
+        "user_data_dir": {
+          "description": "The persistent browser profile it shares with the agent's headed\nbrowser.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "user_data_dir"
+      ],
+      "type": "object"
+    },
+    "ScreenBrowserParams": {
+      "additionalProperties": false,
+      "description": "`screen.browser` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "url": {
+          "default": null,
+          "description": "An `http` or `https` page to open (a blank page when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ScreenHandbackParams": {
+      "additionalProperties": false,
+      "description": "`screen.handback` params.",
+      "properties": {
+        "force": {
+          "default": false,
+          "description": "Clear the lease whoever holds it.",
+          "type": "boolean"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewer": {
+          "default": null,
+          "description": "The viewer handing it back (the client kind when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ScreenLeaseState": {
+      "additionalProperties": false,
+      "description": "The lease after a takeover or hand-back.",
+      "properties": {
+        "epoch": {
+          "description": "Bumped by every takeover; results of agent calls started under an\nolder epoch are void.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "holder": {
+          "description": "The viewer holding the screen; `None`: the agent has it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "epoch"
+      ],
+      "type": "object"
+    },
+    "ScreenTakeoverParams": {
+      "additionalProperties": false,
+      "description": "`screen.takeover` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewer": {
+          "default": null,
+          "description": "Who takes it over, as shown to the agent and other viewers (the\nclient kind when omitted); the same name hands it back after a\nreconnect.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ScreenTicket": {
+      "additionalProperties": false,
+      "description": "A single-use display ticket.",
+      "properties": {
+        "expires_in_secs": {
+          "description": "Seconds until it expires (30).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "lease": {
+          "$ref": "#/$defs/ScreenLeaseState",
+          "default": {
+            "epoch": 0
+          },
+          "description": "Who controls the screen as the ticket is issued."
+        },
+        "path": {
+          "description": "The display stream's path on the daemon's listener (`/screen`).",
+          "type": "string"
+        },
+        "ticket": {
+          "description": "The secret: offered as the `prometheus-ticket.<ticket>` WebSocket\nsubprotocol next to `prometheus-display.v1`, on `path`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticket",
+        "path",
+        "expires_in_secs"
+      ],
+      "type": "object"
+    },
+    "ScreenTicketParams": {
+      "additionalProperties": false,
+      "description": "`screen.ticket` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile (the connection's only one when omitted).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "SecretAnswer": {
@@ -6007,6 +6423,28 @@
       },
       "type": "object"
     },
+    "SessionPresencePayload": {
+      "additionalProperties": false,
+      "description": "`session.presence` payload.",
+      "properties": {
+        "clients": {
+          "description": "Every client attached now, in the order they attached.",
+          "items": {
+            "$ref": "#/$defs/PresenceClient"
+          },
+          "type": "array"
+        },
+        "session_id": {
+          "description": "The session.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "clients"
+      ],
+      "type": "object"
+    },
     "SessionProject": {
       "additionalProperties": false,
       "description": "`session.project` payload: a session moved to another project.",
@@ -6047,6 +6485,42 @@
       },
       "required": [
         "session_id"
+      ],
+      "type": "object"
+    },
+    "SessionRewound": {
+      "additionalProperties": false,
+      "description": "`session.rewind` result.",
+      "properties": {
+        "checkpoint": {
+          "default": null,
+          "description": "The workspace checkpoint holding the files as they were after\n`to_turn` (`files.rollback {checkpoint}`), when later turns changed\nfiles; restoring is the client's offer to make.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "parent_session_id": {
+          "description": "The session it branched from (kept unchanged).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The new branch session, ending at `to_turn`.",
+          "type": "string"
+        },
+        "turns": {
+          "description": "The turns the branch holds.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "session_id",
+        "parent_session_id",
+        "turns"
       ],
       "type": "object"
     },
@@ -6152,6 +6626,10 @@
             "null"
           ]
         },
+        "ephemeral": {
+          "description": "Keep the session's transcript out of the session store and its\ntrajectory (spec: workspace-architecture, Embeddable client SDKs):\nhidden from listings, no trajectory, transcript removed when the\nsession unloads; its usage still counts against every budget.",
+          "type": "boolean"
+        },
         "ignore_rules": {
           "default": false,
           "description": "No rule files, identity file, memory snapshot or preloaded skills\n(`--ignore-rules`).",
@@ -6211,6 +6689,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "system_prompt_overlay": {
+          "description": "Text sent as a last system block with every model call of this\nsession only (an embedding program's instructions): never part of\nthe frozen prompt, the stored history or the trajectory.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "yolo": {
           "default": false,
@@ -6335,6 +6820,76 @@
       ],
       "type": "object"
     },
+    "SubagentEventKind": {
+      "description": "What one `subagent.event` carries.",
+      "oneOf": [
+        {
+          "const": "assistant",
+          "description": "The child's assistant text.",
+          "type": "string"
+        },
+        {
+          "const": "tool_call",
+          "description": "A tool call it made (`tool`, `text` = what it works on).",
+          "type": "string"
+        },
+        {
+          "const": "tool_result",
+          "description": "That call's result (`tool`, `text` = its output or error).",
+          "type": "string"
+        },
+        {
+          "const": "finished",
+          "description": "It ended (`status`).",
+          "type": "string"
+        }
+      ]
+    },
+    "SubagentEventPayload": {
+      "additionalProperties": false,
+      "description": "`subagent.event` payload: one item of a subscribed child's transcript,\nsent to the subscribing connection only.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SubagentEventKind",
+          "description": "What it is."
+        },
+        "session_id": {
+          "description": "The parent session.",
+          "type": "string"
+        },
+        "status": {
+          "description": "How the child ended, for `finished`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Its text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tool": {
+          "description": "The tool, for a call or result.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id",
+        "kind"
+      ],
+      "type": "object"
+    },
     "SubagentList": {
       "additionalProperties": false,
       "description": "`subagent.list` result.",
@@ -6392,6 +6947,44 @@
         "session_id",
         "subagent_id",
         "text"
+      ],
+      "type": "object"
+    },
+    "SubagentSubscribeParams": {
+      "additionalProperties": false,
+      "description": "`subagent.subscribe` params.",
+      "properties": {
+        "session_id": {
+          "description": "The parent session the connection is attached to.",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child (`sa-<ULID>`).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "session_id",
+        "subagent_id"
+      ],
+      "type": "object"
+    },
+    "SubagentSubscribed": {
+      "additionalProperties": false,
+      "description": "`subagent.subscribe` result.",
+      "properties": {
+        "status": {
+          "description": "`running`, or how it ended (`completed`, `failed`, ...).",
+          "type": "string"
+        },
+        "subagent_id": {
+          "description": "The child.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "subagent_id",
+        "status"
       ],
       "type": "object"
     },
@@ -6644,6 +7237,70 @@
       },
       "type": "object"
     },
+    "Timeline": {
+      "additionalProperties": false,
+      "description": "`session.timeline` result.",
+      "properties": {
+        "turns": {
+          "description": "The active transcript's turns, oldest first.",
+          "items": {
+            "$ref": "#/$defs/TimelineTurn"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "turns"
+      ],
+      "type": "object"
+    },
+    "TimelineTurn": {
+      "additionalProperties": false,
+      "description": "One turn of a session's timeline.",
+      "properties": {
+        "at": {
+          "description": "When it started (RFC 3339).",
+          "type": "string"
+        },
+        "cost_usd": {
+          "default": null,
+          "description": "What its model calls cost, when known.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "first_line": {
+          "description": "The first line of its input.",
+          "type": "string"
+        },
+        "message_id": {
+          "description": "The user message that started it (`msg_<ULID>`).",
+          "type": "string"
+        },
+        "tools": {
+          "description": "Tool calls it made.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "turn": {
+          "description": "Its number, from 1.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "turn",
+        "message_id",
+        "at",
+        "first_line",
+        "tools"
+      ],
+      "type": "object"
+    },
     "Transcript": {
       "additionalProperties": false,
       "description": "`session.transcript` result.",
@@ -6665,6 +7322,13 @@
       "additionalProperties": false,
       "description": "One message of a transcript.",
       "properties": {
+        "author": {
+          "description": "Who sent a user message: the client id the gateway stamped it with\n(spec: tui, Shared live sessions).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "description": "`msg_<ULID>`.",
           "type": "string"
@@ -7226,7 +7890,7 @@
       "description": "One password-manager source.",
       "properties": {
         "available": {
-          "description": "Whether this build can read it.",
+          "description": "Whether its CLI (`op`, `bw`) is installed: the managed runtime or\nthe daemon's launch `PATH`.",
           "type": "boolean"
         },
         "enabled": {
@@ -7663,13 +8327,17 @@
       "since": "1.0"
     },
     "local_model.context_grown": {
-      "declared": false,
       "owner": "local-models",
+      "payload": {
+        "$ref": "#/$defs/LocalModelContextGrown"
+      },
       "since": "1.0"
     },
     "message.delivery": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "payload": {
+        "$ref": "#/$defs/MessageDeliveryPayload"
+      },
       "since": "1.0"
     },
     "message.reaction": {
@@ -7727,14 +8395,23 @@
       "since": "1.0"
     },
     "session.presence": {
-      "declared": false,
       "owner": "messaging-gateway",
+      "payload": {
+        "$ref": "#/$defs/SessionPresencePayload"
+      },
       "since": "1.0"
     },
     "session.project": {
       "owner": "projects",
       "payload": {
         "$ref": "#/$defs/SessionProject"
+      },
+      "since": "1.0"
+    },
+    "subagent.event": {
+      "owner": "tui",
+      "payload": {
+        "$ref": "#/$defs/SubagentEventPayload"
       },
       "since": "1.0"
     },
@@ -8376,6 +9053,16 @@
       },
       "since": "1.0"
     },
+    "i18n.languages": {
+      "owner": "i18n",
+      "params": {
+        "$ref": "#/$defs/ProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Languages"
+      },
+      "since": "1.0"
+    },
     "journey.list": {
       "owner": "memory",
       "params": {
@@ -8807,14 +9494,44 @@
       },
       "since": "1.0"
     },
-    "screen.handback": {
-      "declared": false,
+    "screen.browser": {
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenBrowserParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenBrowserOpened"
+      },
+      "since": "1.0"
+    },
+    "screen.handback": {
+      "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenHandbackParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenLeaseState"
+      },
       "since": "1.0"
     },
     "screen.takeover": {
-      "declared": false,
       "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenTakeoverParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenLeaseState"
+      },
+      "since": "1.0"
+    },
+    "screen.ticket": {
+      "owner": "execution-environments",
+      "params": {
+        "$ref": "#/$defs/ScreenTicketParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ScreenTicket"
+      },
       "since": "1.0"
     },
     "session.attach": {
@@ -8965,6 +9682,17 @@
       },
       "since": "1.0"
     },
+    "session.rewind": {
+      "long": true,
+      "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/RewindParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SessionRewound"
+      },
+      "since": "1.0"
+    },
     "session.settings": {
       "owner": "acp-adapter",
       "params": {
@@ -8992,6 +9720,16 @@
       },
       "result": {
         "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "session.timeline": {
+      "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SessionRef"
+      },
+      "result": {
+        "$ref": "#/$defs/Timeline"
       },
       "since": "1.0"
     },
@@ -9047,8 +9785,13 @@
       "since": "1.0"
     },
     "subagent.subscribe": {
-      "declared": false,
       "owner": "tui",
+      "params": {
+        "$ref": "#/$defs/SubagentSubscribeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/SubagentSubscribed"
+      },
       "since": "1.0"
     },
     "system.health": {

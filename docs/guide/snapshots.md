@@ -25,7 +25,20 @@ With `files.snapshot.enabled = true` (default; `prometheus chat
 - with `files.snapshot.terminal = "destructive"` (default `off`), also a
   checkpoint before terminal commands shaped like `rm`, `rmdir`, `cp`, `mv`,
   `install`, `sed -i`, `truncate`, `dd`, `shred`, output redirection `>`,
-  `git reset`, `git clean`, `git checkout` and `git restore`.
+  `git reset`, `git clean`, `git checkout` and `git restore`;
+- with `files.snapshot.terminal = "workspace"`, those checkpoints plus a
+  manifest of the session workspace (each file's size, modification time
+  and content hash, prior contents kept in the store) before **every**
+  terminal command; afterwards each file the command changed, created or
+  removed inside the workspace is journaled like a file-tool change, so
+  `/undo` reverts what `sed -i`, a formatter or a build script did too. A
+  background command keeps changing files after its call returned: while
+  one runs, the next command first journals what changed since the last
+  manifest, and its exit journals the rest (in the turn it exits in). A
+  file whose size and modification time did not change is not read again.
+  A workspace over `files.snapshot.max_workspace_bytes` (default 512 MiB)
+  or 20,000 files is not checkpointed: the command runs as usual and its
+  result carries a one-time notice.
 
 Recording never fails or blocks the call it records. Sessions on other
 terminal backends are snapshotted too:

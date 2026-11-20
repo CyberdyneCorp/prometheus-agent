@@ -33,6 +33,33 @@ pub struct ModelConfig {
     /// and the vendor's install prefixes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub codex_bin: Option<String>,
+    /// Who runs turns on `openai-codex`, `openai-api` and custom providers
+    /// the Codex config also defines: `auto` (Prometheus itself) or
+    /// `codex_app_server` (a long-lived `codex app-server`). A change
+    /// applies from the next session.
+    pub openai_runtime: OpenaiRuntime,
+}
+
+/// `model.openai_runtime`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenaiRuntime {
+    /// Prometheus runs every turn.
+    #[default]
+    Auto,
+    /// Eligible turns run in the Codex app-server.
+    CodexAppServer,
+}
+
+impl OpenaiRuntime {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::CodexAppServer => "codex_app_server",
+        }
+    }
 }
 
 impl Default for ModelConfig {
@@ -46,6 +73,7 @@ impl Default for ModelConfig {
                 .to_vec(),
             min_context_window: 64_000,
             codex_bin: None,
+            openai_runtime: OpenaiRuntime::Auto,
         }
     }
 }
@@ -524,6 +552,14 @@ pub struct AuxiliaryConfig {
     /// model; `--model` wins).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trajectory_compress: Option<AuxiliaryTask>,
+    /// Natural-language schedules of `cron add --nl` and the `cronjob`
+    /// tool's `schedule_text` (defaults to the main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<AuxiliaryTask>,
+    /// Profile descriptions of `profile describe --auto` (defaults to the
+    /// main model).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<AuxiliaryTask>,
 }
 
 impl Default for AuxiliaryConfig {
@@ -547,6 +583,8 @@ impl Default for AuxiliaryConfig {
             kanban: None,
             eval_judge: None,
             trajectory_compress: None,
+            schedule: None,
+            profile: None,
         }
     }
 }
@@ -618,12 +656,51 @@ pub struct FallbackEntry {
     pub credential: Option<SecretName>,
 }
 
+/// `routing.policy` (spec: model-providers, Cost and latency aware
+/// routing policy).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RoutingPolicy {
+    /// The requested provider and model.
+    #[default]
+    Pinned,
+    /// The lowest estimated cost per turn.
+    Cheapest,
+    /// The lowest median time to first token.
+    Fastest,
+    /// The lowest weighted sum of normalised cost and latency.
+    Balanced,
+}
+
+impl RoutingPolicy {
+    /// The config spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pinned => "pinned",
+            Self::Cheapest => "cheapest",
+            Self::Fastest => "fastest",
+            Self::Balanced => "balanced",
+        }
+    }
+}
+
 /// The `[routing]` section (spec: model-providers, Provider health
-/// scoring).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// scoring; Cost and latency aware routing policy).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 #[schemars(extend("x-apply" = "next_session"))]
 pub struct RoutingConfig {
+    /// How a session's route is chosen at its start: `pinned` (the
+    /// requested route), `cheapest`, `fastest` or `balanced`.
+    pub policy: RoutingPolicy,
+    /// The weight of cost against latency under `balanced`.
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub cost_weight: f64,
+    /// The routes a policy chooses among (`[[routing.candidates]]`, as
+    /// fallback entries); empty: the requested route plus the fallback
+    /// chain.
+    pub candidates: Vec<FallbackEntry>,
     /// Calls per (provider, model, credential) a health score is computed
     /// over.
     #[schemars(range(min = 1, max = 500))]
@@ -637,6 +714,9 @@ pub struct RoutingConfig {
 impl Default for RoutingConfig {
     fn default() -> Self {
         Self {
+            policy: RoutingPolicy::Pinned,
+            cost_weight: 0.5,
+            candidates: Vec::new(),
             health_window: 50,
             health_half_life_secs: 1800,
         }

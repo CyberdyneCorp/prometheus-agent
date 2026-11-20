@@ -60,6 +60,17 @@ fn dashboard_plugins_render_in_sandboxed_frames() {
     playwright(home.path(), "plugins.spec.ts", &[]);
 }
 
+/// i18n, Language switchers show endonyms: the dashboard header lists
+/// every language by endonym and mirrors the page for Arabic.
+#[test]
+fn the_dashboard_language_switcher_writes_the_profile_language() {
+    let home = mock_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    playwright(home.path(), "language.spec.ts", &[]);
+    let language = ok(&run(home.path(), &["config", "get", "display.language"]));
+    assert_eq!(language.trim().trim_matches('"'), "ar");
+}
+
 /// Scenario: Secret shown once. Scenario: Offline docs.
 #[test]
 fn the_webhooks_and_docs_pages_work_in_the_browser() {

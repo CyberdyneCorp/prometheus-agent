@@ -40,6 +40,7 @@ pmt-plugins = { path = "crates/pmt-plugins" }
 pmt-providers = { path = "crates/pmt-providers" }
 pmt-pybridge = { path = "crates/pmt-pybridge" }
 pmt-rpc = { path = "crates/pmt-rpc" }
+pmt-sdk = { path = "crates/pmt-sdk" }
 pmt-gateway = { path = "crates/pmt-gateway" }
 pmt-adapters-telegram = { path = "crates/pmt-adapters-telegram" }
 pmt-adapters-discord = { path = "crates/pmt-adapters-discord" }
@@ -66,7 +67,7 @@ schemars = "1.2"
 rmcp = { version = "3.9.0", default-features = false }
 # WASM plugin host (design D7): the Component Model on Cranelift, with no
 # WASI (plugins get only the WIT host interfaces) and no on-disk code cache.
-wasmtime = { version = "48.0.8", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "call-hook"] }
+wasmtime = { version = "48.0.9", default-features = false, features = ["runtime", "cranelift", "component-model", "std", "call-hook"] }
 # Test-only: turns the sample plugins' core modules into components.
 wit-component = "0.254.2"
 # `requires_prometheus` ranges and WIT world versions.
@@ -176,6 +177,9 @@ seccompiler = "0.5"
 libc = "0.2"
 # flock(2) on Android, where std's File::try_lock is unsupported.
 rustix = { version = "1.1", default-features = false, features = ["std", "fs"] }
+# Socket options std lacks (IP_FREEBIND for the egress proxy's container
+# listener); already in the tree through tokio.
+socket2 = { version = "0.6", features = ["all"] }
 # Plain (non-`\\?\`) Windows paths for shells that mishandle verbatim ones.
 dunce = "1.0"
 windows-sys = "0.61"
@@ -190,6 +194,8 @@ getrandom = "0.4"
 # the exported secrets.
 argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
 chacha20poly1305 = { version = "0.11", default-features = false, features = ["alloc"] }
+# The keystream of an encrypted store's temporary files.
+chacha20 = { version = "0.10", default-features = false, features = ["cipher"] }
 # URL parsing and form encoding of sign-in requests and callbacks.
 url = "2.5"
 # Test-only HTTP mock server (recorded provider stream fixtures).
@@ -314,7 +320,8 @@ lto = "fat"
 codegen-units = 1
 # Size-optimized code: the stripped binary is 28% smaller with unchanged
 # startup, chat prompt and peak RSS; the agent's time goes to network and
-# model latency, not to tight loops (perf/README.md).
+# model latency, not to tight loops. "z" was measured and refused: its
+# startup faults in more text pages (perf/README.md).
 opt-level = "s"
 strip = "symbols"
 

@@ -33,6 +33,7 @@ impl Tui<'_> {
     pub(super) fn prune_card(&self) -> Option<Card> {
         let strings = self.strings();
         self.prune.then(|| Card {
+            diff: Vec::new(),
             title: pmt_i18n::t!(strings, "tui.prune_title"),
             body: String::new(),
             hint: pmt_i18n::t!(strings, "tui.prune_hint"),

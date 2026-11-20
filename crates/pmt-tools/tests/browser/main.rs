@@ -18,9 +18,12 @@ mod connect;
 #[path = "../common/dispatcher.rs"]
 mod dispatcher;
 mod isolation;
+mod lightpanda;
 mod local_options;
+mod managers;
 mod real_profile;
 mod support;
+mod takeover;
 mod vault;
 mod warm;
 

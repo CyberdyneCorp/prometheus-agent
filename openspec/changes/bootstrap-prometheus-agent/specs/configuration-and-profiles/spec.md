@@ -295,6 +295,11 @@ The system SHALL support `config_backend.kind = "remote"` set only in `managed.t
 - **WHEN** the user runs `prometheus chat`
 - **THEN** the process SHALL exit 78 after about 30 s with a message naming the plane URL and SHALL NOT read `config.toml`
 
+#### Scenario: Every reader uses the plane
+- **GIVEN** `config_backend.kind = "remote"`, a plane on which profile `ops` sets `gateway.accept_routes_from = ["default"]` and profile `default` sets `display.language = "es"` and enables a platform-adapter plugin, and local `config.toml` files that say otherwise
+- **WHEN** `default` declares a route to `ops`, the UI strings are loaded and the plugin's platform table is validated
+- **THEN** the route SHALL be accepted, the strings SHALL be Spanish and the platform SHALL validate, all from the plane, and a local opt-in the plane does not hold SHALL NOT be honoured
+
 ### Requirement: Profile creation options
 `prometheus profile create` SHALL also accept `--clone-all` (copy everything from the source profile including plugins, cron definitions and themes but excluding sessions, `state.db`, logs, snapshots and backups), `--no-skills` (create without seeding bundled skills, setting `skills.include_bundled = false` in the new profile), `--sync-imports` (with a clone flag, also copy the import sync registry of `hermes-migration` › Keeping imports in sync), `--description <text>`, `--no-alias` (skip the default alias launcher), and `--clone-channels`, without which messaging adapter configuration, pairing and allowlist data SHALL never be cloned so two profiles do not answer the same bot account.
 **Milestone:** M2

@@ -24,6 +24,21 @@ pub struct SessionsConfig {
     /// Below this many free bytes on the store's volume an interactive
     /// start offers to turn on auto-prune (when `retention_secs = 0`).
     pub low_disk_bytes: u64,
+    /// Hybrid semantic search.
+    pub search: SessionSearchConfig,
+}
+
+/// The `[sessions.search]` section.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct SessionSearchConfig {
+    /// Embed messages in the background and answer hybrid searches with
+    /// the full-text and vector rankings fused.
+    pub semantic: bool,
+    /// The embedding model (`provider/model` or a model on the main
+    /// route's provider); unset uses `memory.recall.embedding_model`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_model: Option<String>,
 }
 
 impl Default for SessionsConfig {
@@ -35,6 +50,7 @@ impl Default for SessionsConfig {
             max_resume_messages: 20_000,
             max_export_messages: 20_000,
             low_disk_bytes: 1_073_741_824,
+            search: SessionSearchConfig::default(),
         }
     }
 }
@@ -69,6 +85,22 @@ pub struct StorageConfig {
     /// `state.db` journal mode; `delete` only for filesystems without WAL
     /// support.
     pub journal_mode: JournalMode,
+    /// Encryption of `state.db` pages and blob files. An existing store
+    /// is converted only offline: `prometheus sessions encrypt|decrypt`.
+    pub encryption: StorageEncryption,
+}
+
+/// `storage.encryption`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StorageEncryption {
+    /// Plaintext.
+    #[default]
+    None,
+    /// A random per-profile key held in the OS keychain.
+    Keychain,
+    /// A key derived (Argon2id) from the `STATE_DB_PASSPHRASE` secret.
+    Passphrase,
 }
 
 /// SQLite journal modes.
@@ -141,6 +173,10 @@ pub struct MemoryConfig {
     pub notifications: MemoryNotifications,
     /// The background memory review.
     pub review: MemoryReviewConfig,
+    /// Salience decay and dormancy.
+    pub decay: MemoryDecayConfig,
+    /// Consolidation proposals.
+    pub consolidation: MemoryConsolidationConfig,
     /// Each provider's own non-secret settings (`memory.providers.<id>.*`;
     /// its secrets live in the profile's secrets store).
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
@@ -223,7 +259,55 @@ impl Default for MemoryConfig {
             provider_recall_spill: false,
             notifications: MemoryNotifications::On,
             review: MemoryReviewConfig::default(),
+            decay: MemoryDecayConfig::default(),
+            consolidation: MemoryConsolidationConfig::default(),
             providers: BTreeMap::new(),
+        }
+    }
+}
+
+/// The `[memory.decay]` section: an unpinned entry's salience halves
+/// every `half_life_secs` since its last use.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct MemoryDecayConfig {
+    /// Seconds for an unused entry's salience to halve.
+    #[schemars(range(min = 1))]
+    pub half_life_secs: u64,
+    /// An archival entry whose salience falls below this becomes dormant.
+    #[schemars(range(min = 0.0, max = 1.0))]
+    pub dormant_below: f64,
+}
+
+impl Default for MemoryDecayConfig {
+    fn default() -> Self {
+        Self {
+            half_life_secs: 7_776_000,
+            dormant_below: 0.1,
+        }
+    }
+}
+
+/// The `[memory.consolidation]` section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct MemoryConsolidationConfig {
+    /// Run an idle-time consolidation pass.
+    pub enabled: bool,
+    /// Seconds between idle-time passes.
+    #[schemars(range(min = 1))]
+    pub interval_secs: u64,
+    /// Commit a pass's proposal without approval (otherwise it is staged
+    /// for `memory approve`).
+    pub auto_apply: bool,
+}
+
+impl Default for MemoryConsolidationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_secs: 604_800,
+            auto_apply: false,
         }
     }
 }
@@ -316,6 +400,13 @@ pub struct SkillsConfig {
     /// Size of the skill ledger before its oldest entries are compacted
     /// (0 = unbounded).
     pub ledger_max_bytes: u64,
+    /// Run a skill's evals before a background review or curator
+    /// consolidation commits a change to it, and reject a change that
+    /// lowers the pass rate (other edits are only warned).
+    pub eval_gate: bool,
+    /// Runs per case of a gated edit's evals.
+    #[schemars(range(min = 1))]
+    pub eval_gate_repeat: u32,
 }
 
 impl Default for SkillsConfig {
@@ -343,6 +434,8 @@ impl Default for SkillsConfig {
             trusted_signers: Vec::new(),
             signing_key: String::new(),
             ledger_max_bytes: super::curator::DEFAULT_LEDGER_MAX_BYTES,
+            eval_gate: false,
+            eval_gate_repeat: 3,
         }
     }
 }

@@ -10,80 +10,84 @@ Prometheus Agent
 Usage: prometheus [OPTIONS] [COMMAND]
 
 Commands:
-  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
-  config       Read, change, validate and explain the profile's config.toml
-  secrets      Store, list and remove the profile's secrets (values never on the command line)
-  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
-  journey      The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
-  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants       List and revoke the profile's permanent capability grants and approvals
-  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
-  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
-  cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
-  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
-  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
-  eval         Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
-  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
-  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
-  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
-  projects     Projects: named workspaces spanning folders, the active project, archive and restore
-  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
-  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
-  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
-  vault        The credential vault: logins, cards and addresses the browser fills by handle
-  security     Security records of the profile: verify the tamper-evident audit log
-  backup       Back up the whole home to a .tar.zst archive, or restore one
-  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
-  cache        The model-call cache: stats, prune, clear
-  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
-  verify       Detect a project's build/test/start recipe and run it
-  snapshots    Snapshot and restore the selected profile's critical state
-  profile      List, create, select, rename and delete profiles
-  sessions     List, search, export and manage the profile's sessions
-  logs         Show structured log records of a component (`list` names them)
-  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
-  usage        Totals of model and metered tool calls from the usage ledger
-  prompt       Measure the system prompt and tool schemas a new session would send
-  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
-  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  providers    Provider routing state: per-route health scores
-  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
-  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
-  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
-  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets     List toolsets and show the tools a toolset resolves to
-  approvals    Check how the approval gate treats a command, without running it
-  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
-  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
-  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
-  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
-  portal       The Nous Portal subscription and its tool gateway routing
-  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
-  dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
-  serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
-  webapp       Open the desktop workspace in the browser (`webapp.enabled`)
-  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`) [alias: gui]
-  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
-  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
-  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
-  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
-  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
-  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
-  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
-  schema       Print the JSON Schema of a published contract (`subagent-result`)
-  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
-  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
-  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help         Print this message or the help of the given subcommand(s)
+  chat           Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version        Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup          Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor         Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug          Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
+  config         Read, change, validate and explain the profile's config.toml
+  secrets        Store, list and remove the profile's secrets (values never on the command line)
+  skills         List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator        The skill curator: status, passes, pins, archive and restore, ledger and rollback
+  journey        The skills and memories the agent learned, as a timeline; list, delete, edit [aliases: learning, memory-graph]
+  memory         Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants         List and revoke the profile's permanent capability grants and approvals
+  browser        Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp            Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  cron           Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness        The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience     The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+  eval           Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
+  evolve         Harness evolution jobs (opt-in: `evolve.enabled = true`)
+  kanban         Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
+  worktrees      Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects       Projects: named workspaces spanning folders, the active project, archive and restore
+  themes         Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console        A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks       Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
+  vault          The credential vault: logins, cards and addresses the browser fills by handle
+  security       Security records of the profile: verify the tamper-evident audit log
+  codex-runtime  Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+  computer-use   The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
+  egress         The profile's egress proxy for container and remote sandboxes
+  backup         Back up the whole home to a .tar.zst archive, or restore one
+  replay         Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache          The model-call cache: stats, prune, clear
+  files          Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify         Detect a project's build/test/start recipe and run it
+  snapshots      Snapshot and restore the selected profile's critical state
+  profile        List, create, select, rename and delete profiles
+  sessions       List, search, export and manage the profile's sessions
+  logs           Show structured log records of a component (`list` names them)
+  status         Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+  usage          Totals of model and metered tool calls from the usage ledger
+  prompt         Measure the system prompt and tool schemas a new session would send
+  demo           Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory     Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
+  model          Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers      Provider routing state: per-route health scores
+  moa            List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local          Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
+  fallback       List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth           Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
+  tools          List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets       List toolsets and show the tools a toolset resolves to
+  approvals      Check how the approval gate treats a command, without running it
+  update         Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle         Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate        Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+  uninstall      Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
+  pause          Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  identity       Messaging accounts linked across platforms with `/link`
+  portal         The Nous Portal subscription and its tool gateway routing
+  daemon         Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  dashboard      Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+  serve          Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+  webapp         Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop        Launch the Prometheus Desktop app for the selected profile, or install it (`--install`) [alias: gui]
+  gateway        Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing        Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  connectors     Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge         The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp            MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins        Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
+  tui            The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp            The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
+  schema         Print the JSON Schema of a published contract (`subagent-result`)
+  rpc            The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions    Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes       List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help           Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -1556,12 +1560,14 @@ Store, list and remove the profile's secrets (values never on the command line)
 Usage: prometheus secrets [OPTIONS] <COMMAND>
 
 Commands:
-  set      Store a secret; the value is read from a hidden prompt or from stdin
-  list     List secret names, their source and whether they are shadowed (never values)
-  get      Show where a secret comes from; --reveal prints the value to a terminal only
-  unset    Remove a secret from the profile's store [alias: rm]
-  migrate  Move every secret to another backend and select it in config.toml
-  help     Print this message or the help of the given subcommand(s)
+  set          Store a secret; the value is read from a hidden prompt or from stdin
+  list         List secret names, their source and whether they are shadowed (never values)
+  get          Show where a secret comes from; --reveal prints the value to a terminal only
+  unset        Remove a secret from the profile's store [alias: rm]
+  migrate      Move every secret to another backend and select it in config.toml
+  bitwarden    The Bitwarden Secrets Manager source (`bws`)
+  onepassword  The 1Password source (`op`)
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -1812,6 +1818,751 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus secrets bitwarden`
+
+```text
+The Bitwarden Secrets Manager source (`bws`)
+
+Usage: prometheus secrets bitwarden [OPTIONS] <COMMAND>
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus secrets bitwarden setup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --project-id <ID>
+          The project whose secrets are read (default: every project the token sees)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --server-url <URL>
+          A self-hosted server's URL
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+  -y, --yes
+          Install the CLI without asking
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus secrets bitwarden status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus secrets bitwarden token [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus secrets bitwarden sync [OPTIONS]
+
+Options:
+      --apply
+          Record the previewed names as the ones the source supplies
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus secrets bitwarden install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -y, --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus secrets bitwarden disable [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets bitwarden help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets bitwarden help [COMMAND]
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus secrets bitwarden help setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus secrets bitwarden help setup
+```
+
+## `prometheus secrets bitwarden help status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus secrets bitwarden help status
+```
+
+## `prometheus secrets bitwarden help token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus secrets bitwarden help token
+```
+
+## `prometheus secrets bitwarden help sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus secrets bitwarden help sync
+```
+
+## `prometheus secrets bitwarden help install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus secrets bitwarden help install
+```
+
+## `prometheus secrets bitwarden help disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus secrets bitwarden help disable
+```
+
+## `prometheus secrets bitwarden help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets bitwarden help help
+```
+
+## `prometheus secrets onepassword`
+
+```text
+The 1Password source (`op`)
+
+Usage: prometheus secrets onepassword [OPTIONS] <COMMAND>
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus secrets onepassword setup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --vault <VAULT>
+          The vault `sync` reads
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+  -y, --yes
+          Install the CLI without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus secrets onepassword status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus secrets onepassword map [OPTIONS] <NAME> <REFERENCE>
+
+Arguments:
+  <NAME>
+          The secret name
+
+  <REFERENCE>
+          Its `op://` reference
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus secrets onepassword unmap [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The secret name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus secrets onepassword sync [OPTIONS]
+
+Options:
+      --apply
+          Write the previewed mappings
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus secrets onepassword disable [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus secrets onepassword help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets onepassword help [COMMAND]
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus secrets onepassword help setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus secrets onepassword help setup
+```
+
+## `prometheus secrets onepassword help status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus secrets onepassword help status
+```
+
+## `prometheus secrets onepassword help map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus secrets onepassword help map
+```
+
+## `prometheus secrets onepassword help unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus secrets onepassword help unmap
+```
+
+## `prometheus secrets onepassword help sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus secrets onepassword help sync
+```
+
+## `prometheus secrets onepassword help disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus secrets onepassword help disable
+```
+
+## `prometheus secrets onepassword help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus secrets onepassword help help
+```
+
 ## `prometheus secrets help`
 
 ```text
@@ -1820,12 +2571,14 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus secrets help [COMMAND]
 
 Commands:
-  set      Store a secret; the value is read from a hidden prompt or from stdin
-  list     List secret names, their source and whether they are shadowed (never values)
-  get      Show where a secret comes from; --reveal prints the value to a terminal only
-  unset    Remove a secret from the profile's store
-  migrate  Move every secret to another backend and select it in config.toml
-  help     Print this message or the help of the given subcommand(s)
+  set          Store a secret; the value is read from a hidden prompt or from stdin
+  list         List secret names, their source and whether they are shadowed (never values)
+  get          Show where a secret comes from; --reveal prints the value to a terminal only
+  unset        Remove a secret from the profile's store
+  migrate      Move every secret to another backend and select it in config.toml
+  bitwarden    The Bitwarden Secrets Manager source (`bws`)
+  onepassword  The 1Password source (`op`)
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus secrets help set`
@@ -1866,6 +2619,134 @@ Usage: prometheus secrets help unset
 Move every secret to another backend and select it in config.toml
 
 Usage: prometheus secrets help migrate
+```
+
+## `prometheus secrets help bitwarden`
+
+```text
+The Bitwarden Secrets Manager source (`bws`)
+
+Usage: prometheus secrets help bitwarden [COMMAND]
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+```
+
+## `prometheus secrets help bitwarden setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus secrets help bitwarden setup
+```
+
+## `prometheus secrets help bitwarden status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus secrets help bitwarden status
+```
+
+## `prometheus secrets help bitwarden token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus secrets help bitwarden token
+```
+
+## `prometheus secrets help bitwarden sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus secrets help bitwarden sync
+```
+
+## `prometheus secrets help bitwarden install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus secrets help bitwarden install
+```
+
+## `prometheus secrets help bitwarden disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus secrets help bitwarden disable
+```
+
+## `prometheus secrets help onepassword`
+
+```text
+The 1Password source (`op`)
+
+Usage: prometheus secrets help onepassword [COMMAND]
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+```
+
+## `prometheus secrets help onepassword setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus secrets help onepassword setup
+```
+
+## `prometheus secrets help onepassword status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus secrets help onepassword status
+```
+
+## `prometheus secrets help onepassword map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus secrets help onepassword map
+```
+
+## `prometheus secrets help onepassword unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus secrets help onepassword unmap
+```
+
+## `prometheus secrets help onepassword sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus secrets help onepassword sync
+```
+
+## `prometheus secrets help onepassword disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus secrets help onepassword disable
 ```
 
 ## `prometheus secrets help help`
@@ -1909,6 +2790,7 @@ Commands:
   diff             Show how an ejected copy differs from the current bundled version
   reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  test             Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
   pending          Review skill writes staged by `skills.write_approval` (default: list them)
@@ -3354,6 +4236,66 @@ Options:
           Print help
 ```
 
+## `prometheus skills test`
+
+```text
+Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
+
+Usage: prometheus skills test [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          The skill
+
+Options:
+      --all
+          Every skill that has evals
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --provider <PROVIDER>
+          `mock` plays each case's mock script (deterministic, offline); `live` uses the profile's model
+
+          Possible values:
+          - mock: The mock provider playing each case's `mock_script`
+          - live: The profile's configured model
+
+          [default: mock]
+
+      --repeat <REPEAT>
+          Runs per case
+
+          [default: 1]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus skills reload`
 
 ```text
@@ -4250,6 +5192,7 @@ Commands:
   diff             Show how an ejected copy differs from the current bundled version
   reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  test             Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
   pending          Review skill writes staged by `skills.write_approval` (default: list them)
@@ -4507,6 +5450,14 @@ Usage: prometheus skills help reset
 Report skills that do not load (path, line, reason) and quarantined project skills
 
 Usage: prometheus skills help doctor
+```
+
+## `prometheus skills help test`
+
+```text
+Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
+
+Usage: prometheus skills help test
 ```
 
 ## `prometheus skills help reload`
@@ -5818,27 +6769,29 @@ Inspect, edit, export and import what the agent remembers (built-in memory)
 Usage: prometheus memory [OPTIONS] <COMMAND>
 
 Commands:
-  status   Show whether built-in memory is enabled, each store's usage and pending changes
-  list     List entries (dormant ones only with --all)
-  show     Show one entry in full (blocked entries show their raw text here)
-  add      Add an entry (from the next session's snapshot)
-  rm       Remove an entry
-  pin      Pin an entry
-  unpin    Unpin an entry
-  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
-  export   Print every entry as Markdown (the edit view) or JSONL
-  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
-  pending  List memory changes staged for approval
-  approve  Apply a staged change (`all` for every one)
-  reject   Drop a staged change (`all` for every one)
-  log      List memory revisions, oldest first
-  diff     Show memory changes as a unified diff per entry
-  revert   Undo a revision (recorded as a new revision with origin user)
-  search   Rank archival entries for a query as recall would
-  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
-  off      Use built-in memory only (memory.provider = "builtin")
-  reset    Delete every entry of a store
-  help     Print this message or the help of the given subcommand(s)
+  status       Show whether built-in memory is enabled, each store's usage and pending changes
+  list         List entries (dormant ones only with --all)
+  show         Show one entry in full (blocked entries show their raw text here)
+  add          Add an entry (from the next session's snapshot)
+  rm           Remove an entry
+  pin          Pin an entry
+  unpin        Unpin an entry
+  edit         Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export       Print every entry as Markdown (the edit view) or JSONL
+  import       Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending      List memory changes staged for approval
+  approve      Apply a staged change (`all` for every one)
+  reject       Drop a staged change (`all` for every one)
+  log          List memory revisions, oldest first
+  diff         Show memory changes as a unified diff per entry
+  revert       Undo a revision (recorded as a new revision with origin user)
+  search       Rank archival entries for a query as recall would
+  wake         Make a dormant entry active again
+  consolidate  Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+  setup        Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off          Use built-in memory only (memory.provider = "builtin")
+  reset        Delete every entry of a store
+  help         Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -6671,6 +7624,9 @@ Options:
       --home <PATH>
           Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
 
+      --all
+          Include dormant entries
+
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
@@ -6697,6 +7653,98 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus memory wake`
+
+```text
+Make a dormant entry active again
+
+Usage: prometheus memory wake [OPTIONS] <ID>
+
+Arguments:
+  <ID>
+          The entry id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus memory consolidate`
+
+```text
+Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+
+Usage: prometheus memory consolidate [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --target <TARGET>
+          Only this store
+
+          Possible values:
+          - memory: The agent's own notes
+          - user:   The user profile
+
+      --apply
+          Commit the proposal (journaled with origin consolidation)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
 ```
 
 ## `prometheus memory setup`
@@ -6841,27 +7889,29 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus memory help [COMMAND]
 
 Commands:
-  status   Show whether built-in memory is enabled, each store's usage and pending changes
-  list     List entries (dormant ones only with --all)
-  show     Show one entry in full (blocked entries show their raw text here)
-  add      Add an entry (from the next session's snapshot)
-  rm       Remove an entry
-  pin      Pin an entry
-  unpin    Unpin an entry
-  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
-  export   Print every entry as Markdown (the edit view) or JSONL
-  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
-  pending  List memory changes staged for approval
-  approve  Apply a staged change (`all` for every one)
-  reject   Drop a staged change (`all` for every one)
-  log      List memory revisions, oldest first
-  diff     Show memory changes as a unified diff per entry
-  revert   Undo a revision (recorded as a new revision with origin user)
-  search   Rank archival entries for a query as recall would
-  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
-  off      Use built-in memory only (memory.provider = "builtin")
-  reset    Delete every entry of a store
-  help     Print this message or the help of the given subcommand(s)
+  status       Show whether built-in memory is enabled, each store's usage and pending changes
+  list         List entries (dormant ones only with --all)
+  show         Show one entry in full (blocked entries show their raw text here)
+  add          Add an entry (from the next session's snapshot)
+  rm           Remove an entry
+  pin          Pin an entry
+  unpin        Unpin an entry
+  edit         Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export       Print every entry as Markdown (the edit view) or JSONL
+  import       Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending      List memory changes staged for approval
+  approve      Apply a staged change (`all` for every one)
+  reject       Drop a staged change (`all` for every one)
+  log          List memory revisions, oldest first
+  diff         Show memory changes as a unified diff per entry
+  revert       Undo a revision (recorded as a new revision with origin user)
+  search       Rank archival entries for a query as recall would
+  wake         Make a dormant entry active again
+  consolidate  Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+  setup        Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off          Use built-in memory only (memory.provider = "builtin")
+  reset        Delete every entry of a store
+  help         Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus memory help status`
@@ -6998,6 +8048,22 @@ Usage: prometheus memory help revert
 Rank archival entries for a query as recall would
 
 Usage: prometheus memory help search
+```
+
+## `prometheus memory help wake`
+
+```text
+Make a dormant entry active again
+
+Usage: prometheus memory help wake
+```
+
+## `prometheus memory help consolidate`
+
+```text
+Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+
+Usage: prometheus memory help consolidate
 ```
 
 ## `prometheus memory help setup`
@@ -17579,6 +18645,7 @@ Usage: prometheus security [OPTIONS] <COMMAND>
 
 Commands:
   audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  scan   Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
   help   Print this message or the help of the given subcommand(s)
 
 Options:
@@ -17723,6 +18790,65 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus security audit help help
 ```
 
+## `prometheus security scan`
+
+```text
+Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
+
+Usage: prometheus security scan [OPTIONS]
+
+Options:
+      --fail-on <FAIL_ON>
+          Exit 1 when any finding is at least this severe
+
+          Possible values:
+          - low:      Low
+          - moderate: Moderate (OSV's `MEDIUM`)
+          - high:     High
+          - critical: Critical
+
+          [default: critical]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --skip-runtimes
+          Leave out the managed runtimes
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --skip-plugins
+          Leave out plugin manifests and Python-bridge environments
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --skip-mcp
+          Leave out MCP server packages
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
 ## `prometheus security help`
 
 ```text
@@ -17732,6 +18858,7 @@ Usage: prometheus security help [COMMAND]
 
 Commands:
   audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  scan   Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
   help   Print this message or the help of the given subcommand(s)
 ```
 
@@ -17754,12 +18881,1073 @@ Check the hash chain; exit 1 naming the first record that was edited, inserted o
 Usage: prometheus security help audit verify
 ```
 
+## `prometheus security help scan`
+
+```text
+Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
+
+Usage: prometheus security help scan
+```
+
 ## `prometheus security help help`
 
 ```text
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus security help help
+```
+
+## `prometheus codex-runtime`
+
+```text
+Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+
+Usage: prometheus codex-runtime [OPTIONS] <COMMAND>
+
+Commands:
+  status   The configured runtime and the Codex executable it would run
+  set      Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+  migrate  Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime status`
+
+```text
+The configured runtime and the Codex executable it would run
+
+Usage: prometheus codex-runtime status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime set`
+
+```text
+Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+
+Usage: prometheus codex-runtime set [OPTIONS] <MODE>
+
+Arguments:
+  <MODE>
+          `auto`, `codex_app_server`, `on` or `off`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime migrate`
+
+```text
+Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+
+Usage: prometheus codex-runtime migrate [OPTIONS]
+
+Options:
+      --dry-run
+          Show what would be written; write nothing
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus codex-runtime help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus codex-runtime help [COMMAND]
+
+Commands:
+  status   The configured runtime and the Codex executable it would run
+  set      Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+  migrate  Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus codex-runtime help status`
+
+```text
+The configured runtime and the Codex executable it would run
+
+Usage: prometheus codex-runtime help status
+```
+
+## `prometheus codex-runtime help set`
+
+```text
+Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+
+Usage: prometheus codex-runtime help set
+```
+
+## `prometheus codex-runtime help migrate`
+
+```text
+Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+
+Usage: prometheus codex-runtime help migrate
+```
+
+## `prometheus codex-runtime help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus codex-runtime help help
+```
+
+## `prometheus computer-use`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
+
+Usage: prometheus computer-use [OPTIONS] <COMMAND>
+
+Commands:
+  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on
+
+Usage: prometheus computer-use screen [OPTIONS] <COMMAND>
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus computer-use screen status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen start`
+
+```text
+Start the screen
+
+Usage: prometheus computer-use screen start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen stop`
+
+```text
+Stop the screen
+
+Usage: prometheus computer-use screen stop [OPTIONS]
+
+Options:
+      --force
+          Also take it back from a person holding it
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus computer-use screen install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -y, --yes
+          Do not ask before installing
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus computer-use screen serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use screen help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use screen help [COMMAND]
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use screen help status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus computer-use screen help status
+```
+
+## `prometheus computer-use screen help start`
+
+```text
+Start the screen
+
+Usage: prometheus computer-use screen help start
+```
+
+## `prometheus computer-use screen help stop`
+
+```text
+Stop the screen
+
+Usage: prometheus computer-use screen help stop
+```
+
+## `prometheus computer-use screen help install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus computer-use screen help install
+```
+
+## `prometheus computer-use screen help serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus computer-use screen help serve
+```
+
+## `prometheus computer-use screen help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use screen help help
+```
+
+## `prometheus computer-use help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use help [COMMAND]
+
+Commands:
+  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use help screen`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on
+
+Usage: prometheus computer-use help screen [COMMAND]
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+```
+
+## `prometheus computer-use help screen status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus computer-use help screen status
+```
+
+## `prometheus computer-use help screen start`
+
+```text
+Start the screen
+
+Usage: prometheus computer-use help screen start
+```
+
+## `prometheus computer-use help screen stop`
+
+```text
+Stop the screen
+
+Usage: prometheus computer-use help screen stop
+```
+
+## `prometheus computer-use help screen install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus computer-use help screen install
+```
+
+## `prometheus computer-use help screen serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus computer-use help screen serve
+```
+
+## `prometheus computer-use help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use help help
+```
+
+## `prometheus egress`
+
+```text
+The profile's egress proxy for container and remote sandboxes
+
+Usage: prometheus egress [OPTIONS] <COMMAND>
+
+Commands:
+  status   Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+  start    Start the proxy (the daemon starts it for profiles that inject)
+  stop     Stop it (forced after 5 seconds)
+  restart  Stop and start it
+  reload   Apply allowlist, denylist and mapping changes without dropping connections
+  rotate   Mint new placeholders for every mapping (running sandboxes get them on their next command)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress status`
+
+```text
+Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+
+Usage: prometheus egress status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --show-tokens
+          Show the placeholders in full
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress start`
+
+```text
+Start the proxy (the daemon starts it for profiles that inject)
+
+Usage: prometheus egress start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress stop`
+
+```text
+Stop it (forced after 5 seconds)
+
+Usage: prometheus egress stop [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress restart`
+
+```text
+Stop and start it
+
+Usage: prometheus egress restart [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress reload`
+
+```text
+Apply allowlist, denylist and mapping changes without dropping connections
+
+Usage: prometheus egress reload [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress rotate`
+
+```text
+Mint new placeholders for every mapping (running sandboxes get them on their next command)
+
+Usage: prometheus egress rotate [OPTIONS]
+
+Options:
+      --confirm
+          Do not ask to type `rotate`
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress serve`
+
+```text
+Run the proxy in this process (started by `start` and the daemon)
+
+Usage: prometheus egress serve [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --owned
+          End when stdin closes (the daemon owns the proxy)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus egress help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus egress help [COMMAND]
+
+Commands:
+  status   Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+  start    Start the proxy (the daemon starts it for profiles that inject)
+  stop     Stop it (forced after 5 seconds)
+  restart  Stop and start it
+  reload   Apply allowlist, denylist and mapping changes without dropping connections
+  rotate   Mint new placeholders for every mapping (running sandboxes get them on their next command)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus egress help status`
+
+```text
+Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+
+Usage: prometheus egress help status
+```
+
+## `prometheus egress help start`
+
+```text
+Start the proxy (the daemon starts it for profiles that inject)
+
+Usage: prometheus egress help start
+```
+
+## `prometheus egress help stop`
+
+```text
+Stop it (forced after 5 seconds)
+
+Usage: prometheus egress help stop
+```
+
+## `prometheus egress help restart`
+
+```text
+Stop and start it
+
+Usage: prometheus egress help restart
+```
+
+## `prometheus egress help reload`
+
+```text
+Apply allowlist, denylist and mapping changes without dropping connections
+
+Usage: prometheus egress help reload
+```
+
+## `prometheus egress help rotate`
+
+```text
+Mint new placeholders for every mapping (running sandboxes get them on their next command)
+
+Usage: prometheus egress help rotate
+```
+
+## `prometheus egress help serve`
+
+```text
+Run the proxy in this process (started by `start` and the daemon)
+
+Usage: prometheus egress help serve
+```
+
+## `prometheus egress help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus egress help help
 ```
 
 ## `prometheus backup`
@@ -19222,16 +21410,21 @@ List, create, select, rename and delete profiles
 Usage: prometheus profile [OPTIONS] <COMMAND>
 
 Commands:
-  list    List the profiles; the active one is marked
-  create  Create a profile, optionally copying another one once
-  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
-  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
-  import  Create a profile from an archive `profile export` wrote
-  use     Make a profile the one used without -p (`use default` clears the choice)
-  show    Show a profile (default: the selected one)
-  rename  Rename a profile
-  delete  Delete a profile and everything in it (asks to type its name unless --yes)
-  help    Print this message or the help of the given subcommand(s)
+  list      List the profiles; the active one is marked
+  create    Create a profile, optionally copying another one once
+  alias     Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export    Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import    Create a profile from an archive `profile export` wrote
+  use       Make a profile the one used without -p (`use default` clears the choice)
+  show      Show a profile (default: the selected one)
+  rename    Rename a profile
+  delete    Delete a profile and everything in it (asks to type its name unless --yes)
+  describe  Set or generate a profile's description
+  install   Install a profile distribution from a git URL or a directory
+  update    Update a profile from the distribution it was installed from
+  info      Show where a profile's distribution came from
+  identity  Move or purge a profile's identity
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
       --home <PATH>
@@ -19696,6 +21889,384 @@ Options:
           Print help
 ```
 
+## `prometheus profile describe`
+
+```text
+Set or generate a profile's description
+
+Usage: prometheus profile describe [OPTIONS] [NAME]
+
+Arguments:
+  [NAME]
+          Profile name (default: the selected one; ignored with --all)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --text <TEXT>
+          The description (at most 500 characters)
+
+      --auto
+          Write one with the auxiliary model from the profile's name, identity file, model and skills
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --overwrite
+          Replace an existing description
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --all
+          Describe every profile that has no description yet
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile install`
+
+```text
+Install a profile distribution from a git URL or a directory
+
+Usage: prometheus profile install [OPTIONS] <SOURCE>
+
+Arguments:
+  <SOURCE>
+          A git URL or a directory holding `distribution.toml`
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --name <NAME>
+          The new profile's name (default: the manifest's `name`)
+
+      --alias
+          Also write the alias launcher `<name>`
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --force
+          Install over an existing profile of that name
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -y, --yes
+          Do not ask for confirmation
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile update`
+
+```text
+Update a profile from the distribution it was installed from
+
+Usage: prometheus profile update [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          The profile a distribution was installed into
+
+Options:
+      --force-config
+          Also replace `config.toml` with the distribution's
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+  -y, --yes
+          Do not ask for confirmation
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile info`
+
+```text
+Show where a profile's distribution came from
+
+Usage: prometheus profile info [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity`
+
+```text
+Move or purge a profile's identity
+
+Usage: prometheus profile identity [OPTIONS] <COMMAND>
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus profile identity move [OPTIONS] <FROM> <TO>
+
+Arguments:
+  <FROM>
+          The profile to copy from
+
+  <TO>
+          The profile to copy to
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus profile identity purge [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>
+          Profile name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --yes
+          Do not ask for confirmation
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus profile identity help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile identity help [COMMAND]
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus profile identity help move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus profile identity help move
+```
+
+## `prometheus profile identity help purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus profile identity help purge
+```
+
+## `prometheus profile identity help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus profile identity help help
+```
+
 ## `prometheus profile help`
 
 ```text
@@ -19704,16 +22275,21 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus profile help [COMMAND]
 
 Commands:
-  list    List the profiles; the active one is marked
-  create  Create a profile, optionally copying another one once
-  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
-  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
-  import  Create a profile from an archive `profile export` wrote
-  use     Make a profile the one used without -p (`use default` clears the choice)
-  show    Show a profile (default: the selected one)
-  rename  Rename a profile
-  delete  Delete a profile and everything in it (asks to type its name unless --yes)
-  help    Print this message or the help of the given subcommand(s)
+  list      List the profiles; the active one is marked
+  create    Create a profile, optionally copying another one once
+  alias     Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export    Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import    Create a profile from an archive `profile export` wrote
+  use       Make a profile the one used without -p (`use default` clears the choice)
+  show      Show a profile (default: the selected one)
+  rename    Rename a profile
+  delete    Delete a profile and everything in it (asks to type its name unless --yes)
+  describe  Set or generate a profile's description
+  install   Install a profile distribution from a git URL or a directory
+  update    Update a profile from the distribution it was installed from
+  info      Show where a profile's distribution came from
+  identity  Move or purge a profile's identity
+  help      Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus profile help list`
@@ -19788,6 +22364,66 @@ Delete a profile and everything in it (asks to type its name unless --yes)
 Usage: prometheus profile help delete
 ```
 
+## `prometheus profile help describe`
+
+```text
+Set or generate a profile's description
+
+Usage: prometheus profile help describe
+```
+
+## `prometheus profile help install`
+
+```text
+Install a profile distribution from a git URL or a directory
+
+Usage: prometheus profile help install
+```
+
+## `prometheus profile help update`
+
+```text
+Update a profile from the distribution it was installed from
+
+Usage: prometheus profile help update
+```
+
+## `prometheus profile help info`
+
+```text
+Show where a profile's distribution came from
+
+Usage: prometheus profile help info
+```
+
+## `prometheus profile help identity`
+
+```text
+Move or purge a profile's identity
+
+Usage: prometheus profile help identity [COMMAND]
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+```
+
+## `prometheus profile help identity move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus profile help identity move
+```
+
+## `prometheus profile help identity purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus profile help identity purge
+```
+
 ## `prometheus profile help help`
 
 ```text
@@ -19819,6 +22455,8 @@ Commands:
   siblings         List the other children of a session's parent (forks, continuations)
   import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  encrypt          Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+  decrypt          Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
@@ -20133,6 +22771,16 @@ Options:
 
       --include-inactive
           Include rewound messages
+
+      --mode <MODE>
+          `hybrid` fuses full-text and semantic rankings; `auto` is hybrid when `sessions.search.semantic` is on
+
+          Possible values:
+          - auto:   Hybrid when semantic search is on, else full text
+          - fts:    Full text only
+          - hybrid: Full text and semantic, fused
+
+          [default: auto]
 
   -h, --help
           Print help (see a summary with '-h')
@@ -20556,6 +23204,91 @@ Options:
 
       --yes
           Swap the recovered store in without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus sessions encrypt`
+
+```text
+Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+
+Usage: prometheus sessions encrypt [OPTIONS] --mode <MODE>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --mode <MODE>
+          Where the key comes from
+
+          Possible values:
+          - keychain:   A random key held in the OS keychain
+          - passphrase: A key derived from the `STATE_DB_PASSPHRASE` secret
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus sessions decrypt`
+
+```text
+Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
+
+Usage: prometheus sessions decrypt [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
@@ -21090,6 +23823,8 @@ Commands:
   siblings         List the other children of a session's parent (forks, continuations)
   import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  encrypt          Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+  decrypt          Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
@@ -21221,6 +23956,22 @@ Usage: prometheus sessions help import
 Copy every readable row of state.db into a new clean store (needs the store closed)
 
 Usage: prometheus sessions help recover
+```
+
+## `prometheus sessions help encrypt`
+
+```text
+Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+
+Usage: prometheus sessions help encrypt
+```
+
+## `prometheus sessions help decrypt`
+
+```text
+Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
+
+Usage: prometheus sessions help decrypt
 ```
 
 ## `prometheus sessions help journal-mode`
@@ -25538,6 +28289,7 @@ Commands:
   sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
   cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
   sessions          Import one Claude Code or Codex CLI conversation as a session
+  rollback          Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
   help              Print this message or the help of the given subcommand(s)
 
 Options:
@@ -26068,6 +28820,51 @@ Options:
           Print help (see a summary with '-h')
 ```
 
+## `prometheus migrate rollback`
+
+```text
+Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
+
+Usage: prometheus migrate rollback [OPTIONS] --run <RUN_ID>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --run <RUN_ID>
+          The run to take back (the `run_id` of its report)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --yes
+          Roll back without asking
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus migrate help`
 
 ```text
@@ -26085,6 +28882,7 @@ Commands:
   sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
   cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
   sessions          Import one Claude Code or Codex CLI conversation as a session
+  rollback          Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
   help              Print this message or the help of the given subcommand(s)
 ```
 
@@ -26158,6 +28956,14 @@ Usage: prometheus migrate help cleanup
 Import one Claude Code or Codex CLI conversation as a session
 
 Usage: prometheus migrate help sessions
+```
+
+## `prometheus migrate help rollback`
+
+```text
+Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
+
+Usage: prometheus migrate help rollback
 ```
 
 ## `prometheus migrate help help`
@@ -26383,6 +29189,172 @@ Usage: prometheus pause help status
 Print this message or the help of the given subcommand(s)
 
 Usage: prometheus pause help help
+```
+
+## `prometheus identity`
+
+```text
+Messaging accounts linked across platforms with `/link`
+
+Usage: prometheus identity [OPTIONS] <COMMAND>
+
+Commands:
+  list    Every linked account, by person
+  unlink  Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus identity list`
+
+```text
+Every linked account, by person
+
+Usage: prometheus identity list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus identity unlink`
+
+```text
+Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+
+Usage: prometheus identity unlink [OPTIONS] <ACCOUNT> [PLATFORM]
+
+Arguments:
+  <ACCOUNT>
+          `<platform>:<sender_id>`, or a person id
+
+  [PLATFORM]
+          The platform, when `account` is a person id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus identity help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus identity help [COMMAND]
+
+Commands:
+  list    Every linked account, by person
+  unlink  Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus identity help list`
+
+```text
+Every linked account, by person
+
+Usage: prometheus identity help list
+```
+
+## `prometheus identity help unlink`
+
+```text
+Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+
+Usage: prometheus identity help unlink
+```
+
+## `prometheus identity help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus identity help help
 ```
 
 ## `prometheus portal`
@@ -27788,6 +30760,7 @@ Commands:
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
   peer            Peer gateways on other machines: register them, message their agents and run tasks there
+  proxy           The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -28712,6 +31685,232 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway peer help help
 ```
 
+## `prometheus gateway proxy`
+
+```text
+The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
+
+Usage: prometheus gateway proxy [OPTIONS] <COMMAND>
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+  help       Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus gateway proxy start [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --provider <PROVIDER>
+          The provider whose sign-in it lends: `nous` or `xai`
+
+          [default: nous]
+
+      --host <HOST>
+          The address to listen on
+
+          [default: 127.0.0.1]
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --port <PORT>
+          The port
+
+          [default: 8645]
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --allow-lan
+          Listen beyond loopback; clients then need `PMT_PROXY_CLIENT_KEY`
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus gateway proxy status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus gateway proxy providers [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway proxy help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway proxy help [COMMAND]
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+  help       Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway proxy help start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus gateway proxy help start
+```
+
+## `prometheus gateway proxy help status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus gateway proxy help status
+```
+
+## `prometheus gateway proxy help providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus gateway proxy help providers
+```
+
+## `prometheus gateway proxy help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway proxy help help
+```
+
 ## `prometheus gateway list`
 
 ```text
@@ -29081,6 +32280,7 @@ Commands:
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
   peer            Peer gateways on other machines: register them, message their agents and run tasks there
+  proxy           The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -29238,6 +32438,43 @@ Usage: prometheus gateway help peer status
 Stop a remote run
 
 Usage: prometheus gateway help peer stop
+```
+
+## `prometheus gateway help proxy`
+
+```text
+The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
+
+Usage: prometheus gateway help proxy [COMMAND]
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+```
+
+## `prometheus gateway help proxy start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus gateway help proxy start
+```
+
+## `prometheus gateway help proxy status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus gateway help proxy status
+```
+
+## `prometheus gateway help proxy providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus gateway help proxy providers
 ```
 
 ## `prometheus gateway help list`
@@ -30813,6 +34050,9 @@ Options:
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
 
+      --tools <TOOLS>
+          Expose exactly these tools (comma-separated) instead of `mcp_server.expose_toolsets` (the Codex runtime's callback server)
+
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
 
@@ -30973,6 +34213,7 @@ Commands:
   run            Runs a command a plugin registered (`cli_commands`), or lists them
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
+  dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
   capabilities   Declared versus granted capabilities, per plugin
@@ -31847,6 +35088,55 @@ Options:
           Print help
 ```
 
+## `prometheus plugins dev`
+
+```text
+Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
+
+Usage: prometheus plugins dev [OPTIONS] <PATH>
+
+Arguments:
+  <PATH>
+          The plugin directory
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --watch
+          Rebuild and reload on every source change
+
+      --grant <CAPS>
+          Approve `all` requested capabilities, or a comma list, without asking
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins remove`
 
 ```text
@@ -32570,6 +35860,7 @@ Commands:
   run            Runs a command a plugin registered (`cli_commands`), or lists them
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
+  dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
   capabilities   Declared versus granted capabilities, per plugin
@@ -32724,6 +36015,14 @@ Usage: prometheus plugins help hooks doctor
 The capabilities a staged update asks for beyond the current grant
 
 Usage: prometheus plugins help diff-grants
+```
+
+## `prometheus plugins help dev`
+
+```text
+Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
+
+Usage: prometheus plugins help dev
 ```
 
 ## `prometheus plugins help remove`
@@ -32897,8 +36196,14 @@ Options:
   -v, --verbose...
           More detail; repeatable
 
+      --attach <REF>
+          Join a live session as a driver beside the clients already on it: an id, an id prefix or a title
+
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+      --observe <REF>
+          Join a live session read-only, as an observer: an id, an id prefix or a title
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
@@ -34232,80 +37537,84 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus help [COMMAND]
 
 Commands:
-  chat         Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
-  version      Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
-  setup        Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
-  doctor       Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
-  debug        Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
-  config       Read, change, validate and explain the profile's config.toml
-  secrets      Store, list and remove the profile's secrets (values never on the command line)
-  skills       List, inspect, enable, lint and maintain the profile's skills and skill bundles
-  curator      The skill curator: status, passes, pins, archive and restore, ledger and rollback
-  journey      The skills and memories the agent learned, as a timeline; list, delete, edit
-  memory       Inspect, edit, export and import what the agent remembers (built-in memory)
-  grants       List and revoke the profile's permanent capability grants and approvals
-  browser      Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
-  lsp          Language servers behind the diagnostics of file edits: status, registry, installs, restart
-  cron         Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
-  harness      The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
-  experience   The experience library: entries, domains, pin, forget, restore, export, import and rebuild
-  eval         Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
-  evolve       Harness evolution jobs (opt-in: `evolve.enabled = true`)
-  kanban       Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
-  worktrees    Git worktrees of sessions and subagents: list, sweep and restore archived trees
-  projects     Projects: named workspaces spanning folders, the active project, archive and restore
-  themes       Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
-  console      A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
-  webhooks     Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
-  vault        The credential vault: logins, cards and addresses the browser fills by handle
-  security     Security records of the profile: verify the tamper-evident audit log
-  backup       Back up the whole home to a .tar.zst archive, or restore one
-  replay       Session recordings: export one, replay it (detecting divergence), or re-record it with this build
-  cache        The model-call cache: stats, prune, clear
-  files        Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
-  verify       Detect a project's build/test/start recipe and run it
-  snapshots    Snapshot and restore the selected profile's critical state
-  profile      List, create, select, rename and delete profiles
-  sessions     List, search, export and manage the profile's sessions
-  logs         Show structured log records of a component (`list` names them)
-  status       Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
-  usage        Totals of model and metered tool calls from the usage ledger
-  prompt       Measure the system prompt and tool schemas a new session would send
-  demo         Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
-  trajectory   Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
-  model        Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
-  providers    Provider routing state: per-route health scores
-  moa          List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
-  local        Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
-  fallback     List and edit the profile's fallback chain (`[[fallback.chain]]`)
-  auth         Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
-  tools        List the profile's tools and explain one (exposure, capabilities, approvals)
-  toolsets     List toolsets and show the tools a toolset resolves to
-  approvals    Check how the approval gate treats a command, without running it
-  update       Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
-  bundle       Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
-  migrate      Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
-  uninstall    Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
-  pause        Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
-  portal       The Nous Portal subscription and its tool gateway routing
-  daemon       Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
-  dashboard    Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
-  serve        Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
-  webapp       Open the desktop workspace in the browser (`webapp.enabled`)
-  desktop      Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
-  gateway      Messaging adapters of the running daemon and the profile's delivery outbox
-  pairing      Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
-  connectors   Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
-  bridge       The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
-  mcp          MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
-  plugins      Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
-  tui          The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
-  acp          The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
-  schema       Print the JSON Schema of a published contract (`subagent-result`)
-  rpc          The daemon's client protocol: `rpc schema` prints the schema this binary speaks
-  completions  Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
-  runtimes     List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
-  help         Print this message or the help of the given subcommand(s)
+  chat           Talk to the agent: interactive on a terminal, one-shot with `-z` or when stdin or stdout is not a terminal (the default command)
+  version        Print the version and build identity (`--json` for every field, `--verbose` for build details and compiled-in surfaces)
+  setup          Set up the profile: model and provider (or a subscription sign-in), secrets, tools, terminal and memory
+  doctor         Check the install and profile: one ok / warn / fail line per check; `--fix` performs the enumerated repairs
+  debug          Diagnostics: a setup summary for support threads, a redacted debug bundle, an opt-in report upload and a daemon task dump
+  config         Read, change, validate and explain the profile's config.toml
+  secrets        Store, list and remove the profile's secrets (values never on the command line)
+  skills         List, inspect, enable, lint and maintain the profile's skills and skill bundles
+  curator        The skill curator: status, passes, pins, archive and restore, ledger and rollback
+  journey        The skills and memories the agent learned, as a timeline; list, delete, edit
+  memory         Inspect, edit, export and import what the agent remembers (built-in memory)
+  grants         List and revoke the profile's permanent capability grants and approvals
+  browser        Browser sessions: status, and closing the real browser whose profile real-profile browsing copies
+  lsp            Language servers behind the diagnostics of file edits: status, registry, installs, restart
+  cron           Scheduled jobs: create, list, pause, run now, inspect runs, replay, doctor and the headless tick
+  harness        The profile's harness: validate, history, diff, rollback and manual edits (works without `evolve.enabled`)
+  experience     The experience library: entries, domains, pin, forget, restore, export, import and rebuild
+  eval           Evaluation: suites, runs, post-hoc judging, reports, benchmark adapters, session capture and batch datasets
+  evolve         Harness evolution jobs (opt-in: `evolve.enabled = true`)
+  kanban         Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
+  worktrees      Git worktrees of sessions and subagents: list, sweep and restore archived trees
+  projects       Projects: named workspaces spanning folders, the active project, archive and restore
+  themes         Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
+  console        A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
+  webhooks       Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
+  vault          The credential vault: logins, cards and addresses the browser fills by handle
+  security       Security records of the profile: verify the tamper-evident audit log
+  codex-runtime  Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+  computer-use   The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
+  egress         The profile's egress proxy for container and remote sandboxes
+  backup         Back up the whole home to a .tar.zst archive, or restore one
+  replay         Session recordings: export one, replay it (detecting divergence), or re-record it with this build
+  cache          The model-call cache: stats, prune, clear
+  files          Undo a session's file changes, roll a workspace back to a checkpoint, and manage the file snapshot store
+  verify         Detect a project's build/test/start recipe and run it
+  snapshots      Snapshot and restore the selected profile's critical state
+  profile        List, create, select, rename and delete profiles
+  sessions       List, search, export and manage the profile's sessions
+  logs           Show structured log records of a component (`list` names them)
+  status         Whether the daemon runs and how: components, sessions, the next scheduled job and today's spend (`--check` for scripts)
+  usage          Totals of model and metered tool calls from the usage ledger
+  prompt         Measure the system prompt and tool schemas a new session would send
+  demo           Run the offline demo: the agent fixes a bug in a small ledger repository with the scripted mock provider, in a temporary profile
+  trajectory     Render a session's recorded trajectory, or export sessions as `ShareGPT` training records
+  model          Pick, set, list and inspect the profile's model (no subcommand: the interactive picker)
+  providers      Provider routing state: per-route health scores
+  moa            List, create, update and delete Mixture of Agents presets (`[moa.presets.<name>]`)
+  local          Local models: the llama.cpp engine, the hardware-priced catalog, downloads, the model library and the managed llama-server
+  fallback       List and edit the profile's fallback chain (`[[fallback.chain]]`)
+  auth           Add, list and remove provider API keys and subscription sign-ins (an interactive manager without a subcommand on a terminal)
+  tools          List the profile's tools and explain one (exposure, capabilities, approvals)
+  toolsets       List toolsets and show the tools a toolset resolves to
+  approvals      Check how the approval gate treats a command, without running it
+  update         Update this install to its channel's newest signed release, check for one (exit 10 when available), change the channel, or roll back
+  bundle         Offline bundles: one file holding a signed release (and runtimes) for installs and updates without network access
+  migrate        Import another agent's home: `from-hermes` reads a Hermes Agent home (never changing it) into Prometheus profiles
+  uninstall      Remove this install: the binary, its alias, `prometheus.prev` and its service units; the home only with `--purge` (`--dry-run` lists all)
+  pause          Emergency pause: no new turns or scheduled jobs on any profile of this home until `pause off` (running turns finish)
+  identity       Messaging accounts linked across platforms with `/link`
+  portal         The Nous Portal subscription and its tool gateway routing
+  daemon         Run, start, stop and inspect the gateway daemon that owns this home's sessions (one per home; clients attach to it)
+  dashboard      Open the web dashboard: start the daemon's dashboard listener and sign the browser in with a one-time login link
+  serve          Run the gateway daemon in the foreground with the dashboard listener open and no browser (for service managers); remote clients attach through the dashboard listener
+  webapp         Open the desktop workspace in the browser (`webapp.enabled`)
+  desktop        Launch the Prometheus Desktop app for the selected profile, or install it (`--install`)
+  gateway        Messaging adapters of the running daemon and the profile's delivery outbox
+  pairing        Approve, deny, list and revoke messaging senders' pairing requests. A code is approved with `prometheus pairing approve <platform> <code>`, the RPC `pairing.approve` from a client attached to the profile, or the admin-only chat command `/pair approve <code>`
+  connectors     Hosted app connectors (Gmail, Notion, Linear...) on the Nous connector gateway: list them, list and rename accounts, connect and disconnect accounts
+  bridge         The python bridge: sidecar status, logs and restarts, a doctor for the managed runtime and plugin environments, and named side environments for skill scripts
+  mcp            MCP servers: add (from a preset or the catalog), list, remove, test and sign in to the profile's servers, pick their tools, show their state, and serve Prometheus tools and skills to MCP clients. With no subcommand on a terminal, an interactive picker
+  plugins        Plugins: list, enable and disable them, manage their capability grants, and run the adapter conformance kit (`plugins test-adapter`)
+  tui            The full-screen terminal UI, attached to the home's gateway daemon (started when it is not running), or with `--standalone` to an in-process gateway that serves only this TUI
+  acp            The Agent Client Protocol server editors launch (Zed, VS Code, JetBrains...): a viewer of the profile's gateway daemon on stdio
+  schema         Print the JSON Schema of a published contract (`subagent-result`)
+  rpc            The daemon's client protocol: `rpc schema` prints the schema this binary speaks
+  completions    Print a shell completion script (load it from your shell's startup file, for example `source <(prometheus completions zsh)`)
+  runtimes       List, install, verify and collect the managed runtimes (Node, CPython, uv, Chromium) shared by every profile
+  help           Print this message or the help of the given subcommand(s)
 ```
 
 ## `prometheus help chat`
@@ -34512,11 +37821,13 @@ Store, list and remove the profile's secrets (values never on the command line)
 Usage: prometheus help secrets [COMMAND]
 
 Commands:
-  set      Store a secret; the value is read from a hidden prompt or from stdin
-  list     List secret names, their source and whether they are shadowed (never values)
-  get      Show where a secret comes from; --reveal prints the value to a terminal only
-  unset    Remove a secret from the profile's store
-  migrate  Move every secret to another backend and select it in config.toml
+  set          Store a secret; the value is read from a hidden prompt or from stdin
+  list         List secret names, their source and whether they are shadowed (never values)
+  get          Show where a secret comes from; --reveal prints the value to a terminal only
+  unset        Remove a secret from the profile's store
+  migrate      Move every secret to another backend and select it in config.toml
+  bitwarden    The Bitwarden Secrets Manager source (`bws`)
+  onepassword  The 1Password source (`op`)
 ```
 
 ## `prometheus help secrets set`
@@ -34559,6 +37870,134 @@ Move every secret to another backend and select it in config.toml
 Usage: prometheus help secrets migrate
 ```
 
+## `prometheus help secrets bitwarden`
+
+```text
+The Bitwarden Secrets Manager source (`bws`)
+
+Usage: prometheus help secrets bitwarden [COMMAND]
+
+Commands:
+  setup    Install `bws` if needed, store and check the access token, select the project and turn the source on
+  status   Show the CLI version, whether the token works and the names the source supplies (never values)
+  token    Replace the access token after checking the new one
+  sync     Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+  install  Install the pinned `bws` into the runtime store
+  disable  Turn the source off (`bws` is then never run)
+```
+
+## `prometheus help secrets bitwarden setup`
+
+```text
+Install `bws` if needed, store and check the access token, select the project and turn the source on
+
+Usage: prometheus help secrets bitwarden setup
+```
+
+## `prometheus help secrets bitwarden status`
+
+```text
+Show the CLI version, whether the token works and the names the source supplies (never values)
+
+Usage: prometheus help secrets bitwarden status
+```
+
+## `prometheus help secrets bitwarden token`
+
+```text
+Replace the access token after checking the new one
+
+Usage: prometheus help secrets bitwarden token
+```
+
+## `prometheus help secrets bitwarden sync`
+
+```text
+Preview the names the project would add or that other sources shadow; `--apply` accepts that list
+
+Usage: prometheus help secrets bitwarden sync
+```
+
+## `prometheus help secrets bitwarden install`
+
+```text
+Install the pinned `bws` into the runtime store
+
+Usage: prometheus help secrets bitwarden install
+```
+
+## `prometheus help secrets bitwarden disable`
+
+```text
+Turn the source off (`bws` is then never run)
+
+Usage: prometheus help secrets bitwarden disable
+```
+
+## `prometheus help secrets onepassword`
+
+```text
+The 1Password source (`op`)
+
+Usage: prometheus help secrets onepassword [COMMAND]
+
+Commands:
+  setup    Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+  status   Show the CLI version, whether the token works and the mapped names (never values)
+  map      Map a secret name to an `op://vault/item/field` reference
+  unmap    Remove a mapping
+  sync     Preview mappings for the vault's items named like secrets; `--apply` writes them
+  disable  Turn the source off (`op` is then never run)
+```
+
+## `prometheus help secrets onepassword setup`
+
+```text
+Install `op` if needed, store and check the service-account token, select the vault and turn the source on
+
+Usage: prometheus help secrets onepassword setup
+```
+
+## `prometheus help secrets onepassword status`
+
+```text
+Show the CLI version, whether the token works and the mapped names (never values)
+
+Usage: prometheus help secrets onepassword status
+```
+
+## `prometheus help secrets onepassword map`
+
+```text
+Map a secret name to an `op://vault/item/field` reference
+
+Usage: prometheus help secrets onepassword map
+```
+
+## `prometheus help secrets onepassword unmap`
+
+```text
+Remove a mapping
+
+Usage: prometheus help secrets onepassword unmap
+```
+
+## `prometheus help secrets onepassword sync`
+
+```text
+Preview mappings for the vault's items named like secrets; `--apply` writes them
+
+Usage: prometheus help secrets onepassword sync
+```
+
+## `prometheus help secrets onepassword disable`
+
+```text
+Turn the source off (`op` is then never run)
+
+Usage: prometheus help secrets onepassword disable
+```
+
 ## `prometheus help skills`
 
 ```text
@@ -34592,6 +38031,7 @@ Commands:
   diff             Show how an ejected copy differs from the current bundled version
   reset            Remove an ejected copy so the name resolves to the bundled skill again, or restore a hub skill to its locked content
   doctor           Report skills that do not load (path, line, reason) and quarantined project skills
+  test             Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
   reload           Rescan every skill root and bundle; report added, removed and changed skills since the last reload
   bundles          Manage skill bundles (`<profile>/skill-bundles/<slug>.toml`)
   pending          Review skill writes staged by `skills.write_approval` (default: list them)
@@ -34848,6 +38288,14 @@ Usage: prometheus help skills reset
 Report skills that do not load (path, line, reason) and quarantined project skills
 
 Usage: prometheus help skills doctor
+```
+
+## `prometheus help skills test`
+
+```text
+Run a skill's evals (`evals/evals.toml`), each case in an isolated temporary profile; exits 0 only when every case passes
+
+Usage: prometheus help skills test
 ```
 
 ## `prometheus help skills reload`
@@ -35199,26 +38647,28 @@ Inspect, edit, export and import what the agent remembers (built-in memory)
 Usage: prometheus help memory [COMMAND]
 
 Commands:
-  status   Show whether built-in memory is enabled, each store's usage and pending changes
-  list     List entries (dormant ones only with --all)
-  show     Show one entry in full (blocked entries show their raw text here)
-  add      Add an entry (from the next session's snapshot)
-  rm       Remove an entry
-  pin      Pin an entry
-  unpin    Unpin an entry
-  edit     Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
-  export   Print every entry as Markdown (the edit view) or JSONL
-  import   Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
-  pending  List memory changes staged for approval
-  approve  Apply a staged change (`all` for every one)
-  reject   Drop a staged change (`all` for every one)
-  log      List memory revisions, oldest first
-  diff     Show memory changes as a unified diff per entry
-  revert   Undo a revision (recorded as a new revision with origin user)
-  search   Rank archival entries for a query as recall would
-  setup    Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
-  off      Use built-in memory only (memory.provider = "builtin")
-  reset    Delete every entry of a store
+  status       Show whether built-in memory is enabled, each store's usage and pending changes
+  list         List entries (dormant ones only with --all)
+  show         Show one entry in full (blocked entries show their raw text here)
+  add          Add an entry (from the next session's snapshot)
+  rm           Remove an entry
+  pin          Pin an entry
+  unpin        Unpin an entry
+  edit         Edit entries as Markdown in $VISUAL / $EDITOR; the result is applied as one batch after showing the diff
+  export       Print every entry as Markdown (the edit view) or JSONL
+  import       Import a Markdown or JSONL export, or a Hermes MEMORY.md / USER.md (entries separated by §)
+  pending      List memory changes staged for approval
+  approve      Apply a staged change (`all` for every one)
+  reject       Drop a staged change (`all` for every one)
+  log          List memory revisions, oldest first
+  diff         Show memory changes as a unified diff per entry
+  revert       Undo a revision (recorded as a new revision with origin user)
+  search       Rank archival entries for a query as recall would
+  wake         Make a dormant entry active again
+  consolidate  Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+  setup        Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session
+  off          Use built-in memory only (memory.provider = "builtin")
+  reset        Delete every entry of a store
 ```
 
 ## `prometheus help memory status`
@@ -35355,6 +38805,22 @@ Usage: prometheus help memory revert
 Rank archival entries for a query as recall would
 
 Usage: prometheus help memory search
+```
+
+## `prometheus help memory wake`
+
+```text
+Make a dormant entry active again
+
+Usage: prometheus help memory wake
+```
+
+## `prometheus help memory consolidate`
+
+```text
+Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply
+
+Usage: prometheus help memory consolidate
 ```
 
 ## `prometheus help memory setup`
@@ -36952,6 +40418,7 @@ Usage: prometheus help security [COMMAND]
 
 Commands:
   audit  The security audit log (`<profile>/logs/security-audit.jsonl`)
+  scan   Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
 ```
 
 ## `prometheus help security audit`
@@ -36971,6 +40438,188 @@ Commands:
 Check the hash chain; exit 1 naming the first record that was edited, inserted or removed
 
 Usage: prometheus help security audit verify
+```
+
+## `prometheus help security scan`
+
+```text
+Check runtimes, bridge environments, plugin and MCP packages against the OSV vulnerability database
+
+Usage: prometheus help security scan
+```
+
+## `prometheus help codex-runtime`
+
+```text
+Who runs turns on the OpenAI providers: Prometheus, or the Codex app-server (from the next session); migrate the profile's MCP servers into the Codex config
+
+Usage: prometheus help codex-runtime [COMMAND]
+
+Commands:
+  status   The configured runtime and the Codex executable it would run
+  set      Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+  migrate  Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+```
+
+## `prometheus help codex-runtime status`
+
+```text
+The configured runtime and the Codex executable it would run
+
+Usage: prometheus help codex-runtime status
+```
+
+## `prometheus help codex-runtime set`
+
+```text
+Set `model.openai_runtime` for new sessions: `auto` (or `off`) or `codex_app_server` (or `on`)
+
+Usage: prometheus help codex-runtime set
+```
+
+## `prometheus help codex-runtime migrate`
+
+```text
+Write the profile's MCP servers, the enabled Codex plugins and the Prometheus callback server into the managed section of the Codex config, and use the app-server from the next session
+
+Usage: prometheus help codex-runtime migrate
+```
+
+## `prometheus help computer-use`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on and the desktop app streams
+
+Usage: prometheus help computer-use [COMMAND]
+
+Commands:
+  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+```
+
+## `prometheus help computer-use screen`
+
+```text
+The bot screen: the virtual desktop the agent's headed browsers act on
+
+Usage: prometheus help computer-use screen [COMMAND]
+
+Commands:
+  status   Whether the screen runs, its display, size, idle time and who holds it
+  start    Start the screen
+  stop     Stop the screen
+  install  Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+```
+
+## `prometheus help computer-use screen status`
+
+```text
+Whether the screen runs, its display, size, idle time and who holds it
+
+Usage: prometheus help computer-use screen status
+```
+
+## `prometheus help computer-use screen start`
+
+```text
+Start the screen
+
+Usage: prometheus help computer-use screen start
+```
+
+## `prometheus help computer-use screen stop`
+
+```text
+Stop the screen
+
+Usage: prometheus help computer-use screen stop
+```
+
+## `prometheus help computer-use screen install`
+
+```text
+Install Xvnc and a minimal Xfce session with the package manager (shows the packages first)
+
+Usage: prometheus help computer-use screen install
+```
+
+## `prometheus help computer-use screen serve`
+
+```text
+Run the screen in this process (started by `start`)
+
+Usage: prometheus help computer-use screen serve
+```
+
+## `prometheus help egress`
+
+```text
+The profile's egress proxy for container and remote sandboxes
+
+Usage: prometheus help egress [COMMAND]
+
+Commands:
+  status   Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+  start    Start the proxy (the daemon starts it for profiles that inject)
+  stop     Stop it (forced after 5 seconds)
+  restart  Stop and start it
+  reload   Apply allowlist, denylist and mapping changes without dropping connections
+  rotate   Mint new placeholders for every mapping (running sandboxes get them on their next command)
+```
+
+## `prometheus help egress status`
+
+```text
+Listeners, mode, credential mappings (placeholders redacted), denied connections and provider secrets injection does not cover
+
+Usage: prometheus help egress status
+```
+
+## `prometheus help egress start`
+
+```text
+Start the proxy (the daemon starts it for profiles that inject)
+
+Usage: prometheus help egress start
+```
+
+## `prometheus help egress stop`
+
+```text
+Stop it (forced after 5 seconds)
+
+Usage: prometheus help egress stop
+```
+
+## `prometheus help egress restart`
+
+```text
+Stop and start it
+
+Usage: prometheus help egress restart
+```
+
+## `prometheus help egress reload`
+
+```text
+Apply allowlist, denylist and mapping changes without dropping connections
+
+Usage: prometheus help egress reload
+```
+
+## `prometheus help egress rotate`
+
+```text
+Mint new placeholders for every mapping (running sandboxes get them on their next command)
+
+Usage: prometheus help egress rotate
+```
+
+## `prometheus help egress serve`
+
+```text
+Run the proxy in this process (started by `start` and the daemon)
+
+Usage: prometheus help egress serve
 ```
 
 ## `prometheus help backup`
@@ -37203,15 +40852,20 @@ List, create, select, rename and delete profiles
 Usage: prometheus help profile [COMMAND]
 
 Commands:
-  list    List the profiles; the active one is marked
-  create  Create a profile, optionally copying another one once
-  alias   Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
-  export  Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
-  import  Create a profile from an archive `profile export` wrote
-  use     Make a profile the one used without -p (`use default` clears the choice)
-  show    Show a profile (default: the selected one)
-  rename  Rename a profile
-  delete  Delete a profile and everything in it (asks to type its name unless --yes)
+  list      List the profiles; the active one is marked
+  create    Create a profile, optionally copying another one once
+  alias     Write a launcher that runs `prometheus -p <name> "$@"` into your bin directory (~/.local/bin, or %LOCALAPPDATA%\Prometheus\bin)
+  export    Export a profile as a .tar.zst archive (no secrets, sessions or logs unless asked)
+  import    Create a profile from an archive `profile export` wrote
+  use       Make a profile the one used without -p (`use default` clears the choice)
+  show      Show a profile (default: the selected one)
+  rename    Rename a profile
+  delete    Delete a profile and everything in it (asks to type its name unless --yes)
+  describe  Set or generate a profile's description
+  install   Install a profile distribution from a git URL or a directory
+  update    Update a profile from the distribution it was installed from
+  info      Show where a profile's distribution came from
+  identity  Move or purge a profile's identity
 ```
 
 ## `prometheus help profile list`
@@ -37286,6 +40940,66 @@ Delete a profile and everything in it (asks to type its name unless --yes)
 Usage: prometheus help profile delete
 ```
 
+## `prometheus help profile describe`
+
+```text
+Set or generate a profile's description
+
+Usage: prometheus help profile describe
+```
+
+## `prometheus help profile install`
+
+```text
+Install a profile distribution from a git URL or a directory
+
+Usage: prometheus help profile install
+```
+
+## `prometheus help profile update`
+
+```text
+Update a profile from the distribution it was installed from
+
+Usage: prometheus help profile update
+```
+
+## `prometheus help profile info`
+
+```text
+Show where a profile's distribution came from
+
+Usage: prometheus help profile info
+```
+
+## `prometheus help profile identity`
+
+```text
+Move or purge a profile's identity
+
+Usage: prometheus help profile identity [COMMAND]
+
+Commands:
+  move   Copy a profile's identity file and identity memory to another profile (applies from its next session)
+  purge  Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+```
+
+## `prometheus help profile identity move`
+
+```text
+Copy a profile's identity file and identity memory to another profile (applies from its next session)
+
+Usage: prometheus help profile identity move
+```
+
+## `prometheus help profile identity purge`
+
+```text
+Remove a profile's identity file and identity memory, after a snapshot (applies from its next session)
+
+Usage: prometheus help profile identity purge
+```
+
 ## `prometheus help sessions`
 
 ```text
@@ -37309,6 +41023,8 @@ Commands:
   siblings         List the other children of a session's parent (forks, continuations)
   import           Import a JSONL export (all-or-none; ids must be new unless --remap-ids)
   recover          Copy every readable row of state.db into a new clean store (needs the store closed)
+  encrypt          Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+  decrypt          Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
   journal-mode     Switch state.db's journal mode offline (delete for filesystems without shared memory)
   refresh-prompts  Rebuild the stored system prompt of sessions at their next turn
   retitle          Regenerate automatic titles with the title model (user titles are kept)
@@ -37439,6 +41155,22 @@ Usage: prometheus help sessions import
 Copy every readable row of state.db into a new clean store (needs the store closed)
 
 Usage: prometheus help sessions recover
+```
+
+## `prometheus help sessions encrypt`
+
+```text
+Encrypt state.db and the blob files offline (needs the store closed); records storage.encryption
+
+Usage: prometheus help sessions encrypt
+```
+
+## `prometheus help sessions decrypt`
+
+```text
+Decrypt state.db and the blob files offline (needs the store closed); records storage.encryption = none
+
+Usage: prometheus help sessions decrypt
 ```
 
 ## `prometheus help sessions journal-mode`
@@ -38203,6 +41935,7 @@ Commands:
   sync              Re-run every registered Claude Code, Codex or Cursor import whose source changed
   cleanup           Archive a migrated agent's directories (`<name>.pre-migration`)
   sessions          Import one Claude Code or Codex CLI conversation as a session
+  rollback          Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
 ```
 
 ## `prometheus help migrate from-hermes`
@@ -38277,6 +42010,14 @@ Import one Claude Code or Codex CLI conversation as a session
 Usage: prometheus help migrate sessions
 ```
 
+## `prometheus help migrate rollback`
+
+```text
+Take a migration run back: remove what it created, restore what it replaced, keep what was changed since
+
+Usage: prometheus help migrate rollback
+```
+
 ## `prometheus help uninstall`
 
 ```text
@@ -38311,6 +42052,34 @@ Usage: prometheus help pause off
 Print whether the home is paused, why, by whom and since when
 
 Usage: prometheus help pause status
+```
+
+## `prometheus help identity`
+
+```text
+Messaging accounts linked across platforms with `/link`
+
+Usage: prometheus help identity [COMMAND]
+
+Commands:
+  list    Every linked account, by person
+  unlink  Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+```
+
+## `prometheus help identity list`
+
+```text
+Every linked account, by person
+
+Usage: prometheus help identity list
+```
+
+## `prometheus help identity unlink`
+
+```text
+Take an account (`<platform>:<sender_id>`), or every account of a person on a platform (`<person_id> <platform>`), out of its link
+
+Usage: prometheus help identity unlink
 ```
 
 ## `prometheus help portal`
@@ -38554,6 +42323,7 @@ Commands:
   outbox          The durable delivery outbox of the selected profile
   send            Send one message to a chat without an agent turn (through the daemon's outbox when it runs)
   peer            Peer gateways on other machines: register them, message their agents and run tasks there
+  proxy           The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
   list            List every running Prometheus daemon of this OS user, whatever its home
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
@@ -38710,6 +42480,43 @@ Usage: prometheus help gateway peer status
 Stop a remote run
 
 Usage: prometheus help gateway peer stop
+```
+
+## `prometheus help gateway proxy`
+
+```text
+The subscription proxy: lend this profile's provider sign-in to other tools as a local OpenAI-compatible endpoint (port 8645)
+
+Usage: prometheus help gateway proxy [COMMAND]
+
+Commands:
+  start      Run the subscription proxy in the foreground (Ctrl-C stops it)
+  status     Each provider's readiness
+  providers  The providers the proxy can forward to and their paths
+```
+
+## `prometheus help gateway proxy start`
+
+```text
+Run the subscription proxy in the foreground (Ctrl-C stops it)
+
+Usage: prometheus help gateway proxy start
+```
+
+## `prometheus help gateway proxy status`
+
+```text
+Each provider's readiness
+
+Usage: prometheus help gateway proxy status
+```
+
+## `prometheus help gateway proxy providers`
+
+```text
+The providers the proxy can forward to and their paths
+
+Usage: prometheus help gateway proxy providers
 ```
 
 ## `prometheus help gateway list`
@@ -39056,6 +42863,7 @@ Commands:
   run            Runs a command a plugin registered (`cli_commands`), or lists them
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
+  dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
   remove         Remove an installed plugin (its grants are revoked; its data in `plugin-data/` is kept)
   grants         Show, approve or revoke a plugin's capability grants
   capabilities   Declared versus granted capabilities, per plugin
@@ -39209,6 +43017,14 @@ Usage: prometheus help plugins hooks doctor
 The capabilities a staged update asks for beyond the current grant
 
 Usage: prometheus help plugins diff-grants
+```
+
+## `prometheus help plugins dev`
+
+```text
+Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
+
+Usage: prometheus help plugins dev
 ```
 
 ## `prometheus help plugins remove`
@@ -39612,6 +43428,10 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.snapshots.v1` | `prometheus snapshots list` |
 | `prometheus.profiles.v1` | `prometheus profile list` |
 | `prometheus.profile.v1` | `prometheus profile show` |
+| `prometheus.profile_info.v1` | `prometheus profile info` |
+| `prometheus.egress_status.v1` | `prometheus egress status` |
+| `prometheus.screen_status.v1` | `prometheus computer-use screen status` |
+| `prometheus.security_scan.v1` | `prometheus security scan` |
 | `prometheus.sessions.v1` | `prometheus sessions list` |
 | `prometheus.session.v1` | `prometheus sessions show` |
 | `prometheus.search.v1` | `prometheus sessions search` |

@@ -113,14 +113,15 @@ fn each_surface_starts_from_its_builtin_default() {
     let config = Config::default();
     let starting =
         |key: &str| surface(key).starting_toolsets(&registry, &config.tools, &config.toolsets);
-    for key in ["cli", "cron"] {
+    for key in ["cli", "cron", "tui", "desktop", "dashboard"] {
         assert_eq!(starting(key), ["core"], "{key}");
     }
-    // GUI sessions switch projects by default (spec: projects, Project
-    // tool for GUI sessions).
-    for key in ["tui", "desktop"] {
-        assert_eq!(starting(key), ["core", "project"], "{key}");
+    // GUI sessions switch projects (spec: projects, Project tool for GUI
+    // sessions): their surface folds the gated toolset in.
+    for key in ["tui", "desktop", "dashboard"] {
+        assert!(select(&registry, key, &config).contains("project"), "{key}");
     }
+    assert!(!select(&registry, "cli", &config).contains("project"));
     assert_eq!(starting("api"), ["api_server"]);
     assert_eq!(starting("acp"), ["acp"]);
     assert_eq!(starting("acp_unattended"), ["acp_unattended"]);

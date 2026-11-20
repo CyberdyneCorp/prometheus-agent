@@ -53,6 +53,9 @@ pub struct Gpu {
     /// Memory bandwidth in GB/s, when known (drives the speed estimate).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bandwidth_gbps: Option<f64>,
+    /// How busy it is now, percent, when the driver reports it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub utilization_percent: Option<f64>,
 }
 
 /// The probed machine.
@@ -195,6 +198,7 @@ mod tests {
             integrated: false,
             cuda: None,
             bandwidth_gbps: None,
+            utilization_percent: None,
         };
         assert_eq!(gpu.budget(&machine(vec![])), 7 * GIB - GIB / 2);
     }
@@ -209,6 +213,7 @@ mod tests {
             integrated: true,
             cuda: None,
             bandwidth_gbps: None,
+            utilization_percent: None,
         };
         // Three quarters of 32 GiB is 24 GiB, but only 20 GiB are free.
         assert_eq!(gpu.budget(&machine(vec![])), 20 * GIB);

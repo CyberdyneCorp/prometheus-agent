@@ -212,6 +212,40 @@ fn the_worktrees_cli_lists_prunes_and_refuses_unknown_archives() {
     assert_eq!(unknown.status.code(), Some(66), "{}", stderr(&unknown));
 }
 
+#[test]
+fn prune_removes_the_install_state_of_a_checkout_deleted_20_days_ago() {
+    let home = mock_home();
+    let day = 86_400;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let lsp = home.path().join("profiles/default/cache/lsp/rust-analyzer");
+    let gone = home.path().join("deleted-lane");
+    let old = lsp.join("0a1b2c");
+    let recent = lsp.join("3d4e5f");
+    pmt_worktrees::install_state::record(&old, &gone, now - 20 * day);
+    pmt_worktrees::install_state::record(&recent, &gone, now - 2 * day);
+
+    let dry = ok(&command(home.path())
+        .args(["worktrees", "prune", "--dry-run"])
+        .output()
+        .unwrap());
+    assert!(dry.contains("(unused 20 days): would remove"), "{dry}");
+    assert!(old.exists());
+
+    let pruned = ok(&command(home.path())
+        .args(["--json", "worktrees", "prune"])
+        .output()
+        .unwrap());
+    let pruned: Value = serde_json::from_str(&pruned).unwrap();
+    let state = &pruned["install_state"];
+    assert_eq!(state.as_array().unwrap().len(), 1, "{pruned}");
+    assert_eq!(state[0]["removed"], true);
+    assert!(!old.exists(), "removed");
+    assert!(recent.exists(), "unused for less than the retention");
+}
+
 #[cfg(unix)]
 mod interactive {
     use std::time::Duration;

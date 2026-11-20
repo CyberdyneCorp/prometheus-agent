@@ -296,6 +296,7 @@ impl DaemonHost {
                 crate::mcp_host::editor::unbind(&id.to_string());
                 pmt_tools::editor::unbind(&id.to_string());
                 session.live.close(&profile.store, reason).await;
+                super::setup::forget_if_ephemeral(&profile.store, id, &session.setup);
                 true
             }
             Err(shared) => {
@@ -327,6 +328,7 @@ impl DaemonHost {
                 crate::mcp_host::editor::unbind(&id.to_string());
                 pmt_tools::editor::unbind(&id.to_string());
                 session.live.unload().await;
+                super::setup::forget_if_ephemeral(&profile.store, id, &session.setup);
                 true
             }
             Err(shared) => {
@@ -383,6 +385,7 @@ impl DaemonHost {
             && let Some(session) = profile.loaded.lock().await.remove(&id)
         {
             session.live.end(&profile.store, reason).await;
+            super::setup::forget_if_ephemeral(&profile.store, id, &session.setup);
         }
     }
 }

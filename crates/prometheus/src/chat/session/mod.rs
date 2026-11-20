@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+mod codex_gates;
 pub mod credentials;
 pub mod cron;
 pub mod delegation;
@@ -70,7 +71,7 @@ use pmt_skills::review::Nudge;
 use pmt_skills::secrets::SecretPrompt;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
 use pmt_store::{NewSession, Source, Store};
-use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
+use pmt_tools::approval::{ApprovalRequest, CommandGate, Reply};
 use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
 
@@ -128,6 +129,8 @@ pub struct Options {
     /// `--domain`, or the scheduled job's or kanban task's `domain`: the
     /// session's experience-library domain (spec: experience-library).
     pub domain: Option<String>,
+    /// A daemon session a person attends: it loads `plugins dev` plugins.
+    pub dev_plugins: bool,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -226,7 +229,7 @@ pub struct Live {
     /// The approval gate.
     pub gate: Arc<CommandGate>,
     /// Approval prompts to show (interactive only).
-    pub approvals: Option<Surface<ApprovalRequest, Decision>>,
+    pub approvals: Option<Surface<ApprovalRequest, Reply>>,
     /// Clarify questions to show (interactive only).
     pub clarify: Option<ClarifyPrompts>,
     /// The session's skills.
@@ -317,7 +320,7 @@ impl Factory {
         let user_home = launch.user_home().map(PathBuf::as_path);
         let plugins = rollout::plugins(
             &scope,
-            crate::plugins_host::for_session(&scope, &options.cwd),
+            crate::plugins_host::for_attended(&scope, &options.cwd, options.dev_plugins),
             options
                 .rollout
                 .as_ref()
@@ -339,6 +342,7 @@ impl Factory {
             plugin_scope.clone(),
             Arc::clone(&store),
             options.cwd.clone(),
+            options.dev_plugins,
             plugins::PluginTools::build(
                 &scope,
                 &plugins,
@@ -612,9 +616,9 @@ impl Factory {
         clients: Option<Clients>,
         child: Option<&delegation::ChildSpec>,
     ) -> Result<Live, Error> {
-        let model = self.model_for(target, child).await?;
+        let (target, routed, model) = Box::pin(self.routed_model(id, target, child)).await?;
         self.maintain();
-        let session = self.session_row(id, target)?;
+        let session = self.session_row(id, &target)?;
         let conversation = self.models.bind_conversation(&session);
         let discovery = self.discover_mcp_for(id, child.is_some()).await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
@@ -625,11 +629,11 @@ impl Factory {
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities_for(id, &skills, child)?;
         let current = SharedScope::new(self.scope_for(child));
-        let vision = self.vision_plan(id, target, child.is_some()).await;
+        let vision = self.vision_plan(id, &target, child.is_some()).await;
         let at = place::At::open(&self.options.cwd, clients.as_ref());
         let at = place::At { vision, ..at };
         let environment =
-            self.environment(&session, target, &capabilities, &current, &skills, &at)?;
+            self.environment(&session, &target, &capabilities, &current, &skills, &at)?;
         media::prime(&id.to_string()).await;
         let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
@@ -643,7 +647,7 @@ impl Factory {
         let (reach, aux) = ((&selection, &capabilities), (&summarizer, &model));
         let (agent_tools, clarify) =
             self.agent_tools(id, &memory, aux, reach, cards, &delegation)?;
-        let gate = self.gate_for(id, child, &model, &environment)?;
+        let gate = self.gate_for(id, child, (&model, &registry), &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
@@ -657,7 +661,7 @@ impl Factory {
             .await;
         let (agent, progress, mcp) = self.agent_of(opening::AgentInputs {
             id,
-            target,
+            target: &target,
             session: &session,
             child,
             clients: clients.as_ref().map(|c| Arc::clone(&c.events)),
@@ -708,7 +712,7 @@ impl Factory {
             _skills: attached,
             _conversation: conversation,
         };
-        Box::pin(live.emit_start(&session, target, &lessons)).await;
+        Box::pin(live.emit_start(&session, &target, &lessons, routed)).await;
         Ok(live)
     }
 
@@ -892,12 +896,7 @@ impl Factory {
         child: Option<&delegation::ChildSpec>,
         no_clients: bool,
     ) -> Result<trace::Recording, Error> {
-        let trajectory = pmt_obs::trajectory::writer::open_for_session(
-            &self.scope,
-            &session.id.to_string(),
-            &session.root_session_id.to_string(),
-        )?
-        .map(Arc::new);
+        let trajectory = trace::trajectory(&self.scope, session)?;
         let parent = self.options.cron.as_ref().and_then(|run| run.trace);
         let trace = trace::open(&self.scope_for(child), session, parent);
         let stream = self.stream_for(session, no_clients && child.is_none());
@@ -1025,8 +1024,12 @@ impl Factory {
             Arc::clone(&self.store),
             id,
             clarifier,
-            SessionSearch::new(Arc::clone(&self.store), id)
-                .with_summarizer(Arc::clone(summarizer) as _),
+            crate::sessions_cmd::semantic::tool(
+                SessionSearch::new(Arc::clone(&self.store), id)
+                    .with_summarizer(Arc::clone(summarizer) as _),
+                (&self.scope, &self.store),
+                self.launch.user_home().map(std::path::PathBuf::as_path),
+            ),
         )?
         .with_memory(Arc::clone(memory) as _)
         .with_connections(crate::connectors_host::manager(&self.scope, cards))
@@ -1169,6 +1172,11 @@ impl Factory {
             );
         }));
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
+        setup.eval_gate = Some(crate::skills_cmd::evals::ProfileGate::shared(
+            &self.scope,
+            &self.store,
+            &self.launch,
+        ));
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))
             .or_else(|| self.secret_prompt.clone());

@@ -1,5 +1,66 @@
 {
   "runtimes": {
+    "bws": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "bws",
+          "format": "zip",
+          "sha256": "9cb1c1c6e6164d83b2e339883ba02b4cbb37188ce9a484b1ce8249443163e066",
+          "size": 6044198,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-aarch64-apple-darwin-2.1.0.zip"
+        },
+        "darwin-x64": {
+          "exe": "bws",
+          "format": "zip",
+          "sha256": "6f626b3971368902af1b9847c02791a1b4666969d7561e2047681cded7997537",
+          "size": 6473426,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-x86_64-apple-darwin-2.1.0.zip"
+        },
+        "linux-arm64": {
+          "exe": "bws",
+          "format": "zip",
+          "sha256": "18253757286e119d450133a87eb463bf8c1ce418ce24c834f4f250d60cba6f9e",
+          "size": 5638155,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-aarch64-unknown-linux-gnu-2.1.0.zip"
+        },
+        "linux-arm64-musl": {
+          "exe": "bws",
+          "format": "zip",
+          "sha256": "eb0f1ae61d1c3b74244d2841233276e05c77e8be4da197ed90fc6248387005e1",
+          "size": 5651025,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-aarch64-unknown-linux-musl-2.1.0.zip"
+        },
+        "linux-x64": {
+          "exe": "bws",
+          "format": "zip",
+          "sha256": "ba8233c3a4aee5d43e3c73bbd04d99e9bc5aba13bbbfd06d89b073abe732b860",
+          "size": 5984639,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-x86_64-unknown-linux-gnu-2.1.0.zip"
+        },
+        "linux-x64-musl": {
+          "exe": "bws",
+          "format": "zip",
+          "sha256": "f59ee150e42b82128d437087e9bac920053c6bfddcb960d20ce9386e5ac9bba6",
+          "size": 5987311,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-x86_64-unknown-linux-musl-2.1.0.zip"
+        },
+        "windows-arm64": {
+          "exe": "bws.exe",
+          "format": "zip",
+          "sha256": "ba18adeb5d123481211c47c4e4d0ad6d81a6b0139150704785542fdee542e583",
+          "size": 5314294,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-aarch64-pc-windows-msvc-2.1.0.zip"
+        },
+        "windows-x64": {
+          "exe": "bws.exe",
+          "format": "zip",
+          "sha256": "8d6f2b51beb6f992b5b1de8b85a98bdf18de74096b724d17fa06219fc23f2bd5",
+          "size": 5677642,
+          "url": "https://github.com/bitwarden/sdk-sm/releases/download/bws-v2.1.0/bws-x86_64-pc-windows-msvc-2.1.0.zip"
+        }
+      },
+      "version": "2.1.0"
+    },
     "chromium": {
       "artifacts": {
         "darwin-arm64": {
@@ -162,6 +223,39 @@
       },
       "version": "1.3.10"
     },
+    "lightpanda": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "lightpanda",
+          "format": "binary",
+          "sha256": "9f3ee749a55d1abc5f8fdda0d9559c3b2abcec5bff5bfe902bc06c0a89538ec4",
+          "size": 93242456,
+          "url": "https://github.com/lightpanda-io/browser/releases/download/1.0.2/lightpanda-aarch64-macos"
+        },
+        "darwin-x64": {
+          "exe": "lightpanda",
+          "format": "binary",
+          "sha256": "91a775ecc67937d8d79c1b1a315748e52157804f18f629c6e1c6332a46255fc6",
+          "size": 97165009,
+          "url": "https://github.com/lightpanda-io/browser/releases/download/1.0.2/lightpanda-x86_64-macos"
+        },
+        "linux-arm64": {
+          "exe": "lightpanda",
+          "format": "binary",
+          "sha256": "ac546dfc43c533430da92b75ab36f2a29da7d6324d5d38baf606ef2e0d849345",
+          "size": 73830456,
+          "url": "https://github.com/lightpanda-io/browser/releases/download/1.0.2/lightpanda-aarch64-linux"
+        },
+        "linux-x64": {
+          "exe": "lightpanda",
+          "format": "binary",
+          "sha256": "ae7d01d261efb9e480e18ce3424533332883863bcf70b12a4321b5733f37e19e",
+          "size": 76408136,
+          "url": "https://github.com/lightpanda-io/browser/releases/download/1.0.2/lightpanda-x86_64-linux"
+        }
+      },
+      "version": "1.0.2"
+    },
     "node": {
       "artifacts": {
         "darwin-arm64": {
@@ -222,6 +316,46 @@
         }
       },
       "version": "24.22.1"
+    },
+    "op": {
+      "artifacts": {
+        "darwin-arm64": {
+          "exe": "op",
+          "format": "zip",
+          "sha256": "216e86c6db491c752ccb7819b3b1851cc8456ea015a1f7c8a58dd103ef0a474e",
+          "size": 15087213,
+          "url": "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_darwin_arm64_v2.42.0.zip"
+        },
+        "darwin-x64": {
+          "exe": "op",
+          "format": "zip",
+          "sha256": "917b0d2b41de3d943bb6562331275c43c4b525af6b003eade06248905ddd62b0",
+          "size": 16467472,
+          "url": "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_darwin_amd64_v2.42.0.zip"
+        },
+        "linux-arm64": {
+          "exe": "op",
+          "format": "zip",
+          "sha256": "e56c379fabafb393ce699258e484694abe464870fb41f35ce1b5c3f17868ba61",
+          "size": 15112023,
+          "url": "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_linux_arm64_v2.42.0.zip"
+        },
+        "linux-x64": {
+          "exe": "op",
+          "format": "zip",
+          "sha256": "261fe3844a43e7e83a3d85e8a9f36411729436a1d3add1dc7dd46cbbceebe9e5",
+          "size": 16233648,
+          "url": "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_linux_amd64_v2.42.0.zip"
+        },
+        "windows-x64": {
+          "exe": "op.exe",
+          "format": "zip",
+          "sha256": "8c457a0dc852c15beb35af77717ed32294345a300e15c444ed42c79ebc4330e9",
+          "size": 16234486,
+          "url": "https://cache.agilebits.com/dist/1P/op2/pkg/v2.42.0/op_windows_amd64_v2.42.0.zip"
+        }
+      },
+      "version": "2.42.0"
     },
     "uv": {
       "artifacts": {

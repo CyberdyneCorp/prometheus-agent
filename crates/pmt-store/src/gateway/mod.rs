@@ -2,9 +2,11 @@
 //! [`routes`] maps conversation keys to sessions and keeps each routed
 //! session's gateway state (reset reason, suspension, crash-recovery
 //! bookkeeping), [`pairing`] holds pairing requests and approved senders,
-//! and [`outbox`] every outbound message until it is delivered.
+//! [`identity`] the accounts people linked across platforms, and
+//! [`outbox`] every outbound message until it is delivered.
 
 pub mod chats;
+pub mod identity;
 pub mod outbox;
 pub mod pairing;
 pub mod prefs;

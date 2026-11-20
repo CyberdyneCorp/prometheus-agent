@@ -110,6 +110,7 @@ mod tests {
             integrated: memory == 0,
             cuda,
             bandwidth_gbps: None,
+            utilization_percent: None,
         }
     }
 

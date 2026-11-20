@@ -1,0 +1,11 @@
+# An SSH server for the egress tunnel tests: user `pmt` (sh login shell),
+# public-key login only, `curl` for the commands. The key arrives in
+# PMT_PUBKEY at start; PMT_FORWARDING (yes|no) sets AllowTcpForwarding.
+FROM docker.io/library/alpine:3@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+RUN apk add --no-cache openssh-server curl \
+ && ssh-keygen -A \
+ && adduser -D -s /bin/sh pmt \
+ && echo "pmt:$(head -c 18 /dev/urandom | base64)" | chpasswd \
+ && sed -i '/^AllowTcpForwarding/d' /etc/ssh/sshd_config \
+ && printf 'PasswordAuthentication no\nPermitRootLogin no\n' >> /etc/ssh/sshd_config
+CMD ["sh", "-c", "printf 'AllowTcpForwarding %s\\n' \"${PMT_FORWARDING:-yes}\" >> /etc/ssh/sshd_config && mkdir -p /home/pmt/.ssh && printf '%s\\n' \"$PMT_PUBKEY\" > /home/pmt/.ssh/authorized_keys && chown -R pmt:pmt /home/pmt/.ssh && chmod 700 /home/pmt/.ssh && chmod 600 /home/pmt/.ssh/authorized_keys && exec /usr/sbin/sshd -D -e"]

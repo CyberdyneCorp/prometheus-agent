@@ -17,11 +17,12 @@ use pmt_gateway::Link;
 use pmt_obs::trajectory::writer::Emit;
 use pmt_rpc::contracts::{
     ASSISTANT_DELTA, ApprovalAsk, ApprovalFinding, ApprovalRequestParams, ClarifyAsk,
-    ClarifyRequestParams, Decision, SecretAsk, SecretRequestParams, SessionEvent, SudoAsk,
-    SudoRequestParams,
+    ClarifyRequestParams, Decision, EditHunk, SecretAsk, SecretRequestParams, SessionEvent,
+    SudoAsk, SudoRequestParams,
 };
 use pmt_skills::secrets::SecretPrompt;
 use pmt_tools::approval::ApprovalRequest;
+use pmt_tools::approval::review::{EditReview, hunks};
 use serde_json::{Value, json};
 
 /// Forwards every trajectory event of a session to its link.
@@ -132,7 +133,7 @@ impl pmt_tools::terminal::sudo::SudoPrompt for SudoToClients {
 /// Answers the session's approval prompts through its clients until the
 /// session's prompt channel closes.
 pub(super) async fn approvals(
-    mut prompts: Surface<ApprovalRequest, pmt_tools::approval::Decision>,
+    mut prompts: Surface<ApprovalRequest, pmt_tools::approval::Reply>,
     link: Link,
     timeout: Duration,
 ) {
@@ -142,7 +143,13 @@ pub(super) async fn approvals(
         pmt_core::spawn::spawn(async move {
             let answer = link.ask::<ApprovalAsk>(&params, Some(timeout)).await;
             if let Some(answer) = answer {
-                prompt.respond(decision(answer.decision));
+                prompt.respond(pmt_tools::approval::Reply {
+                    decision: decision(answer.decision),
+                    review: EditReview {
+                        accepted_hunks: answer.accepted_hunks,
+                        replacement: answer.replacement,
+                    },
+                });
             }
             // No answer: dropping the prompt denies it.
         });
@@ -182,6 +189,13 @@ fn approval_params(session_id: &str, request: &ApprovalRequest) -> ApprovalReque
             path: d.path.clone(),
             old_text: d.old_text.clone(),
             new_text: d.new_text.clone(),
+            hunks: hunks(d.old_text.as_deref().unwrap_or_default(), &d.new_text)
+                .into_iter()
+                .map(|h| EditHunk {
+                    header: h.header,
+                    lines: h.lines,
+                })
+                .collect(),
         }),
     }
 }

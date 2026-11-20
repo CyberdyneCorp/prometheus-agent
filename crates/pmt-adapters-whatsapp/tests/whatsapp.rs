@@ -1,6 +1,6 @@
 //! The `WhatsApp` adapter against a mock bridge (spec: platform-adapters):
 //! the conformance kit, the alias flip, logout, the missing runtime,
-//! media.
+//! media, delivery and read receipts.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -10,7 +10,7 @@ use pmt_adapters_whatsapp::{TOKEN_SECRET, Whatsapp};
 use pmt_gateway::messaging::conformance::{self, kit_setup};
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterState, Admission, Inbound, MediaKind,
-    Outgoing,
+    Outgoing, Receipt,
 };
 use pmt_store::gateway::outbox::OutboundAttachment;
 use serde_json::json;
@@ -19,6 +19,7 @@ use serde_json::json;
 struct Recorder {
     events: Mutex<Vec<Inbound>>,
     states: Mutex<Vec<(AdapterState, Option<AdapterError>)>>,
+    receipts: Mutex<Vec<Receipt>>,
 }
 
 impl AdapterLink for Recorder {
@@ -29,6 +30,10 @@ impl AdapterLink for Recorder {
 
     fn report(&self, state: AdapterState, error: Option<AdapterError>) {
         self.states.lock().unwrap().push((state, error));
+    }
+
+    fn receipt(&self, receipt: Receipt) {
+        self.receipts.lock().unwrap().push(receipt);
     }
 }
 
@@ -218,5 +223,39 @@ async fn self_chat_mode_ignores_contacts() {
         .map(|e| e.text.clone())
         .collect();
     assert_eq!(texts, ["note to me"]);
+    adapter.disconnect().await;
+}
+
+/// Spec: platform-adapters, Delivery and read receipts.
+#[tokio::test]
+async fn delivery_statuses_of_a_send_are_reported_as_receipts() {
+    let home = tempfile::tempdir().unwrap();
+    let (mock, adapter, link) = connected(home.path()).await;
+    let described = adapter.describe();
+    assert!(described.delivery_receipts && described.read_receipts);
+    let sent = adapter
+        .send(&Outgoing::text(mock::USER, None, "hi"))
+        .await
+        .unwrap();
+    let id = sent.message_id.expect("a sent id");
+    mock.status(&id, "server_ack");
+    mock.status(&id, "delivered");
+    mock.status(&id, "read");
+    eventually(|| link.receipts.lock().unwrap().len() == 2).await;
+    let receipts = link.receipts.lock().unwrap().clone();
+    assert_eq!(
+        receipts,
+        vec![
+            Receipt {
+                message_id: id.clone(),
+                read: false
+            },
+            Receipt {
+                message_id: id,
+                read: true
+            },
+        ]
+    );
+    assert!(link.events.lock().unwrap().is_empty(), "no inbound message");
     adapter.disconnect().await;
 }

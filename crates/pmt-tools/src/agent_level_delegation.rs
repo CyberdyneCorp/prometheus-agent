@@ -51,7 +51,7 @@ pub fn delegate_task() -> ToolDescriptor {
                 },
                 "subagent_id": {"type": "string", "description": "The child a control action targets."},
                 "message": {"type": "string", "description": "The steer message."},
-                "join": {"type": "string", "enum": ["all"], "description": "Wait for every child (the only mode)."},
+                "join": {"type": "string", "pattern": "^(all|first_success|quorum:[1-9][0-9]*)$", "description": "all (default): wait for every child; first_success: return at the first child that completes (and matches its output_schema), stopping the rest; quorum:N: return once N children succeeded, stopping the rest. The reply's join_satisfied says whether the mode was met."},
                 "budget": {
                     "type": "object",
                     "properties": {

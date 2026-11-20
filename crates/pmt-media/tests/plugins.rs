@@ -1,4 +1,4 @@
-//! Image, speech and transcription providers of enabled plugins (spec:
+//! Image, video, speech and transcription providers of enabled plugins (spec:
 //! plugin-system, Provider-object plugins fail closed when unregistered):
 //! a selected name that is not built in reaches the provider a plugin
 //! registered, its answer is checked and billed as it reports, and a name
@@ -53,6 +53,12 @@ impl Studio {
                 let audio = std::fs::read(request["file_path"].as_str().unwrap()).unwrap();
                 json!({"success": true, "transcript": format!(" heard {} bytes ", audio.len())})
             }
+            Kind::VideoGen => {
+                let clip = self.data.join("files/clip.mp4");
+                std::fs::write(&clip, b"\0\0\0\x18ftypmp42").unwrap();
+                json!({"success": true, "video": clip, "model": "reel-2",
+                    "billing_source": "api_key:reels"})
+            }
         }
     }
 }
@@ -61,7 +67,10 @@ impl MediaPlugins for Studio {
     fn plugin_of(&self, kind: Kind, id: &str) -> Option<String> {
         let registered = matches!(
             (kind, id),
-            (Kind::ImageGen, "pics") | (Kind::Tts, "voicebox") | (Kind::Stt, "ears")
+            (Kind::ImageGen, "pics")
+                | (Kind::Tts, "voicebox")
+                | (Kind::Stt, "ears")
+                | (Kind::VideoGen, "reels")
         );
         registered.then(|| "studio".to_owned())
     }
@@ -99,6 +108,27 @@ async fn a_plugin_image_provider_makes_a_stored_media_file_billed_as_reported() 
     let seen = studio.seen.lock().unwrap();
     assert_eq!(seen[0].1["prompt"], "a lighthouse");
     assert_eq!(seen[0].1["aspect_ratio"], "square");
+}
+
+#[tokio::test]
+async fn a_plugin_video_provider_makes_a_stored_media_file() {
+    let mut config = Config::default();
+    config.video_gen.provider = Some("reels".into());
+    let mut rig = Rig::new(config);
+    let studio = Studio::new(&rig);
+    rig.plugins = studio.clone();
+    let result = rig
+        .session()
+        .generate_video(&json!({"prompt": "a parade", "duration": 6}))
+        .await;
+    assert_eq!(result.status, Status::Ok, "{}", result.text_content());
+    let text = result.text_content();
+    assert!(media_path(&text).starts_with(rig.media_dir()), "{text}");
+    assert_eq!(details(&text)["model"], "reel-2");
+    assert_eq!(result.metadata[BILLING_SOURCE], "api_key:reels");
+    let seen = studio.seen.lock().unwrap();
+    assert_eq!(seen[0].1["duration"], 6);
+    assert_eq!(seen[0].1["aspect_ratio"], "16:9");
 }
 
 #[tokio::test]

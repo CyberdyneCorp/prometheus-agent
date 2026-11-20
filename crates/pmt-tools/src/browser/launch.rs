@@ -292,7 +292,7 @@ pub(super) struct Run<'a> {
 /// profiles, never below the user's `AppData`, whose directories (the
 /// `AppContainer` profiles' parent among them) the sandbox would otherwise
 /// rewrite listing entries on.
-fn temp_root(profiles_root: &Path) -> PathBuf {
+pub(super) fn temp_root(profiles_root: &Path) -> PathBuf {
     if cfg!(windows) {
         profiles_root.parent().unwrap_or(profiles_root).join("tmp")
     } else {
@@ -407,7 +407,7 @@ impl Connect {
 }
 
 /// The start failure of a browser that exited.
-fn exited(status: std::io::Result<std::process::ExitStatus>) -> String {
+pub(super) fn exited(status: std::io::Result<std::process::ExitStatus>) -> String {
     match status {
         Ok(status) => format!("the browser exited during start ({status})"),
         Err(err) => format!("the browser exited during start ({err})"),
@@ -533,7 +533,7 @@ fn spawn(run: &Run<'_>) -> Result<Spawned, String> {
 /// The last lines the browser wrote to stderr. The pipe is drained for the
 /// browser's whole life (a full pipe would block it); the tail explains a
 /// failed start (for example Chromium's `No usable sandbox!`).
-struct StderrTail {
+pub(super) struct StderrTail {
     lines: Arc<std::sync::Mutex<Kept>>,
     reader: Option<tokio::task::JoinHandle<()>>,
 }
@@ -562,7 +562,7 @@ impl Kept {
 const TAIL_LINES: usize = 8;
 
 impl StderrTail {
-    fn drain(stderr: Option<tokio::process::ChildStderr>) -> Self {
+    pub(super) fn drain(stderr: Option<tokio::process::ChildStderr>) -> Self {
         use tokio::io::AsyncBufReadExt as _;
         let lines: Arc<std::sync::Mutex<Kept>> = Arc::default();
         let reader = stderr.map(|stderr| {
@@ -580,7 +580,7 @@ impl StderrTail {
     }
 
     /// `why` followed by the browser's last stderr lines, once it exited.
-    async fn explain(mut self, why: String) -> String {
+    pub(super) async fn explain(mut self, why: String) -> String {
         if let Some(reader) = self.reader.take() {
             let _ = tokio::time::timeout(Duration::from_secs(2), reader).await;
         }

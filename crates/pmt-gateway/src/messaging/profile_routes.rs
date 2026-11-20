@@ -63,14 +63,13 @@ pub(crate) fn routing(
     shared: &Shared,
     owner: &str,
     platform: &str,
-    inbound: &Inbound,
+    (inbound, person): (&Inbound, Option<String>),
     gateway: &GatewayConfig,
 ) -> (Routing, SessionKey) {
     let Some((profile, config)) = target(shared, owner, platform, inbound, gateway) else {
-        return super::admit::routing_of(owner, platform, inbound, gateway);
+        return super::admit::routing_of(owner, platform, (inbound, person), gateway);
     };
     shared.adapters.lend(&profile, platform, owner);
-    let (group_per_user, thread_per_user) = config.sessions_for(platform);
     let routing = Routing {
         adapter: format!("{owner}/{platform}"),
         profile,
@@ -80,12 +79,11 @@ pub(crate) fn routing(
         chat_type: inbound.chat_type,
         thread_id: inbound.thread_id.clone(),
         sender_id: inbound.sender_id.clone(),
+        // Links belong to the receiving profile: a routed event starts
+        // per account in its target.
         person_id: None,
     };
-    let key = routing.key(Isolation {
-        group_per_user,
-        thread_per_user,
-    });
+    let key = routing.key(Isolation::of(&config, platform));
     (routing, key)
 }
 

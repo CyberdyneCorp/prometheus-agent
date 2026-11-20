@@ -29,6 +29,21 @@ pub(super) fn outcome(finished: &TurnFinished) -> &'static str {
     if completed { SUCCEEDED } else { FAILED }
 }
 
+/// The emoji of a reaction setting: a name (`eyes`, `thumbsup`, ...) or
+/// the emoji itself.
+pub(super) fn emoji(setting: &str) -> &str {
+    match setting.trim().trim_matches(':') {
+        "eyes" => STARTED,
+        "thumbsup" | "+1" | "thumbs_up" => "\u{1f44d}",
+        "hourglass" => "\u{23f3}",
+        "white_check_mark" | "check" => SUCCEEDED,
+        "ok_hand" => "\u{1f44c}",
+        "inbox_tray" => "\u{1f4e5}",
+        "speech_balloon" => "\u{1f4ac}",
+        other => other,
+    }
+}
+
 impl Lane {
     /// Marks the triggering message `message_id` with `emoji`.
     pub(super) async fn mark(&self, message_id: Option<&String>, emoji: &str) {
@@ -36,27 +51,67 @@ impl Lane {
         let on = self
             .config()
             .is_some_and(|s| s.config().gateway.platform(platform).reactions_on(platform));
-        let (Some(message_id), true) = (message_id, on) else {
-            return;
-        };
+        if let (Some(message_id), true) = (message_id, on) {
+            self.react(message_id, emoji).await;
+        }
+    }
+
+    /// Adds `emoji` to message `message_id` of this chat; `false` when the
+    /// adapter has no reactions or the platform refused it.
+    pub(super) async fn react(&self, message_id: &str, emoji: &str) -> bool {
         let Some(slot) = self
             .shared
             .adapters
-            .ready(&self.profile, platform)
+            .ready(&self.profile, &self.routing.platform)
             .filter(|s| s.can(Op::Reactions))
         else {
-            return;
+            return false;
         };
         let reaction = Reaction {
             chat_id: self.routing.chat_id.clone(),
-            message_id: message_id.clone(),
+            message_id: message_id.to_owned(),
             emoji: emoji.to_owned(),
             remove: false,
         };
         match slot.adapter.react(&reaction).await {
-            Ok(()) => {}
-            Err(SendError::Unsupported) => slot.refused(Op::Reactions),
-            Err(err) => tracing::debug!("lifecycle reaction not set: {}", err.describe()),
+            Ok(()) => true,
+            Err(SendError::Unsupported) => {
+                slot.refused(Op::Reactions);
+                false
+            }
+            Err(err) => {
+                tracing::debug!("reaction not set: {}", err.describe());
+                false
+            }
+        }
+    }
+
+    /// Spec: platform-adapters, Busy acknowledgement via reactions: a
+    /// follow-up during a turn gets the platform's `busy_reaction`
+    /// (default `eyes`) instead of a busy text; `false` when it could not.
+    pub(super) async fn react_busy(&self, message_id: Option<&String>) -> bool {
+        let Some(message_id) = message_id else {
+            return false;
+        };
+        let setting = self
+            .config()
+            .and_then(|s| {
+                s.config()
+                    .gateway
+                    .platform(&self.routing.platform)
+                    .busy_reaction
+            })
+            .unwrap_or_else(|| "eyes".to_owned());
+        self.react(message_id, emoji(&setting)).await
+    }
+
+    /// `gateway.ack_reaction` on every accepted inbound message.
+    pub(super) async fn ack_inbound(&self, message_id: &str) {
+        let setting = self
+            .config()
+            .and_then(|s| s.config().gateway.ack_reaction.clone());
+        if let (Some(setting), false) = (setting, message_id.is_empty()) {
+            self.react(message_id, emoji(&setting)).await;
         }
     }
 }

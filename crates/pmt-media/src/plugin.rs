@@ -53,6 +53,8 @@ use crate::speech::tts::{Speak, Voice};
 pub enum Kind {
     /// `image_gen.provider`.
     ImageGen,
+    /// `video_gen.provider`.
+    VideoGen,
     /// `tts.provider`.
     Tts,
     /// `stt.provider`.
@@ -65,6 +67,7 @@ impl Kind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::ImageGen => "image_gen",
+            Self::VideoGen => "video_gen",
             Self::Tts => "tts",
             Self::Stt => "stt",
         }
@@ -167,6 +170,10 @@ pub fn selected(setup: &MediaSetup, kind: Kind) -> Option<Selected> {
         Kind::ImageGen => {
             let id = config.image_gen.provider.as_deref()?;
             (id, image_provider(id).is_some())
+        }
+        Kind::VideoGen => {
+            let id = config.video_gen.provider.as_deref()?;
+            (id, crate::video_gen::catalog::PROVIDERS.contains(&id))
         }
         Kind::Tts => {
             let id = config.tts.provider.as_deref()?;
@@ -340,6 +347,96 @@ pub async fn generate_image(
         ..Generated::default()
     };
     Ok((plan, generated))
+}
+
+/// One `video_generate` call to the plugin provider: the plan the result
+/// reports, the video and its MIME type. The request is the Hermes
+/// `generate` keyword arguments; the answer's `video` is a `data:` URL, an
+/// http(s) URL or a file in the plugin's data directory.
+///
+/// # Errors
+///
+/// The plugin's failure, or an answer that holds no video.
+pub async fn generate_video(
+    setup: &MediaSetup,
+    selected: &Selected,
+    request: &crate::video_gen::Request,
+) -> Result<(crate::video_gen::Plan, Vec<u8>, String), String> {
+    let mut body = json!({"prompt": request.prompt, "aspect_ratio": request.aspect_ratio,
+        "resolution": request.resolution});
+    let optional = [
+        (
+            "model",
+            setup.config().video_gen.model.as_ref().map(|m| json!(m)),
+        ),
+        ("duration", request.duration.map(|d| json!(d))),
+        ("image_url", request.image_url.as_ref().map(|u| json!(u))),
+        (
+            "negative_prompt",
+            request.negative_prompt.as_ref().map(|n| json!(n)),
+        ),
+        ("audio", request.audio.map(Value::Bool)),
+        ("seed", request.seed.map(|s| json!(s))),
+    ];
+    for (key, value) in optional {
+        if let Some(value) = value {
+            body[key] = value;
+        }
+    }
+    if !request.references.is_empty() {
+        body["reference_image_urls"] = json!(request.references);
+    }
+    let answer = setup
+        .plugins
+        .invoke(Kind::VideoGen, &selected.id, body)
+        .await?;
+    if let Some(why) = failure(&answer) {
+        return Err(why);
+    }
+    let video = text(&answer, "video").ok_or("the provider answered no video")?;
+    let (bytes, mime) = if let Some(decoded) = data_url(video) {
+        decoded
+    } else if video.starts_with("https://") || video.starts_with("http://") {
+        let response = setup
+            .fetcher
+            .get(video)
+            .await
+            .map_err(|e| e.message().to_owned())?;
+        read_capped(response, crate::video_gen::MAX_VIDEO_BYTES).await?
+    } else {
+        (
+            read_reported(setup, &selected.plugin, video).await?.0,
+            String::new(),
+        )
+    };
+    if !is_video(&bytes) {
+        return Err("the provider's answer is not a video".to_owned());
+    }
+    let model = text(&answer, "model")
+        .map(str::to_owned)
+        .or_else(|| setup.config().video_gen.model.clone())
+        .unwrap_or_default();
+    let mime = if mime.starts_with("video/") {
+        mime
+    } else {
+        "video/mp4".to_owned()
+    };
+    let plan = crate::video_gen::Plan {
+        provider: selected.id.clone(),
+        model: crate::video_gen::VideoModel::verbatim(&model),
+        access: Access {
+            token: None,
+            billing_source: billing(&answer),
+            gateway_url: None,
+        },
+        base_url: String::new(),
+    };
+    Ok((plan, bytes, mime))
+}
+
+/// Whether `bytes` look like an MP4 (`ftyp`) or Matroska/`WebM` file.
+fn is_video(bytes: &[u8]) -> bool {
+    bytes.get(4..8) == Some(b"ftyp") || bytes.starts_with(&[0x1A, 0x45, 0xDF, 0xA3])
 }
 
 /// The audio of one chunk from the plugin provider of `voice`, and how it

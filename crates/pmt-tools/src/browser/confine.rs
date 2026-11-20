@@ -49,14 +49,53 @@ pub(super) fn sandbox(
     profile: &Path,
     temp: &Path,
 ) -> Result<pmt_sandbox::Sandbox, String> {
-    let (executable, proxy, confinement) = (run.executable, run.proxy, run.confinement);
+    let display = run
+        .options
+        .headed
+        .then_some(run.options.display_env.as_slice());
+    let target = Target {
+        executable: run.executable,
+        profile,
+        temp,
+        display,
+        listen: None,
+    };
+    build(&target, run.proxy, run.confinement)
+}
+
+/// What one confined browser is.
+pub(super) struct Target<'a> {
+    pub(super) executable: &'a Path,
+    pub(super) profile: &'a Path,
+    pub(super) temp: &'a Path,
+    /// A headed browser's display variables.
+    pub(super) display: Option<&'a [(String, std::ffi::OsString)]>,
+    /// A loopback port the browser serves DevTools on, and the parent's
+    /// way to it (Lightpanda).
+    pub(super) listen: Option<(u16, pmt_sandbox::Inbound)>,
+}
+
+/// The sandbox of `target`, going out only through `proxy`.
+///
+/// # Errors
+///
+/// The policy or the platform sandbox cannot be built.
+pub(super) fn build(
+    target: &Target<'_>,
+    proxy: &pmt_net::egress::Proxy,
+    confinement: &Confinement,
+) -> Result<pmt_sandbox::Sandbox, String> {
     let paths = pmt_sandbox::Paths {
         user_home: confinement.user_home.clone(),
         prometheus_home: confinement.prometheus_home.clone(),
-        workspace: profile.to_path_buf(),
-        scratch: vec![temp.to_path_buf()],
+        workspace: target.profile.to_path_buf(),
+        scratch: vec![target.temp.to_path_buf()],
     };
     let error = |e: pmt_core::error::Error| e.message().to_owned();
+    let listen = target
+        .listen
+        .as_ref()
+        .map(|(port, _)| format!("net.listen:loopback:{port}"));
     let mut capabilities = [
         "fs.read:<workspace>/**",
         "fs.write:<workspace>/**",
@@ -67,21 +106,23 @@ pub(super) fn sandbox(
         "net.connect:*",
     ]
     .iter()
-    .chain(LINUX_READS)
-    .map(|c| Capability::parse(c))
+    .copied()
+    .chain(LINUX_READS.iter().copied())
+    .chain(listen.as_deref())
+    .map(Capability::parse)
     .collect::<Result<Vec<_>, _>>()
     .map_err(error)?;
     // A path with spaces (an `.app` bundle) has no capability-string form.
-    let installation = installation(executable);
+    let installation = installation(target.executable);
     if !readable_by_every_container(&installation) {
         capabilities.push(Capability::read_under(&installation));
     }
-    if run.options.headed {
-        capabilities.extend(display_reads(&run.options.display_env));
+    if let Some(display) = target.display {
+        capabilities.extend(display_reads(display));
     }
     let set: CapabilitySet = capabilities.into_iter().collect();
     let mut policy = pmt_sandbox::Policy::from_set(&set, &paths).for_browser();
-    if run.options.headed {
+    if target.display.is_some() {
         policy = policy.with_display();
     }
     // Linux serves the child's private listener from the proxy; on Windows
@@ -96,6 +137,10 @@ pub(super) fn sandbox(
     };
     #[cfg(not(unix))]
     let relay = pmt_sandbox::Relay::new(|_| {});
+    let relay = match &target.listen {
+        Some((_, inbound)) => relay.with_inbound(inbound.clone()),
+        None => relay,
+    };
     let policy = policy.through_proxy(proxy.addr().port(), relay);
     let options = pmt_sandbox::Options {
         launcher: confinement.launcher.clone(),

@@ -136,13 +136,18 @@ The system SHALL treat as private: loopback (IPv4/IPv6), link-local, RFC 1918, I
 - **THEN** the request SHALL be denied
 
 ### Requirement: Credential injection at the egress proxy (upgrade)
-When `security.egress.credential_injection = true` (default false) and a secret is mapped to host patterns in `security.egress.inject.<NAME>`, sandboxed children SHALL receive a per-session placeholder token instead of the secret, and the proxy SHALL replace the placeholder with the real value only on TLS requests to the mapped hosts, rejecting any request that carries the placeholder to an unmapped host with `egress.denied` reason `credential_misdirected`.
+When `security.egress.credential_injection = true` (default false) and a secret is mapped to host patterns in `security.egress.inject.<NAME>`, sandboxed children (a session's processes, stdio MCP servers, python plugin sidecars) SHALL receive a placeholder token, fresh per session or per launch of a shared child, instead of the secret wherever they would receive it, and the proxy SHALL replace the placeholder with the real value only on TLS requests to the mapped hosts, rejecting any request that carries the placeholder to an unmapped host with `egress.denied` reason `credential_misdirected`.
 **Milestone:** M3
 
 #### Scenario: Placeholder sent elsewhere
 - **GIVEN** `GITHUB_TOKEN` mapped to `api.github.com`
 - **WHEN** a child sends the placeholder to `evil.example`
 - **THEN** the proxy SHALL reject the request and the real token SHALL never leave the proxy
+
+#### Scenario: MCP server holds the placeholder
+- **GIVEN** `GITHUB_TOKEN` mapped to `api.github.com` and a stdio MCP server given `GITHUB_TOKEN` through `env_secrets`
+- **WHEN** the server starts and calls `api.github.com` with the value it holds
+- **THEN** the server SHALL hold only the placeholder and the request SHALL reach `api.github.com` with the real token
 
 ### Requirement: Secrets storage
 Secrets SHALL be stored only in `<profile>/secrets.toml` (mode 0600, created with no-follow, written atomically under a lock) or in the OS keychain when `secrets.backend = "keychain"`, SHALL never be stored in `config.toml`, and SHALL be read from the environment only for names matching `PMT_SECRET_*` or a registered provider-native name; credential values SHALL have non-ASCII characters stripped on load with one warning per key.
@@ -366,7 +371,7 @@ The system SHALL support `secrets.command = { enabled = false, argv = [], timeou
 - **THEN** the helper SHALL be killed after 3 seconds, startup SHALL continue and the log SHALL contain no helper output
 
 ### Requirement: Egress proxy operation and status
-The egress proxy SHALL be owned by the gateway daemon and managed with `prometheus egress status [--json] [--show-tokens]`, `start`, `stop` (graceful, forced after 5 seconds), `restart`, `reload` (apply allowlist, denylist and mapping changes without dropping connections) and `rotate [--confirm]`, and `/egress [status]` on every surface; status SHALL show the listener address and port (`security.egress.proxy_port`, default 9090 for container bridge listeners, ephemeral on loopback), mode, credential mappings with placeholder tokens redacted to prefix and suffix unless `--show-tokens`, denied-connection counts and provider secrets that are present but not covered by injection; the proxy's pid file SHALL be created exclusively with no-follow and carry a per-start nonce so a recycled pid is never signalled; a proxy that fails to bind within 5 seconds SHALL fail loudly, and with `security.egress.enforce_on_container = true` (default) container and remote backends SHALL refuse to start while injection is enabled but the proxy is down.
+The egress proxy SHALL be owned by the gateway daemon and managed with `prometheus egress status [--json] [--show-tokens]`, `start`, `stop` (graceful, forced after 5 seconds), `restart`, `reload` (apply allowlist, denylist and mapping changes without dropping connections) and `rotate [--confirm]`, and `/egress [status]` on every surface; status SHALL show the listener address and port (`security.egress.proxy_port`, default 9090 for container bridge listeners, ephemeral on loopback), where the container listener binds where the profile's container runtime reaches the host (loopback behind a runtime VM that forwards the host alias, a rootful runtime's bridge gateway even before its bridge exists, or for a rootless runtime the host's own address, serving only connections that come from the host itself, with the relay's host alias mapped to it; never `0.0.0.0`), mode, credential mappings with placeholder tokens redacted to prefix and suffix unless `--show-tokens`, denied-connection counts and provider secrets that are present but not covered by injection; the proxy's pid file SHALL be created exclusively with no-follow and carry a per-start nonce so a recycled pid is never signalled; a proxy that fails to bind within 5 seconds SHALL fail loudly, and with `security.egress.enforce_on_container = true` (default) container and remote backends SHALL refuse to start while injection is enabled but the proxy is down.
 **Milestone:** M3
 
 #### Scenario: Proxy down with enforcement
@@ -374,14 +379,29 @@ The egress proxy SHALL be owned by the gateway daemon and managed with `promethe
 - **WHEN** a container session starts
 - **THEN** the session SHALL fail with `egress proxy is not running` rather than starting with real credentials
 
+#### Scenario: Rootless runtime listener
+- **GIVEN** credential injection enabled and a rootless container runtime whose bridge gateway is no address of the host
+- **WHEN** the proxy starts
+- **THEN** it SHALL start, its container listener SHALL be on the host's own address and serve only connections from the host, and the relay SHALL map the host alias to that address
+
 ### Requirement: Egress proxy coverage of containers and remote sandboxes
-When credential injection is enabled the system SHALL route container and remote-sandbox traffic through the egress proxy (proxy env vars plus, for containers, a network that only reaches the proxy), SHALL generate a per-profile CA at `<profile>/egress/ca.crt` with its key at `ca.key` (0600, created with no-follow, never copied off the host), SHALL mount the certificate read-only into containers and upload it to remote sandboxes, set `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NODE_OPTIONS=--use-openssl-ca` to it, and SHALL by default allow injected credentials only toward the built-in provider hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.x.ai`, `api.mistral.ai`, `api.groq.com`, `api.together.xyz`, `api.deepseek.com`, `inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`; the proxy SHALL always deny the private and metadata ranges of this spec on its upstream side regardless of host allowlists.
+When credential injection is enabled the system SHALL route container and remote-sandbox traffic through the egress proxy (proxy env vars plus, for containers, a network that only reaches the proxy: an internal runtime network per profile whose only other member is a relay to the proxy; for SSH hosts, a reverse forward from the remote loopback to the proxy on a connection of its own, failing closed when the server refuses it), SHALL refuse sandboxes it cannot keep to the proxy (plugin remote sandboxes, which cannot reach the host, and singularity instances, which share the host's network) with `egress.proxy_unreachable`, SHALL generate a per-profile CA at `<profile>/egress/ca.crt` with its key at `ca.key` (0600, created with no-follow, never copied off the host), SHALL mount the certificate read-only into containers and upload it to remote sandboxes, set `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` and `NODE_OPTIONS=--use-openssl-ca` to it, and SHALL by default allow injected credentials only toward the built-in provider hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`, `api.anthropic.com`, `generativelanguage.googleapis.com`, `api.x.ai`, `api.mistral.ai`, `api.groq.com`, `api.together.xyz`, `api.deepseek.com`, `inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`; the proxy SHALL always deny the private and metadata ranges of this spec on its upstream side regardless of host allowlists.
 **Milestone:** M3
 
 #### Scenario: CA inside the container
 - **GIVEN** credential injection enabled and a container session
 - **WHEN** the model runs `python -c "import requests; requests.get('https://api.openai.com/v1/models')"` with the placeholder token
 - **THEN** TLS SHALL verify against the mounted CA and the upstream request SHALL carry the real key
+
+#### Scenario: SSH sandbox through the tunnelled proxy
+- **GIVEN** credential injection enabled and the `ssh` backend
+- **WHEN** the model runs a request with the placeholder token on the SSH host
+- **THEN** it SHALL go through the reverse-forwarded proxy, verify TLS against the uploaded CA and reach the upstream with the real key, and a server refusing the forward SHALL run no command
+
+#### Scenario: Sandbox the proxy cannot cover
+- **GIVEN** credential injection enabled, the proxy running and `terminal.backend = "singularity"`
+- **WHEN** a session runs a command
+- **THEN** it SHALL be refused with `egress.proxy_unreachable` and nothing SHALL run
 
 ### Requirement: Egress credential source and placeholder rotation
 `security.egress.credential_source` SHALL be `store` (default: the profile's secrets store) or `bitwarden` (refetched from Bitwarden Secrets Manager on every proxy start); with `bitwarden`, a missing access token, missing project id or a mapped secret absent from the fetch SHALL make the proxy refuse to start listing the missing names unless `security.egress.allow_store_fallback = true`; `prometheus egress rotate` SHALL require typing `rotate` (or `--confirm`) because it invalidates placeholders in running sandboxes, SHALL back up the previous mapping file (0600), mint new placeholders for every mapped secret, and push them to running sessions' sandboxes on their next command; re-running setup without `rotate` SHALL keep existing placeholders and mint only for new mappings.

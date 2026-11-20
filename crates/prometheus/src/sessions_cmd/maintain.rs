@@ -7,7 +7,7 @@ use std::io::IsTerminal as _;
 use std::path::Path;
 
 use pmt_config::ProfileScope;
-use pmt_config::schema::JournalMode;
+use pmt_config::schema::{JournalMode, StorageEncryption};
 use pmt_core::error::Error;
 use pmt_core::runtime::{Role, WriterLock};
 use pmt_store::{ListOptions, Session, Store, TitleSource, TitleWrite, Visibility};
@@ -64,6 +64,38 @@ pub(super) fn recover(
     if ctx.json {
         return print_json(&json!({"report": report, "swapped": kept.is_some(), "original": kept}));
     }
+    Ok(0)
+}
+
+/// `sessions encrypt|decrypt` (spec: session-storage, Encryption at rest
+/// option): converts the closed store, then records the mode in
+/// `config.toml`.
+pub(super) fn convert(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    wanted: StorageEncryption,
+) -> Result<u8, Error> {
+    let _lock = closed(scope)?;
+    let current = scope.config().storage.encryption;
+    let keychain: std::sync::Arc<dyn pmt_config::secrets::Keychain> =
+        std::sync::Arc::new(pmt_config::secrets::OsKeychain);
+    let done = pmt_store::crypt::convert::convert_store(scope, &keychain, current, wanted)?;
+    let name = match wanted {
+        StorageEncryption::None => "none",
+        StorageEncryption::Keychain => "keychain",
+        StorageEncryption::Passphrase => "passphrase",
+    };
+    scope
+        .profile()
+        .config_file()
+        .set("storage.encryption", name)?;
+    if ctx.json {
+        return print_json(&json!({"encryption": name, "blobs": done.blobs}));
+    }
+    eprintln!(
+        "state.db and {} blob file(s) converted; storage.encryption = \"{name}\"",
+        done.blobs
+    );
     Ok(0)
 }
 

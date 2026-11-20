@@ -14,7 +14,7 @@ use super::spawn::{Dispatched, Mode};
 use super::units::Unit;
 use super::{Delegator, Dispatch};
 use crate::Refusal;
-use crate::contract;
+use crate::contract::{self, Join};
 
 /// What a labelled dispatch runs.
 #[derive(Debug, Clone)]
@@ -72,7 +72,7 @@ impl Delegator {
             live,
             independent: false,
         };
-        self.dispatch_background(&id, dispatched, sink, Some(&request.label));
+        self.dispatch_background(&id, dispatched, sink, (Some(&request.label), Join::All));
         Ok(id)
     }
 }

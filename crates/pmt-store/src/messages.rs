@@ -6,8 +6,6 @@
 //! all of the batch or none of it. Payloads over [`SPILL_BYTES`] are moved
 //! to the blob store before the transaction and referenced by SHA-256.
 
-use std::path::Path;
-
 use jiff::Timestamp;
 use pmt_core::error::Error;
 use pmt_core::id::{MessageId, SessionId};
@@ -163,7 +161,7 @@ pub(crate) struct Prepared {
     hash: String,
 }
 
-fn place(blob_dir: &Path, text: Option<String>) -> Result<Option<Stored>, Error> {
+fn place(blob_dir: &crate::blobs::Blobs, text: Option<String>) -> Result<Option<Stored>, Error> {
     text.map(|text| {
         if text.len() > SPILL_BYTES {
             blobs::put(blob_dir, text.as_bytes()).map(Stored::Blob)
@@ -180,7 +178,7 @@ fn place(blob_dir: &Path, text: Option<String>) -> Result<Option<Stored>, Error>
 /// storage), so the stored row, its blobs and its hash never hold a known
 /// secret.
 pub(crate) fn prepare(
-    blob_dir: &Path,
+    blob_dir: &crate::blobs::Blobs,
     message: &NewMessage,
     redactor: Option<&Redactor>,
 ) -> Result<Prepared, Error> {
@@ -302,7 +300,7 @@ const COLUMNS: &str = "id, session_id, seq, role, content, content_ref, tool_cal
     reasoning, reasoning_ref, provider_payload, provider_payload_ref, tool_call_id, tool_name, \
     metadata, content_hash, created_at, active, compacted, compaction_epoch";
 
-fn message_from_row(blob_dir: &Path, row: &Row<'_>) -> Result<Message, Error> {
+fn message_from_row(blob_dir: &crate::blobs::Blobs, row: &Row<'_>) -> Result<Message, Error> {
     let text = |i: usize| row.get::<_, Option<String>>(i).map_err(sql);
     let payload = |i: usize| -> Result<Option<String>, Error> {
         if let Some(inline) = text(i)? {
@@ -350,7 +348,7 @@ fn message_from_row(blob_dir: &Path, row: &Row<'_>) -> Result<Message, Error> {
 
 pub(crate) fn load(
     conn: &Connection,
-    blob_dir: &Path,
+    blob_dir: &crate::blobs::Blobs,
     session: SessionId,
     visibility: Visibility,
 ) -> Result<Vec<Message>, Error> {
@@ -365,7 +363,7 @@ pub(crate) fn load(
 /// Calls `each` with every row of the transcript in `seq` order.
 pub(crate) fn for_each(
     conn: &Connection,
-    blob_dir: &Path,
+    blob_dir: &crate::blobs::Blobs,
     session: SessionId,
     visibility: Visibility,
     mut each: impl FnMut(Message) -> Result<(), Error>,
@@ -412,7 +410,7 @@ impl Store {
         messages: &[NewMessage],
     ) -> Result<Vec<u64>, Error> {
         self.ensure_writable()?;
-        let blob_dir = self.location().blobs();
+        let blob_dir = &self.blobs();
         let redactor = self.redactor();
         let rows = messages
             .iter()
@@ -476,7 +474,7 @@ impl Store {
         session: SessionId,
         visibility: Visibility,
     ) -> Result<Vec<Message>, Error> {
-        let blob_dir = self.location().blobs().to_path_buf();
+        let blob_dir = self.blobs();
         self.read(|conn| load(conn, &blob_dir, session, visibility))
     }
 }

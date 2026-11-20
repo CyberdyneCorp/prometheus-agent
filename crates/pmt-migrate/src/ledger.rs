@@ -179,6 +179,12 @@ impl Ledger {
         Self { path: None, file }
     }
 
+    /// The file it is saved to (`None`: never saved).
+    #[must_use]
+    pub fn file(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
     /// The record of `key`.
     #[must_use]
     pub fn get(&self, key: &str) -> Option<&Record> {

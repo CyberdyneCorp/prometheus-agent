@@ -18,6 +18,7 @@ use crate::output::{document, print_raw};
 /// The profile cannot be opened or the log cannot be read.
 pub fn run(command: &SecurityCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
+        SecurityCommand::Scan(args) => crate::security_scan::run(args, ctx),
         SecurityCommand::Audit {
             command: AuditCommand::Verify,
         } => verify(ctx),

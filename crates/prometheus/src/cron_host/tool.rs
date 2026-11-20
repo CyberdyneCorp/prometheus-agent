@@ -71,7 +71,7 @@ impl CronPort for ToolPort {
             let reply = if arguments["action"] == "run" {
                 self.run_now(session, &arguments).await
             } else {
-                self.run(session, &arguments)
+                self.change(session, &arguments).await
             };
             match reply {
                 Ok(reply) => ToolResult::ok(reply.to_string()),
@@ -108,6 +108,7 @@ pub(crate) fn fields(arguments: &Value, scope: &ProfileScope) -> Result<Fields, 
     Ok(Fields {
         schedule: text(arguments, "schedule"),
         schedule_text: text(arguments, "schedule_text"),
+        translated: None,
         prompt: text(arguments, "prompt"),
         skills: list(arguments, "skills"),
         script: text(arguments, "script"),
@@ -192,6 +193,15 @@ pub(crate) fn needs_confirmation(echo: &Echo, token: &str) -> Value {
     })
 }
 
+/// A confirmation request naming the free-form text its schedule was
+/// translated from, so the user confirms the translation.
+fn translated_from(mut reply: Value, fields: &Fields) -> Value {
+    if let Some(text) = &fields.schedule_text {
+        reply["translated_from"] = json!(text);
+    }
+    reply
+}
+
 /// What a finished tool run reports to its session.
 fn outcome(job: &Job, run: &RunRow) -> String {
     let excerpt: String = run
@@ -220,7 +230,56 @@ fn outcome(job: &Job, run: &RunRow) -> String {
 }
 
 impl ToolPort {
-    fn run(&self, session: SessionId, arguments: &Value) -> Result<Value, Error> {
+    /// Every action but `run`; a job change re-arms the managed scheduler
+    /// (spec: Managed scheduler contract), whose failure leaves it to the
+    /// daemon's next pass.
+    async fn change(&self, session: SessionId, arguments: &Value) -> Result<Value, Error> {
+        let translated = self.translated(session, arguments).await?;
+        let reply = self.run(session, arguments, translated)?;
+        let reads = arguments["action"] == "list" || arguments["action"] == "runs";
+        if !reads && let Err(err) = super::managed::sync(&self.scope, &self.store).await {
+            tracing::warn!("{}", err.message());
+        }
+        Ok(reply)
+    }
+
+    /// The call's `schedule_text` translated by the auxiliary model (the
+    /// usage is the session's), in the zone the job will run in.
+    async fn translated(
+        &self,
+        session: SessionId,
+        arguments: &Value,
+    ) -> Result<Option<pmt_cron::schedule::Schedule>, Error> {
+        let Some(schedule_text) = text(arguments, "schedule_text") else {
+            return Ok(None);
+        };
+        let profile_zone = profile_zone(&self.scope)?;
+        let job_zone = match (arguments["action"].as_str(), text(arguments, "job_id")) {
+            (Some("update"), Some(key)) => {
+                let spec = ops::find(&self.store, &key)?.spec;
+                spec.zone(&profile_zone).unwrap_or(profile_zone)
+            }
+            _ => profile_zone,
+        };
+        let zone = super::translate::zone_of(&fields(arguments, &self.scope)?, &job_zone)?;
+        let models = crate::chat::session::model::Models::open(
+            &self.scope,
+            &self.store,
+            self.launch.user_home().map(std::path::PathBuf::as_path),
+            &crate::chat::session::model::RouteFlags::default(),
+            None,
+        )?;
+        super::translate::translate(&models, session, &schedule_text, &zone, Timestamp::now())
+            .await
+            .map(Some)
+    }
+
+    fn run(
+        &self,
+        session: SessionId,
+        arguments: &Value,
+        translated: Option<pmt_cron::schedule::Schedule>,
+    ) -> Result<Value, Error> {
         let now = Timestamp::now();
         let action = arguments["action"].as_str().unwrap_or_default();
         let job = || {
@@ -228,11 +287,11 @@ impl ToolPort {
                 .ok_or_else(|| usage(format!("cronjob {action} needs 'job_id'")))
         };
         match action {
-            "create" => self.create(session, arguments, now),
+            "create" => self.create(session, (arguments, translated), now),
             "list" => Ok(
                 json!({"jobs": self.store.cron_jobs()?.into_iter().filter_map(|r| Job::from_row(r).ok()).map(|j| summary(&j)).collect::<Vec<_>>()}),
             ),
-            "update" => self.update(session, &job()?, arguments, now),
+            "update" => self.update(session, &job()?, (arguments, translated), now),
             "pause" => Ok(summary(&ops::pause(
                 &self.store,
                 &job()?,
@@ -301,8 +360,13 @@ impl ToolPort {
     }
 
     /// The call's job fields, refused when they reach past the session.
-    fn model_fields(&self, session: SessionId, arguments: &Value) -> Result<Fields, Error> {
+    fn model_fields(
+        &self,
+        session: SessionId,
+        (arguments, translated): (&Value, Option<pmt_cron::schedule::Schedule>),
+    ) -> Result<Fields, Error> {
         let mut fields = fields(arguments, &self.scope)?;
+        fields.translated = translated;
         self.check_workdir(session, &mut fields)?;
         self.caller.check(&fields)?;
         Ok(fields)
@@ -327,12 +391,12 @@ impl ToolPort {
     fn create(
         &self,
         session: SessionId,
-        arguments: &Value,
+        (arguments, translated): (&Value, Option<pmt_cron::schedule::Schedule>),
         now: Timestamp,
     ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let fields = self.model_fields(session, arguments)?;
+        let fields = self.model_fields(session, (arguments, translated))?;
         let mut spec = fields.new_spec(now, &profile.zone)?;
         let origin = self.origin(session);
         if spec.deliver.is_empty() {
@@ -358,9 +422,9 @@ impl ToolPort {
                 &codes::CRON_CONFIRMATION,
                 "the confirm_token is unknown, expired or for different job fields: ask again without it",
             )),
-            None => Ok(needs_confirmation(
-                &echo,
-                &ops::confirm_token(&spec, name.as_deref(), now),
+            None => Ok(translated_from(
+                needs_confirmation(&echo, &ops::confirm_token(&spec, name.as_deref(), now)),
+                &fields,
             )),
         }
     }
@@ -369,12 +433,12 @@ impl ToolPort {
         &self,
         session: SessionId,
         key: &str,
-        arguments: &Value,
+        (arguments, translated): (&Value, Option<pmt_cron::schedule::Schedule>),
         now: Timestamp,
     ) -> Result<Value, Error> {
         let scripts = scripts_dir(&self.scope);
         let profile = self.profile(&scripts)?;
-        let fields = self.model_fields(session, arguments)?;
+        let fields = self.model_fields(session, (arguments, translated))?;
         let name = text(arguments, "name");
         if fields.reschedules() {
             let current = ops::find(&self.store, key)?;
@@ -384,9 +448,9 @@ impl ToolPort {
             let confirmed = text(arguments, "confirm_token")
                 .is_some_and(|token| ops::redeem(&token, &spec, name.as_deref(), now));
             if !confirmed {
-                return Ok(needs_confirmation(
-                    &echo,
-                    &ops::confirm_token(&spec, name.as_deref(), now),
+                return Ok(translated_from(
+                    needs_confirmation(&echo, &ops::confirm_token(&spec, name.as_deref(), now)),
+                    &fields,
                 ));
             }
         }

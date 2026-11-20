@@ -8,6 +8,7 @@
 
 import type { ApprovalRequestParams } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
+import { LanguagePicker } from "../../../web/src/lib/language";
 import { Prefs } from "../../../web/src/lib/prefs";
 import { applyFonts, restore, snapshot, Zoom } from "./appearance";
 import { Attention, focusCard } from "./attention";
@@ -137,6 +138,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   const list = h("ul", { class: "sessions", "aria-label": "Sessions" });
   const picker = h("select", { name: "profile", "aria-label": "Profile" }, ...served.map((p) => h("option", { value: p, selected: p === "default" }, p)));
   const desktopSection = h("section", { class: "desktop-settings", "aria-label": "Desktop settings" });
+  // The profile's display.language; a right-to-left choice mirrors the window at once.
+  const language = new LanguagePicker((method, params) => client.call(method, params), () => client.profile);
   const connections = new ConnectionsPanel();
   const background = new Background((id, params, title) => attention.approval(id, params, title));
   // Bot messages between this desktop's connections travel through it.
@@ -231,6 +234,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     void panels.load(client.profile);
     void projects.load();
     void applyFonts(client);
+    void language.load().catch((err: unknown) => console.warn("languages unavailable:", err));
     if (!isWebapp()) void desktopSettings(client, desktopSection).catch((err: unknown) => console.warn("desktop settings:", err));
   };
   client.onReattached = () => void chat.reattached();
@@ -269,7 +273,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     exportProfile: files.exportProfile,
     importProfile: files.importProfile,
   });
-  const work = workspace(client, chat, h("div", {}, settings.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  const work = workspace(client, chat, h("div", {}, settings.el, language.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
   if (isWebapp()) webappParts(client, chat, work.terminal, [desktopSection, connections.el]);
   const guide = new Guide();
   const onboarding = new Onboarding(client, chat, prefs, dialogs);

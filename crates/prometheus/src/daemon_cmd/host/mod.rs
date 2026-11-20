@@ -42,6 +42,8 @@ mod cron;
 mod cron_admit;
 mod cron_continue;
 mod cron_fire;
+mod cron_managed;
+pub(super) use cron_managed::FireEndpoint;
 mod cron_send;
 #[cfg(feature = "dashboard")]
 mod dashboard;
@@ -59,6 +61,8 @@ mod health_sample;
 mod interop;
 mod kanban;
 mod listing;
+mod live;
+mod local_telemetry;
 mod model_picker;
 mod notify;
 mod panes;
@@ -152,17 +156,25 @@ struct Profile {
     /// (shared with every factory, whose shared tools read it).
     current: SharedScope,
     store: Arc<Store>,
+    /// The profile's egress proxy, when this daemon started it (it ends
+    /// when this is dropped: its stdin closes).
+    #[allow(dead_code)] // held for its lifetime only
+    egress_proxy: Mutex<Option<std::process::Child>>,
     /// What the reloads did, for `daemon status`.
     config: Mutex<reload::State>,
     /// Held across a whole config re-read, so a plugin reload that finds
     /// the file unchanged waits for the poll that is still applying it.
     rereading: tokio::sync::Mutex<()>,
-    /// Session machinery per working directory and setup.
-    factories: Mutex<HashMap<(PathBuf, SessionSetup), Arc<Factory>>>,
+    /// Session machinery per working directory, setup and whether a
+    /// person attends its sessions ([`setup::attended`]).
+    factories: Mutex<HashMap<(PathBuf, SessionSetup, bool), Arc<Factory>>>,
     setups: Mutex<HashMap<SessionId, SessionSetup>>,
     loaded: tokio::sync::Mutex<HashMap<SessionId, Arc<Loaded>>>,
     /// Wakes the profile's scheduler loop (a webhook queued a run).
     cron_wake: tokio::sync::Notify,
+    /// The profile's concurrent scheduled runs (`cron.max_parallel_jobs`
+    /// when first used), shared by the scheduler loop and managed fires.
+    cron_permits: std::sync::OnceLock<Arc<tokio::sync::Semaphore>>,
     /// Wakes the profile's automation loop (a command set something).
     automation_wake: tokio::sync::Notify,
 }
@@ -228,19 +240,25 @@ impl Profile {
     fn open(scope: ProfileScope) -> Result<Arc<Self>, Error> {
         let store = Arc::new(Store::open(&scope)?);
         crate::chat::session::backend::reap_orphans_in_background(&scope);
+        let egress_proxy = Mutex::new(crate::egress::gateway::own(&scope));
         // Children a previous daemon left running end `interrupted`; their
         // completions are owed to their sessions.
         pmt_delegation::host::deliver::recover(&store);
+        if let Err(err) = store.forget_ephemeral() {
+            tracing::error!("ephemeral transcripts left by a previous daemon stay: {err}");
+        }
         let state = reload::State::new(&scope);
         Ok(Arc::new(Self {
             current: SharedScope::new(scope),
             config: Mutex::new(state),
             rereading: tokio::sync::Mutex::default(),
             store,
+            egress_proxy,
             factories: Mutex::default(),
             setups: Mutex::default(),
             loaded: tokio::sync::Mutex::default(),
             cron_wake: tokio::sync::Notify::new(),
+            cron_permits: std::sync::OnceLock::new(),
             automation_wake: tokio::sync::Notify::new(),
         }))
     }
@@ -248,6 +266,14 @@ impl Profile {
     /// The configuration new sessions start with.
     fn scope(&self) -> ProfileScope {
         self.current.get()
+    }
+
+    /// The permits of the profile's concurrent scheduled runs.
+    fn cron_permits(&self) -> Arc<tokio::sync::Semaphore> {
+        Arc::clone(
+            self.cron_permits
+                .get_or_init(|| crate::cron_host::permits(&self.scope().config().cron)),
+        )
     }
 }
 
@@ -379,7 +405,7 @@ impl DaemonHost {
             .remove(&id)
             .or_else(|| frozen_policy(profile, &row))
             .unwrap_or_default();
-        let factory = self.factory(profile, cwd, &setup)?;
+        let factory = self.factory_of(profile, cwd, &setup, &row)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
         // A chat's session tells the chat when its background processes
         // end; an interactive client session tells its clients. Other
@@ -420,7 +446,8 @@ impl DaemonHost {
             completions,
             sudo,
         };
-        let mut live = factory.open_with(id, &target, Some(clients)).await?;
+        // Boxed: opening a session is the largest future of the daemon.
+        let mut live = Box::pin(factory.open_with(id, &target, Some(clients))).await?;
         live.memory.setup().notices.bind(notify::memory_sink(
             chat.clone(),
             profile.scope().name().to_string(),
@@ -437,8 +464,7 @@ impl DaemonHost {
         if let Some(prompts) = live.clarify.take() {
             pmt_core::spawn::spawn(clarify(prompts, link.clone()).in_current_span());
         }
-        // Tool progress is rendered by clients from `session.event`.
-        drop(live.progress.take());
+        setup::client_rendered(&mut live, &setup);
         let session = Arc::new(Loaded {
             live,
             factory,
@@ -615,23 +641,13 @@ impl Host for DaemonHost {
             let cwd = Self::cwd_of(profile, given.as_deref());
             std::fs::create_dir_all(&cwd).map_err(|e| Error::io(&codes::HOME_IO, &cwd, &e))?;
             let setup = params.setup.clone();
-            let factory = self.factory(profile, cwd.clone(), &setup)?;
+            let attended = setup::attended(source, &pmt_store::Origin::None);
+            let factory = self.factory_for(profile, cwd.clone(), &setup, attended)?;
             let target = factory.models.primary(&setup::flags(&setup)).await?;
             let mut new = NewSession::new(source);
             new.provider = Some(target.provider.clone());
             new.model.clone_from(&target.model);
-            if let Some(tag) = &params.source_tag {
-                pmt_store::sessions::check_source_tag(tag)?;
-                // Only `onboarding.ensure` makes the onboarding chat, the
-                // one session with `setup_beat`.
-                if tag == crate::chat::session::tools::ONBOARDING_TAG {
-                    return Err(Error::new(
-                        &codes::SESSION_INVALID_SOURCE_TAG,
-                        "the source tag 'onboarding' is reserved for the desktop's onboarding chat (onboarding.ensure)",
-                    ));
-                }
-                new.source_tag = Some(tag.clone());
-            }
+            setup::tag(&params, &mut new)?;
             new.cwd = Some(cwd.to_string_lossy().into_owned());
             let session = profile.store.create_session(&new)?;
             editor::created(&profile.store, session.id, &params.editor_mcp_servers)?;
@@ -709,6 +725,11 @@ impl Host for DaemonHost {
                     id: m.id.to_string(),
                     role: m.role.as_str().to_owned(),
                     reactions: desktop_ui::reactions_of(m.metadata.as_ref()),
+                    author: m
+                        .metadata
+                        .as_ref()
+                        .and_then(|meta| meta["author"]["client_id"].as_str())
+                        .map(str::to_owned),
                     text: m.content,
                 })
                 .collect();
@@ -756,6 +777,7 @@ impl Host for DaemonHost {
                 tokens,
                 context_window,
                 cost_usd: (cost.calls > cost.unpriced_calls).then_some(cost.cost_usd),
+                local_resources: local_telemetry::sample(&profile.scope(), route.as_ref()),
                 billing_source: route.map(|r| r.billing_source),
                 subscription,
                 categories,
@@ -946,6 +968,7 @@ impl Host for DaemonHost {
         Ok(pmt_gateway::vault::VaultAccess {
             vault: crate::vault_cmd::open(&scope),
             scope,
+            launch_path: self.launch.inherited("PATH").map(ToOwned::to_owned),
         })
     }
 
@@ -1065,13 +1088,18 @@ impl Host for DaemonHost {
         Box::pin(self.reload_config(profile))
     }
 
+    fn languages<'a>(&'a self, profile: &'a str) -> HostFuture<'a, pmt_rpc::contracts::Languages> {
+        let languages = self.languages_of(profile);
+        Box::pin(async move { languages })
+    }
+
     fn queue<'a>(
         &'a self,
         profile: &'a str,
         op: pmt_gateway::host::QueueOp,
         link: Link,
     ) -> HostFuture<'a, pmt_rpc::contracts::QueueState> {
-        Box::pin(async move { self.queue_op(&self.profile(profile)?, op, &link).await })
+        Box::pin(async move { Box::pin(self.queue_op(&self.profile(profile)?, op, &link)).await })
     }
 
     fn fs_list<'a>(
@@ -1080,10 +1108,9 @@ impl Host for DaemonHost {
         params: pmt_rpc::contracts::FsListParams,
         link: Link,
     ) -> HostFuture<'a, pmt_rpc::contracts::FsListing> {
-        Box::pin(async move {
-            self.fs_list_of(&self.profile(profile)?, params, &link)
-                .await
-        })
+        Box::pin(
+            async move { Box::pin(self.fs_list_of(&self.profile(profile)?, params, &link)).await },
+        )
     }
 
     fn fs_read<'a>(
@@ -1092,10 +1119,9 @@ impl Host for DaemonHost {
         params: pmt_rpc::contracts::FsReadParams,
         link: Link,
     ) -> HostFuture<'a, pmt_rpc::contracts::FsFile> {
-        Box::pin(async move {
-            self.fs_read_of(&self.profile(profile)?, params, &link)
-                .await
-        })
+        Box::pin(
+            async move { Box::pin(self.fs_read_of(&self.profile(profile)?, params, &link)).await },
+        )
     }
 
     fn artifacts<'a>(
@@ -1143,6 +1169,10 @@ impl Host for DaemonHost {
     }
 
     fn panes(&self) -> Option<&dyn pmt_gateway::panes::PanesHost> {
+        Some(self)
+    }
+
+    fn live(&self) -> Option<&dyn pmt_gateway::live::LiveHost> {
         Some(self)
     }
 

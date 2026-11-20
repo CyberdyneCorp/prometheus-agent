@@ -14,6 +14,8 @@
 //!   tool, [`doctor`] the health report.
 //! - [`blueprint`]: parameterised automation blueprints; [`suggest`]: the
 //!   suggested automations inbox.
+//! - [`managed`]: the managed scheduler contract (arming, fire tokens and
+//!   the claim of a signalled occurrence).
 
 pub mod blueprint;
 pub mod clock;
@@ -27,6 +29,7 @@ pub mod fields;
 pub mod grace;
 pub mod incident;
 pub mod job;
+pub mod managed;
 pub mod notepad;
 pub mod ops;
 pub mod prompt;

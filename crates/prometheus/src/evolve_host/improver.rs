@@ -106,6 +106,7 @@ impl HostImprover {
             provider: provider.as_deref(),
             model: model.as_deref(),
             mock_script: None,
+            unrecorded: false,
         };
         let options = Options {
             interactive: false,

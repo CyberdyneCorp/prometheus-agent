@@ -70,6 +70,34 @@ pub fn image(context: ProbeContext<'_>) -> Result<(), String> {
     }
 }
 
+/// `video_generate`: the selected built-in provider's credential, or,
+/// unset, any detectable one (`FAL_KEY`, `XAI_API_KEY`, a Nous sign-in).
+///
+/// # Errors
+///
+/// The missing credential.
+pub fn video(context: ProbeContext<'_>) -> Result<(), String> {
+    let has = context.has_secret;
+    match context.config.video_gen.provider.as_deref() {
+        None => needs(
+            has,
+            &["FAL_KEY".into(), "XAI_API_KEY".into(), signin("nous")],
+            "FAL_KEY (video_gen.provider unset; fal is the default)",
+        ),
+        Some("nous") => needs(has, &[signin("nous")], "a Nous Portal sign-in"),
+        Some("xai") => needs(
+            has,
+            &["XAI_API_KEY".into(), signin("xai-oauth")],
+            "XAI_API_KEY or an xai-oauth sign-in",
+        ),
+        Some("fal") => needs(has, &["FAL_KEY".into()], "FAL_KEY"),
+        Some("openrouter") => needs(has, &["OPENROUTER_API_KEY".into()], "OPENROUTER_API_KEY"),
+        Some("deepinfra") => needs(has, &["DEEPINFRA_API_KEY".into()], "DEEPINFRA_API_KEY"),
+        // Maybe a plugin's: the call fails closed when nothing provides it.
+        Some(_) => Ok(()),
+    }
+}
+
 /// `text_to_speech`: the keyless default, local engines, command and
 /// plugin providers are always offered; a selected cloud provider needs
 /// its key (or the Nous sign-in).

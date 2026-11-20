@@ -49,6 +49,7 @@ impl Lane {
             self.callback(&routing, data);
             return;
         }
+        self.ack_inbound(&inbound.message_id).await;
         if self.answer_numbered(&routing, &inbound.text)
             || self.answer_clarify(&routing, &inbound.text)
         {
@@ -143,6 +144,8 @@ impl Lane {
             "pair" => self.pair(&call.routing, &table, &call.args),
             "pause" => self.pause_command(&call.routing, &call.args),
             "sethome" => self.set_home(&call.routing),
+            "link" => self.link_command(&call.routing, &call.args),
+            "unlink" => self.unlink_command(&call.routing, &call.args),
             "policy" => self.policy_command(&call.routing, &call.args).await,
             "commands" => self.commands_command(&call.routing, &call.args),
             "busy" => self.busy_command(&call.routing, &call.args),

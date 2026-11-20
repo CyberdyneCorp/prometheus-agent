@@ -102,6 +102,7 @@ fn serve(stream: std::net::TcpStream, received: &Received) {
 
 fn exporter(endpoint: &str, capture_content: bool) -> Exporter {
     let exporter = Exporter::start(ExportSettings {
+        metrics: true,
         endpoint: endpoint.to_owned(),
         protocol: OtelProtocol::HttpProtobuf,
         headers: vec![("x-api-key".to_owned(), "k".to_owned())],
@@ -138,6 +139,7 @@ fn turn(trace: &SessionTrace, prompt: &str) {
         Event::UserMessage(MessageText {
             message_id: None,
             text: prompt.to_owned(),
+            author: None,
         }),
         "turn_1",
     ));
@@ -157,6 +159,7 @@ fn turn(trace: &SessionTrace, prompt: &str) {
             duration_ms: Some(3),
             output: Some(format!("the file says: {prompt}")),
             error: None,
+            taint: None,
         }),
         "turn_1",
     ));
@@ -348,6 +351,7 @@ fn subagent_spans_join_the_parent_trace() {
             duration_ms: Some(10),
             output: None,
             error: None,
+            taint: None,
         }),
         "turn_p",
     ));
@@ -388,6 +392,7 @@ fn tool_failures_count_by_tool_outcome_and_kind() {
                 code: None,
                 message: "slow".to_owned(),
             }),
+            taint: None,
         }),
         "t",
     ));

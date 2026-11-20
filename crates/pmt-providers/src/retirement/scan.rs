@@ -208,6 +208,7 @@ fn auxiliary_slots<'a>(config: &'a Config, main: Option<&'a str>, slots: &mut Ve
         ("voice_chat", &aux.voice_chat),
         ("commit_message", &aux.commit_message),
         ("kanban", &aux.kanban),
+        ("schedule", &aux.schedule),
     ];
     for (name, task) in tasks {
         let Some(task) = task else { continue };

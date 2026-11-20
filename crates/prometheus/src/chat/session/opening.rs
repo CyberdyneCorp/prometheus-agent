@@ -148,6 +148,64 @@ impl Factory {
         (prompt, sections, lessons.injected)
     }
 
+    /// The route session `id` opens on (spec: model-providers, Cost and
+    /// latency aware routing policy): a new top-level session that did not
+    /// pin its route takes the one `routing.policy` picks, recorded on its
+    /// row; a resumed session, a delegated child and a pinned scheduled run
+    /// keep `target`, so a route never changes mid-session.
+    ///
+    /// # Errors
+    ///
+    /// Store errors; a routing candidate naming an unknown provider.
+    pub(super) async fn route_for(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        child: Option<&ChildSpec>,
+    ) -> Result<
+        (
+            pmt_providers::resolve::Target,
+            Option<pmt_obs::trajectory::payload::RouteSelected>,
+        ),
+        Error,
+    > {
+        let pinned_run = self.options.cron.as_ref().is_some_and(|run| run.pinned);
+        if child.is_some() || pinned_run || self.store.session(id)?.message_count > 0 {
+            return Ok((target.clone(), None));
+        }
+        let (routed, event) = self.models.routed(target).await?;
+        if event.is_some() && routed != *target {
+            self.store
+                .set_session_route(id, &routed.provider, routed.model.as_deref())?;
+        }
+        Ok((routed, event))
+    }
+
+    /// [`Factory::route_for`] then [`Factory::model_for`] of the route:
+    /// the session's route (boxed, as is its choice event, to keep the
+    /// opening future small) and its model port.
+    ///
+    /// # Errors
+    ///
+    /// As both.
+    pub(super) async fn routed_model(
+        &self,
+        id: SessionId,
+        target: &pmt_providers::resolve::Target,
+        child: Option<&ChildSpec>,
+    ) -> Result<
+        (
+            Box<pmt_providers::resolve::Target>,
+            Option<Box<pmt_obs::trajectory::payload::RouteSelected>>,
+            Arc<SwitchableModel>,
+        ),
+        Error,
+    > {
+        let (target, routed) = self.route_for(id, target, child).await?;
+        let model = self.model_for(&target, child).await?;
+        Ok((Box::new(target), routed.map(Box::new), model))
+    }
+
     /// The session's model port (spec: model-providers, Scoped fallback
     /// chains for pinned owners): a scheduled run and a delegated child
     /// each keep the chain they inherit (the profile's, then the run's)
@@ -197,18 +255,23 @@ impl Factory {
         }
     }
 
-    /// The session's approval gate: a child's fails closed.
+    /// The session's approval gate: a child's fails closed. It also
+    /// answers the Codex app-server runtime's approvals of the session.
     pub(super) fn gate_for(
         &self,
         id: SessionId,
         child: Option<&ChildSpec>,
-        model: &Arc<SwitchableModel>,
+        (model, registry): (&Arc<SwitchableModel>, &Arc<pmt_tools::ToolRegistry>),
         environment: &env::Attached,
     ) -> Result<tools::Gate, Error> {
-        match child {
+        let gate = match child {
             Some(spec) => self.child_gate(id, spec, environment),
             None => self.gate(id, Some(model), Some(environment)),
-        }
+        }?;
+        self.models
+            .codex_gates()
+            .register(id, &gate.gate, registry, self.options.cwd.clone());
+        Ok(gate)
     }
 
     /// The session's `execute_code`, in its own sandbox.
@@ -281,6 +344,10 @@ impl Factory {
             setup.memory = None;
         }
         setup.compaction_boundary = Some(Arc::clone(inputs.tool_state) as _);
+        setup.growth = Some(Arc::new(crate::local_cmd::growth::LocalGrowth::new(
+            self.scope.home(),
+            self.models.shared_catalog(),
+        )));
         setup.context_engine = crate::context_engine::for_session(
             &self.scope,
             &self.plugins,

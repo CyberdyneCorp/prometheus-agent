@@ -124,7 +124,10 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         ("vision", strings(&["vision_analyze"])),
         ("video", strings(&["video_analyze"])),
         ("image_gen", strings(&["image_generate"])),
-        ("video_gen", strings(&["video_generate"])),
+        (
+            "video_gen",
+            strings(&["video_generate", "xai_video_edit", "xai_video_extend"]),
+        ),
         ("computer_use", strings(&["computer_use"])),
         ("terminal", strings(&["terminal", "process"])),
         ("process", strings(&["process"])),
@@ -220,7 +223,7 @@ fn default_off_and_posture_flags() {
     };
     assert_eq!(
         flagged(|t| t.default_off),
-        ["x_search", "video", "video_gen", "kanban", "a2a", "project"]
+        ["x_search", "video", "video_gen", "kanban", "a2a"]
     );
     assert_eq!(flagged(|t| t.posture), ["coding"]);
     // Default-off toolsets join `all` only when named explicitly.
@@ -228,6 +231,54 @@ fn default_off_and_posture_flags() {
     for name in ["x_search", "video_analyze", "video_generate"] {
         assert!(!all.contains(name), "{name}");
     }
+}
+
+/// The gated toolsets each surface's session gets from `all`.
+fn gated_of(surface: &pmt_tools::SessionSurface) -> Vec<String> {
+    let registry = registry();
+    let selection = Selection::resolve(&registry, &strings(&["all"]), &[])
+        .unwrap()
+        .folded_for(&registry, surface, &[], &[])
+        .unwrap();
+    pmt_tools::agent_level_desktop::SURFACE_GATED
+        .iter()
+        .filter(|name| selection.toolsets.iter().any(|t| t == *name))
+        .map(|name| (*name).to_owned())
+        .collect()
+}
+
+/// Scenario: CLI session cannot obtain desktop tools. The surface-gated
+/// toolsets come from the session's surface alone, never from `all`.
+#[test]
+fn a_cli_session_cannot_obtain_desktop_tools() {
+    use pmt_tools::SessionSurface::{Cli, Cron, Dashboard, Desktop, Gateway, Onboarding, Tui};
+    let cli = resolve(&["all"], &[])
+        .folded_for(&registry(), &Cli, &[], &[])
+        .unwrap();
+    for tool in pmt_tools::agent_level_desktop::DESKTOP_UI_TOOLS {
+        assert!(!cli.contains(tool), "{tool}");
+    }
+    assert!(!cli.contains("project"));
+    assert!(gated_of(&Cli).is_empty());
+    assert!(gated_of(&Cron).is_empty());
+    assert!(gated_of(&Gateway("telegram".to_owned())).is_empty());
+    // `catalog` folds in once registered (plugin-system's catalog tool).
+    assert_eq!(gated_of(&Desktop), ["desktop_ui", "project"]);
+    assert_eq!(
+        gated_of(&Onboarding),
+        ["desktop_ui", "onboarding", "project"]
+    );
+    assert_eq!(gated_of(&Tui), ["project"]);
+    assert_eq!(gated_of(&Dashboard), ["project"]);
+    // Gated toolsets stay out of `core`.
+    for name in pmt_tools::agent_level_desktop::SURFACE_GATED {
+        assert!(!CORE.contains(&name), "{name}");
+    }
+    let named = Selection::resolve(&registry(), &strings(&["core", "project"]), &[])
+        .unwrap()
+        .folded_for(&registry(), &Cli, &[], &[])
+        .unwrap();
+    assert!(!named.contains("project"));
 }
 
 /// Spec: messaging-gateway, Webhook route delivery and safe default

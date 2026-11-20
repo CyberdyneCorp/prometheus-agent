@@ -232,6 +232,7 @@ impl Host for FakeHost {
                 role: "assistant".into(),
                 text: Some(text.clone()),
                 reactions: Vec::new(),
+                author: None,
             })
             .collect();
         Box::pin(async { Ok(Transcript { messages }) })
@@ -246,6 +247,7 @@ impl Host for FakeHost {
                 billing_source: None,
                 subscription: None,
                 categories: Vec::new(),
+                local_resources: None,
             })
         })
     }

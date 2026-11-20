@@ -74,6 +74,9 @@ pub struct SessionSetup {
     /// Told `(skill, action)` after each successful `skill_manage` create,
     /// edit or delete (plugin `on_skill_lifecycle`).
     pub lifecycle: Option<Lifecycle>,
+    /// Runs the skill's evals around an edit when `skills.eval_gate` is
+    /// on (spec: skills, Eval-gated skill edits); `None` skips the gate.
+    pub eval_gate: Option<Arc<dyn crate::evals::Gate>>,
 }
 
 /// The `on_skill_lifecycle` seam: skill name and action.
@@ -101,6 +104,7 @@ impl SessionSetup {
             review: false,
             message_limit: None,
             lifecycle: None,
+            eval_gate: None,
         }
     }
 }

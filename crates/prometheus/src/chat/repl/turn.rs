@@ -147,7 +147,7 @@ impl Repl {
             tokio::select! {
                 result = &mut turn => return result,
                 event = self.input.next() => {
-                    self.busy_event(event, live, interrupt).await;
+                    Box::pin(self.busy_event(event, live, interrupt)).await;
                     let prompt = self.prompt();
                     self.input.request(&prompt);
                 }
@@ -232,7 +232,7 @@ impl Repl {
                 } else if text.trim_start().starts_with('!') {
                     self.notice(self.strings().get("cli.shell_busy"));
                 } else if text.trim_start().starts_with('/') {
-                    self.busy_slash(text.trim(), session, interrupt).await;
+                    Box::pin(self.busy_slash(text.trim(), session, interrupt)).await;
                 } else if !text.trim().is_empty() {
                     self.busy_text(text, session, interrupt);
                 }
@@ -276,7 +276,7 @@ impl Repl {
                 if let Resolution::Builtin { command, args } =
                     self.registry.resolve(typed, Surface::Cli)
                 {
-                    self.immediate(command.name, &args, session).await;
+                    Box::pin(self.immediate(command.name, &args, session)).await;
                 }
             }
         }
@@ -309,7 +309,7 @@ impl Repl {
                     if let Some(outcome) = prompts::outcome(decision, &strings) {
                         self.notice(outcome);
                     }
-                    prompt.respond(decision);
+                    prompt.respond(decision.into());
                 } else {
                     self.notice(strings.get("approval.answer_hint"));
                     self.pending = Some(Pending::Approval(prompt));

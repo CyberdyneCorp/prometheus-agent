@@ -256,7 +256,7 @@ fn prepare(id: &str, run: &Run, task: &Task, paths: &Paths<'_>) -> Result<(), St
 
 /// This binary on the task's home, with none of the invoking
 /// environment's Prometheus settings.
-fn base(bin: &Path, home: &Path) -> Command {
+pub(crate) fn base(bin: &Path, home: &Path) -> Command {
     let mut cmd = Command::new(bin);
     for (var, _) in std::env::vars_os() {
         let name = var.to_string_lossy();

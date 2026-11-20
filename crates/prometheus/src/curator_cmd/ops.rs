@@ -118,6 +118,11 @@ impl Curator {
     fn with_scope<T>(&self, now: Timestamp, f: impl FnOnce(&Scope<'_>) -> T) -> Result<T, Error> {
         let catalog = self.catalog();
         let cron = self.cron_skills()?;
+        let gate = crate::skills_cmd::evals::ProfileGate {
+            scope: self.scope.clone(),
+            store: Arc::clone(&self.store),
+            launch: self.launch.clone(),
+        };
         let scope = Scope {
             profile_dir: self.scope.dir(),
             store: &self.store,
@@ -125,6 +130,7 @@ impl Curator {
             catalog: &catalog,
             cron_skills: &cron,
             now,
+            eval_gate: Some(&gate),
         };
         Ok(f(&scope))
     }

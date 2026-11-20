@@ -14,11 +14,16 @@
 //!   view; [`slash`] is `/memory`, [`status`] its status, [`review`] the
 //!   background review, [`tool`] the registry entry.
 //!
+//! [`decay`] ages entries into dormancy; [`consolidate`] turns the
+//! auxiliary model's merge proposals into reviewable batches.
+//!
 //! [`journal`] reads the revision journal the store writes with every
 //! committed batch (`memory log/diff/revert`, `/memory review`).
 
 pub mod batch;
 pub mod budget;
+pub mod consolidate;
+pub mod decay;
 pub mod id;
 pub mod journal;
 pub mod manage;

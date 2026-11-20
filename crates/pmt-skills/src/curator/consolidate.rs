@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use super::Managed;
 use super::moves;
+use crate::evals::Gate;
 use crate::frontmatter;
 use crate::layout::SKILL_FILE;
 use crate::ledger::{Actor, Evidence, Ledger};
@@ -161,7 +162,7 @@ pub fn apply(
     store: &Store,
     managed: &[Managed],
     merges: &[Merge],
-    scanner: &dyn Scanner,
+    (scanner, gate): (&dyn Scanner, Option<(&dyn Gate, u32)>),
     errors: &mut Vec<String>,
 ) -> Vec<Applied> {
     let mut names: BTreeSet<&str> = managed.iter().map(|m| m.skill.name.as_str()).collect();
@@ -171,7 +172,7 @@ pub fn apply(
             errors.push(format!("merge into '{}' refused: {why}", merge.into));
             continue;
         }
-        match apply_one(ledger, store, managed, merge) {
+        match apply_one(ledger, store, managed, merge, gate) {
             Ok(()) => {
                 for a in &merge.absorbed {
                     names.remove(a.as_str());
@@ -196,18 +197,44 @@ fn apply_one(
     store: &Store,
     managed: &[Managed],
     merge: &Merge,
+    gate: Option<(&dyn Gate, u32)>,
 ) -> Result<(), Error> {
     let existing = managed.iter().find(|m| m.skill.name == merge.into);
     let rel = existing.map_or_else(|| merge.into.clone(), |m| m.rel.clone());
     let file_rel = format!("{rel}/{SKILL_FILE}");
     let before = ledger.capture([file_rel.clone()]);
-    let path = ledger.skills_dir().join(&rel).join(SKILL_FILE);
+    let dir = ledger.skills_dir().join(&rel);
+    let path = dir.join(SKILL_FILE);
+    let gated = match gate {
+        Some((gate, repeat)) if existing.is_some() => gate
+            .rate(&dir, &merge.into, repeat)
+            .map_err(|e| Error::new(&codes::SKILL_INVALID, e))?
+            .map(|rate| (gate, repeat, rate)),
+        _ => None,
+    };
+    let original = std::fs::read(&path).ok();
     if let Some(parent) = path.parent() {
         pmt_core::private_fs::create_dir(parent)
             .map_err(|e| Error::io(&codes::SKILL_IO, parent, &e))?;
     }
     pmt_core::private_fs::write_atomic(&path, merge.skill_md.as_bytes())
         .map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
+    if let Some((gate, repeat, rate)) = gated {
+        let after = gate
+            .rate(&dir, &merge.into, repeat)
+            .map_err(|e| Error::new(&codes::SKILL_INVALID, e))?
+            .unwrap_or_default();
+        if after.fell_from(rate) {
+            if let Some(original) = &original {
+                pmt_core::private_fs::write_atomic(&path, original)
+                    .map_err(|e| Error::io(&codes::SKILL_IO, &path, &e))?;
+            }
+            return Err(Error::new(
+                &codes::SKILL_INVALID,
+                crate::evals::rejected(rate, after),
+            ));
+        }
+    }
     let action = if existing.is_some() { "edit" } else { "create" };
     ledger.record(
         Actor::Curator,

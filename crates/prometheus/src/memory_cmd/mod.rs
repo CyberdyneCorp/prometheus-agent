@@ -5,6 +5,7 @@
 //! session.
 
 pub mod args;
+pub(crate) mod consolidate;
 mod edit;
 mod journal;
 
@@ -97,12 +98,20 @@ pub fn run(command: &MemoryCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             journal::diff(&env, since.as_deref(), session.as_deref())
         }
         MemoryCommand::Revert { rev } => journal::revert(&env, *rev),
-        MemoryCommand::Search { query, explain } => journal::search(
+        MemoryCommand::Search {
+            query,
+            explain,
+            all,
+        } => journal::search(
             &env,
             query,
-            *explain,
+            (*explain, *all),
             ctx.launch.user_home().map(PathBuf::as_path),
         ),
+        MemoryCommand::Wake { id } => wake(&env, id),
+        MemoryCommand::Consolidate { target, apply } => {
+            consolidate::run(&env, ctx.launch, &targets(*target), *apply)
+        }
     }
 }
 
@@ -189,6 +198,8 @@ fn list(
     r: Option<TierArg>,
     all: bool,
 ) -> Result<u8, Error> {
+    // Show what is dormant by now, not as of the last session start.
+    pmt_memory::decay::sweep(&env.store, &env.config().decay, jiff::Timestamp::now())?;
     let entries: Vec<MemoryEntry> = env
         .store
         .memory_entries(t.map(target))?
@@ -233,6 +244,15 @@ fn find(env: &Env, id: &str) -> Result<MemoryEntry, Error> {
         Error::new(&codes::MEMORY_NOT_FOUND, format!("no memory entry '{id}'"))
             .with_hint("prometheus memory list --all")
     })
+}
+
+fn wake(env: &Env, id: &str) -> Result<u8, Error> {
+    let e = pmt_memory::decay::wake(&env.store, id, jiff::Timestamp::now())?;
+    if env.json {
+        return json(&entry_json(&e));
+    }
+    eprintln!("{id} is active again (from the next session)");
+    Ok(0)
 }
 
 fn show(env: &Env, id: &str) -> Result<u8, Error> {

@@ -131,9 +131,17 @@ pub trait PanesHost: Send + Sync {
 
     /// The profile's sessions with a running turn.
     fn running<'a>(&'a self, profile: &'a str) -> HostFuture<'a, Vec<c::CenterSession>>;
+
+    /// Opens a browser on the profile's running bot screen (the desktop's
+    /// browser launcher).
+    fn screen_browser<'a>(
+        &'a self,
+        profile: &'a str,
+        url: Option<&'a str>,
+    ) -> HostFuture<'a, c::ScreenBrowserOpened>;
 }
 
-fn panes(call: &Call) -> Result<&dyn PanesHost, RpcError> {
+pub(crate) fn panes(call: &Call) -> Result<&dyn PanesHost, RpcError> {
     call.server
         .host()
         .panes()

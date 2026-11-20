@@ -23,6 +23,7 @@ pub mod gguf;
 pub mod hardware;
 pub mod hub;
 pub mod library;
+pub mod placement;
 pub mod pull;
 pub mod server;
 pub mod status;

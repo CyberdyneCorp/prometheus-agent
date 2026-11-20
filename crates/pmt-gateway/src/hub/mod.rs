@@ -25,6 +25,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::tickets::random_hex;
 
+mod presence;
+
 /// A connection's number within the daemon.
 pub type ConnId = u64;
 
@@ -177,6 +179,10 @@ struct Log {
     bytes: usize,
     evicted_through: u64,
     attached: HashMap<ConnId, Peer>,
+    /// When each attached client joined: its join number and time.
+    joined: HashMap<ConnId, (u64, String)>,
+    /// Joins so far (orders [`Log::joined`]).
+    joins: u64,
     /// When its last client left (`None` while one is attached, or once
     /// the host closed it).
     unattended_since: Option<Instant>,
@@ -365,6 +371,8 @@ impl Hub {
         let answers = peer.answers();
         let recipient = peer.clone();
         let tx = peer.tx.clone();
+        let client_id = peer.client_id.clone();
+        let present = presence::join(log, conn, &peer);
         log.attached.insert(conn, peer);
         log.unattended_since = None;
         // A connection that re-attaches as observer may no longer answer
@@ -396,12 +404,16 @@ impl Hub {
         for (session, id) in orphaned {
             self.cancel_event(&session, &id, "no_responder");
         }
+        if present {
+            self.presence(session_id);
+        }
         Attached {
             session_id: session_id.to_owned(),
             latest_seq,
             epoch: self.epoch.clone(),
             truncated,
             open_requests,
+            client_id: Some(client_id),
         }
     }
 
@@ -498,10 +510,11 @@ impl Hub {
     /// Detaches `conn` from `session_id`; requests only it could answer
     /// resolve unanswered.
     pub fn detach(&self, conn: ConnId, session_id: &str) {
+        let mut left = false;
         let orphaned = {
             let mut state = self.state();
             if let Some(log) = state.sessions.get_mut(session_id) {
-                leave(log, conn);
+                left = leave(log, conn);
             }
             if state
                 .owners
@@ -515,20 +528,28 @@ impl Hub {
         for (session, id) in orphaned {
             self.cancel_event(&session, &id, "no_responder");
         }
+        if left {
+            self.presence(session_id);
+        }
     }
 
     /// Detaches `conn` from every session (it disconnected).
     pub fn detach_all(&self, conn: ConnId) {
-        let orphaned = {
+        let (orphaned, left) = {
             let mut state = self.state();
-            for log in state.sessions.values_mut() {
-                leave(log, conn);
-            }
+            let left: Vec<String> = state
+                .sessions
+                .iter_mut()
+                .filter_map(|(id, log)| leave(log, conn).then(|| id.clone()))
+                .collect();
             state.owners.retain(|_, (owner, _)| *owner != conn);
-            orphan_requests(&mut state, conn, None)
+            (orphan_requests(&mut state, conn, None), left)
         };
         for (session, id) in orphaned {
             self.cancel_event(&session, &id, "no_responder");
+        }
+        for session in left {
+            self.presence(&session);
         }
     }
 
@@ -582,6 +603,18 @@ impl Hub {
         let Some(peer) = peer else { return false };
         self.notify(&[peer], event, data);
         true
+    }
+
+    /// Sends a daemon-level event (not logged) to every connection
+    /// attached to `session_id`.
+    pub fn notify_session(&self, session_id: &str, event: &str, data: Value) {
+        let peers: Vec<Peer> = self
+            .state()
+            .sessions
+            .get(session_id)
+            .map(|log| log.attached.values().cloned().collect())
+            .unwrap_or_default();
+        self.notify(&peers, event, data);
     }
 
     /// Sends a daemon-level event (no session, not logged) to `peers`.
@@ -999,12 +1032,15 @@ impl Hub {
     }
 }
 
-/// Removes `conn` from the session's clients; the last one leaving starts
-/// the session's unattended time.
-fn leave(log: &mut Log, conn: ConnId) {
-    if log.attached.remove(&conn).is_some() && log.attached.is_empty() {
+/// Removes `conn` from the session's clients (`true` when it was one);
+/// the last one leaving starts the session's unattended time.
+fn leave(log: &mut Log, conn: ConnId) -> bool {
+    log.joined.remove(&conn);
+    let left = log.attached.remove(&conn).is_some();
+    if left && log.attached.is_empty() {
         log.unattended_since = Some(Instant::now());
     }
+    left
 }
 
 fn evict_front(log: &mut Log) -> usize {

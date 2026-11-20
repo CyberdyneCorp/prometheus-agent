@@ -204,6 +204,7 @@ pub(crate) struct Sender {
     hooks: Option<Arc<dyn RequestHooks>>,
     pii: Option<Arc<pmt_core::pii::Pii>>,
     conversations: Conversations,
+    runtime_approvals: Option<Arc<dyn crate::codex::RuntimeApprovals>>,
 }
 
 impl std::fmt::Debug for Sender {
@@ -222,6 +223,7 @@ impl Sender {
             hooks: None,
             pii: None,
             conversations: Conversations::default(),
+            runtime_approvals: None,
         }
     }
 
@@ -241,6 +243,15 @@ impl Sender {
     /// Runs plugin request hooks of the providers they handle.
     pub(crate) fn with_request_hooks(mut self, hooks: Arc<dyn RequestHooks>) -> Self {
         self.hooks = Some(hooks);
+        self
+    }
+
+    /// Answers the Codex app-server's approval requests.
+    pub(crate) fn with_runtime_approvals(
+        mut self,
+        approvals: Arc<dyn crate::codex::RuntimeApprovals>,
+    ) -> Self {
+        self.runtime_approvals = Some(approvals);
         self
     }
 
@@ -289,6 +300,15 @@ impl Sender {
             let limits = Limits::of(route);
             let feed = crate::external::AcpFeed::start(launch, request, limits).await?;
             return ModelStream::start(Source::Acp(Box::new(feed)), limits).await;
+        }
+        if let Some(program) = crate::codex::program(route) {
+            let limits = Limits::of(route);
+            let approvals = self.runtime_approvals.clone();
+            let session = session.map(|s| s.to_string());
+            let feed =
+                crate::codex::feed::CodexFeed::start(&program, request, session, approvals, limits)
+                    .await?;
+            return ModelStream::start(Source::Codex(Box::new(feed)), limits).await;
         }
         let hooks = self.hooks.as_deref().filter(|h| h.handles(&route.provider));
         let affinity = session.and_then(|s| self.conversations.affinity(s));
@@ -612,6 +632,7 @@ enum Source {
     Http(HttpBody),
     Mock(Feed),
     Acp(Box<crate::external::AcpFeed>),
+    Codex(Box<crate::codex::feed::CodexFeed>),
     /// A served response: one recorded chunk per read, then its recorded
     /// failure, if it failed.
     Served(VecDeque<Vec<StreamEvent>>, Option<ProviderError>),
@@ -891,6 +912,7 @@ impl ModelStream {
                 Source::Http(body) => body.step(&mut self.normalizer, self.limits).await?,
                 Source::Mock(feed) => feed.step(&mut self.normalizer, self.limits).await?,
                 Source::Acp(feed) => feed.step(&mut self.normalizer, self.limits).await?,
+                Source::Codex(feed) => feed.step(&mut self.normalizer, self.limits).await?,
                 Source::Served(chunks, failure) => match chunks.pop_front() {
                     Some(chunk) => self.normalizer.replay(chunk),
                     None => return Err(failure.take().unwrap_or_else(wire::truncated)),

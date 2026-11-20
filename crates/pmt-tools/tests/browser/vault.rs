@@ -87,6 +87,7 @@ impl Setup {
             storage: VaultKeyStorage::File,
             browser: Arc::clone(&self.exec),
             prompt,
+            managers: Vec::new(),
         }
     }
 

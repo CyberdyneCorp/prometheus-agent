@@ -50,6 +50,13 @@ pub(super) fn options(
     }
     options.locks_dir =
         pmt_core::inventory::user_runtime_dir(ctx.launch).map(|dir| dir.join("locks"));
+    // The managed scheduler's fires reach a profile whose managed trigger
+    // is in effect when the daemon starts.
+    if host.receives_managed_fires() {
+        options.cron_fire = Some(Arc::new(super::host::FireEndpoint {
+            host: Arc::clone(host),
+        }));
+    }
     if let Some(scope) = host.scope(launch_profile) {
         let gateway = &scope.config().gateway;
         options.drain_timeout = Duration::from_secs(gateway.shutdown.drain_timeout_secs);

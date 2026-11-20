@@ -317,9 +317,11 @@ impl ProfileDir {
     /// The profile's `config.toml` and its writer.
     #[must_use]
     pub fn config_file(&self) -> ConfigFile {
-        ConfigFile::new(
+        ConfigFile::of_profile(
             self.dir.join("config.toml"),
             self.dir.join("backups").join("config"),
+            &self.home,
+            self.name.as_str(),
         )
     }
 }

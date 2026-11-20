@@ -131,6 +131,7 @@ mod tests {
         let emit = Emit::now(Event::AssistantMessage(MessageText {
             message_id: None,
             text: "hi".into(),
+            author: None,
         }))
         .in_turn("trn_1", None);
         let first = serde_json::to_value(stream.line(&emit)).unwrap();

@@ -141,7 +141,23 @@ the connection attached to it (`-32002` with `data.code`
 `session.not_attached`), and the ones that drive it (`prompt.submit`,
 `command.dispatch`, `session.compact`, `session.interrupt`,
 `approval.respond`) need it attached as a `driver`, the default role of
-`session.attach {session_id, role}`; an `observer` only reads.
+`session.attach {session_id, role}`; an `observer` only reads. Every
+attached client receives `session.presence {session_id, clients:
+[{client_id, client_kind, role, since}]}` each time a client joins,
+leaves or changes its role; it is a daemon-level event (no session
+`seq`), and the attach answer carries the connection's own `client_id`.
+`subagent.subscribe {session_id, subagent_id}` streams a delegated child's
+transcript to the subscribing connection as `subagent.event {session_id,
+subagent_id, kind: assistant|tool_call|tool_result|finished, text?, tool?,
+status?}` (what it did so far first, then each item until it ends).
+`session.timeline {session_id}` lists the turns (`turn`, `message_id`,
+`at`, `first_line`, `tools`, `cost_usd`), and `session.rewind
+{session_id, to_turn}` makes a new branch session ending at that turn
+(the original is kept) and answers the `files.rollback` checkpoint that
+holds the files as they were after it, when later turns changed files.
+An `approval.request` for a file edit carries `diff {path, old_text,
+new_text, hunks}`; `approval.respond` may name `accepted_hunks` (the tool
+writes only those) or a `replacement` content.
 `session.create` retried with the same `idempotency_key` within 300 s
 returns the same session; its `source`, when given, must be the
 connection's own client kind. Methods that act on a profile take

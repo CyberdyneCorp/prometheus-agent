@@ -74,6 +74,10 @@ pub struct Model {
     /// The native window from the file's own metadata.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_max: Option<u64>,
+    /// Where the managed server puts it (batch, what lives in RAM);
+    /// `None`: llama.cpp's defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<crate::placement::Placement>,
     /// RFC 3339 time it entered the library.
     pub added_at: String,
 }
@@ -286,6 +290,7 @@ impl Library {
             quant: None,
             context: context(&info),
             context_max: info.context_length,
+            placement: None,
             added_at: jiff::Timestamp::now().to_string(),
         };
         self.publish(&model)?;

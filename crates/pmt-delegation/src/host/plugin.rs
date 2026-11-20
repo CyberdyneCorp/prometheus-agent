@@ -67,7 +67,7 @@ impl Delegator {
         let entry = Arc::clone(&children.first().ok_or_else(empty_launch)?.entry);
         let me = Arc::clone(self);
         pmt_core::spawn::spawn(async move {
-            me.run_all(children).await;
+            me.run_all(children, crate::contract::Join::All).await;
         });
         Ok(handles::issue(&Claims {
             subagent_id: entry.subagent_id.clone(),

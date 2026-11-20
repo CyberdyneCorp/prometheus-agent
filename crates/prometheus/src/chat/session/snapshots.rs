@@ -55,6 +55,8 @@ impl Opener<'_> {
         let settings = Settings {
             enabled: true,
             terminal: config.terminal != SnapshotTerminal::Off,
+            workspace_bytes: (config.terminal == SnapshotTerminal::Workspace)
+                .then_some(config.max_workspace_bytes),
             max_file_bytes: config.max_file_bytes,
             max_checkpoints: usize::try_from(config.max_checkpoints).unwrap_or(usize::MAX),
             retention: Duration::from_secs(config.retention_secs),

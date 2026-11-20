@@ -18,6 +18,7 @@ pub mod patch;
 mod read;
 pub mod remote;
 pub mod search;
+pub mod syntax;
 pub mod text;
 pub mod tools;
 pub mod tracker;

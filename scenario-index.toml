@@ -85,13 +85,34 @@ capabilities = [
     "desktop-app",
     "kanban",
     "distribution-and-update",
+    "memory",
     "experience-library",
     "harness-evolution",
     "messaging-gateway",
     "plugin-system",
     "projects",
     "replay-and-evaluation",
+    "session-storage",
+    "skills",
+    "tui",
     "web-dashboard",
+    "model-providers",
+    "tool-system",
+    "execution-environments",
+    "security-boundaries",
+    "subagent-delegation",
+    "scheduled-jobs",
+    "hermes-migration",
+    "platform-adapters",
+    "configuration-and-profiles",
+    "api-server",
+    "local-models",
+    "web-and-media-tools",
+    "git-worktrees",
+    "connectors",
+    "i18n",
+    "observability",
+    "workspace-architecture",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -134,7 +155,7 @@ capabilities = [
 "Slow prompt fails the gate" = ["xtask/src/perf/budget.rs::a_slow_or_heavy_chat_breaches_its_budgets"]
 
 [workspace-architecture."Memory and size budgets"]
-"Binary too large" = ["xtask/src/perf/budget.rs::an_82_mib_binary_fails_the_size_budget"]
+"Binary too large" = ["xtask/src/perf/budget.rs::a_92_mib_binary_fails_the_size_budget"]
 "Small binary growth from a near-empty baseline" = ["xtask/src/perf/budget.rs::binary_growth_under_the_size_floor_is_not_a_regression"]
 
 [workspace-architecture."Repository health gates"]
@@ -2618,6 +2639,16 @@ capabilities = [
 [execution-environments."First-party cloud browser providers"]
 "Key present, not configured" = ["crates/pmt-tools/tests/browser/cloud.rs::a_provider_key_alone_never_selects_the_provider"]
 
+[execution-environments."Lightpanda engine"]
+"Shadowed by a cloud provider" = ["crates/prometheus/tests/browser_engine.rs::doctor_and_status_report_the_engine_shadowed_by_a_cloud_provider", "crates/pmt-tools/tests/browser/lightpanda.rs::the_model_is_told_what_lightpanda_cannot_do_unless_it_is_shadowed"]
+
+[execution-environments."Bot screen"]
+"Low memory" = ["crates/prometheus/src/screen/memory.rs::nine_hundred_mb_free_is_refused_naming_the_default_threshold", "crates/prometheus/tests/bot_screen.rs::too_little_free_memory_refuses_naming_the_threshold"]
+"Sandbox that cannot host a display" = ["crates/prometheus/src/screen/placement.rs::a_backend_without_a_display_is_refused_and_points_to_gateway", "crates/prometheus/tests/bot_screen.rs::a_backend_that_cannot_host_a_display_points_to_gateway_placement"]
+
+[execution-environments."Bot screen takeover lease"]
+"Agent during takeover" = { tests = ["crates/pmt-tools/tests/browser/takeover.rs::browser_tools_wait_while_a_person_holds_the_screen", "crates/pmt-tools/tests/browser/takeover.rs::a_result_from_before_the_takeover_is_voided", "crates/pmt-config/src/screen_lease.rs::the_agent_waits_while_a_person_holds_the_screen", "crates/prometheus/tests/bot_screen.rs::a_viewer_streams_the_screen_and_takes_it_over", "crates/prometheus/tests/desktop_screen.rs::desktop_screen_pane_streams_and_takes_over"], note = "the browser tools are fenced by the shared lease guard (pmt_config::screen_lease); computer_use (task 76.1) does not exist yet and must call the same guard" }
+
 [execution-environments."Private URLs route to a local browser"]
 "Localhost under Browserbase" = ["crates/pmt-tools/tests/browser/cloud.rs::a_private_url_opens_in_a_local_sidecar_and_never_reaches_the_provider"]
 
@@ -4870,3 +4901,192 @@ capabilities = [
 [replay-and-evaluation."Trajectory compressor"]
 "Head and tail preserved" = ["crates/pmt-eval/src/compress.rs::head_and_tail_survive_and_one_summary_replaces_the_middle", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
 "Short trajectory untouched" = ["crates/pmt-eval/src/compress.rs::a_short_record_is_copied_without_a_model_call", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
+
+# Group 72.1: memory decay, expiry, dormancy and consolidation proposals.
+[memory."Decay, expiry and dormancy (upgrade)"]
+"Expired event leaves the prompt" = ["crates/pmt-memory/tests/memory/decay.rs::an_expired_event_leaves_the_prompt_and_stays_listed_as_dormant", "crates/prometheus/tests/memory_consolidate.rs::an_expired_entry_is_listed_as_dormant_and_wakes_on_request"]
+
+[memory."Consolidation proposals (upgrade)"]
+"Contradiction is proposed, not silently applied" = ["crates/prometheus/tests/memory_consolidate.rs::a_contradiction_is_proposed_as_a_diff_and_applied_only_on_request", "crates/pmt-memory/tests/memory/decay.rs::a_contradiction_is_previewed_then_committed_as_consolidation_and_pins_survive"]
+
+# Group 72.4: skill evals and eval-gated skill edits.
+[skills."Skill evals (upgrade)"]
+"Skill eval detects a non-triggering description" = ["crates/prometheus/tests/skills_evals.rs::a_non_triggering_description_fails_with_skill_not_loaded_on_the_live_model"]
+
+[skills."Eval-gated skill edits (upgrade)"]
+"Regressing agent edit is rolled back" = ["crates/prometheus/tests/skills_evals.rs::a_regressing_background_review_patch_is_rolled_back", "crates/pmt-skills/tests/skills/eval_gate.rs::a_regressing_background_review_edit_is_rejected_and_the_skill_kept"]
+
+# Group 72.2: hybrid semantic + full-text search and encryption at rest.
+[session-storage."Hybrid semantic and full-text search (upgrade)"]
+"Paraphrase found" = ["crates/prometheus/tests/sessions_hybrid.rs::a_paraphrase_is_found_in_hybrid_mode", "crates/pmt-store/tests/store/search_hybrid.rs::fusion_ranks_agreement_first_and_finds_paraphrases"]
+"Embedding model offline" = ["crates/prometheus/tests/sessions_hybrid.rs::an_offline_embedding_model_degrades_to_full_text", "crates/pmt-store/tests/store/search_hybrid.rs::without_vectors_a_hybrid_search_is_full_text_marked_degraded"]
+
+[session-storage."Encryption at rest option (upgrade)"]
+"Store unreadable without key" = ["crates/pmt-store/tests/store/encryption.rs::an_encrypted_store_is_unreadable_as_sqlite_and_keeps_its_rows", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
+"Missing key fails closed" = ["crates/pmt-store/tests/store/encryption.rs::a_missing_key_fails_closed_without_creating_a_store", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
+
+# Group 72.3: TUI split panes, inline diff review, timeline scrubber and
+# shared live sessions.
+[tui."Split panes for subagents and tool output (upgrade)"]
+"Watching a delegated child" = ["crates/prometheus/tests/tui_live.rs::f2_lists_both_children_and_streams_the_selected_ones_transcript_to_its_end", "crates/pmt-tui/tests/upgrades.rs::the_subagents_pane_sits_beside_the_transcript_from_120_columns", "crates/pmt-tui/tests/upgrades.rs::the_subagents_pane_sits_below_the_transcript_from_80_to_119_columns", "crates/pmt-tui/tests/upgrades.rs::under_80_columns_the_tool_pane_is_a_tab_with_the_full_output", "crates/pmt-delegation/src/live.rs::a_late_subscriber_gets_the_backlog_then_live_items_until_the_end"]
+"Foreign subagent subscription" = ["crates/pmt-gateway/tests/live_sessions.rs::subscribing_to_a_child_of_an_unattached_session_is_session_not_attached"]
+
+[tui."Inline diff review for file edits (upgrade)"]
+"Partial acceptance" = ["crates/prometheus/tests/tui_live.rs::accepting_hunks_1_and_3_writes_only_those_and_the_model_hears_hunk_2_was_rejected", "crates/pmt-tui/tests/upgrades.rs::an_edit_approval_shows_numbered_hunks_and_the_review_choices", "crates/pmt-tools/src/approval/review.rs::only_the_accepted_hunks_are_applied", "crates/pmt-tools/src/approval/review.rs::a_reviewed_patch_writes_the_merged_file_and_names_the_rejected_hunk"]
+
+[tui."Session timeline scrubber (upgrade)"]
+"Rewind keeps the original" = ["crates/prometheus/tests/tui_live.rs::rewinding_a_12_turn_session_to_turn_7_shows_a_7_turn_branch_and_keeps_the_original", "crates/prometheus/tests/tui_live.rs::a_rewind_offers_the_turns_checkpoint_and_yes_restores_its_files", "crates/pmt-tui/tests/upgrades.rs::the_timeline_lists_turns_over_a_read_only_preview_of_the_highlighted_one"]
+
+[tui."Shared live sessions (upgrade)"]
+"Observer cannot submit" = ["crates/prometheus/tests/tui_live.rs::a_tui_observing_a_session_shows_it_read_only_and_cannot_submit", "crates/pmt-gateway/tests/live_sessions.rs::an_observer_is_listed_as_one_and_cannot_submit"]
+"Desktop joins a TUI session" = ["crates/prometheus/tests/tui_live.rs::a_desktop_joining_the_tuis_session_is_shown_and_its_input_labelled", "crates/pmt-gateway/tests/live_sessions.rs::a_desktop_joining_a_tui_session_is_listed_to_both_and_gets_the_same_turn_seqs", "crates/pmt-tui/tests/upgrades.rs::a_shared_session_names_the_other_clients_in_the_status_line"]
+
+# Group 72.5: cost- and latency-aware routing policy.
+[model-providers."Cost and latency aware routing policy (upgrade)"]
+"Cheapest healthy capable candidate wins" = ["crates/pmt-providers/tests/providers/route_policy.rs::cheapest_healthy_capable_candidate_wins", "crates/pmt-providers/src/routing.rs::each_policy_picks_its_candidate"]
+"Route is stable within a session" = ["crates/prometheus/tests/routing_policy.rs::a_route_chosen_at_start_stays_for_every_turn"]
+
+# Group 72.6: surface toolsets from the session and taint-aware escalation.
+[tool-system."Surface toolsets come from the session"]
+"CLI session cannot obtain desktop tools" = ["crates/pmt-tools/tests/toolsets.rs::a_cli_session_cannot_obtain_desktop_tools"]
+
+[tool-system."Taint-aware escalation (upgrade)"]
+"Exfiltration attempt after browsing" = ["crates/pmt-tools/tests/taint.rs::an_exfiltration_attempt_after_browsing_asks_before_the_request_is_sent", "crates/pmt-tools/tests/taint.rs::a_target_approved_for_the_session_and_untainted_turns_do_not_ask", "crates/pmt-tools/src/approval/taint.rs::outbound_targets_are_hosts_commands_or_query_carrying_reads"]
+
+# Group 72.7: terminal workspace checkpoints.
+[execution-environments."Terminal workspace checkpoints (upgrade)"]
+"Undo a sed edit" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_sed_edit_made_by_a_terminal_command", "crates/pmt-tools/src/snapshots/workspace.rs::a_command_s_edits_creations_and_removals_are_found_with_their_prior_content", "crates/pmt-tools/src/snapshots/workspace.rs::an_oversized_workspace_is_skipped_with_one_notice"]
+"Undo a background command's late write" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_file_a_background_command_wrote_after_it_finished", "crates/pmt-tools/src/snapshots/workspace.rs::a_background_command_s_later_changes_are_found", "crates/pmt-tools/src/snapshots/workspace.rs::a_background_exit_during_a_command_is_recorded_when_that_command_ends"]
+
+# Group 72.8: credential injection at the egress proxy and opt-in external
+# secret sources.
+[security-boundaries."Credential injection at the egress proxy (upgrade)"]
+"Placeholder sent elsewhere" = ["crates/pmt-net/tests/egress_inject.rs::the_placeholder_becomes_the_token_only_for_the_mapped_host", "crates/prometheus/tests/egress_injection.rs::injected_credentials_never_reach_the_child_process", "crates/pmt-net/src/egress/inject.rs::a_placeholder_split_across_reads_is_never_forwarded", "crates/prometheus/tests/python_bridge.rs::a_sidecar_holds_only_the_placeholder_of_an_injected_secret"]
+"MCP server holds the placeholder" = ["crates/prometheus/tests/egress_injection.rs::a_stdio_mcp_server_holds_only_the_placeholder", "crates/pmt-net/src/egress/mod.rs::an_unreachable_address_falls_through_to_the_next"]
+
+[security-boundaries."External secret sources are opt-in"]
+"Default install" = ["crates/prometheus/tests/egress_injection.rs::a_default_install_never_runs_the_external_source_clis", "crates/pmt-config/src/secrets/external_tests.rs::a_default_config_builds_no_source"]
+
+# Group 72.11: fan-in join modes for delegation.
+[subagent-delegation."Fan-in join modes (upgrade)"]
+"First success cancels the rest" = ["crates/pmt-delegation/tests/host.rs::first_success_returns_the_winner_and_stops_the_others", "crates/prometheus/tests/delegation_join.rs::first_success_returns_the_quick_child_and_interrupts_the_slow_ones", "crates/pmt-delegation/tests/host.rs::a_schema_invalid_answer_is_no_success"]
+"Quorum not reachable" = ["crates/pmt-delegation/tests/host.rs::an_unreachable_quorum_returns_every_result_unsatisfied"]
+
+# Group 72.9: natural-language schedule translation and the managed
+# scheduler contract.
+[scheduled-jobs."Natural-language schedule translation (upgrade)"]
+"Biweekly phrase becomes an RRULE" = ["crates/prometheus/tests/cron_translate.rs::a_biweekly_phrase_is_echoed_as_an_rrule_and_saved_only_once_confirmed", "crates/prometheus/tests/cron_translate.rs::the_tool_translates_once_and_saves_what_it_echoed", "crates/pmt-cron/src/schedule/translate.rs::a_biweekly_phrase_becomes_an_rrule_with_three_instants", "crates/pmt-cron/src/schedule/rrule/tests.rs::the_first_business_day_of_each_month"]
+"Translation is never trusted silently" = ["crates/prometheus/tests/cron_translate.rs::an_answer_that_is_neither_grammar_nor_a_valid_rrule_saves_nothing", "crates/pmt-cron/src/schedule/translate.rs::grammar_answers_are_accepted_and_anything_else_refused", "crates/pmt-cron/src/schedule/rrule/tests.rs::unsupported_or_invalid_rules_are_refused_with_a_reason"]
+
+[scheduled-jobs."Managed scheduler contract"]
+"Duplicate external fire" = ["crates/prometheus/tests/cron_managed.rs::managed_fires_are_verified_deduplicated_and_held_by_the_emergency_stop", "crates/pmt-cron/tests/managed.rs::a_fire_delivered_twice_claims_its_occurrence_once"]
+"Symmetric-key token rejected" = ["crates/prometheus/tests/cron_managed.rs::managed_fires_are_verified_deduplicated_and_held_by_the_emergency_stop", "crates/pmt-net/src/jwt.rs::symmetric_and_unsigned_tokens_never_verify", "crates/pmt-cron/src/managed.rs::fire_token_claims_are_checked_within_the_leeway"]
+
+# Group 72.12: migration rollback and the plugin development loop.
+[hermes-migration."Migration rollback (upgrade)"]
+"Rollback keeps a continued session" = ["crates/prometheus/tests/migrate_rollback.rs::rollback_removes_the_imported_sessions_but_keeps_a_continued_one", "crates/prometheus/tests/migrate_rollback.rs::rollback_restores_the_pre_migration_home", "crates/prometheus/tests/migrate_rollback.rs::a_rolled_back_rerun_takes_back_the_messages_it_appended", "crates/prometheus/tests/migrate_rollback.rs::an_earlier_run_waits_for_the_later_one"]
+
+[plugin-system."Plugin development loop (upgrade)"]
+"Edit-reload cycle" = ["crates/prometheus/tests/plugins_dev.rs::a_changed_hook_handles_the_next_event_without_a_restart", "crates/prometheus/tests/plugins_dev.rs::the_tui_session_in_the_daemon_follows_the_rebuild_and_the_gateway_never_loads_it", "crates/pmt-plugins/src/discovery/tests.rs::a_dev_directory_is_enabled_as_dev_id_and_hides_the_installed_copy"]
+
+# Group 72.10: cross-platform identity linking, delivery and read receipts,
+# busy acknowledgement via reactions.
+[messaging-gateway."Cross-platform identity linking (upgrade)"]
+"Continue on another platform" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_linked_person_continues_one_conversation_on_another_platform", "crates/pmt-gateway/tests/messaging/identity.rs::per_platform_mode_keeps_each_accounts_dms_apart"]
+"Linking cannot bypass authorization" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_unauthorized_account_cannot_link"]
+"Expired code" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_expired_code_links_nothing"]
+
+[messaging-gateway."Delivery receipts surfaced (upgrade)"]
+"Read receipt reaches the TUI" = ["crates/prometheus/tests/gateway_whatsapp_receipts.rs::a_read_whatsapp_reply_reaches_the_attached_client_and_the_outbox", "crates/pmt-adapters-whatsapp/tests/whatsapp.rs::delivery_statuses_of_a_send_are_reported_as_receipts"]
+
+[platform-adapters."Delivery and read receipts (upgrade)"]
+"Signal read receipt" = ["crates/pmt-adapters-signal/src/events.rs::a_read_receipt_names_the_ids_send_returned", "crates/pmt-gateway/tests/messaging/identity.rs::a_read_receipt_moves_the_entry_to_read_and_reaches_attached_clients"]
+
+[platform-adapters."Busy acknowledgement via reactions (upgrade)"]
+"Reaction instead of noise" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_follow_up_during_a_turn_gets_a_reaction_instead_of_a_busy_text", "crates/pmt-gateway/tests/messaging/identity.rs::ack_reaction_marks_each_accepted_message"]
+
+[configuration-and-profiles."Remote configuration backend"]
+"Unreachable plane fails closed" = { tests = ["crates/prometheus/tests/config_remote.rs::unreachable_plane_fails_closed", "crates/prometheus/tests/config_remote.rs::the_plane_supplies_the_configuration_and_writes_carry_only_changed_keys", "crates/pmt-config/src/remote/tests.rs::a_locked_key_is_refused_naming_its_level"], note = "config.toml is a file that does not parse: the exit-78 error names the plane URL, never the parse error" }
+"Every reader uses the plane" = { tests = ["crates/pmt-config/src/gateway_check_routes.rs::a_remote_targets_opt_in_comes_from_the_plane", "crates/pmt-config/src/language.rs::a_plane_set_language_reaches_the_strings", "crates/prometheus/tests/config_remote.rs::plane_enabled_adapter_plugins_are_preregistered"], note = "readers that hold only another profile's directory build its file with ConfigFile::of_profile_dir (remote-aware)" }
+
+[configuration-and-profiles."Profile descriptions"]
+"Auto description does not overwrite" = ["crates/prometheus/tests/profile_distribution.rs::auto_description_does_not_overwrite"]
+
+[configuration-and-profiles."Profile distributions"]
+"Update keeps user config" = ["crates/prometheus/tests/profile_distribution.rs::install_previews_never_copies_credentials_and_update_keeps_user_config"]
+"Credentials never installed" = ["crates/prometheus/tests/profile_distribution.rs::install_previews_never_copies_credentials_and_update_keeps_user_config", "crates/prometheus/tests/profile_distribution.rs::an_incompatible_distribution_is_refused_with_78"]
+
+[configuration-and-profiles."Identity migration and purge"]
+"Purge is snapshotted" = ["crates/prometheus/tests/profile_distribution.rs::purge_is_snapshotted", "crates/prometheus/tests/profile_distribution.rs::identity_moves_to_another_profile"]
+
+[configuration-and-profiles."External secret source commands"]
+"Invalid rotated token refused" = ["crates/prometheus/tests/secret_sources_cli.rs::invalid_rotated_token_refused", "crates/prometheus/tests/secret_sources_cli.rs::bitwarden_status_shows_names_and_sync_writes_only_with_apply", "crates/prometheus/tests/secret_sources_cli.rs::onepassword_setup_map_and_sync"]
+
+[security-boundaries."Egress proxy operation and status"]
+"Proxy down with enforcement" = ["crates/prometheus/tests/egress_proxy.rs::proxy_down_with_enforcement", "crates/prometheus/tests/egress_proxy.rs::start_status_rotate_reload_and_stop"]
+"Rootless runtime listener" = { tests = ["crates/prometheus/src/egress/gateway/bridge.rs::a_rootless_reach_serves_only_the_host_and_maps_the_relay_to_it", "crates/prometheus/src/egress/gateway/bridge.rs::the_host_address_is_a_local_one", "crates/prometheus/src/egress/gateway/bridge.rs::a_gateway_binds_before_its_bridge_exists", "crates/pmt-net/src/egress/mod.rs::a_listener_restricted_to_a_peer_serves_only_that_peer", "crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"], note = "the Linux CI runners have rootless Podman (gateway 10.88.0.1 is no host address): every egress_proxy test starts the proxy there" }
+
+[security-boundaries."Egress proxy coverage of containers and remote sandboxes"]
+"CA inside the container" = { tests = ["crates/prometheus/tests/egress_proxy.rs::ca_inside_the_container", "crates/prometheus/tests/egress_proxy.rs::the_proxy_injects_the_real_key_only_toward_the_mapped_host"], note = "a real container session (curl image) through the proxy: curl verifies TLS against the mounted bundle (CURL_CA_BUNDLE, the same contract python requests uses via REQUESTS_CA_BUNDLE); on the egress-only network curl reaches neither the host nor the internet without the proxy; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"SSH sandbox through the tunnelled proxy" = { tests = ["crates/prometheus/tests/egress_ssh.rs::an_ssh_sandbox_goes_through_the_tunnelled_proxy", "crates/prometheus/tests/egress_ssh.rs::an_ssh_host_refusing_the_tunnel_runs_nothing"], note = "an sshd container (fixtures/sshd-egress) with and without AllowTcpForwarding; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"Sandbox the proxy cannot cover" = ["crates/prometheus/tests/egress_proxy.rs::a_backend_the_proxy_cannot_cover_is_refused"]
+
+[security-boundaries."Egress credential source and placeholder rotation"]
+"Bitwarden missing a secret" = ["crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"]
+
+[security-boundaries."Password manager login sources"]
+"Headless session" = ["crates/pmt-tools/tests/browser/managers.rs::headless_session", "crates/pmt-tools/tests/browser/managers.rs::an_unlocked_manager_login_fills_only_on_its_saved_website"]
+
+[security-boundaries."Dependency vulnerability scan"]
+"CI gate" = ["crates/prometheus/tests/security_scan.rs::ci_gate", "crates/prometheus/tests/security_scan.rs::unreachable_osv_exits_69"]
+
+# Group 73.4: the Codex app-server runtime and the Codex runtime migration.
+[model-providers."Codex app-server runtime"]
+"Runtime switch deferred" = { tests = ["crates/prometheus/tests/codex_runtime_switch.rs::runtime_switch_is_deferred_to_the_next_session", "crates/pmt-providers/tests/providers/codex.rs::one_server_and_thread_serve_a_session_and_the_persona_goes_once", "crates/pmt-agent/tests/turn/performed.rs::performed_actions_are_recorded_as_a_finished_tool_round"], note = "the line-interface session runs in a pseudo-terminal (unix); the route is resolved once per session from the configuration it started with, on every platform" }
+"Codex binary missing" = ["crates/prometheus/tests/codex_runtime.rs::turning_the_runtime_on_without_codex_is_refused_and_changes_nothing", "crates/pmt-providers/tests/providers/codex.rs::a_missing_codex_binary_fails_the_route_naming_model_codex_bin"]
+
+[model-providers."Codex runtime migration"]
+"User text preserved" = ["crates/prometheus/tests/codex_runtime.rs::migrate_twice_keeps_the_user_block_and_one_managed_section", "crates/prometheus/src/codex_runtime_cmd/migrate.rs::user_text_is_preserved_and_the_section_appears_once"]
+
+# Group 73.5: gateway proxy mode and the subscription proxy.
+[api-server."Gateway proxy mode"]
+"Container relays to host agent" = { tests = ["crates/prometheus/tests/gateway_proxy.rs::a_proxied_chat_is_answered_by_the_host_agent", "crates/prometheus/tests/gateway_proxy.rs::an_unreachable_upstream_answers_unavailable_and_queues_nothing", "crates/prometheus/tests/gateway_proxy.rs::a_refused_key_puts_the_adapters_in_fatal_with_proxy_auth"], note = "two homes stand for the container and the host: the container daemon's test adapter receives the message and its gateway.proxy.url names the host daemon's API server" }
+
+[api-server."Subscription proxy"]
+"Disallowed path" = ["crates/prometheus/tests/subscription_proxy.rs::allowed_paths_go_upstream_with_the_profile_credential_and_others_are_404"]
+"Client bearer replaced" = ["crates/prometheus/tests/subscription_proxy.rs::allowed_paths_go_upstream_with_the_profile_credential_and_others_are_404"]
+"LAN requires a client key" = ["crates/prometheus/tests/subscription_proxy.rs::a_lan_listener_requires_the_client_key"]
+
+# Group 73.6: local-model window placement and growth, resource telemetry.
+[local-models."Context window and memory placement"]
+"Window grows before compression" = { tests = ["crates/pmt-agent/tests/turn/growth.rs::a_grown_window_skips_the_compaction", "crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-local/src/placement.rs::growth_doubles_toward_the_need_or_says_why_not"], note = "the turn loop asks its growth port at the compression threshold (pmt-agent, fake port); the daemon test drives the real port against the stub llama-server: preset, unload and reload at 131072" }
+"Growth impossible triggers compression" = ["crates/pmt-agent/tests/turn/growth.rs::an_impossible_growth_compacts_as_usual", "crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows"]
+
+[local-models."Local resource telemetry"]
+"Gauge shows real window" = ["crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-providers/src/metadata/window.rs::each_source_wins_over_every_later_one"]
+
+# Group 73.7: video_generate and provider-contributed media tools.
+[web-and-media-tools."video_generate tool"]
+"Stuck job times out" = { tests = ["crates/pmt-media/tests/video_gen.rs::a_stuck_job_times_out_with_the_provider_job_id"], note = "a fake clock advances only on the 5 s poll sleeps: 180 polls of a job stuck IN_QUEUE end at 900 s with status timeout and the fal request id" }
+
+[web-and-media-tools."Provider-contributed media tools"]
+"Tools absent for another provider" = ["crates/pmt-media/tests/video_gen.rs::provider_tools_are_absent_for_another_provider"]
+
+# Group 73.8: install state retention, /connectors, language switchers.
+[git-worktrees."Shared install state retention"]
+"Deleted checkout" = { tests = ["crates/pmt-worktrees/src/install_state.rs::state_of_a_checkout_deleted_20_days_ago_is_removed", "crates/prometheus/tests/worktree_chat.rs::prune_removes_the_install_state_of_a_checkout_deleted_20_days_ago"], note = "the state is a language-server cache directory under <profile>/cache/lsp whose record names a checkout that no longer exists, last used 20 days ago (retention 14 days)" }
+
+[connectors."Connectors slash command"]
+"TUI list view" = { tests = ["crates/prometheus/tests/connectors_slash.rs::the_tui_lists_accounts_with_states_and_offers_reconnect_for_an_expired_one", "crates/prometheus/tests/connectors_slash.rs::the_line_interface_offers_no_disconnect", "crates/prometheus/src/chat/commands/connectors.rs::a_broken_account_offers_reconnect_and_only_tui_and_desktop_offer_disconnect"], note = "the TUI runs /connectors through command.dispatch with its tui client kind (the daemon test connects as a tui client against the fake Nous connector gateway)" }
+
+[i18n."Language switchers show endonyms"]
+"RTL layout" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_language_switcher_mirrors_the_window_for_arabic", "crates/prometheus/tests/dashboard_browser.rs::the_dashboard_language_switcher_writes_the_profile_language", "crates/prometheus/tests/tui_language.rs::the_picker_lists_endonyms_and_writes_the_choice", "crates/pmt-tui/src/languages.rs::rows_show_endonyms_with_ids_and_the_current_language_is_highlighted"], note = "desktop-language.spec.ts selects ar in the desktop settings: the document turns dir=rtl and the sessions column moves to the other side in the same window, after one config.patch of display.language; the dashboard and the TUI picker list the same i18n.languages" }
+
+# Group 73.9: Langfuse preset, NeMo Relay (files, host fed from the trajectory stream) and the client SDKs.
+[observability."NeMo Relay and Langfuse integrations"]
+"Langfuse without keys" = ["crates/prometheus/tests/obs_langfuse.rs::a_langfuse_preset_without_its_secret_key_stops_the_daemon_naming_it", "crates/prometheus/tests/obs_langfuse.rs::langfuse_receives_the_spans_with_basic_authentication"]
+"Relay files reported" = { tests = ["crates/prometheus/tests/obs_langfuse.rs::doctor_lists_the_relay_files_with_the_system_one_last", "crates/pmt-obs/src/relay/mod.rs::the_configured_file_replaces_the_users_and_the_system_file_comes_last"], note = "debug builds point the system file at a test directory (PMT_TEST_RELAY_SYSTEM_DIR); /etc is not writable in tests" }
+
+[workspace-architecture."Embeddable client SDKs"]
+"Python embedding" = { tests = ["crates/prometheus/tests/sdk_clients.rs::a_python_script_runs_a_turn_and_gets_its_events_and_usage", "crates/prometheus/tests/sdk_clients.rs::a_node_program_runs_a_turn_and_gets_its_events_and_usage", "crates/prometheus/tests/sdk_clients.rs::an_ephemeral_session_with_an_overlay_leaves_no_transcript"], note = "the mock provider's scripted read_file call; the Node and Rust tests run the same turn through the other two SDKs" }
+"Old SDK against a new protocol" = ["crates/prometheus/tests/sdk_clients.rs::every_sdk_refuses_a_newer_protocol_before_any_request", "crates/pmt-sdk/src/lib.rs::only_supported_majors_pass"]

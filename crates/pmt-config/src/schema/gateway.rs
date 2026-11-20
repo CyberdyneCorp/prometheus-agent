@@ -138,6 +138,59 @@ pub struct GatewayConfig {
     /// MCP server notifications as internal webhook events.
     #[schemars(extend("x-apply" = "live"))]
     pub mcp_events: McpEvents,
+    /// Sender accounts linked across platforms (`/link`).
+    #[schemars(extend("x-apply" = "live"))]
+    pub identity: GatewayIdentity,
+    /// A reaction added to every accepted inbound message (an emoji or a
+    /// name such as `eyes` or `thumbsup`; unset: none) on adapters that
+    /// support reactions.
+    #[schemars(extend("x-apply" = "live"))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ack_reaction: Option<String>,
+    /// Proxy mode: forward every admitted turn to another daemon's API
+    /// server instead of running an agent here.
+    #[schemars(extend("x-apply" = "live"))]
+    pub proxy: GatewayProxy,
+}
+
+/// `[gateway.proxy]` (spec: api-server, Gateway proxy mode): the adapters
+/// keep authorization, pairing, routing keys and delivery here, and every
+/// admitted turn runs on the API server at `url` as a session-chat request
+/// keyed by the local conversation key.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayProxy {
+    /// The remote API server's base URL including its profile prefix
+    /// (`http://host.docker.internal:8642/p/default`); unset: turns run
+    /// here.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// The secret holding the remote profile's API key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_secret: Option<super::SecretName>,
+}
+
+/// `[gateway.identity]` (spec: messaging-gateway, Cross-platform identity
+/// linking).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct GatewayIdentity {
+    /// `per_platform` (default): each account's DMs are its own
+    /// conversation; `shared`: DMs from all of a person's linked accounts
+    /// continue one conversation, answered on the platform of the latest
+    /// message (group conversations never merge).
+    pub dm_mode: DmMode,
+}
+
+/// How a linked person's DMs map to conversations.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DmMode {
+    /// One conversation per account.
+    #[default]
+    PerPlatform,
+    /// One conversation per person.
+    Shared,
 }
 
 /// `[gateway.mcp_events]` (experimental).

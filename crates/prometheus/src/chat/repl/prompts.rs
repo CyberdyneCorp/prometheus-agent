@@ -15,7 +15,7 @@ use pmt_core::secret::SecretString;
 use pmt_i18n::Strings;
 use pmt_memory::session::Approver;
 use pmt_skills::secrets::SecretPrompt;
-use pmt_tools::approval::{ApprovalRequest, Decision, printable};
+use pmt_tools::approval::{ApprovalRequest, Decision, Reply, printable};
 use tokio::sync::{mpsc, oneshot};
 
 /// A memory change waiting for the person.
@@ -106,7 +106,7 @@ impl SecretPrompt for CliSecretPrompt {
 /// What the next line answers.
 pub(super) enum Pending {
     /// A command approval.
-    Approval(Prompt<ApprovalRequest, Decision>),
+    Approval(Prompt<ApprovalRequest, Reply>),
     /// Clarify questions; `answers` so far.
     Clarify {
         /// The prompt.
@@ -150,7 +150,7 @@ impl Pending {
     /// Gives up: denies, skips or cancels.
     pub(super) fn cancel(self) {
         match self {
-            Self::Approval(prompt) => prompt.respond(Decision::Deny),
+            Self::Approval(prompt) => prompt.respond(Decision::Deny.into()),
             Self::Clarify { prompt, .. } => drop(prompt),
             Self::Memory(reply) | Self::Install(reply) => {
                 let _ = reply.send(false);

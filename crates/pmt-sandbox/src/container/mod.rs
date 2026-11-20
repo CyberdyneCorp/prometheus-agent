@@ -7,6 +7,7 @@
 //! - [`hardening`] is the flag set every container starts with and maps a
 //!   runtime's rejection back to the flag it names.
 //! - [`options`] validates `terminal.container.volumes` and `extra_args`.
+//! - [`egress`] sets up a profile's egress-only network and its relay.
 //! - [`lifecycle`] creates, starts, stops and removes containers, keeps
 //!   the process-wide pool idle reaper, and reaps a profile's orphans.
 //!
@@ -21,6 +22,7 @@ use std::time::Duration;
 use pmt_config::schema::{DegradedFeature, SandboxConfig};
 use pmt_core::error::{Error, codes};
 
+pub mod egress;
 pub mod hardening;
 pub mod lifecycle;
 pub mod options;
@@ -93,6 +95,9 @@ pub struct Runtime {
 pub struct Probe {
     /// The daemon cannot act as host root: rootless, or inside a VM.
     pub rootless: bool,
+    /// The daemon runs in a VM of its own (Docker Desktop), which
+    /// forwards the host alias to the host's loopback.
+    pub vm: bool,
     /// How that was decided.
     pub how: String,
 }
@@ -238,16 +243,19 @@ impl Runtime {
         let probe = if security_info.contains("rootless") || security_info == "true" {
             Probe {
                 rootless: true,
+                vm: false,
                 how: "rootless".to_owned(),
             }
         } else if os.contains("Docker Desktop") {
             Probe {
                 rootless: true,
+                vm: true,
                 how: "Docker Desktop VM".to_owned(),
             }
         } else {
             Probe {
                 rootless: false,
+                vm: false,
                 how: "rootful daemon".to_owned(),
             }
         };

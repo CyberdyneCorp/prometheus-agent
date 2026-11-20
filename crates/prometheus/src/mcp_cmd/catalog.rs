@@ -390,7 +390,8 @@ fn bootstrap(scope: &ProfileScope, dir: &Path, command: &str) -> Result<(), Erro
     ));
     let requester = format!("mcp-bootstrap:{}", dir_name(dir));
     let observer = crate::egress::observer(scope, None, None);
-    let proxy = crate::egress::child_proxy(scope, &capabilities, hosts, &requester, observer)?;
+    let proxy =
+        crate::egress::child_proxy(scope, &capabilities, (hosts, None), &requester, observer)?;
     let mut policy = pmt_sandbox::Policy::from_set(&capabilities, &paths);
     if let Some(proxy) = &proxy {
         policy = crate::egress::through(policy, proxy);

@@ -156,16 +156,17 @@ pub fn read_pem_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, Error
 }
 
 /// Writes the PEM bundle sandboxed children trust: the OS roots plus the
-/// `network.extra_ca_file` roots, so children verify like the in-process
+/// roots of `extra_ca_files` (`network.extra_ca_file`, the egress proxy's
+/// CA under credential injection), so children verify like the in-process
 /// client does (the file is replaced atomically, mode 0600).
 ///
 /// # Errors
 ///
 /// `net.extra_ca` for a bad extra file; `net.client_init` when no root at
 /// all could be collected or the bundle cannot be written.
-pub fn write_child_bundle(dest: &Path, extra_ca_file: Option<&Path>) -> Result<(), Error> {
+pub fn write_child_bundle(dest: &Path, extra_ca_files: &[&Path]) -> Result<(), Error> {
     let mut certs = rustls_native_certs::load_native_certs().certs;
-    if let Some(extra) = extra_ca_file {
+    for extra in extra_ca_files {
         certs.extend(read_pem_certs(extra)?);
     }
     if certs.is_empty() {
@@ -228,7 +229,7 @@ mod tests {
         let extra = dir.path().join("corp.pem");
         std::fs::write(&extra, ca.cert.pem()).unwrap();
         let bundle = dir.path().join("bundle.pem");
-        write_child_bundle(&bundle, Some(&extra)).unwrap();
+        write_child_bundle(&bundle, &[extra.as_path()]).unwrap();
         let certs = read_pem_certs(&bundle).unwrap();
         assert!(certs.iter().any(|c| c.as_ref() == ca.cert.der().as_ref()));
     }

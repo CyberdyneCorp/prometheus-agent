@@ -241,6 +241,27 @@ pub enum Command {
         #[command(subcommand)]
         command: SecurityCommand,
     },
+    /// Who runs turns on the OpenAI providers: Prometheus, or the Codex
+    /// app-server (from the next session); migrate the profile's MCP
+    /// servers into the Codex config.
+    CodexRuntime {
+        /// The codex-runtime subcommand.
+        #[command(subcommand)]
+        command: crate::codex_runtime_cmd::CodexRuntimeCommand,
+    },
+    /// The bot screen: the virtual desktop the agent's headed browsers
+    /// act on and the desktop app streams.
+    ComputerUse {
+        /// The computer-use subcommand.
+        #[command(subcommand)]
+        command: crate::computer_use_cmd::ComputerUseCommand,
+    },
+    /// The profile's egress proxy for container and remote sandboxes.
+    Egress {
+        /// The egress subcommand.
+        #[command(subcommand)]
+        command: crate::egress_cmd::EgressCommand,
+    },
     /// Back up the whole home to a .tar.zst archive, or restore one.
     Backup {
         /// The backup subcommand.
@@ -391,6 +412,12 @@ pub enum Command {
     /// Emergency pause: no new turns or scheduled jobs on any profile of
     /// this home until `pause off` (running turns finish).
     Pause(crate::pause_cmd::PauseArgs),
+    /// Messaging accounts linked across platforms with `/link`.
+    Identity {
+        /// The identity subcommand.
+        #[command(subcommand)]
+        command: crate::identity_cmd::IdentityCommand,
+    },
     /// The Nous Portal subscription and its tool gateway routing.
     Portal {
         /// The portal subcommand.
@@ -1051,6 +1078,9 @@ pub enum SecurityCommand {
         #[command(subcommand)]
         command: AuditCommand,
     },
+    /// Check runtimes, bridge environments, plugin and MCP packages
+    /// against the OSV vulnerability database.
+    Scan(crate::security_scan::ScanArgs),
 }
 
 /// `prometheus security audit` subcommands.
@@ -1092,6 +1122,18 @@ pub enum SecretsCommand {
         /// Target backend.
         #[arg(long, value_enum)]
         to: SecretsBackendArg,
+    },
+    /// The Bitwarden Secrets Manager source (`bws`).
+    Bitwarden {
+        /// The bitwarden subcommand.
+        #[command(subcommand)]
+        command: crate::secret_sources_cmd::BitwardenCommand,
+    },
+    /// The 1Password source (`op`).
+    Onepassword {
+        /// The onepassword subcommand.
+        #[command(subcommand)]
+        command: crate::secret_sources_cmd::OnePasswordCommand,
     },
 }
 
@@ -1255,6 +1297,23 @@ pub enum ProfileCommand {
         /// Do not ask for confirmation.
         #[arg(long)]
         yes: bool,
+    },
+    /// Set or generate a profile's description.
+    Describe(crate::profile_cmd::args::DescribeArgs),
+    /// Install a profile distribution from a git URL or a directory.
+    Install(crate::profile_cmd::args::InstallArgs),
+    /// Update a profile from the distribution it was installed from.
+    Update(crate::profile_cmd::args::UpdateArgs),
+    /// Show where a profile's distribution came from.
+    Info {
+        /// Profile name.
+        name: String,
+    },
+    /// Move or purge a profile's identity.
+    Identity {
+        /// The identity subcommand.
+        #[command(subcommand)]
+        command: crate::profile_cmd::args::IdentityCommand,
     },
 }
 

@@ -18,6 +18,10 @@ use pmt_core::error::{Error, codes};
 use pmt_net::DestinationPolicy;
 use pmt_net::egress::{Allowed, Denial, Denylist, HostPolicy, Mode, Observer};
 
+pub mod gateway;
+pub mod injection;
+pub mod mappings;
+
 /// The pmt-net mode of a configured mode.
 #[must_use]
 pub fn mode(mode: EgressMode) -> Mode {
@@ -237,7 +241,9 @@ pub struct SessionEgress {
 /// naming a host also granting that host's private address (spec:
 /// security-boundaries, Egress enforcement for child processes). The child
 /// runs with [`pmt_sandbox::Policy::through_proxy`] and the proxy
-/// variables.
+/// variables. With `injection` the proxy also injects the session's mapped
+/// credentials (spec: security-boundaries, Credential injection at the
+/// egress proxy).
 ///
 /// # Errors
 ///
@@ -245,7 +251,10 @@ pub struct SessionEgress {
 pub fn child_proxy(
     scope: &ProfileScope,
     capabilities: &pmt_core::capability::CapabilitySet,
-    hosts: Arc<HostPolicy>,
+    (hosts, injection): (
+        Arc<HostPolicy>,
+        Option<Arc<pmt_net::egress::inject::Injection>>,
+    ),
     requester: &str,
     observer: Observer,
 ) -> Result<Option<pmt_net::egress::Proxy>, Error> {
@@ -271,6 +280,9 @@ pub fn child_proxy(
     let mut rules = pmt_net::egress::Rules::new(hosts, destinations, requester).observed(observer);
     if !anywhere {
         rules = rules.granted(granted);
+    }
+    if let Some(injection) = injection {
+        rules = rules.injecting(injection);
     }
     pmt_net::egress::Proxy::start(rules).map(Some).map_err(|e| {
         Error::new(

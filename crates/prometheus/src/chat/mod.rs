@@ -125,6 +125,12 @@ pub fn mode(args: &ChatArgs, terminals: bool, interface: Interface, quiet: bool)
 /// Usage, configuration, store and session errors (the caller prints and
 /// exits with their code); a finished run returns its own status.
 pub fn run(args: &ChatArgs, ctx: &Context<'_>, ui: Ui) -> Result<u8, Error> {
+    // A developer's foreground session loads the plugins `plugins dev`
+    // serves (spec: plugin-system, Plugin development loop); the TUI's
+    // sessions run in the daemon, which loads them for attended clients.
+    if !args.safe_mode {
+        crate::plugins_host::dev::allow();
+    }
     let ui = ui.with_format(args.output_format);
     let record = Arc::new(usage_file::RunRecord::default());
     let mut outcome = run_recorded(args, ctx, ui, &record);
@@ -177,6 +183,7 @@ fn run_recorded(
         ctx.scope()?
     };
     crate::startup::start_export(&scope);
+    crate::relay_host::start(&scope, ctx.launch);
     if scope.config().plugins.safe_mode && !ui.quiet {
         // What every safe-mode start shows (spec: plugin-system, Safe mode).
         let strings = pmt_config::language::strings(scope.dir(), pmt_i18n::Surface::Core);
@@ -298,6 +305,7 @@ impl Run<'_> {
             provider: args.provider.as_deref(),
             model: args.model.as_deref(),
             mock_script: args.mock_script.as_deref(),
+            unrecorded: false,
         };
         let mut factory = Factory::new(scope, ctx.launch, &flags, ad_hoc, options)?
             .with_config_reread(set.clone());
@@ -341,6 +349,8 @@ fn session_options(args: &ChatArgs, mode: Mode) -> Result<Options, Error> {
             .as_deref()
             .map(pmt_evolve::experience::domain::parse)
             .transpose()?,
+        // `dev::allow` in `run` already lets every session here load them.
+        dev_plugins: false,
     })
 }
 
@@ -382,6 +392,7 @@ impl Tui<'_> {
             terminal: terminal::identity().filter(|_| scope.config().sessions.terminal_continue),
             cwd,
             egress: self.args.egress_overrides(),
+            join: None,
         };
         crate::tui_cmd::start(&launch, scope, ctx, ui)
     }

@@ -185,6 +185,7 @@ pub fn run(recording: &Recording, settings: &Settings<'_>) -> Result<Report, Err
         provider: state.provider.as_deref(),
         model: state.model.as_deref(),
         mock_script: state.mock_script.is_some().then_some(mock.as_path()),
+        unrecorded: false,
     };
     let options = Options {
         cwd: workspace,

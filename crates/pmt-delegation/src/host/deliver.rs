@@ -42,7 +42,7 @@ impl Delegator {
     pub(super) async fn complete(
         &self,
         delegation_id: &str,
-        results: &[SubagentResult],
+        joined: &super::spawn::Joined,
         tasks: usize,
         sink: &Arc<dyn Completions>,
         label: Option<&str>,
@@ -50,7 +50,13 @@ impl Delegator {
         if self.suspended() {
             return;
         }
-        let text = completion_text(delegation_id, &self.for_context(results, tasks), label);
+        let mut body = json!({});
+        joined.report(&mut body);
+        let text = completion_text(
+            delegation_id,
+            &self.for_context(&joined.results, tasks),
+            (label, body.as_object()),
+        );
         deliver_one(&self.ctx.store, delegation_id, text, sink.as_ref()).await;
     }
 }
@@ -73,12 +79,19 @@ pub fn capped(result: &SubagentResult, cap: Option<usize>, spill_dir: &Path) -> 
 /// The `delegation_completed` input text of `results`, headed by
 /// `label` when the dispatch named one (`/review`).
 #[must_use]
-pub fn completion_text(delegation_id: &str, results: &[Value], label: Option<&str>) -> String {
+pub fn completion_text(
+    delegation_id: &str,
+    results: &[Value],
+    (label, extra): (Option<&str>, Option<&serde_json::Map<String, Value>>),
+) -> String {
     let mut body = json!({
         "type": COMPLETION_TYPE,
         "delegation_id": delegation_id,
         "results": results,
     });
+    for (key, value) in extra.into_iter().flatten() {
+        body[key] = value.clone();
+    }
     let heading = match label {
         Some(label) => {
             body["label"] = label.into();
@@ -185,7 +198,11 @@ pub async fn deliver_pending(
             .filter_map(|json| serde_json::from_str::<SubagentResult>(json).ok())
             .map(|result| capped(&result, cap, spill_dir))
             .collect();
-        let text = completion_text(&delegation.id, &results, delegation.label.as_deref());
+        let text = completion_text(
+            &delegation.id,
+            &results,
+            (delegation.label.as_deref(), None),
+        );
         deliver_one(store, &delegation.id, text, sink).await;
     }
 }

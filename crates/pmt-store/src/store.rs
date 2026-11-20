@@ -11,7 +11,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use pmt_config::schema::JournalMode;
@@ -62,6 +62,8 @@ pub struct Store {
     /// replay recreates the recorded ones; see
     /// [`Store::plan_session_ids`]).
     pub(crate) planned_ids: Mutex<std::collections::VecDeque<pmt_core::id::SessionId>>,
+    /// Encryption at rest (`storage.encryption`), when on.
+    crypt: Option<crate::crypt::Crypt>,
 }
 
 struct Writer {
@@ -96,6 +98,22 @@ impl Store {
         Self::open_with(scope, migrate::MIGRATIONS)
     }
 
+    /// [`Store::open`] with the keychain an encrypted store's key is read
+    /// from (tests use `pmt_config::secrets::MemoryKeychain`).
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::open`], and `store.key_unavailable` /
+    /// `store.encryption_mismatch` (exit 78).
+    pub fn open_with_keychain(
+        scope: &ProfileScope,
+        keychain: &Arc<dyn pmt_config::secrets::Keychain>,
+    ) -> Result<Self, Error> {
+        let location = StoreLocation::of(scope);
+        let crypt = crate::crypt::keys::for_store(scope, keychain, location.database())?;
+        Self::open_location_crypt(scope, location, migrate::MIGRATIONS, crypt)
+    }
+
     pub(crate) fn open_with(scope: &ProfileScope, migrations: &[Migration]) -> Result<Self, Error> {
         Self::open_location(scope, StoreLocation::of(scope), migrations)
     }
@@ -116,6 +134,18 @@ impl Store {
         location: StoreLocation,
         migrations: &[Migration],
     ) -> Result<Self, Error> {
+        let keychain: Arc<dyn pmt_config::secrets::Keychain> =
+            Arc::new(pmt_config::secrets::OsKeychain);
+        let crypt = crate::crypt::keys::for_store(scope, &keychain, location.database())?;
+        Self::open_location_crypt(scope, location, migrations, crypt)
+    }
+
+    fn open_location_crypt(
+        scope: &ProfileScope,
+        location: StoreLocation,
+        migrations: &[Migration],
+        crypt: Option<crate::crypt::Crypt>,
+    ) -> Result<Self, Error> {
         let profile = scope.profile().clone();
         profile.ensure_live()?;
         let profile_id = profile.id()?;
@@ -123,7 +153,7 @@ impl Store {
         files::private_dir(location.blobs())?;
         let supported = migrations.last().map_or(0, |m| m.version);
         let quarantined = if database.exists() {
-            integrity::check_at_open(&database, location.quarantine(), supported)?
+            integrity::check_at_open(&database, location.quarantine(), supported, crypt.as_ref())?
         } else {
             None
         };
@@ -132,10 +162,16 @@ impl Store {
             files::tighten(&path, 0o600);
         }
         let journal = scope.config().storage.journal_mode;
-        let conn = open_writer(&database, &profile_id, &profile, migrations, journal)?;
+        let conn = open_writer(
+            &database,
+            (&profile_id, &profile),
+            migrations,
+            journal,
+            crypt.as_ref(),
+        )?;
         let newer_schema = conn.newer_schema;
         let mut store = Self {
-            readers: ReaderPool::new(database.clone()),
+            readers: ReaderPool::new(database.clone(), crypt.clone()),
             file_id: files::file_id(&database),
             uuid: read_store_uuid(&conn.conn)?,
             location,
@@ -155,6 +191,7 @@ impl Store {
                 .redact_secrets
                 .then(|| scope.secrets().clone()),
             planned_ids: Mutex::default(),
+            crypt,
         };
         if let Some(quarantined) = quarantined {
             store.quarantine = Some(store.salvage(quarantined)?);
@@ -174,10 +211,26 @@ impl Store {
         }))
     }
 
+    /// The store's encryption, when `storage.encryption` is on.
+    #[must_use]
+    pub fn crypt(&self) -> Option<&crate::crypt::Crypt> {
+        self.crypt.as_ref()
+    }
+
+    /// The key blob files are sealed with.
+    pub(crate) fn blob_key(&self) -> Option<&crate::crypt::Key> {
+        self.crypt.as_ref().map(crate::crypt::Crypt::key)
+    }
+
     /// The store's files.
     #[must_use]
     pub fn location(&self) -> &StoreLocation {
         &self.location
+    }
+
+    /// The profile's directory.
+    pub(crate) fn profile_dir(&self) -> &Path {
+        self.profile.path()
     }
 
     /// The name of the profile the store belongs to.
@@ -387,13 +440,13 @@ struct Opened {
 
 fn open_writer(
     database: &Path,
-    profile_id: &ProfileId,
-    profile: &ProfileDir,
+    (profile_id, profile): (&ProfileId, &ProfileDir),
     migrations: &[Migration],
     // The configured mode (`storage.journal_mode`).
     journal: JournalMode,
+    crypt: Option<&crate::crypt::Crypt>,
 ) -> Result<Opened, Error> {
-    let mut conn = Connection::open(database).map_err(sql)?;
+    let mut conn = crate::crypt::open(database, crypt).map_err(sql)?;
     conn.busy_timeout(BUSY_TIMEOUT).map_err(sql)?;
     conn.pragma_update(None, "foreign_keys", true)
         .map_err(sql)?;
@@ -539,6 +592,7 @@ impl Drop for Borrowed<'_> {
 /// At most [`MAX_READERS`] read-only connections, opened on demand.
 struct ReaderPool {
     database: PathBuf,
+    crypt: Option<crate::crypt::Crypt>,
     state: Mutex<PoolState>,
     returned: Condvar,
 }
@@ -549,9 +603,10 @@ struct PoolState {
 }
 
 impl ReaderPool {
-    fn new(database: PathBuf) -> Self {
+    fn new(database: PathBuf, crypt: Option<crate::crypt::Crypt>) -> Self {
         Self {
             database,
+            crypt,
             state: Mutex::new(PoolState {
                 idle: Vec::new(),
                 open: 0,
@@ -590,7 +645,8 @@ impl ReaderPool {
         let flags = OpenFlags::SQLITE_OPEN_READ_ONLY
             | OpenFlags::SQLITE_OPEN_NO_MUTEX
             | OpenFlags::SQLITE_OPEN_URI;
-        let conn = Connection::open_with_flags(&self.database, flags).map_err(sql)?;
+        let conn =
+            crate::crypt::connect(&self.database, flags, self.crypt.as_ref()).map_err(sql)?;
         conn.busy_timeout(BUSY_TIMEOUT).map_err(sql)?;
         Ok(conn)
     }

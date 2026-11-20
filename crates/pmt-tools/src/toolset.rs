@@ -109,6 +109,11 @@ impl Toolset {
     }
 }
 
+/// The `video_gen` toolset: `video_generate` plus the tools video
+/// providers contribute (present only while their provider is the
+/// configured one).
+const VIDEO_GEN: &[&str] = &["video_generate", "xai_video_edit", "xai_video_extend"];
+
 /// The `browser` toolset.
 const BROWSER: &[&str] = &[
     "browser_exec",
@@ -223,7 +228,7 @@ pub fn builtin() -> Vec<Toolset> {
         Toolset::new("vision", "Image analysis", &["vision_analyze"]),
         Toolset::new("video", "Video analysis", &["video_analyze"]).default_off(),
         Toolset::new("image_gen", "Image generation", &["image_generate"]),
-        Toolset::new("video_gen", "Video generation", &["video_generate"]).default_off(),
+        Toolset::new("video_gen", "Video generation", VIDEO_GEN).default_off(),
         Toolset::new("computer_use", "Desktop control", &["computer_use"]),
         Toolset::new(
             "terminal",
@@ -302,18 +307,18 @@ pub fn builtin() -> Vec<Toolset> {
     sets
 }
 
-/// The GUI surfaces' toolsets (spec: desktop-app, Desktop UI toolset
-/// contract; First-run onboarding chat; projects, Project tool for GUI
-/// sessions): `project` (default on for desktop and tui only), and the
-/// surface-gated `desktop_ui` and `onboarding`.
+/// The GUI surfaces' toolsets (spec: tool-system, Surface toolsets come
+/// from the session; desktop-app, Desktop UI toolset contract; First-run
+/// onboarding chat; projects, Project tool for GUI sessions), all
+/// surface-gated: `project` (desktop, tui and dashboard), `desktop_ui`
+/// and `onboarding`.
 fn gui_toolsets() -> Vec<Toolset> {
     vec![
-        Toolset::new(
+        surface_gated(Toolset::new(
             crate::agent_level_desktop::PROJECT,
-            "Switch or create the session's project (on by default for desktop and tui)",
+            "Switch or create the session's project (desktop, tui and dashboard sessions)",
             &["project"],
-        )
-        .default_off(),
+        )),
         surface_gated(Toolset::new(
             crate::agent_level_desktop::DESKTOP_UI,
             "The desktop window: reactions, terminal and preview panes, tours, tips, appearance",

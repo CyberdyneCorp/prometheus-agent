@@ -66,6 +66,9 @@ pub struct Priced {
     pub reason: Option<String>,
     /// Curated by Prometheus (community models from search are not).
     pub validated: bool,
+    /// Where the managed server puts it (kept in the library record).
+    #[serde(skip)]
+    pub placement: Option<crate::placement::Placement>,
 }
 
 /// Every entry of `catalog` priced for `selection`, catalog order, with at
@@ -135,10 +138,19 @@ fn price_entry(entry: &Entry, selection: &Selection) -> Option<Priced> {
             },
         )
     };
-    let context_start = match fit {
-        Fit::FitsGpu => grown_window(entry, quant, min_window, gpu),
-        _ => min_window,
+    let budget = crate::placement::Budget {
+        gpu,
+        ram: selection.ram_budget,
+        gpu_bandwidth: selection
+            .gpu
+            .as_ref()
+            .map_or(CPU_BANDWIDTH_GBPS, crate::hardware::Gpu::bandwidth),
     };
+    let placement = match fit {
+        Fit::TooBig => None,
+        _ => crate::placement::launch(&shape(entry, quant), &budget),
+    };
+    let context_start = placement.map_or(min_window, |p| p.window);
     let memory_bytes = need(entry, quant, context_start);
     Some(Priced {
         id: entry.id.clone(),
@@ -154,17 +166,28 @@ fn price_entry(entry: &Entry, selection: &Selection) -> Option<Priced> {
         recommended: false,
         reason: (fit == Fit::TooBig).then(|| too_big(memory_bytes, selection)),
         validated: true,
+        placement,
     })
 }
 
-/// The largest doubling of `start` up to the native window that still fits
-/// the GPU.
-fn grown_window(entry: &Entry, quant: &Quant, start: u64, budget: u64) -> u64 {
-    let mut window = start;
-    while window * 2 <= entry.context_max && need(entry, quant, window * 2) <= budget {
-        window *= 2;
+/// What placing `quant` of `entry` needs.
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)] // shares of byte counts
+pub fn shape(entry: &Entry, quant: &Quant) -> crate::placement::Shape {
+    let weights = quant.bytes();
+    crate::placement::Shape {
+        weights,
+        projector: entry.projector.as_ref().map_or(0, |p| p.size),
+        experts: (weights as f64 * entry.expert_share.clamp(0.0, 1.0)) as u64,
+        kv_per_token: entry.kv_bytes_per_token,
+        mtp: entry.mtp,
+        native: entry.context_max,
+        active_bytes: entry.active_params_b * quant.bits / 8.0 * 1e9,
     }
-    window
 }
 
 fn speed(entry: &Entry, quant: &Quant, fit: Fit, selection: &Selection) -> f64 {
@@ -211,6 +234,7 @@ mod tests {
                 integrated: false,
                 cuda: Some(13),
                 bandwidth_gbps: None,
+                utilization_percent: None,
             }],
         }
     }

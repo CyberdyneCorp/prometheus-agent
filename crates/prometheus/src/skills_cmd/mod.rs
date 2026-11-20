@@ -7,11 +7,13 @@
 pub mod args;
 mod bundles;
 mod config;
+pub(crate) mod evals;
 pub(crate) mod hub;
 mod list;
 mod maintain;
 mod share;
 pub(crate) mod slash;
+mod test;
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -122,6 +124,22 @@ pub fn run(command: &SkillsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
             name,
         )?),
         SkillsCommand::Doctor => doctor(&env),
+        SkillsCommand::Test {
+            name,
+            all: _,
+            provider,
+            repeat,
+        } => test::run(
+            &env,
+            &test::Request {
+                name: name.as_deref(),
+                provider: match provider {
+                    args::EvalProviderArg::Mock => evals::Provider::Mock,
+                    args::EvalProviderArg::Live => evals::Provider::Live,
+                },
+                repeat: *repeat,
+            },
+        ),
         SkillsCommand::Reset { name } => {
             if let Some(done) = hub::reset(&env, name) {
                 return done;

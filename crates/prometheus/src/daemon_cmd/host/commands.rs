@@ -102,7 +102,7 @@ impl DaemonHost {
             caller: session.live.surface(),
             chat: None,
         };
-        let dispatched = run.line(line_of(&params), 0).await;
+        let dispatched = Box::pin(run.line(line_of(&params), 0)).await;
         // Every surface shows the session's model, effort and mode: a
         // command that may have changed them is announced.
         if SETTINGS.contains(&params.name.trim_start_matches('/'))
@@ -137,7 +137,7 @@ impl DaemonHost {
             caller: "gateway",
             chat: Some(&self.gateway),
         };
-        Ok(run.line(input.to_owned(), 0).await)
+        Ok(Box::pin(run.line(input.to_owned(), 0)).await)
     }
 }
 
@@ -189,7 +189,7 @@ impl Run<'_> {
             return done(commands::cron::confirm(&self.ctx(&scope), confirmation));
         }
         match self.registry.resolve(&line, self.surface) {
-            Resolution::Builtin { command, args } => self.builtin(command, &args).await,
+            Resolution::Builtin { command, args } => Box::pin(self.builtin(command, &args)).await,
             Resolution::External { command, args } => match command.source {
                 Source::Quick => Box::pin(self.quick(&command.name, &args, depth)).await,
                 Source::Plugin => {
@@ -228,7 +228,7 @@ impl Run<'_> {
                 refused(format!("quick command '{name}' nests too deeply"))
             }
             pmt_config::schema::QuickCommandKind::Alias => {
-                self.line(alias_line(&command, args), depth + 1).await
+                Box::pin(self.line(alias_line(&command, args), depth + 1)).await
             }
             pmt_config::schema::QuickCommandKind::Exec => {
                 let mut command = command;
@@ -281,13 +281,13 @@ impl Run<'_> {
                 "restoring a snapshot replaces the store the gateway daemon serves; stop it with 'prometheus daemon stop' and restore from the line interface",
             ),
             "snapshot" => done(crate::slash_handlers::snapshot(&self.profile.scope(), args)),
-            _ => self.shared(name, args).await,
+            _ => Box::pin(self.shared(name, args)).await,
         }
     }
 
     async fn shared(&self, name: &str, args: &str) -> Dispatched {
         let scope = self.profile.scope();
-        let reply = commands::run(&self.ctx(&scope), name, args).await;
+        let reply = Box::pin(commands::run(&self.ctx(&scope), name, args)).await;
         if AUTOMATION.contains(&name) {
             // What a command set starts at the next idle boundary, and every
             // surface shows it.
@@ -320,7 +320,12 @@ impl Run<'_> {
             live: &self.session.live,
             scope,
             registry: self.registry,
-            surface: self.surface,
+            // A client's commands resolve as the line interface's, but
+            // what they show follows the client that asked.
+            surface: match (self.surface, self.link.client()) {
+                (Surface::Cli, Some(client)) => super::discovery::surface(client),
+                (surface, _) => surface,
+            },
             timestamps: scope.config().display.timestamps,
             running: self.session.busy.load(Ordering::Acquire),
             post: self.poster(),

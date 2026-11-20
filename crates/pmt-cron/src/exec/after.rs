@@ -417,7 +417,7 @@ fn settle_job(row: &mut JobRow, job: &Job, run: &RunRow, executed: bool, now: Ti
         .is_some_and(|limit| row.completed >= limit);
     if limit_reached {
         complete(row, now);
-    } else if row.next_run_at.is_none() && job.spec.schedule.recurring() {
+    } else if row.next_run_at.is_none() && !job.spec.schedule.ends() {
         JobState::Error.as_str().clone_into(&mut row.state);
     } else if row.next_run_at.is_none() {
         complete(row, now);

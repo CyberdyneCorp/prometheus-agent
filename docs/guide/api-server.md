@@ -189,3 +189,53 @@ later runs of its session wait until then. Each profile runs at most
   `/v1/toolsets`, and the authenticated `GET /health/detailed`, which
   reports bounded status and counts — never configuration values,
   credentials, paths or raw errors.
+
+## Gateway proxy mode
+
+A daemon whose profile sets `[gateway.proxy]` keeps its messaging adapters,
+authorization, pairing, conversation keys and delivery, but runs no agent:
+every admitted turn goes to another daemon's API server as a session-chat
+request, and the answer streams back to the chat. This lets a containerized
+gateway relay to the agent on the host:
+
+```toml
+[gateway.proxy]
+url = "http://host.docker.internal:8642/p/default"   # the remote API base with its profile prefix
+key_secret = "UPSTREAM_API_KEY"                      # the remote profile's API key, in this profile's secrets
+```
+
+Each local conversation gets its own remote session on its first turn
+(`POST /api/sessions` with `X-Prometheus-Session-Key` set to the local
+conversation key), remembered in `<profile>/gateway/proxy-sessions.json`;
+one the remote no longer has is created again. A remote `401` puts the
+profile's adapters in `fatal` with code `proxy_auth`; an unreachable remote
+answers "Upstream agent unavailable, try again shortly." and queues nothing.
+
+## Subscription proxy
+
+`prometheus gateway proxy start` lends the profile's subscription sign-in to
+other tools as a local OpenAI-compatible endpoint, with no agent loop and no
+tools:
+
+```text
+prometheus gateway proxy start [--provider nous|xai] [--host 127.0.0.1] [--port 8645] [--allow-lan]
+prometheus gateway proxy status        # per provider: ready (expires <time>), not logged in, credentials need attention
+prometheus gateway proxy providers     # the providers and the paths each forwards
+```
+
+Only the provider's allowed paths are forwarded, verbatim and with streaming
+preserved (`nous`: `/v1/chat/completions`, `/v1/completions`,
+`/v1/embeddings`, `/v1/models`; `xai`: `/v1/chat/completions`,
+`/v1/responses`, `/v1/models`); any other path answers 404 listing them and
+nothing goes upstream. The client's `Authorization` is ignored: the proxy
+attaches the profile's current token, refreshed under the cross-process
+refresh lock. Bodies are never logged; each call is recorded in the usage
+ledger with `billing_source = "subscription:<provider>"` and purpose
+`proxy`, in a hidden session tagged `proxy`. Requests whose `Host` is not
+the proxy's own address (the IP literal it listens on, or on
+`--host 0.0.0.0` the interface address the client connected to; a loopback
+address also as `localhost`; DNS names are refused) and browser requests (an `Origin`, or
+`Sec-Fetch-Site` other than `none`) are refused. A non-loopback `--host`
+needs `--allow-lan`, and LAN clients must then send
+`Authorization: Bearer <PMT_PROXY_CLIENT_KEY>` (the secret is generated on
+first use). `start` exits 78 when the provider is not signed in.

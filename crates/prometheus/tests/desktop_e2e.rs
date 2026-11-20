@@ -64,3 +64,14 @@ fn desktop_settings_palette_bots_and_profiles() {
     }
     drive(home.path(), "desktop-settings.spec.ts");
 }
+
+/// Scenario: RTL layout (i18n, Language switchers show endonyms): the
+/// settings list every language by endonym; choosing `ar` writes
+/// `display.language` and mirrors the window at once.
+#[test]
+fn the_language_switcher_mirrors_the_window_for_arabic() {
+    let home = mock_home();
+    drive(home.path(), "desktop-language.spec.ts");
+    let language = ok(&run(home.path(), &["config", "get", "display.language"]));
+    assert_eq!(language.trim().trim_matches('"'), "en", "switched back");
+}

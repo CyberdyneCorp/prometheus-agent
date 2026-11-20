@@ -9,6 +9,7 @@ mod hermes;
 mod host;
 mod interrupt;
 mod more;
+mod rollback;
 
 use std::path::{Path, PathBuf};
 
@@ -24,6 +25,7 @@ use crate::prompt;
 pub use agents::{AgentArgs, OpenClawArgs};
 pub use hermes::FromHermesArgs;
 pub use more::{CleanupArgs, SessionsArgs, SyncArgs};
+pub use rollback::RollbackArgs;
 
 /// `prometheus migrate` subcommands.
 #[derive(Debug, Subcommand)]
@@ -55,6 +57,9 @@ pub enum MigrateCommand {
     Cleanup(CleanupArgs),
     /// Import one Claude Code or Codex CLI conversation as a session.
     Sessions(SessionsArgs),
+    /// Take a migration run back: remove what it created, restore what it
+    /// replaced, keep what was changed since.
+    Rollback(RollbackArgs),
 }
 
 /// Runs a `migrate` subcommand; `profiles` are the `--profile` values.
@@ -84,6 +89,7 @@ pub fn run(command: &MigrateCommand, ctx: &Context<'_>, profiles: &[String]) -> 
         MigrateCommand::Sync(args) => more::sync(args, ctx),
         MigrateCommand::Cleanup(args) => more::cleanup(args, ctx),
         MigrateCommand::Sessions(args) => more::sessions(args, ctx),
+        MigrateCommand::Rollback(args) => rollback::run(args, ctx),
     }
 }
 

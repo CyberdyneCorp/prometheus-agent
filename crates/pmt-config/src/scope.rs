@@ -107,9 +107,17 @@ impl ProfileScope {
             ),
             Launch::Other => None,
         };
-        let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env).with_command(
-            crate::secrets::command::load(&config.config().secrets.command),
-        );
+        let secrets = SecretsHandle::new(profile.name().as_str(), store, launch_env)
+            .with_command(crate::secrets::command::load(
+                &config.config().secrets.command,
+            ))
+            .with_external(
+                crate::secrets::external::ExternalSources::for_profile(
+                    config.config(),
+                    profile.home(),
+                )
+                .map(Arc::new),
+            );
         crate::passthrough::check_with_secrets(&config.config().terminal, &secrets)?;
         crate::essential::semantic(config.config(), profile.path())?;
         Ok(Self {

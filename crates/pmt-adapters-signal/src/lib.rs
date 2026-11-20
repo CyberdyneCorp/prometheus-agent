@@ -257,6 +257,8 @@ impl Adapter for Signal {
             supports_delete: true,
             supports_typing: true,
             supports_reactions: true,
+            delivery_receipts: true,
+            read_receipts: true,
             media_in: all.clone(),
             media_out: all,
             stateless_send: true,

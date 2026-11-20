@@ -47,6 +47,15 @@ profile's store first, so a restart of the daemon delivers it exactly once
 when the session is next loaded; children still running at a restart end
 `interrupted`.
 
+A call's `join` decides when it is done: `all` (default) waits for every
+child; `first_success` returns once a child completes (and, with an
+`output_schema`, its answer matched it) and stops the others; `quorum:N`
+returns once N children succeeded and stops the rest. Stopped children
+report `status = "interrupted"` and `exit_reason = "interrupted"`, and the
+result (or the background completion) carries `join` and `join_satisfied`,
+which is `false` when too few children succeeded. With independent
+completions the join applies within each completion.
+
 At most `delegation.max_concurrent_children` children run at once per
 profile; more wait in a fair queue (up to `delegation.max_queued`). A child
 that makes no progress for 450 seconds between steps, or 1200 seconds in one

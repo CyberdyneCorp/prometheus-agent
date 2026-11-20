@@ -268,6 +268,49 @@ Python-bridge calls (a `traceparent` field), and a client may send its
 own in a request's `meta.traceparent`; it is sent to model providers only
 with `propagate_external = true`.
 
+### Langfuse
+
+`observability.otel.preset = "langfuse"` turns export on toward Langfuse:
+spans go to `<observability.langfuse.host>/api/public/otel` (default host
+`https://cloud.langfuse.com`) over OTLP/HTTP with Basic authentication
+built from the secrets `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
+Langfuse takes traces only, so no metrics are sent. A daemon whose preset
+lacks either secret refuses to start (exit 78) naming it. Message content
+reaches Langfuse only with `observability.otel.capture_content = true`.
+
+```toml
+[observability.otel]
+preset = "langfuse"
+
+[observability.langfuse]
+host = "https://cloud.langfuse.com"
+```
+
+### NeMo Relay
+
+NeMo Relay reads its user `plugins.toml` (`~/.config/nemo-relay/plugins.toml`,
+replaced by `observability.nemo_relay.plugins_toml` when set) and then its
+system file (`/etc/nemo-relay/plugins.toml`, `%ProgramData%\nemo-relay\plugins.toml`
+on Windows), which has the highest precedence. `prometheus doctor
+observability` lists the files that apply, the system one marked as the
+highest precedence.
+
+With `observability.nemo_relay.enabled = true` (the launch profile's
+setting, daemon-wide) the process hosts Relay in the python bridge: on the
+first session event it builds a managed environment with
+`nemo-relay>=0.11,<0.12` under `<profile>/python/relay/` (the lock needs the
+package index once; later starts are offline) and runs the bridge's
+`relay_host.py` there. Every session's lifecycle reaches Relay from the
+trajectory stream: the session as an `Agent` scope, each turn as a
+`Function` scope inside it, each model call as an `Llm` scope and each tool
+call as a `Tool` scope inside the turn. Message text, tool arguments and
+tool output are sent (redacted) only with
+`observability.otel.capture_content = true`. Sessions never wait for Relay:
+a host that cannot start is logged (`NeMo Relay disabled: ...`) and a host
+that falls behind drops events; at exit the process waits up to 30 s for
+Relay to flush. `nemo-relay` publishes wheels for Linux and macOS (arm64)
+only, so the host cannot start on Windows.
+
 ## Liveness watchdog and task dumps
 
 A thread outside the daemon's async runtime probes it every

@@ -109,11 +109,11 @@ export type Admission = "started" | "queued" | "steered" | "handled";
 
 /** The answer to `approval.request` (also `approval.respond` params, with its `id`). */
 export interface ApprovalAnswer {
-  /** For a diff approval: the hunks accepted. */
+  /** For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. */
   accepted_hunks?: Array<number> | null;
   /** The decision. */
   decision: Decision;
-  /** An edited command to run instead. */
+  /** For a diff approval: the file content to write instead of the proposed one (`edit then accept`). */
   replacement?: string | null;
 }
 
@@ -151,13 +151,13 @@ export interface ApprovalRequestParams {
 
 /** `approval.respond` params. */
 export interface ApprovalRespondParams {
-  /** For a diff approval: the hunks accepted. */
+  /** For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. */
   accepted_hunks?: Array<number> | null;
   /** The decision. */
   decision: Decision;
   /** The `approval.request` id (`srq-<12 hex>`). */
   id: string;
-  /** An edited command to run instead. */
+  /** For a diff approval: the file content to write instead of the proposed one (`edit then accept`). */
   replacement?: string | null;
 }
 
@@ -218,6 +218,8 @@ export type AttachRole = "driver" | "observer";
 
 /** `session.attach` / `session.resume` result. */
 export interface Attached {
+  /** This connection's client id, as `session.presence` lists it and its inputs are stamped with. */
+  client_id?: string | null;
   /** The daemon epoch the sequence numbers belong to. */
   epoch: string;
   /** The newest event sequence number kept for it. */
@@ -629,6 +631,8 @@ export interface ContextUsage {
   context_window?: number | null;
   /** The session's cost so far in the usage ledger's currency (USD), priced calls only. */
   cost_usd?: number | null;
+  /** The local runtime's resource use while the session's local model is resident (sampled at most once every 2 seconds). */
+  local_resources?: LocalResources | null;
   /** The subscription the current route bills, when it is one. */
   subscription?: SubscriptionStatus | null;
   /** Estimated tokens of the active context. */
@@ -684,12 +688,22 @@ export type Disposition = "exec" | "unavailable" | "hidden";
 
 /** A file edit an approval asks about. */
 export interface EditDiff {
+  /** The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what `accepted_hunks` refers to. */
+  hunks?: Array<EditHunk>;
   /** The content after the edit. */
   new_text: string;
   /** The current content (`null`: a new file). */
   old_text?: string | null;
   /** The absolute path. */
   path: string;
+}
+
+/** One hunk of a file edit. */
+export interface EditHunk {
+  /** `@@ -<old start>,<old lines> +<new start>,<new lines> @@`. */
+  header: string;
+  /** Its lines, each starting with ` `, `-` or `+`. */
+  lines: Array<string>;
 }
 
 /** How file edits of an editor session are approved (ACP session modes). */
@@ -1284,6 +1298,26 @@ export interface JourneyNode {
   uses?: number;
 }
 
+/** One selectable language. */
+export interface LanguageEntry {
+  /** The language's own name for itself (`Deutsch`). */
+  endonym: string;
+  /** The `display.language` id (`de`, `zh-hant`). */
+  id: string;
+  /** `bundled`, `overlay` or `pack:<plugin>`. */
+  origin: string;
+  /** Written right to left: surfaces mirror their layout. */
+  rtl: boolean;
+}
+
+/** `i18n.languages` result. */
+export interface Languages {
+  /** The profile's `display.language`. */
+  current: string;
+  /** Every selectable language, by id. */
+  languages: Array<LanguageEntry>;
+}
+
 /** `session.tree` / `session.siblings` result. */
 export interface Lineage {
   /** The related sessions, by depth then age. */
@@ -1302,6 +1336,20 @@ export interface LineageNode {
   session_id: string;
   /** Its title. */
   title?: string | null;
+}
+
+/** `local_model.context_grown` payload: a session's local model was relaunched at a larger window instead of compressing (spec: local-models, Context window and memory placement). */
+export interface LocalModelContextGrown {
+  /** The window before, tokens. */
+  from: number;
+  /** The library model. */
+  model: string;
+  /** `llamacpp`. */
+  provider: string;
+  /** The session. */
+  session_id: string;
+  /** The window now, tokens. */
+  to: number;
 }
 
 /** Params of every `local.*` method; each uses the fields its command takes (`model` for pull, rm and use; `job` for pause and resume; `query` for search; `path` for add). */
@@ -1324,6 +1372,20 @@ export interface LocalReply {
   data?: unknown;
   /** What happened, in one line. */
   message: string;
+}
+
+/** GPU and RAM use of the local model runtime (spec: local-models, Local resource telemetry). */
+export interface LocalResources {
+  /** GPU memory, bytes. */
+  gpu_memory_total: number;
+  /** GPU memory in use, bytes. */
+  gpu_memory_used: number;
+  /** How busy the GPU is, percent, when the driver reports it. */
+  gpu_utilization_percent?: number | null;
+  /** System RAM, bytes. */
+  ram_total: number;
+  /** System RAM in use, bytes. */
+  ram_used: number;
 }
 
 /** One running language server. */
@@ -1392,6 +1454,16 @@ export interface McpServerState {
 export interface MemorySummary {
   /** `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. */
   line?: string | null;
+}
+
+/** `message.delivery` payload: an outbound message of the session moved to `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery receipts surfaced). */
+export interface MessageDeliveryPayload {
+  /** Its outbox entry. */
+  outbox_id: number;
+  /** The session the message belongs to. */
+  session_id: string;
+  /** `delivered`, `read` or `failed`. */
+  state: string;
 }
 
 /** `message.reaction` payload. */
@@ -1604,6 +1676,18 @@ export interface PlatformSupport {
   target: string;
   /** `tier1`, `tier2` or `unsupported`. */
   tier: string;
+}
+
+/** One client attached to a session. */
+export interface PresenceClient {
+  /** The client's id within the daemon (`<kind>-<connection>`), the one its inputs are stamped with. */
+  client_id: string;
+  /** Its kind from `rpc.hello` (`tui`, `desktop`, ...). */
+  client_kind: string;
+  /** Driver or observer. */
+  role: AttachRole;
+  /** When it attached (RFC 3339). */
+  since: string;
 }
 
 /** One background process of a session. */
@@ -1958,6 +2042,14 @@ export interface ResumeParams {
   setup?: SessionSetup | null;
 }
 
+/** `session.rewind` params. */
+export interface RewindParams {
+  /** The session. */
+  session_id: string;
+  /** The last turn the branch keeps (from 1). */
+  to_turn: number;
+}
+
 /** `bot.roster.list` result. */
 export interface Roster {
   /** Every agent. */
@@ -2020,6 +2112,64 @@ export interface RosterSource {
   ok: boolean;
   /** `local`, `peer` or `connection`. */
   source: string;
+}
+
+/** A browser opened on the bot screen. */
+export interface ScreenBrowserOpened {
+  /** The persistent browser profile it shares with the agent's headed browser. */
+  user_data_dir: string;
+}
+
+/** `screen.browser` params. */
+export interface ScreenBrowserParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** An `http` or `https` page to open (a blank page when omitted). */
+  url?: string | null;
+}
+
+/** `screen.handback` params. */
+export interface ScreenHandbackParams {
+  /** Clear the lease whoever holds it. */
+  force?: boolean;
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** The viewer handing it back (the client kind when omitted). */
+  viewer?: string | null;
+}
+
+/** The lease after a takeover or hand-back. */
+export interface ScreenLeaseState {
+  /** Bumped by every takeover; results of agent calls started under an older epoch are void. */
+  epoch: number;
+  /** The viewer holding the screen; `None`: the agent has it. */
+  holder?: string | null;
+}
+
+/** `screen.takeover` params. */
+export interface ScreenTakeoverParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
+  /** Who takes it over, as shown to the agent and other viewers (the client kind when omitted); the same name hands it back after a reconnect. */
+  viewer?: string | null;
+}
+
+/** A single-use display ticket. */
+export interface ScreenTicket {
+  /** Seconds until it expires (30). */
+  expires_in_secs: number;
+  /** Who controls the screen as the ticket is issued. */
+  lease?: ScreenLeaseState;
+  /** The display stream's path on the daemon's listener (`/screen`). */
+  path: string;
+  /** The secret: offered as the `prometheus-ticket.<ticket>` WebSocket subprotocol next to `prometheus-display.v1`, on `path`. */
+  ticket: string;
+}
+
+/** `screen.ticket` params. */
+export interface ScreenTicketParams {
+  /** The profile (the connection's only one when omitted). */
+  profile?: string | null;
 }
 
 /** `secret.request` result. */
@@ -2098,6 +2248,14 @@ export interface SessionListParams {
   tips_only?: boolean;
 }
 
+/** `session.presence` payload. */
+export interface SessionPresencePayload {
+  /** Every client attached now, in the order they attached. */
+  clients: Array<PresenceClient>;
+  /** The session. */
+  session_id: string;
+}
+
 /** `session.project` payload: a session moved to another project. */
 export interface SessionProject {
   /** The working directory the session moves to at its next tool call. */
@@ -2114,6 +2272,18 @@ export interface SessionProject {
 export interface SessionRef {
   /** `ses_<ULID>`. */
   session_id: string;
+}
+
+/** `session.rewind` result. */
+export interface SessionRewound {
+  /** The workspace checkpoint holding the files as they were after `to_turn` (`files.rollback {checkpoint}`), when later turns changed files; restoring is the client's offer to make. */
+  checkpoint?: number | null;
+  /** The session it branched from (kept unchanged). */
+  parent_session_id: string;
+  /** The new branch session, ending at `to_turn`. */
+  session_id: string;
+  /** The turns the branch holds. */
+  turns: number;
 }
 
 /** A session's settings as clients show and change them. */
@@ -2148,6 +2318,8 @@ export interface SessionSetup {
   base_url?: string | null;
   /** The session's experience-library domain (`--domain`). */
   domain?: string | null;
+  /** Keep the session's transcript out of the session store and its trajectory (spec: workspace-architecture, Embeddable client SDKs): hidden from listings, no trajectory, transcript removed when the session unloads; its usage still counts against every budget. */
+  ephemeral?: boolean;
   /** No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). */
   ignore_rules?: boolean;
   /** Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). */
@@ -2166,6 +2338,8 @@ export interface SessionSetup {
   set?: Array<string>;
   /** Skills preloaded into the session (`--skills`). */
   skills?: Array<string>;
+  /** Text sent as a last system block with every model call of this session only (an embedding program's instructions): never part of the frozen prompt, the stored history or the trajectory. */
+  system_prompt_overlay?: string | null;
   /** Approval-gated calls run without asking (`--yolo`). */
   yolo?: boolean;
 }
@@ -2209,6 +2383,25 @@ export interface SubagentControlled {
   subagent_id: string;
 }
 
+/** What one `subagent.event` carries. */
+export type SubagentEventKind = "assistant" | "tool_call" | "tool_result" | "finished";
+
+/** `subagent.event` payload: one item of a subscribed child's transcript, sent to the subscribing connection only. */
+export interface SubagentEventPayload {
+  /** What it is. */
+  kind: SubagentEventKind;
+  /** The parent session. */
+  session_id: string;
+  /** How the child ended, for `finished`. */
+  status?: string | null;
+  /** The child. */
+  subagent_id: string;
+  /** Its text. */
+  text?: string | null;
+  /** The tool, for a call or result. */
+  tool?: string | null;
+}
+
 /** `subagent.list` result. */
 export interface SubagentList {
   /** The session's children, oldest first. */
@@ -2231,6 +2424,22 @@ export interface SubagentSteerParams {
   subagent_id: string;
   /** The guidance. */
   text: string;
+}
+
+/** `subagent.subscribe` params. */
+export interface SubagentSubscribeParams {
+  /** The parent session the connection is attached to. */
+  session_id: string;
+  /** The child (`sa-<ULID>`). */
+  subagent_id: string;
+}
+
+/** `subagent.subscribe` result. */
+export interface SubagentSubscribed {
+  /** `running`, or how it ended (`completed`, `failed`, ...). */
+  status: string;
+  /** The child. */
+  subagent_id: string;
 }
 
 /** One delegated child of a session. */
@@ -2321,6 +2530,28 @@ export interface SystemParams {
   profile?: string | null;
 }
 
+/** `session.timeline` result. */
+export interface Timeline {
+  /** The active transcript's turns, oldest first. */
+  turns: Array<TimelineTurn>;
+}
+
+/** One turn of a session's timeline. */
+export interface TimelineTurn {
+  /** When it started (RFC 3339). */
+  at: string;
+  /** What its model calls cost, when known. */
+  cost_usd?: number | null;
+  /** The first line of its input. */
+  first_line: string;
+  /** The user message that started it (`msg_<ULID>`). */
+  message_id: string;
+  /** Tool calls it made. */
+  tools: number;
+  /** Its number, from 1. */
+  turn: number;
+}
+
 /** `session.transcript` result. */
 export interface Transcript {
   /** The active messages, oldest first. */
@@ -2329,6 +2560,8 @@ export interface Transcript {
 
 /** One message of a transcript. */
 export interface TranscriptMessage {
+  /** Who sent a user message: the client id the gateway stamped it with (spec: tui, Shared live sessions). */
+  author?: string | null;
   /** `msg_<ULID>`. */
   id: string;
   /** Its reactions (spec: desktop-app, Agent reactions). */
@@ -2529,7 +2762,7 @@ export interface VaultRemoveParams {
 
 /** One password-manager source. */
 export interface VaultSource {
-  /** Whether this build can read it. */
+  /** Whether its CLI (`op`, `bw`) is installed: the managed runtime or the daemon's launch `PATH`. */
   available: boolean;
   /** `vault.<name>.enabled`. */
   enabled: boolean;
@@ -2721,6 +2954,7 @@ export interface Methods {
   "harness.diff": { params: EvolveParams; result: EvolveReply };
   "harness.log": { params: EvolveParams; result: HarnessVersions };
   "harness.rollback": { params: EvolveParams; result: EvolveReply };
+  "i18n.languages": { params: ProfileParams; result: Languages };
   "journey.list": { params: JourneyListParams; result: JourneyList };
   "local.add": { params: LocalParams; result: LocalReply };
   "local.catalog": { params: LocalParams; result: LocalReply };
@@ -2764,6 +2998,10 @@ export interface Methods {
   "queue.resume": { params: SessionRef; result: QueueState };
   "rpc.hello": { params: HelloParams; result: HelloResult };
   "rpc.ping": { params: Empty; result: Ack };
+  "screen.browser": { params: ScreenBrowserParams; result: ScreenBrowserOpened };
+  "screen.handback": { params: ScreenHandbackParams; result: ScreenLeaseState };
+  "screen.takeover": { params: ScreenTakeoverParams; result: ScreenLeaseState };
+  "screen.ticket": { params: ScreenTicketParams; result: ScreenTicket };
   "session.attach": { params: AttachParams; result: Attached };
   "session.banner": { params: SessionRef; result: BannerInfo };
   "session.compact": { params: CompactParams; result: Compacted };
@@ -2778,14 +3016,17 @@ export interface Methods {
   "session.list": { params: SessionListParams; result: SessionList };
   "session.resolve": { params: ResolveParams; result: SessionRef };
   "session.resume": { params: ResumeParams; result: Attached };
+  "session.rewind": { params: RewindParams; result: SessionRewound };
   "session.settings": { params: SessionRef; result: SessionSettings };
   "session.siblings": { params: SessionRef; result: Lineage };
   "session.steer": { params: SteerParams; result: Ack };
+  "session.timeline": { params: SessionRef; result: Timeline };
   "session.transcript": { params: SessionRef; result: Transcript };
   "session.tree": { params: SessionRef; result: Lineage };
   "subagent.list": { params: SessionRef; result: SubagentList };
   "subagent.steer": { params: SubagentSteerParams; result: SubagentControlled };
   "subagent.stop": { params: SubagentRef; result: SubagentControlled };
+  "subagent.subscribe": { params: SubagentSubscribeParams; result: SubagentSubscribed };
   "system.health": { params: SystemParams; result: SystemHealth };
   "system.metrics": { params: SystemParams; result: MetricsSnapshot };
   "ui.prefs.get": { params: UiPrefsGetParams; result: UiPrefs };
@@ -2825,6 +3066,8 @@ export interface Events {
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
+  "local_model.context_grown": LocalModelContextGrown;
+  "message.delivery": MessageDeliveryPayload;
   "message.reaction": MessageReaction;
   "pty.detached": PtyRef;
   "pty.exited": PtyOutput;
@@ -2833,7 +3076,9 @@ export interface Events {
   "request.cancel": RequestCancel;
   "request.resolved": RequestResolved;
   "session.event": unknown;
+  "session.presence": SessionPresencePayload;
   "session.project": SessionProject;
+  "subagent.event": SubagentEventPayload;
   "turn.finished": TurnFinished;
   "ui.prefs.changed": UiPrefs;
   "usage.updated": UsageUpdated;
@@ -2849,16 +3094,10 @@ export const UNDECLARED = [
   "groups.log",
   "groups.replica_state",
   "groups.replicate",
-  "screen.handback",
-  "screen.takeover",
-  "subagent.subscribe",
   "tools.call",
   "tools.list",
   "voice.client_config",
   "wake.feed",
   "achievement.unlocked",
-  "local_model.context_grown",
-  "message.delivery",
-  "session.presence",
   "wake.detected",
 ] as const;

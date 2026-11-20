@@ -96,13 +96,27 @@ pub struct ModelReply {
     /// The advisor blocks a Mixture of Agents call shows (spec:
     /// mixture-of-agents, Privacy filter for advisor outputs).
     pub advisors: Vec<String>,
+    /// Actions the runtime already performed (the Codex app-server ran a
+    /// command or applied a patch), in order: recorded, never run.
+    pub performed: Vec<PerformedCall>,
+}
+
+/// An action an agent runtime performed on its own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PerformedCall {
+    /// The call as the transcript records it.
+    pub call: RequestedCall,
+    /// What it produced.
+    pub output: String,
+    /// Whether it succeeded.
+    pub ok: bool,
 }
 
 impl ModelReply {
-    /// Neither text nor tool calls.
+    /// Neither text, tool calls nor performed actions.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.text.trim().is_empty() && self.tool_calls.is_empty()
+        self.text.trim().is_empty() && self.tool_calls.is_empty() && self.performed.is_empty()
     }
 }
 
@@ -340,6 +354,11 @@ impl ProviderModel {
         Ok(Self::new(setup, caller, state))
     }
 
+    /// The route requests go to now.
+    pub async fn current_route(&self) -> Route {
+        self.fallback.lock().await.current().clone()
+    }
+
     fn info(&self, route: &Route) -> RouteInfo {
         // A MoA preset reports its aggregator's window and price.
         let acting = route.acting();
@@ -488,6 +507,21 @@ fn intake(
         }),
         StreamEvent::Usage { usage } => reply.usage = usage,
         StreamEvent::CompactionItem { item } => reply.compaction_item = Some(item),
+        StreamEvent::ExternalCall {
+            id,
+            name,
+            arguments,
+            output,
+            ok,
+        } => reply.performed.push(PerformedCall {
+            call: RequestedCall {
+                id,
+                name,
+                arguments,
+            },
+            output,
+            ok,
+        }),
         StreamEvent::Stop { stop_reason } => reply.stop = Some(stop_reason),
         StreamEvent::ToolCallStart { .. } | StreamEvent::ToolCallDelta { .. } => {}
     }

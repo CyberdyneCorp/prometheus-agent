@@ -4,13 +4,15 @@
 //! provenance; Hot reload respects the prompt-cache invariant;
 //! platform-adapters, Adapter conformance kit).
 //!
-//! `dev` (M3), `run` (plugin CLI subcommands), `collection` (M3) and
-//! `hooks` (shell hooks) arrive with their owners.
+//! `dev` is the plugin development loop ([`dev`]); `run` (plugin CLI
+//! subcommands), `collection` (M3) and `hooks` (shell hooks) arrive with
+//! their owners.
 
 mod adapter;
 #[cfg(feature = "gateway")]
 mod adapter_plugin;
 mod catalog_cmd;
+mod dev;
 pub mod hooks_cmd;
 mod inspect;
 pub(crate) mod install;
@@ -29,6 +31,8 @@ use clap::{Args, Subcommand};
 use pmt_core::error::Error;
 
 use crate::context::Context;
+
+pub use self::dev::DevArgs;
 
 /// `prometheus plugins` subcommands.
 #[derive(Debug, Subcommand)]
@@ -110,6 +114,10 @@ pub enum PluginsCommand {
         /// The plugin id.
         id: String,
     },
+    /// Serve a local plugin directory as `dev:<id>` without installing or
+    /// signing it, until Ctrl+C; `--watch` rebuilds and reloads it on
+    /// every source change.
+    Dev(DevArgs),
     /// Remove an installed plugin (its grants are revoked; its data in
     /// `plugin-data/` is kept).
     Remove {
@@ -335,6 +343,7 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         }
         PluginsCommand::DiffGrants { id } => update::diff_grants(ctx, id),
         PluginsCommand::Remove { id } => inspect::remove(ctx, id),
+        PluginsCommand::Dev(args) => dev::dev(args, ctx),
         PluginsCommand::Grants { command } => manage::grants(ctx, command),
         PluginsCommand::Capabilities { id } => inspect::capabilities(ctx, id.as_deref()),
         PluginsCommand::Adopt { dir, grant } => inspect::adopt(ctx, dir, grant.as_deref()),

@@ -268,72 +268,12 @@ fn client() -> Option<reqwest::Client> {
         .ok()
 }
 
-fn decode(part: &str) -> Result<Vec<u8>, Error> {
-    URL_SAFE_NO_PAD
-        .decode(part)
-        .map_err(|_| failed("the ID token is malformed"))
-}
-
 /// Checks the JWT's signature against `jwks`; its claims.
 pub(crate) fn verify_jwt(token: &str, jwks: &Value) -> Result<Value, Error> {
-    let mut parts = token.split('.');
-    let (Some(head), Some(body), Some(sig), None) =
-        (parts.next(), parts.next(), parts.next(), parts.next())
-    else {
-        return Err(failed("the ID token is malformed"));
-    };
-    let header: Value =
-        serde_json::from_slice(&decode(head)?).map_err(|_| failed("the ID token is malformed"))?;
-    let signature = decode(sig)?;
-    let message = format!("{head}.{body}");
-    let alg = header["alg"].as_str().unwrap_or_default();
-    let kid = header["kid"].as_str();
-    let keys = jwks["keys"].as_array().cloned().unwrap_or_default();
-    let verified = keys
-        .iter()
-        .filter(|k| kid.is_none_or(|kid| k["kid"].as_str() == Some(kid)))
-        .any(|key| verify_with(alg, key, message.as_bytes(), &signature));
-    if !verified {
-        return Err(failed("the ID token's signature does not verify"));
-    }
-    serde_json::from_slice(&decode(body)?).map_err(|_| failed("the ID token is malformed"))
-}
-
-fn verify_with(alg: &str, key: &Value, message: &[u8], signature: &[u8]) -> bool {
-    let field = |name: &str| {
-        key[name]
-            .as_str()
-            .and_then(|v| URL_SAFE_NO_PAD.decode(v).ok())
-    };
-    match (alg, key["kty"].as_str()) {
-        ("ES256", Some("EC")) => {
-            let (Some(x), Some(y)) = (field("x"), field("y")) else {
-                return false;
-            };
-            let mut point = vec![0x04];
-            point.extend(x);
-            point.extend(y);
-            ring::signature::UnparsedPublicKey::new(
-                &ring::signature::ECDSA_P256_SHA256_FIXED,
-                point,
-            )
-            .verify(message, signature)
-            .is_ok()
-        }
-        ("RS256", Some("RSA")) => {
-            let (Some(n), Some(e)) = (field("n"), field("e")) else {
-                return false;
-            };
-            ring::signature::RsaPublicKeyComponents { n, e }
-                .verify(
-                    &ring::signature::RSA_PKCS1_2048_8192_SHA256,
-                    message,
-                    signature,
-                )
-                .is_ok()
-        }
-        _ => false,
-    }
+    pmt_net::jwt::verify(token, jwks).map_err(|why| match why {
+        pmt_net::jwt::Invalid::Malformed => failed("the ID token is malformed"),
+        pmt_net::jwt::Invalid::Signature => failed("the ID token's signature does not verify"),
+    })
 }
 
 #[cfg(test)]

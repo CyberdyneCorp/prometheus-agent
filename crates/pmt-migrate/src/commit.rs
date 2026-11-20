@@ -13,6 +13,7 @@ use pmt_store::Store;
 
 use crate::component::Component;
 use crate::host::Host;
+use crate::journal::Journal;
 use crate::ledger::{self, Ledger};
 use crate::plan::{Dest, Existing, Step};
 use crate::report::{self, ComponentReport, ProfileReport, Report, Status};
@@ -221,6 +222,11 @@ impl Commit<'_> {
     /// complete and a re-run resumes after it. A component that does not
     /// commit is undone: neither its writes nor its ledger records stay.
     pub fn all(&self, ledger: &RefCell<Ledger>, steps: Planned, out: &mut ProfileReport) {
+        let journal = RefCell::new(Journal::start(
+            self.target.profile.path(),
+            self.run_id,
+            ledger.borrow().file(),
+        ));
         let mut stopped = false;
         for (component, step) in steps {
             stopped |= self.host.interrupted();
@@ -241,7 +247,7 @@ impl Commit<'_> {
                     continue;
                 }
             };
-            let Err(e) = self.one(ledger, component, &mut step) else {
+            let Err(e) = self.one((ledger, &journal), component, &mut step) else {
                 record(out, component, Status::Committed, None, Some(&mut step));
                 continue;
             };
@@ -264,7 +270,7 @@ impl Commit<'_> {
     /// re-run), any other is undone.
     fn one(
         &self,
-        ledger: &RefCell<Ledger>,
+        (ledger, journal): (&RefCell<Ledger>, &RefCell<Journal>),
         component: Component,
         step: &mut Box<dyn Step>,
     ) -> Result<(), Error> {
@@ -272,16 +278,22 @@ impl Commit<'_> {
         let undo = RefCell::new(Undo::new(
             self.staging.join("undo").join(component.as_str()),
         ));
+        let scope = self.scope()?;
         let Err(e) = self
-            .apply(ledger, &undo, step)
+            .apply(&scope, (ledger, journal), &undo, step)
             .and_then(|()| ledger.borrow_mut().commit(component.as_str(), self.run_id))
+            .and_then(|()| journal.borrow_mut().commit(&scope, &self.target.store))
         else {
             return Ok(());
         };
         if step.commits_in_parts() {
             let _ = ledger.borrow().save();
+            if let Err(j) = journal.borrow_mut().commit(&scope, &self.target.store) {
+                tracing::warn!("the rollback journal was not saved: {}", j.message());
+            }
             return Err(e);
         }
+        journal.borrow_mut().discard(&scope);
         *ledger.borrow_mut() = before;
         match undo.into_inner().rollback(&self.target.store) {
             Ok(()) => Err(e),
@@ -296,26 +308,31 @@ impl Commit<'_> {
         }
     }
 
-    fn apply(
-        &self,
-        ledger: &RefCell<Ledger>,
-        undo: &RefCell<Undo>,
-        step: &mut Box<dyn Step>,
-    ) -> Result<(), Error> {
-        // Each component sees the config the previous ones wrote.
-        let scope = ProfileScope::open(
+    /// The destination profile as the previous components left it.
+    fn scope(&self) -> Result<ProfileScope, Error> {
+        ProfileScope::open(
             self.target.profile.clone(),
             &Overrides::default(),
             Launch::Other,
-        )?;
+        )
+    }
+
+    fn apply(
+        &self,
+        scope: &ProfileScope,
+        (ledger, journal): (&RefCell<Ledger>, &RefCell<Journal>),
+        undo: &RefCell<Undo>,
+        step: &mut Box<dyn Step>,
+    ) -> Result<(), Error> {
         let dest = Dest {
-            scope: &scope,
+            scope,
             store: &self.target.store,
             overwrite: self.overwrite,
             host: self.host,
             staging: self.staging.to_owned(),
             ledger,
             undo,
+            journal,
         };
         step.apply(&dest)
     }

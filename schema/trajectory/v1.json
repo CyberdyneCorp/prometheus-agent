@@ -61,6 +61,42 @@
       ],
       "type": "object"
     },
+    "RouteInputs": {
+      "description": "The inputs of one eligible candidate of `provider.route_selected`.",
+      "properties": {
+        "cost_usd": {
+          "description": "Estimated cost of a typical turn in USD (`null`: unpriced).",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "health": {
+          "description": "Health score in [0, 1].",
+          "format": "double",
+          "type": "number"
+        },
+        "route": {
+          "description": "The route.",
+          "type": "string"
+        },
+        "ttft_p50_ms": {
+          "description": "Median time to first token (`null`: never measured).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "route",
+        "health"
+      ],
+      "type": "object"
+    },
     "StepCall": {
       "description": "One tool call as summarised in `turn.step`.",
       "properties": {
@@ -417,6 +453,9 @@
           "payload": {
             "description": "`user.message` and `assistant.message`.",
             "properties": {
+              "author": {
+                "description": "Who sent a user message, as the gateway stamped it (`client_kind`,\n`client_id`, `principal`): what a shared session's clients label\neach input with (spec: tui, Shared live sessions)."
+              },
               "message_id": {
                 "description": "The stored message, when it is one.",
                 "type": [
@@ -450,6 +489,9 @@
           "payload": {
             "description": "`user.message` and `assistant.message`.",
             "properties": {
+              "author": {
+                "description": "Who sent a user message, as the gateway stamped it (`client_kind`,\n`client_id`, `principal`): what a shared session's clients label\neach input with (spec: tui, Shared live sessions)."
+              },
               "message_id": {
                 "description": "The stored message, when it is one.",
                 "type": [
@@ -775,6 +817,13 @@
               },
               "output": {
                 "description": "Output text, when `ok`.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "taint": {
+                "description": "Why the call was flagged: it sent data out of a turn that had read\nuntrusted content (tool-system, Taint-aware escalation).",
                 "type": [
                   "string",
                   "null"
@@ -1433,6 +1482,13 @@
           "payload": {
             "description": "`provider.route_selected`.",
             "properties": {
+              "candidates": {
+                "description": "What the policy weighed about each eligible candidate.",
+                "items": {
+                  "$ref": "#/$defs/RouteInputs"
+                },
+                "type": "array"
+              },
               "policy": {
                 "description": "The routing policy.",
                 "type": "string"

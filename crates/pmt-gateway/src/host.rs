@@ -559,6 +559,12 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no configuration files")) })
     }
 
+    /// The languages `profile` can select, with its current one
+    /// (`i18n.languages`).
+    fn languages<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, pmt_rpc::contracts::Languages> {
+        Box::pin(async { Err(not_served("this host has no language catalogs")) })
+    }
+
     /// One `queue.*` call on a session of `profile` (spec: desktop-app,
     /// Composer history and queue editing); the session's clients learn
     /// of a change through `link` (`queue.changed`).
@@ -622,6 +628,13 @@ pub trait Host: Send + Sync + 'static {
         _steer: Option<&'a str>,
     ) -> HostFuture<'a, String> {
         Box::pin(async { Err(not_served("this host delegates to no subagents")) })
+    }
+
+    /// Child transcripts, the session timeline and rewinds
+    /// (`subagent.subscribe`, `session.timeline`, `session.rewind`);
+    /// `None` answers them `rpc.not_served`.
+    fn live(&self) -> Option<&dyn crate::live::LiveHost> {
+        None
     }
 
     /// The desktop's panes (`git.*`, `projects.*`, `manage.*`, pairing,
@@ -752,6 +765,8 @@ pub struct Link {
     approval_timeout: Duration,
     /// Streamed answer text (a messaging conversation that streams).
     deltas: Option<Deltas>,
+    /// The kind of client that made the call (`None`: the daemon itself).
+    client: Option<pmt_rpc::contracts::ClientKind>,
 }
 
 impl std::fmt::Debug for Link {
@@ -776,7 +791,21 @@ impl Link {
             request_timeout,
             approval_timeout,
             deltas: None,
+            client: None,
         }
+    }
+
+    /// This link answering a call of a `client` kind of client.
+    #[must_use]
+    pub fn with_client(mut self, client: Option<pmt_rpc::contracts::ClientKind>) -> Self {
+        self.client = client;
+        self
+    }
+
+    /// The kind of client that made the call.
+    #[must_use]
+    pub fn client(&self) -> Option<pmt_rpc::contracts::ClientKind> {
+        self.client
     }
 
     /// This link with `deltas` receiving the answer text a turn streams.

@@ -6,8 +6,10 @@
 # by digest in the release manifest. Targets:
 #
 #   sandbox  `<version>`: a shell toolbox for agent commands
-#   desktop  `<version>-desktop`: plus a virtual X display (Xvfb on :99)
-#            for the bot screen
+#   desktop  `<version>-desktop`: plus TigerVNC's Xvnc and a minimal Xfce
+#            session: the bot screen's container when it is placed in the
+#            container backend (Prometheus runs Xvnc and the session in it;
+#            `desktop-start` runs them stand-alone on :99)
 
 ARG BASE=debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
 
@@ -27,7 +29,9 @@ CMD ["sleep", "infinity"]
 FROM sandbox AS desktop
 USER root
 RUN apt-get update \
- && apt-get install -y --no-install-recommends xvfb xauth x11-utils xdotool scrot openbox \
+ && apt-get install -y --no-install-recommends \
+      tigervnc-standalone-server xfce4-session xfwm4 xfce4-panel xfdesktop4 dbus-x11 \
+      xauth x11-utils xdotool scrot \
  && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0755 desktop-start.sh /usr/local/bin/desktop-start
 USER agent

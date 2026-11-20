@@ -1,9 +1,10 @@
 //! The daemon side of the desktop's profile-scoped methods (spec:
 //! desktop-app, Settings write validated config patches; Profile switching
-//! is explicit; Bot chats are created atomically by the daemon).
+//! is explicit; Bot chats are created atomically by the daemon) and the
+//! language switchers' listing (spec: i18n).
 
 use pmt_core::error::{Error, codes};
-use pmt_rpc::contracts::{ConfigChange, ConfigReloaded};
+use pmt_rpc::contracts::{ConfigChange, ConfigReloaded, LanguageEntry, Languages};
 use serde_json::Value;
 
 use super::DaemonHost;
@@ -51,6 +52,31 @@ impl DaemonHost {
             reloads: state.reloads,
             error: state.error,
             pending_restart: state.pending_restart,
+        })
+    }
+
+    /// The languages `name` can select (spec: i18n, Language switchers
+    /// show endonyms).
+    pub(super) fn languages_of(&self, name: &str) -> Result<Languages, Error> {
+        let scope = self.profile(name)?.scope();
+        let config = scope.config();
+        let sources = pmt_config::language::sources(config, scope.dir());
+        let languages = pmt_i18n::languages(&sources)
+            .into_iter()
+            .map(|language| LanguageEntry {
+                origin: match language.origin {
+                    pmt_i18n::Origin::Bundled => "bundled".to_owned(),
+                    pmt_i18n::Origin::Overlay => "overlay".to_owned(),
+                    pmt_i18n::Origin::Pack(plugin) => format!("pack:{plugin}"),
+                },
+                id: language.id,
+                endonym: language.endonym,
+                rtl: language.rtl,
+            })
+            .collect();
+        Ok(Languages {
+            current: config.display.language.clone(),
+            languages,
         })
     }
 }

@@ -40,10 +40,15 @@ use pmt_store::Store;
 /// configuration the sessions run with (a scheduled run's differs from
 /// the profile's) and the mock script the calls were played from, so a
 /// replay can re-run them.
-fn calls_for(scope: &ProfileScope, mock_flag: Option<&Path>) -> (Calls, Option<Arc<Writer>>) {
+fn calls_for(
+    scope: &ProfileScope,
+    mock_flag: Option<&Path>,
+    unrecorded: bool,
+) -> (Calls, Option<Arc<Writer>>) {
     let config = scope.config();
     let cache = ModelCallCache::for_profile(scope.dir(), &config.replay.cache);
-    let recording = config.observability.trajectories.enabled.then(|| {
+    let recorded = config.observability.trajectories.enabled && !unrecorded;
+    let recording = recorded.then(|| {
         let script = pmt_providers::mock::script_path(mock_flag, config, scope.dir())
             .and_then(|path| std::fs::read_to_string(path).ok());
         let header = serde_json::json!({
@@ -84,6 +89,8 @@ pub struct Models {
     calls: Calls,
     /// The session recordings, when trajectories are on.
     recording: Option<Arc<Writer>>,
+    /// The sessions' gates, answering the Codex app-server's approvals.
+    codex_gates: Arc<super::codex_gates::CodexGates>,
 }
 
 /// The shareable parts of a [`ProviderSetup`].
@@ -217,6 +224,9 @@ pub struct RouteFlags<'a> {
     pub model: Option<&'a str>,
     /// `--mock-script`.
     pub mock_script: Option<&'a Path>,
+    /// No model-call recording (an ephemeral session keeps no copy of its
+    /// transcript).
+    pub unrecorded: bool,
 }
 
 impl Models {
@@ -237,7 +247,7 @@ impl Models {
         let catalog = Arc::new(Catalog::new(config, Some(scope.path("cache/models"))));
         let accounts = Arc::new(crate::accounts::open(scope, config, &registry, user_home)?);
         let mock = Arc::new(Mock::for_session(flags.mock_script, config, scope.dir())?);
-        let (calls, recording) = calls_for(scope, flags.mock_script);
+        let (calls, recording) = calls_for(scope, flags.mock_script, flags.unrecorded);
         let prices: Arc<dyn Prices> = catalog.clone();
         let client = crate::model_cmd::client(config)?;
         let recorder = Arc::new(UsageRecorder::new(Arc::clone(store), prices));
@@ -278,6 +288,8 @@ impl Models {
             ),
             None => (aux, caller),
         };
+        let codex_gates = Arc::new(super::codex_gates::CodexGates::default());
+        let caller = caller.with_runtime_approvals(Arc::clone(&codex_gates) as _);
         Ok(Self {
             setup: Arc::new(ProviderSetupParts {
                 config: Arc::new(config.clone()),
@@ -296,6 +308,7 @@ impl Models {
             conversations,
             calls,
             recording,
+            codex_gates,
         })
     }
 
@@ -362,6 +375,11 @@ impl Models {
         if let Some(pii) = &self.pii {
             pii.register_id(id);
         }
+    }
+
+    /// The sessions' gates the Codex app-server's approvals go to.
+    pub(super) fn codex_gates(&self) -> &super::codex_gates::CodexGates {
+        &self.codex_gates
     }
 
     /// Adds the model providers the profile's plugins registered (spec:
@@ -467,6 +485,7 @@ impl Models {
             conversations: self.conversations.clone(),
             calls: self.calls.clone(),
             recording: self.recording.clone(),
+            codex_gates: Arc::clone(&self.codex_gates),
         };
         Ok((reloaded, changed))
     }
@@ -517,6 +536,60 @@ impl Models {
         Ok(target_of(&route))
     }
 
+    /// The route a new session asking for `target` runs on (spec:
+    /// model-providers, Cost and latency aware routing policy): the one
+    /// `routing.policy` picks among `[[routing.candidates]]` (else `target`
+    /// and the fallback chain), with the `provider.route_selected` event
+    /// recording it; `target` itself under `pinned` or when no candidate
+    /// is eligible.
+    ///
+    /// # Errors
+    ///
+    /// A candidate or chain entry naming an unknown provider.
+    pub async fn routed(
+        &self,
+        target: &Target,
+    ) -> Result<(Target, Option<pmt_obs::trajectory::payload::RouteSelected>), Error> {
+        let parts = &self.setup;
+        let routing = &parts.config.routing;
+        if routing.policy == pmt_config::schema::RoutingPolicy::Pinned {
+            return Ok((target.clone(), None));
+        }
+        let candidates = if routing.candidates.is_empty() {
+            let chain = pmt_providers::fallback::chain(&parts.config, &parts.registry)?;
+            std::iter::once(target.clone()).chain(chain).collect()
+        } else {
+            pmt_providers::fallback::targets(
+                &routing.candidates,
+                "routing.candidates",
+                &parts.registry,
+            )?
+        };
+        let resolver = parts.resolver();
+        let ctx = pmt_providers::routing::Context {
+            resolver: &resolver,
+            health: &*parts.health,
+            catalog: &parts.catalog,
+            min_health: parts.config.fallback.min_health,
+        };
+        let selected =
+            pmt_providers::routing::select(routing.policy, routing.cost_weight, &candidates, &ctx)
+                .await;
+        Ok(match selected {
+            // The resolved provider and model, with the candidate's own
+            // endpoint and credential.
+            Some(selection) => (
+                Target {
+                    provider: selection.route.provider.clone(),
+                    model: Some(selection.route.model.clone()),
+                    ..selection.target
+                },
+                Some(selection.event),
+            ),
+            None => (target.clone(), None),
+        })
+    }
+
     /// The port of `target` whose chain is scoped by `owners`, outermost
     /// first (a scheduled run, then a delegated child of it): each owner
     /// keeps the chain it inherits unless it pinned its route (none) or
@@ -530,7 +603,34 @@ impl Models {
         target: &Target,
         owners: &[Owner<'_>],
     ) -> Result<Arc<ProviderModel>, Error> {
-        self.maker().port_scoped(target, owners).await
+        let port = self.maker().port_scoped(target, owners).await?;
+        self.probe_served_window(&port).await;
+        Ok(port)
+    }
+
+    /// Records the window the llama.cpp server runs the session's model with
+    /// (spec: local-models, Local resource telemetry: the context gauge
+    /// uses the window the server actually runs with); best effort.
+    async fn probe_served_window(&self, port: &ProviderModel) {
+        let route = port.current_route().await;
+        let kind = pmt_providers::local::ServerKind::of(&route.provider);
+        // The local model runtime; other loopback endpoints are not probed.
+        if !route.local || kind != pmt_providers::local::ServerKind::LlamaCpp {
+            return;
+        }
+        match pmt_providers::local::probe(&self.client, kind, &route.base_url, &route.model).await {
+            Ok(found) => {
+                if let Some(window) = found.context_window {
+                    self.setup.catalog.record_probe(
+                        &route.provider,
+                        &route.model,
+                        &route.base_url,
+                        window,
+                    );
+                }
+            }
+            Err(err) => tracing::debug!("local served-window probe failed: {}", err.message()),
+        }
     }
 
     /// The route `model` (`[<provider>/]<model>`, as `/model` reads it)
@@ -627,6 +727,30 @@ impl Models {
             self.client.clone(),
             spec,
             main.map(|m| m.target().provider),
+        )))
+    }
+
+    /// The embedder of semantic session search (spec: session-storage,
+    /// Hybrid semantic and full-text search): `sessions.search.embedding_model`,
+    /// else `memory.recall.embedding_model`; `None` when semantic search is
+    /// off or no model is configured.
+    #[must_use]
+    pub fn session_embedder(&self) -> Option<Arc<dyn pmt_memory::rank::Embedder>> {
+        let config = &self.setup.config;
+        if !config.sessions.search.semantic {
+            return None;
+        }
+        let spec = config
+            .sessions
+            .search
+            .embedding_model
+            .clone()
+            .or_else(|| config.memory.recall.embedding_model.clone())?;
+        Some(Arc::new(super::embed::RouteEmbedder::new(
+            Arc::clone(&self.setup),
+            self.client.clone(),
+            spec,
+            None,
         )))
     }
 
@@ -772,6 +896,12 @@ impl Models {
     /// The profile's model catalog.
     pub(crate) fn catalog(&self) -> &Catalog {
         &self.setup.catalog
+    }
+
+    /// The profile's model catalog, shared (it keeps local servers'
+    /// served windows).
+    pub(crate) fn shared_catalog(&self) -> Arc<Catalog> {
+        Arc::clone(&self.setup.catalog)
     }
 
     /// The `vision` auxiliary route of a session on `main` when its model

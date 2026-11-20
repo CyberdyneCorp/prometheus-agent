@@ -215,6 +215,7 @@ impl Hub {
             quant: chosen.quant.clone(),
             context: 0,
             context_max: None,
+            placement: None,
             added_at: String::new(),
         };
         crate::pull::create(jobs, &model, specs.into_iter().map(|(s, _)| s).collect())

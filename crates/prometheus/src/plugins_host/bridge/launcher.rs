@@ -10,7 +10,11 @@
 //! hosts (on Linux from a network namespace of its own); without one it
 //! has no network. It starts children only with
 //! `subprocess` granted. Each start gets a fresh proxy, kept until the
-//! next start. The sandbox also bounds the tree's resources where the OS
+//! next start. Under credential injection the sidecar holds the
+//! placeholder of each mapped secret it was granted, its proxy puts the
+//! value in on TLS requests to the mapped hosts, and its CA bundle (in its
+//! private temporary directory) trusts the egress CA (spec:
+//! security-boundaries, Credential injection at the egress proxy). The sandbox also bounds the tree's resources where the OS
 //! can (spec: python-bridge, Resource limits; see `pmt_pybridge::limits`).
 
 use std::path::PathBuf;
@@ -26,6 +30,8 @@ use pmt_plugins::grants::PluginGrants;
 use pmt_pybridge::launch::{self, LaunchEnv};
 use pmt_pybridge::supervisor::Launcher;
 use pmt_sandbox::{Paths, Policy, ResourceLimits, Sandbox};
+
+use crate::egress::injection::ChildInjection;
 
 /// Where one plugin's sidecar runs from.
 pub(super) struct Layout {
@@ -103,7 +109,11 @@ impl Sandboxed {
     /// An egress proxy for the granted hosts, when there are any: it
     /// admits a host the plugin's grants and the profile's egress policy
     /// both name.
-    fn proxy(&self, granted: &CapabilitySet) -> Result<Option<Proxy>, Error> {
+    fn proxy(
+        &self,
+        granted: &CapabilitySet,
+        injection: Option<&ChildInjection>,
+    ) -> Result<Option<Proxy>, Error> {
         let mut allowed = Vec::new();
         for capability in granted {
             if let Capability::NetConnect { host, port } = capability {
@@ -129,13 +139,13 @@ impl Sandboxed {
         ));
         let requester = self.grants.subject().to_string();
         let observer = crate::egress::attributed(&self.scope, Arc::clone(&self.caller));
-        Proxy::start(
-            Rules::new(hosts, policy, &requester)
-                .granted(allowed)
-                .observed(observer),
-        )
-        .map(Some)
-        .map_err(|e| {
+        let mut rules = Rules::new(hosts, policy, &requester)
+            .granted(allowed)
+            .observed(observer);
+        if let Some(injection) = injection {
+            rules = rules.injecting(Arc::clone(&injection.injection));
+        }
+        Proxy::start(rules).map(Some).map_err(|e| {
             Error::new(
                 &pmt_core::error::codes::BRIDGE_CALL,
                 format!("egress proxy did not start: {e}"),
@@ -143,13 +153,21 @@ impl Sandboxed {
         })
     }
 
-    fn secrets(&self, granted: &CapabilitySet) -> Vec<(String, String)> {
+    /// The granted secrets the sidecar holds: placeholders for the
+    /// injected ones.
+    fn secrets(
+        &self,
+        granted: &CapabilitySet,
+        injection: Option<&ChildInjection>,
+    ) -> Vec<(String, String)> {
         granted
             .iter()
             .filter_map(|c| match c {
                 Capability::SecretsRead(name) => {
                     let value = self.scope.secrets().resolve(name).ok()?;
-                    Some((name.clone(), value.expose().to_owned()))
+                    let held =
+                        crate::egress::injection::child_value(injection, name, value.expose());
+                    Some((name.clone(), held.to_owned()))
                 }
                 _ => None,
             })
@@ -160,7 +178,8 @@ impl Sandboxed {
 impl Launcher for Sandboxed {
     fn command(&self) -> Result<Command, Error> {
         let granted = self.grants.current();
-        let proxy = self.proxy(&granted)?;
+        let injection = crate::egress::injection::for_children(&self.scope)?;
+        let proxy = self.proxy(&granted, injection.as_ref())?;
         let capabilities = self.capabilities(&granted, proxy.as_ref().map(|p| p.addr().port()))?;
         let layout = &self.layout;
         for dir in [&layout.data, &layout.tmp] {
@@ -189,10 +208,16 @@ impl Launcher for Sandboxed {
             home: layout.data.clone(),
             tmp: layout.tmp.clone(),
             path: vec![layout.env.bin.clone()],
-            secrets: self.secrets(&granted),
+            secrets: self.secrets(&granted, injection.as_ref()),
             proxy: proxy.as_ref().map(pmt_net::egress::Proxy::url),
         };
         launch::configure(&mut command, &layout.shim, &env);
+        crate::egress::injection::trust_egress_ca(
+            &self.scope,
+            injection.as_ref(),
+            &layout.tmp.join("ca-bundle.pem"),
+            &mut command,
+        )?;
         *self.proxy.lock().unwrap_or_else(PoisonError::into_inner) = proxy;
         Ok(command)
     }

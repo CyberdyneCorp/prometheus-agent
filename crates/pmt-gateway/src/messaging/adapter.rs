@@ -408,6 +408,10 @@ pub enum CronFire {
 pub trait AdapterLink: Send + Sync {
     /// Submits an inbound event.
     fn submit(&self, inbound: Inbound) -> AdapterFuture<'_, Admission>;
+    /// Reports that a message the adapter sent was delivered or read
+    /// (adapters declaring `delivery_receipts` or `read_receipts`; only
+    /// receipts the platform itself provides).
+    fn receipt(&self, _receipt: Receipt) {}
     /// Reports a state change.
     fn report(&self, state: AdapterState, error: Option<AdapterError>);
     /// Sends `text` to a send target of the adapter's profile
@@ -908,6 +912,15 @@ pub struct Reaction {
     pub emoji: String,
     /// Remove instead of add.
     pub remove: bool,
+}
+
+/// A platform's receipt for a sent message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Receipt {
+    /// The id `send` returned for it.
+    pub message_id: String,
+    /// Read (else delivered).
+    pub read: bool,
 }
 
 /// What a factory builds an adapter from.

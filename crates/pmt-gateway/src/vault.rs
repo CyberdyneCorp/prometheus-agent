@@ -5,6 +5,7 @@
 //! back.
 
 use pmt_config::ProfileScope;
+use pmt_config::secrets::external::{self, LOGIN_SOURCES};
 use pmt_core::error::{Error, codes};
 use pmt_rpc::contracts as c;
 use pmt_rpc::{Catalog, RpcError};
@@ -20,6 +21,9 @@ pub struct VaultAccess {
     pub vault: Vault,
     /// The profile (its `[vault]` settings and `config.toml`).
     pub scope: ProfileScope,
+    /// The launch `PATH` the profile's sessions search for the
+    /// password-manager CLIs.
+    pub launch_path: Option<std::ffi::OsString>,
 }
 
 /// Registers the vault methods.
@@ -170,18 +174,18 @@ async fn sources(
             _ => config.bitwarden.enabled = on,
         }
     }
-    Ok(c::VaultSourceList {
-        sources: vec![
-            c::VaultSource {
-                name: "onepassword".to_owned(),
-                enabled: config.onepassword.enabled,
-                available: false,
+    let home = access.scope.home();
+    let path = access.launch_path.as_deref();
+    let sources = LOGIN_SOURCES
+        .iter()
+        .map(|(name, cli)| c::VaultSource {
+            name: (*name).to_owned(),
+            enabled: match *name {
+                "onepassword" => config.onepassword.enabled,
+                _ => config.bitwarden.enabled,
             },
-            c::VaultSource {
-                name: "bitwarden".to_owned(),
-                enabled: config.bitwarden.enabled,
-                available: false,
-            },
-        ],
-    })
+            available: external::locate(home, cli, path).is_some(),
+        })
+        .collect();
+    Ok(c::VaultSourceList { sources })
 }

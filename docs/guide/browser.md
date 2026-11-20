@@ -161,6 +161,109 @@ switch. Switches Prometheus sets itself (profile directory,
 DevTools transport, proxy, `--headless`) are refused. A browser on a kept
 profile is asked to close before it is ended, so it writes what it holds.
 
+### The Lightpanda engine
+
+`browser.engine = "lightpanda"` browses on [Lightpanda](https://lightpanda.io)
+instead of Chromium: a lighter engine without screenshots that serves one
+page. Each browser session gets its own `lightpanda serve --host 127.0.0.1
+--port <free>` process, from the managed `lightpanda` runtime (`prometheus
+runtimes install lightpanda`; Linux and macOS), else `lightpanda` on `PATH`,
+else a lazy install when `runtimes.allow_lazy_install` allows one. Without
+any, the session uses Chromium and its first result says so
+(`engine_unavailable`). The model is told in the [`browser_exec`](../reference/tools.md#browser_exec) description
+that screenshots are unavailable and only one page is supported.
+
+Lightpanda runs under the same OS sandbox as Chromium, with its CA bundle
+written next to it (it cannot read the system keychain there) and the
+session's egress proxy as its only way out. It serves DevTools on TCP only,
+so its sandbox lets it listen on that one loopback port: on Linux, where it
+has a network namespace of its own, Prometheus reaches the port through
+sockets the browser created in that namespace. It is reaped like Chromium
+(idle timeout, crash replaced on next use).
+
+The engine has the lowest precedence: an explicit CDP endpoint
+(`browser.cdp_url` or `/browser connect`), a cloud provider
+(`browser.provider`) or real-profile browsing (`browser.use_real_profile`)
+shadow it. `prometheus browser status` prints `engine: lightpanda (shadowed
+by <setting>)` and `prometheus doctor terminal` warns about it.
+
+### The bot screen
+
+On a Linux host without a display, `prometheus computer-use screen start`
+runs the profile's bot screen: Xvnc with a minimal Xfce session
+(`bot_desktop.geometry`, default `1440x900`). While it runs, a headed
+browser (`browser.headed = true`) opens on it, on a persistent profile
+(`<profile>/cache/browser/screen-profile`) shared with anything else that
+launches a browser there. With `bot_desktop.auto_start = true` the first
+headed browser launch starts it. It refuses to start with less than
+`bot_desktop.min_free_memory_bytes` free (default 1536 MB, `0` turns the
+check off) and stops after `bot_desktop.idle_stop_secs` without use
+(default 1800, `0` never).
+
+```text
+prometheus computer-use screen install      # shows the packages, then runs the package manager
+prometheus computer-use screen start
+prometheus computer-use screen status
+prometheus computer-use screen stop [--force]
+```
+
+`install` needs root or `sudo`; without either it prints the command to run
+as root. `bot_desktop.placement` decides where the screen goes:
+
+- `auto` (default) puts it where the terminal runs: on the gateway host for
+  the `local` backend, in a desktop container for the `container` backend,
+  on the SSH host for the `ssh` backend; other backends (Modal, Daytona,
+  Singularity, ...) are refused, pointing to `placement = "gateway"`.
+- `terminal` places it the same way, stating that the screen must stay
+  with the terminal.
+- `gateway` always runs it on the gateway host: an explicit opt-in to a
+  screen outside the terminal sandbox.
+
+In the container backend the screen gets a container of its own
+(`pmt-screen-<id>`, image `bot_desktop.image`, default the release's
+`prometheus-sandbox:<version>-desktop`), without network and with the
+container hardening except the read-only root (Xfce writes its settings).
+The profile's session containers mount its X socket directory read-only
+and get `DISPLAY=:1`, so the agent's commands act on the screen. On the SSH
+backend Xvnc and Xfce run on the SSH host as the SSH user (install them
+there; the free-memory floor is that host's), in a private directory of its
+temp, and a forwarding connection of their own relays the RFB and X sockets
+to this host. Either way the gateway streams the screen as it does a local
+one, and a headed browser on the gateway host draws on it through the
+relayed X socket (`DISPLAY` set to its path; libxcb 1.15 or later).
+
+Xvnc admits X clients only with the screen's random X cookie (`-auth`, an
+Xauthority file readable by the screen's user only, written fresh at every
+start; `XAUTHORITY` points the session, the agent's headed browsers, the
+browser launcher and the session containers at it), so another OS user of
+the host cannot reach the display through `/tmp/.X11-unix`.
+
+Xvnc serves RFB on a Unix socket only, never on TCP: mode 0600 on the
+gateway or SSH host, in a private directory; in the desktop container the
+socket directory is mounted from the profile's private directory of the
+gateway's system temp (mode 0700), the only thing that guards it there.
+The desktop app streams it through the daemon: `screen.ticket` returns a
+single-use display ticket valid 30 seconds (and who controls the screen),
+offered with the `prometheus-display.v1` subprotocol on `/screen`.
+
+The desktop's **Screen** pane shows the stream. A stream opened by an
+observer connection stays read-only: its key, pointer and clipboard
+messages never reach the screen. The pane is read-only while the
+agent has control; **Take over** makes the agent wait and sends the pane's
+pointer and keys to the screen; **Open browser** (`screen.browser`) starts a
+browser there on the same persistent screen browser profile the agent's
+headed browser uses (sign in once for both); **Hand back** returns control.
+
+A viewer takes the screen over with `screen.takeover` and hands it back
+with `screen.handback`. While a person holds it, every browser tool of the
+profile fails with `human_has_control` (and so will `computer_use`); a call
+that started before the takeover has its result voided. The most recent
+takeover wins, a dropped viewer keeps the lease, and a lease unused for four
+idle windows of 150 seconds (at least ten minutes) returns to the agent.
+`screen.handback {force: true}` and `prometheus computer-use screen stop
+--force` clear it; a plain `stop` refuses while a person holds the screen.
+The lease is a tool-level fence, not an OS boundary (see `SECURITY.md`).
+
 ## Cloud browsers
 
 Set `browser.provider` to one of the first-party providers; a provider
@@ -323,8 +426,25 @@ code) with the input hidden, or read them one per line from stdin when it
 is not a terminal; a secret given as a flag exits 2. `vault rm <handle>`
 asks you to type the handle (or `--yes`). `vault sources [--enable|
 --disable onepassword|bitwarden]` shows and toggles the password-manager
-login sources (`vault.onepassword.enabled`, `vault.bitwarden.enabled`),
-which this build does not read yet.
+login sources (`vault.onepassword.enabled`, `vault.bitwarden.enabled`)
+and whether each one's CLI is installed (`available: <path>` or
+`unavailable`), found exactly where sessions look for it; the
+`vault.sources` RPC behind the desktop and dashboard settings reports the
+same `available` flag from the daemon's `PATH`.
+
+When a password-manager source is enabled and its CLI is installed (`op`
+from the runtime store or `PATH`, `bw` from `PATH`), [`browser_vault`](../reference/tools.md#browser_vault) lists
+it in `sources` with its state. A locked source is unlocked for the session
+with `unlock(source)`: you type the master password into a masked prompt,
+the CLI gets it through its non-interactive channel (stdin for `op signin
+--raw`, a child-only variable for `bw unlock --passwordenv`) and only the
+session token it returns is kept in memory, until 30 minutes pass without
+use. Its logins then appear in `list` as `op_<id>` / `bw_<id>` (metadata
+only) and fill only on the exact websites saved on the item (their
+origins, no subdomains). A session nobody can answer (cron, webhook, API,
+single query) sees a locked source as `unavailable_in_this_session` and is
+never prompted; 1Password with a stored service-account token
+(`secrets.onepassword.access_token_secret`) needs no unlock.
 
 The vault is `<profile>/vault/vault.enc` (XChaCha20-Poly1305, 0600). Its key
 is `<profile>/vault/vault.key` (0600) with `vault.key_storage = "file"`

@@ -235,7 +235,7 @@ fn openai_access(
 
 /// `xai`: the shared subscription rule (the `xai-oauth` sign-in, unless
 /// its provider prefers the API key).
-fn xai_access(credentials: &Credentials) -> Result<Access, String> {
+pub(crate) fn xai_access(credentials: &Credentials) -> Result<Access, String> {
     let registry =
         pmt_providers::registry::ProviderRegistry::for_profile(&credentials.config, Vec::new())
             .map_err(|e| e.message().to_owned())?;

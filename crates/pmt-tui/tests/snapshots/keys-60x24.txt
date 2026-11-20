@@ -1,6 +1,3 @@
-The build failed in the linker step: two crates define the
-same symbol.
-  submit         Enter
   newline        Alt+Enter
   interrupt      Ctrl+C
   quit           Ctrl+D
@@ -19,6 +16,9 @@ same symbol.
   paste_image    Ctrl+V
   expand_paste   Ctrl+O
   banner         Ctrl+B
+  pane_subagents F2
+  pane_tools     F3
+  timeline       Ctrl+T
 ────────────────────────────────────────────────────────────
 ›
   default │ mock/m1 │ ctx 25% │ $0.0042

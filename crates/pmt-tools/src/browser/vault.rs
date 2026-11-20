@@ -50,6 +50,9 @@ pub struct VaultSession {
     pub browser: Arc<BrowserExec>,
     /// The human's masked prompt (`None`: cron, webhook, API, single-query).
     pub prompt: Option<Arc<dyn MaskedPrompt>>,
+    /// The enabled password-manager sources (`vault.onepassword`,
+    /// `vault.bitwarden`) whose CLI is installed.
+    pub managers: Vec<Arc<super::managers::Source>>,
 }
 
 struct Handler(Arc<Environments>);
@@ -103,7 +106,7 @@ impl VaultSession {
             "fill" => call.fill().await,
             "save_login" => call.save_login().await,
             "enter_code" => call.enter_code().await,
-            "unlock" => unlock(arguments),
+            "unlock" => call.unlock().await,
             other => ToolResult::error(format!("unknown action '{other}'")),
         }
     }
@@ -119,10 +122,119 @@ struct Call<'a> {
 
 impl Call<'_> {
     fn list(&self) -> ToolResult {
-        match self.session.vault.list() {
-            Ok(items) => json_result(&json!({ "items": items })),
-            Err(err) => ToolResult::error(err.message()),
+        let mut items = match self.session.vault.list() {
+            Ok(items) => serde_json::to_value(items).unwrap_or_default(),
+            Err(err) => return ToolResult::error(err.message()),
+        };
+        let attended = self.session.prompt.is_some();
+        let mut sources = Vec::new();
+        for source in &self.session.managers {
+            let mut entry = super::managers::source_entry(source, attended);
+            if source.state(attended) == super::managers::State::Unlocked {
+                match source.list() {
+                    Ok(logins) => {
+                        if let Some(list) = items.as_array_mut() {
+                            list.extend(logins.iter().map(|l| {
+                                json!({"handle": l.handle, "label": l.label, "kind": "login",
+                                       "origins": l.origins, "identifier": l.identifier,
+                                       "source": source.manager().name()})
+                            }));
+                        }
+                    }
+                    Err(why) => entry["error"] = json!(why),
+                }
+            }
+            sources.push(entry);
         }
+        json_result(&json!({ "items": items, "sources": sources }))
+    }
+
+    /// `unlock(source)`: the master password through the masked prompt;
+    /// never asked where nobody can answer.
+    async fn unlock(&self) -> ToolResult {
+        let name = self.arguments["source"].as_str().unwrap_or_default();
+        let Some(source) = super::managers::Manager::parse(name)
+            .and_then(|m| self.session.managers.iter().find(|s| s.manager() == m))
+        else {
+            return ToolResult::error(format!(
+                "browser_vault: '{name}' is not an enabled password-manager source"
+            ));
+        };
+        let attended = self.session.prompt.is_some();
+        match source.state(attended) {
+            super::managers::State::Unlocked => {
+                return json_result(&json!({"source": name, "status": "unlocked"}));
+            }
+            super::managers::State::Unavailable => {
+                return json_result(&super::managers::source_entry(source, attended));
+            }
+            super::managers::State::Locked => {}
+        }
+        let Some(prompt) = &self.session.prompt else {
+            return prompt_unavailable();
+        };
+        let question = format!("Master password for {name} (kept by its CLI, not by Prometheus)");
+        let Some(master) = prompt.ask("VAULT_MASTER_PASSWORD", &question).await else {
+            return refused("the person did not enter the master password");
+        };
+        let unlocked = {
+            let source = Arc::clone(source);
+            pmt_core::spawn::blocking(move || source.unlock(&master))
+                .await
+                .unwrap_or_else(|_| Err("the unlock task failed".to_owned()))
+        };
+        match unlocked {
+            Ok(()) => json_result(&json!({"source": name, "status": "unlocked"})),
+            Err(why) => refused(&format!("{name} did not unlock: {why}")),
+        }
+    }
+
+    /// Fills a password-manager login on its exact saved origins.
+    async fn fill_manager(&self, manager: super::managers::Manager, id: &str) -> ToolResult {
+        let Some(source) = self
+            .session
+            .managers
+            .iter()
+            .find(|s| s.manager() == manager)
+        else {
+            return ToolResult::error("browser_vault: that password-manager source is not enabled");
+        };
+        if source.state(self.session.prompt.is_some()) != super::managers::State::Unlocked {
+            return json_result(&super::managers::source_entry(
+                source,
+                self.session.prompt.is_some(),
+            ));
+        }
+        let fetched = {
+            let (source, id) = (Arc::clone(source), id.to_owned());
+            pmt_core::spawn::blocking(move || source.login(&id))
+                .await
+                .unwrap_or_else(|_| Err("the lookup task failed".to_owned()))
+        };
+        let (login, password) = match fetched {
+            Ok(found) => found,
+            Err(why) => return ToolResult::error(format!("browser_vault: {why}")),
+        };
+        if login.origins.is_empty() {
+            return refused(&format!(
+                "{} has no saved website; nothing was typed",
+                login.handle
+            ));
+        }
+        let browser = match self.browser().await {
+            Ok(browser) => browser,
+            Err(failed) => return failed,
+        };
+        let script = vault_js::login(Some(&login.origins), &login.identifier, password.expose());
+        self.session.browser.redact_filled(&[password.expose()]);
+        let mismatch = |origin: &str| {
+            format!(
+                "{} is saved for {}, not {origin}; nothing was typed",
+                login.handle,
+                login.origins.join(", ")
+            )
+        };
+        self.type_into(&browser, &script, mismatch).await
     }
 
     fn handle(&self) -> Result<Item, ToolResult> {
@@ -154,6 +266,10 @@ impl Call<'_> {
     }
 
     async fn fill(&self) -> ToolResult {
+        let handle = self.arguments["handle"].as_str().unwrap_or_default();
+        if let Some((manager, id)) = super::managers::Manager::of_handle(handle) {
+            return self.fill_manager(manager, id).await;
+        }
         let item = match self.handle() {
             Ok(item) => item,
             Err(refused) => return refused,
@@ -348,17 +464,6 @@ impl Call<'_> {
     }
 }
 
-/// Password-manager sources (1Password, Bitwarden) are not part of this
-/// build: every source is reported unavailable.
-fn unlock(arguments: &Value) -> ToolResult {
-    let source = arguments["source"].as_str().unwrap_or_default();
-    json_result(&json!({
-        "source": source,
-        "status": "unavailable_in_this_session",
-        "message": "password manager sources are not available in this build; use the Prometheus vault",
-    }))
-}
-
 /// Saved origins in the browser's serialization (`https://github.com`).
 fn web_origins(saved: &[String]) -> Vec<String> {
     saved
@@ -396,8 +501,9 @@ fn descriptor() -> ToolDescriptor {
          origins; every card fill asks the user) and returns {filled_fields, origin}; \
          save_login(identifier[, origin, label]) asks the user for the password; \
          enter_code(handle) types the current one-time code (method=passkey|app: tells you \
-         to ask the user to approve on their device); unlock(source) reports password \
-         manager sources. Never ask the user to type a password into the chat.",
+         to ask the user to approve on their device); unlock(source) asks the user to unlock a \
+         password-manager source (onepassword, bitwarden), whose logins then appear in list \
+         with handles op_*/bw_* and fill only on their saved websites. Never ask the user to type a password into the chat.",
         json!({
             "type": "object",
             "properties": {

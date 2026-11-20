@@ -13,6 +13,7 @@ use pmt_rpc::RpcError;
 const READS: &[&str] = &[
     "rpc.hello",
     "ui.prefs.get",
+    "i18n.languages",
     "rpc.ping",
     "session.attach",
     "session.detach",
@@ -25,6 +26,8 @@ const READS: &[&str] = &[
     "session.context_usage",
     "session.banner",
     "subagent.list",
+    "subagent.subscribe",
+    "session.timeline",
     "commands.catalog",
     "complete.slash",
     "model.options",

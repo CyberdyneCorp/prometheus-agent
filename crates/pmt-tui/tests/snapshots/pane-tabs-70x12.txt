@@ -1,0 +1,12 @@
+ transcript  subagents  tool output
+tool output (1)
+› terminal cargo test
+──────────────────────────────────────────────────────────────────────
+running 3 tests
+test a ... ok
+test b ... ok
+test c ... ok
+
+──────────────────────────────────────────────────────────────────────
+›
+  default │ mock/m1

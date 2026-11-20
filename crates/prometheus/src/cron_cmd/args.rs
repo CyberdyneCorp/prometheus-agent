@@ -342,6 +342,7 @@ impl JobFlags {
         Ok(pmt_cron::fields::Fields {
             schedule: schedule.map(str::to_owned),
             schedule_text: self.schedule_text.clone(),
+            translated: None,
             prompt: self.prompt.clone(),
             skills: some(&self.skills),
             script: self.script.clone(),

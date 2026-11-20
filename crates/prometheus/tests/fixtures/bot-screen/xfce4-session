@@ -1,0 +1,4 @@
+#!/bin/sh
+# A stand-in desktop session: records the display it was given, then waits.
+echo "$DISPLAY" > "${PMT_FAKE_SESSION_LOG:-/dev/null}"
+exec sleep 600

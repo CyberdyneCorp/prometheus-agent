@@ -123,6 +123,9 @@ pub enum Reason {
     Unresolved,
     /// The checked address could not be reached.
     Unreachable,
+    /// A credential placeholder was bound for a host its secret is not
+    /// mapped to.
+    CredentialMisdirected,
 }
 
 impl Reason {
@@ -138,6 +141,7 @@ impl Reason {
             Self::PrivateRange => "private_range",
             Self::Unresolved => "unresolved",
             Self::Unreachable => "unreachable",
+            Self::CredentialMisdirected => "credential_misdirected",
         }
     }
 

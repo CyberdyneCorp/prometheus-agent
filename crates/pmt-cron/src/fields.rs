@@ -33,6 +33,9 @@ pub struct Fields {
     pub schedule: Option<String>,
     /// A free-form schedule for the auxiliary model.
     pub schedule_text: Option<String>,
+    /// What the auxiliary model translated `schedule_text` to (the caller
+    /// translates before applying: [`crate::schedule::translate`]).
+    pub translated: Option<Schedule>,
     /// The prompt.
     pub prompt: Option<String>,
     /// Preloaded skills.
@@ -179,18 +182,15 @@ impl Fields {
         now: Timestamp,
         profile_zone: &TimeZone,
     ) -> Result<(), Error> {
-        if self.schedule_text.is_some() {
-            return Err(Error::new(
-                &codes::CRON_INVALID_SCHEDULE,
-                "natural-language schedules (schedule_text, --nl) are not available in this \
-                 build: give the schedule in the grammar ('every 30m', 'weekdays at 9:30', \
-                 a cron expression, 'tomorrow at 9am')",
-            ));
-        }
         set(&mut spec.timezone, self.timezone.as_ref());
-        if let Some(text) = &self.schedule {
-            let zone = spec.zone(profile_zone).map_err(invalid)?;
-            spec.schedule = Schedule::parse(text, now, &zone)?;
+        match (&self.schedule_text, &self.translated, &self.schedule) {
+            (Some(text), None, _) => return Err(crate::schedule::translate::refused(text)),
+            (Some(_), Some(translated), _) => spec.schedule = translated.clone(),
+            (None, _, Some(text)) => {
+                let zone = spec.zone(profile_zone).map_err(invalid)?;
+                spec.schedule = Schedule::parse(text, now, &zone)?;
+            }
+            (None, _, None) => {}
         }
         self.apply_payload(spec);
         self.apply_routing(spec);

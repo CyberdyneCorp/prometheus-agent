@@ -70,6 +70,7 @@ pub mod probe;
 mod profile_routes;
 pub mod proxy;
 pub mod proxy_env;
+mod receipts;
 mod recovery;
 mod relay;
 mod restart;
@@ -82,6 +83,7 @@ pub mod target;
 pub mod tasks;
 mod topics;
 mod typing;
+mod upstream;
 pub mod voice;
 pub mod ws;
 
@@ -103,8 +105,8 @@ pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
     CronFire, Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive,
-    LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Select,
-    SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
+    LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Receipt,
+    Select, SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
 };
 pub use agents::{
     Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFeed, UpdateFromChat,
@@ -112,6 +114,7 @@ pub use agents::{
 };
 pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
+pub use http::{CRON_FIRE_PATH, Endpoint};
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
 pub use recovery::{CLEAN_SHUTDOWN, RESUME_ORIGIN};
@@ -158,6 +161,10 @@ pub struct Options {
     /// `daemon run --replace`: take over credential locks live holders
     /// keep.
     pub replace_locks: bool,
+    /// `POST /api/cron/fire` of the managed scheduler (spec:
+    /// scheduled-jobs, Managed scheduler contract), served on the shared
+    /// listener, which then starts with the gateway.
+    pub cron_fire: Option<Arc<dyn http::Endpoint>>,
 }
 
 impl std::fmt::Debug for Options {
@@ -189,6 +196,7 @@ impl Options {
             http: HttpOptions::default(),
             locks_dir: None,
             replace_locks: false,
+            cron_fire: None,
         }
     }
 }
@@ -438,6 +446,7 @@ impl Gateway {
         if let Some(options) = shared.options.relay.clone() {
             relay::start(&shared, options).await;
         }
+        http::serve_endpoints(&shared);
         for profile in &profiles {
             shared
                 .options

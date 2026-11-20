@@ -1,5 +1,5 @@
 //! Media tool sections (spec: web-and-media-tools): `[x_search]`,
-//! `[image_gen]`, `[tts]` and `[stt]`. Each category's `provider` is the
+//! `[image_gen]`, `[video_gen]`, `[tts]` and `[stt]`. Each category's `provider` is the
 //! single selection key the subscription tool gateway routing reads
 //! (model-providers, Subscription tool gateway routing); unset lets the
 //! routing detect one. Per-provider defaults that the spec names live with
@@ -38,6 +38,37 @@ impl Default for XSearchConfig {
             reasoning_effort: None,
             timeout_secs: 180,
             retries: 2,
+        }
+    }
+}
+
+/// The `[video_gen]` section (the `video_generate` tool, toolset
+/// `video_gen`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+#[schemars(extend("x-apply" = "next_session"))]
+pub struct VideoGenConfig {
+    /// The provider generating videos: `fal`, `xai`, `openrouter`,
+    /// `deepinfra`, `nous` (the subscription tool gateway) or a plugin's;
+    /// unset picks one by the keys present (`fal` when none).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    /// The model (unset: the provider's default). The agent never picks
+    /// it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// How long a generation job is polled (every 5 seconds) before the
+    /// call returns `status = "timeout"` with the provider's job id.
+    #[schemars(range(min = 1))]
+    pub timeout_secs: u64,
+}
+
+impl Default for VideoGenConfig {
+    fn default() -> Self {
+        Self {
+            provider: None,
+            model: None,
+            timeout_secs: 900,
         }
     }
 }

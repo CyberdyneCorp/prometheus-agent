@@ -41,6 +41,7 @@ use tracing::Instrument as _;
 use crate::server::{Call, Conn, HelloState, Server};
 use crate::tickets::random_hex;
 use crate::tickets::{Grant, Redeemed};
+use pmt_rpc::control::Purpose;
 
 /// The longest a single send may block.
 pub const SEND_TIMEOUT: Duration = Duration::from_secs(30);
@@ -66,6 +67,8 @@ const WHILE_RETIRING: &[&str] = &[
 #[derive(Debug)]
 enum Admission {
     Accepted(Grant),
+    /// The bot screen's display stream (a display ticket on `/screen`).
+    Display(Grant),
     Refused(CloseCode),
 }
 
@@ -96,6 +99,9 @@ pub async fn serve(server: Arc<Server>, stream: TcpStream) {
         Some(Admission::Accepted(grant)) => {
             run(server, socket, grant, Ends::default()).await;
         }
+        Some(Admission::Display(grant)) => {
+            crate::screen_stream::serve(&server, socket, grant).await;
+        }
         Some(Admission::Refused(code)) => refuse(socket, code).await,
         None => {}
     }
@@ -110,6 +116,24 @@ fn upgrade(
     admission: &mut Option<Admission>,
 ) -> Result<Response, ErrorResponse> {
     let offered = offered_protocols(request);
+    if request.uri().path() == crate::screen_stream::PATH
+        && offered
+            .iter()
+            .any(|p| p == crate::screen_stream::SUBPROTOCOL)
+    {
+        response.headers_mut().insert(
+            "Sec-WebSocket-Protocol",
+            HeaderValue::from_static(crate::screen_stream::SUBPROTOCOL),
+        );
+        *admission = Some(match admit(server, request, &offered) {
+            Admission::Accepted(grant) if grant.purpose == Purpose::Display => {
+                Admission::Display(grant)
+            }
+            Admission::Accepted(_) => Admission::Refused(CloseCode::NotAllowed),
+            refused => refused,
+        });
+        return Ok(response);
+    }
     if request.uri().path() != RPC_PATH {
         // Upgraded and closed, so a browser sees the code; the ticket is
         // never redeemed.
@@ -134,7 +158,13 @@ fn upgrade(
             .headers_mut()
             .insert("Sec-WebSocket-Protocol", value);
     }
-    *admission = Some(admit(server, request, &offered));
+    // A display ticket opens the display stream only.
+    *admission = Some(match admit(server, request, &offered) {
+        Admission::Accepted(grant) if grant.purpose == Purpose::Display => {
+            Admission::Refused(CloseCode::NotAllowed)
+        }
+        other => other,
+    });
     Ok(response)
 }
 

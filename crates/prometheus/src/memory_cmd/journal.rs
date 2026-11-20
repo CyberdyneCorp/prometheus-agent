@@ -100,7 +100,7 @@ pub(super) fn revert(env: &Env, rev: i64) -> Result<u8, Error> {
 pub(super) fn search(
     env: &Env,
     query: &str,
-    explain: bool,
+    (explain, all): (bool, bool),
     user_home: Option<&Path>,
 ) -> Result<u8, Error> {
     let embedder = if env.config().recall.embedding_model.is_some() {
@@ -116,12 +116,17 @@ pub(super) fn search(
         None
     };
     let redactor = env.scope.secrets().redactor()?;
-    let ranked = crate::model_cmd::block_on(pmt_memory::rank::rank(
+    let options = pmt_memory::rank::Options {
+        include_dormant: all,
+        ..pmt_memory::rank::Options::now()
+    };
+    let ranked = crate::model_cmd::block_on(pmt_memory::rank::rank_with(
         &env.store,
         env.config(),
         embedder.as_deref(),
         &redactor,
         query,
+        options,
     ))??;
     if env.json {
         return json(&ranked);
@@ -134,7 +139,7 @@ pub(super) fn search(
     for s in &ranked {
         let _ = write!(text, "{} {:.3}", s.id, s.score);
         if explain {
-            let _ = write!(text, " (bm25 {:.3}", s.bm25);
+            let _ = write!(text, " (bm25 {:.3}, salience {:.3}", s.bm25, s.salience);
             if let Some(cos) = s.cosine {
                 let _ = write!(text, ", cosine {cos:.3}");
             }

@@ -298,12 +298,17 @@ Before any `write_file`, `patch`, delete or rename performed by a file tool, the
 - **THEN** `src/lib.rs` SHALL be left unchanged and the conflict SHALL be reported
 
 ### Requirement: Terminal workspace checkpoints (upgrade)
-When `files.snapshot.terminal = "workspace"` (default `off`), the system SHALL record a manifest of the session workspace (path, size, mtime, content hash, at most `files.snapshot.max_workspace_bytes`, default 536870912) before each `exec`-class terminal command and store changed files' prior contents afterwards, so that `/undo` also reverts file changes made by terminal commands inside the workspace; a workspace over the limit SHALL skip checkpointing with a one-time notice rather than fail the command.
+When `files.snapshot.terminal = "workspace"` (default `off`), the system SHALL record a manifest of the session workspace (path, size, mtime, content hash, at most `files.snapshot.max_workspace_bytes`, default 536870912) before each `exec`-class terminal command and store changed files' prior contents afterwards, so that `/undo` also reverts file changes made by terminal commands inside the workspace; a background command's changes SHALL be recorded too, including those it makes after its call returned (at the latest when it exits); a workspace over the limit SHALL skip checkpointing with a one-time notice rather than fail the command.
 **Milestone:** M3
 
 #### Scenario: Undo a sed edit
 - **GIVEN** `files.snapshot.terminal = "workspace"`
 - **WHEN** the model runs `sed -i s/a/b/ notes.txt` and the user runs `/undo`
+- **THEN** `notes.txt` SHALL have its prior content
+
+#### Scenario: Undo a background command's late write
+- **GIVEN** `files.snapshot.terminal = "workspace"`
+- **WHEN** the model starts a background command that writes `notes.txt` after its call returned, it exits, and the user runs `/undo`
 - **THEN** `notes.txt` SHALL have its prior content
 
 ### Requirement: Browser session resolution

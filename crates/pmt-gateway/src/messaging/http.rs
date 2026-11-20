@@ -51,6 +51,16 @@ impl Listener {
     }
 }
 
+/// Starts the listener for the daemon's own endpoints (managed scheduler
+/// fires), when it has any.
+pub(crate) fn serve_endpoints(shared: &Arc<Shared>) {
+    if shared.options.cron_fire.is_some()
+        && let Err(reason) = ensure(shared)
+    {
+        tracing::warn!("managed scheduler fires cannot be received: {reason}");
+    }
+}
+
 /// Starts the listener unless it runs; the bound address, or why it
 /// cannot listen.
 pub(crate) fn ensure(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
@@ -146,9 +156,32 @@ pub(crate) fn respond(answer: HttpResponse) -> Response<Full<Bytes>> {
         .unwrap_or_else(|_| Response::new(Full::new(Bytes::new())))
 }
 
-/// `/p/<profile>/<platform>/<rest>` to its adapter.
+/// Where the managed scheduler posts its fires.
+pub const CRON_FIRE_PATH: &str = "/api/cron/fire";
+
+/// The largest fire request read.
+const FIRE_BODY_LIMIT: usize = 64 * 1024;
+
+/// A daemon endpoint served on the shared listener beside the adapters
+/// (the managed scheduler's fires): it verifies the request itself.
+pub trait Endpoint: Send + Sync {
+    /// Answers one request.
+    fn handle(&self, request: HttpRequest) -> super::AdapterFuture<'_, HttpResponse>;
+}
+
+/// `/api/cron/fire` to the daemon's endpoint, `/p/<profile>/<platform>/<rest>`
+/// to its adapter.
 async fn route(shared: &Shared, request: Request<Incoming>) -> HttpResponse {
     let path = request.uri().path().to_owned();
+    if path == CRON_FIRE_PATH {
+        let Some(endpoint) = &shared.options.cron_fire else {
+            return HttpResponse::status(404);
+        };
+        return match read(request, FIRE_BODY_LIMIT, path).await {
+            Ok(incoming) => endpoint.handle(incoming).await,
+            Err(refused) => refused,
+        };
+    }
     let mut segments = path.trim_start_matches('/').splitn(4, '/');
     let (Some("p"), Some(profile), Some(platform)) =
         (segments.next(), segments.next(), segments.next())
@@ -173,8 +206,28 @@ pub(crate) async fn deliver(
     rest: String,
     request: Request<Incoming>,
 ) -> HttpResponse {
+    let incoming = match read(request, adapter.max_body_bytes(), rest).await {
+        Ok(incoming) => incoming,
+        Err(refused) => return refused,
+    };
+    if !adapter.verify_http(&incoming) {
+        tracing::warn!(
+            platform = adapter.describe().platform,
+            "refused an unsigned or wrongly signed webhook request"
+        );
+        return HttpResponse::status(401);
+    }
+    adapter.handle_http(&incoming).await
+}
+
+/// The request with its body read (at most `limit` bytes; 413 beyond),
+/// `path` being what its handler sees.
+async fn read(
+    request: Request<Incoming>,
+    limit: usize,
+    path: String,
+) -> Result<HttpRequest, HttpResponse> {
     let (parts, body) = request.into_parts();
-    let limit = adapter.max_body_bytes();
     // A declared length over the limit is refused before anything is read.
     let declared = parts
         .headers
@@ -182,14 +235,14 @@ pub(crate) async fn deliver(
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok());
     if declared.is_some_and(|len| len > limit as u64) {
-        return HttpResponse::status(413);
+        return Err(HttpResponse::status(413));
     }
     let Ok(body) = Limited::new(body, limit).collect().await else {
-        return HttpResponse::status(413);
+        return Err(HttpResponse::status(413));
     };
-    let incoming = HttpRequest {
+    Ok(HttpRequest {
         method: parts.method.as_str().to_owned(),
-        path: rest,
+        path,
         query: parts.uri.query().map(str::to_owned),
         headers: parts
             .headers
@@ -202,13 +255,5 @@ pub(crate) async fn deliver(
             })
             .collect(),
         body: body.to_bytes().to_vec(),
-    };
-    if !adapter.verify_http(&incoming) {
-        tracing::warn!(
-            platform = adapter.describe().platform,
-            "refused an unsigned or wrongly signed webhook request"
-        );
-        return HttpResponse::status(401);
-    }
-    adapter.handle_http(&incoming).await
+    })
 }

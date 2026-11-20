@@ -583,11 +583,17 @@ fn a_lane_cannot_write_the_board_and_reports_through_its_broker() {
         listed["attachments"][0]["uploader"], "probe-cli",
         "{listed}"
     );
-    assert!(
-        !home.path().join("kanban/lanes").exists()
-            || common::files_under(&home.path().join("kanban/lanes")).is_empty(),
-        "the mailbox is removed when the lane ends"
-    );
+    // The run is done once the broker answers the lane's `complete`; the
+    // broker removes the mailbox only after it sees the lane process exit.
+    let lanes = home.path().join("kanban/lanes");
+    let deadline = Instant::now() + Duration::from_mins(1);
+    while lanes.exists() && !common::files_under(&lanes).is_empty() {
+        assert!(
+            Instant::now() < deadline,
+            "the mailbox is removed when the lane ends"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// A lane that exits without a terminator ends its run with its own exit,

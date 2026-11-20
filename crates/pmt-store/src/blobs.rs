@@ -94,9 +94,19 @@ fn blob_path(dir: &Path, sha256: &str) -> PathBuf {
 
 static TEMP_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// Writes `bytes` under `dir` unless the blob exists; an existing blob's
+/// A store's blob directory and the key its files are sealed with
+/// (spec: session-storage, Encryption at rest option); a blob keeps the
+/// name of its plaintext's hash either way.
+#[derive(Debug, Clone)]
+pub(crate) struct Blobs {
+    pub(crate) dir: PathBuf,
+    pub(crate) key: Option<crate::crypt::Key>,
+}
+
+/// Writes `bytes` under `blobs` unless the blob exists; an existing blob's
 /// mtime is refreshed so a concurrent collection treats it as fresh.
-pub(crate) fn put(dir: &Path, bytes: &[u8]) -> Result<BlobRef, Error> {
+pub(crate) fn put(blobs: &Blobs, bytes: &[u8]) -> Result<BlobRef, Error> {
+    let dir = blobs.dir.as_path();
     let blob = BlobRef::of(bytes);
     let path = blob_path(dir, blob.sha256());
     if path.is_file() {
@@ -116,10 +126,19 @@ pub(crate) fn put(dir: &Path, bytes: &[u8]) -> Result<BlobRef, Error> {
         std::process::id(),
         TEMP_SEQ.fetch_add(1, Ordering::Relaxed)
     ));
+    let sealed;
+    let stored = match &blobs.key {
+        Some(key) => {
+            sealed =
+                crate::crypt::seal_blob(key, bytes).map_err(|e| Error::new(&codes::STORE_IO, e))?;
+            sealed.as_slice()
+        }
+        None => bytes,
+    };
     let written = private_fs::new_file_options()
         .open(&temp)
         .and_then(|mut file| {
-            file.write_all(bytes)?;
+            file.write_all(stored)?;
             file.sync_all()
         })
         .and_then(|()| std::fs::rename(&temp, &path));
@@ -131,7 +150,8 @@ pub(crate) fn put(dir: &Path, bytes: &[u8]) -> Result<BlobRef, Error> {
 }
 
 /// Reads and verifies a blob.
-pub(crate) fn get(dir: &Path, blob: &BlobRef) -> Result<Vec<u8>, Error> {
+pub(crate) fn get(blobs: &Blobs, blob: &BlobRef) -> Result<Vec<u8>, Error> {
+    let dir = blobs.dir.as_path();
     let path = blob_path(dir, blob.sha256());
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
@@ -142,6 +162,15 @@ pub(crate) fn get(dir: &Path, blob: &BlobRef) -> Result<Vec<u8>, Error> {
             ));
         }
         Err(e) => return Err(Error::io(&codes::STORE_IO, &path, &e)),
+    };
+    let bytes = match &blobs.key {
+        Some(key) => crate::crypt::open_blob(key, &bytes).map_err(|e| {
+            Error::new(
+                &codes::STORE_BLOB_CORRUPT,
+                format!("{}: {e}", path.display()),
+            )
+        })?,
+        None => bytes,
     };
     if BlobRef::of(&bytes) != *blob {
         return Err(Error::new(
@@ -161,7 +190,37 @@ impl Store {
     ///
     /// `store.io`.
     pub fn put_blob(&self, bytes: &[u8]) -> Result<BlobRef, Error> {
-        put(self.location().blobs(), bytes)
+        put(&self.blobs(), bytes)
+    }
+
+    /// The blob directory with this store's blob key.
+    pub(crate) fn blobs(&self) -> Blobs {
+        Blobs {
+            dir: self.location().blobs().to_path_buf(),
+            key: self.blob_key().cloned(),
+        }
+    }
+
+    /// A readable file of `blob` for a tool or viewer that needs a path:
+    /// the blob file itself, or for an encrypted store a decrypted copy
+    /// under the profile's `cache/media/` (owner-only).
+    ///
+    /// # Errors
+    ///
+    /// As [`Store::get_blob`]; `store.io`.
+    pub fn blob_file(&self, blob: &BlobRef) -> Result<PathBuf, Error> {
+        if self.blob_key().is_none() {
+            return Ok(self.blob_path(blob));
+        }
+        let dir = self.profile_dir().join("cache/media");
+        files::private_dir(&dir)?;
+        let path = dir.join(blob.sha256());
+        if !path.is_file() {
+            let bytes = self.get_blob(blob)?;
+            private_fs::write_atomic(&path, &bytes)
+                .map_err(|e| Error::io(&codes::STORE_IO, &path, &e))?;
+        }
+        Ok(path)
     }
 
     /// Where `blob` lives on disk.
@@ -176,7 +235,7 @@ impl Store {
     ///
     /// `store.blob_missing`, `store.blob_corrupt`, `store.io`.
     pub fn get_blob(&self, blob: &BlobRef) -> Result<Vec<u8>, Error> {
-        get(self.location().blobs(), blob)
+        get(&self.blobs(), blob)
     }
 
     /// Records that `owner_kind`/`owner_id` (an attachment, a trajectory...)

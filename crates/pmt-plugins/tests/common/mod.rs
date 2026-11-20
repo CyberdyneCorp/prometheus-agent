@@ -385,6 +385,7 @@ impl Profile {
                 running: &version(),
                 blocked: &self.blocked,
                 profile_config: None,
+                dev: &[],
             },
         )
     }

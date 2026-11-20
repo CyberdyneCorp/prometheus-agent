@@ -40,7 +40,8 @@ impl Repl {
             return;
         };
         match self.gate(command).await {
-            GateVerdict::Allow => {}
+            // Only file edits are revised; a command runs as typed.
+            GateVerdict::Allow | GateVerdict::Revised { .. } => {}
             GateVerdict::Blocked(why) | GateVerdict::Denied(why) => {
                 self.notice(&why);
                 return;
@@ -89,7 +90,7 @@ impl Repl {
                             if let Some(outcome) = prompts::outcome(decision, &strings) {
                                 self.notice(outcome);
                             }
-                            prompt.respond(decision);
+                            prompt.respond(decision.into());
                         }
                         None => self.notice(strings.get("approval.not_approved")),
                     }

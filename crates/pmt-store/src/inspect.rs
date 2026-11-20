@@ -130,6 +130,16 @@ fn open(profile: &ProfileDir) -> Result<Option<Connection>, Error> {
     if !path.is_file() {
         return Ok(None);
     }
+    // These peeks have no key: an encrypted store says so plainly.
+    if crate::crypt::is_plaintext(&path) == Some(false) {
+        return Err(Error::new(
+            &codes::STORE_KEY_UNAVAILABLE,
+            format!(
+                "{}: state.db is encrypted (storage.encryption) and cannot be inspected without its key",
+                profile.name()
+            ),
+        ));
+    }
     Connection::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,

@@ -109,6 +109,35 @@ committed (unsupported items and conflicts do not fail a run), 1 when a
 component failed, 66 when the Hermes home is missing, 73 when the
 Prometheus profile cannot be written.
 
+### Rolling a run back
+
+Every real run (Hermes and the other-agent importers) keeps a rollback
+journal per profile under `<profile>/migrations/runs/<run-id>/`: what each
+committed component created or replaced, with copies of replaced files, the
+previous value of each config key (a replaced secret is kept in the
+profile's secrets store under a `PMT_MIGRATE_UNDO_...` name, never in a
+file) and the source's ledger as it was. `prometheus migrate rollback --run
+<run-id>` (the `run_id` of the report; asks first, `--yes` without a
+terminal) takes the run back, newest item first: an item that still holds
+what the run wrote is removed (created by the run) or restored (replaced by
+it), and messages a re-run appended to an earlier session are taken off
+again. An item changed in Prometheus since the run is kept and reported
+`kept_modified`, so a session you continued here stays:
+
+```text
+$ prometheus migrate rollback --run 01m7mc0zvn0wdvmhgbvwztmptg --yes
+rolled back run 01m7mc0zvn0wdvmhgbvwztmptg in profile default
+  removed: 14
+  restored: 1
+  kept_modified: 1
+  kept_modified session ses_01M7MC0ZVN0WDVMHGBVWZTMPTG
+```
+
+The ledger returns to its state before the run, so running the migration
+again imports the source anew. Only the latest run of a source can be
+rolled back (`migrate.rollback_order` names the later one); a rolled-back
+run's journal is deleted (`migrate.run_not_found`, exit 66, afterwards).
+
 ## From OpenClaw, Claude Code, Codex CLI and Cursor
 
 See what is on this machine and what each source would import:

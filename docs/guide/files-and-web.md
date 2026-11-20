@@ -301,3 +301,42 @@ only the newest `vision.replay_recent_images` (default 3; `0` disables)
 are sent again in their original messages. Older images retire in batches
 of that size, so an earlier message changes at most once per batch, and
 show as `[image]`.
+
+## Generating video
+
+[`video_generate`](../reference/tools.md#video_generate) (toolset
+`video_gen`, default-off) makes a short clip from a prompt, or from a first
+frame given as `image_url`. You pick the provider and model, never the
+agent: `video_gen.provider` is `fal` (default), `xai`, `openrouter`,
+`deepinfra`, `nous` (the subscription tool gateway) or a plugin's provider,
+and `video_gen.model` one of its models (unset: the provider's default).
+
+```toml
+[tools]
+enabled_toolsets = ["core", "video_gen"]
+
+[video_gen]
+provider = "fal"
+model = "veo3.1"
+timeout_secs = 900
+```
+
+The tool advertises the configured model's duration range, aspect ratios
+and resolutions, and offers `reference_image_urls`, `negative_prompt`,
+`audio`, `seed` and `upscale` only when that model honours them. A call
+carrying a value the model lacks (a replay of another model's call) still
+runs: the duration is clamped, the nearest resolution is used and the
+unsupported arguments are dropped and listed under `ignored`.
+
+Generation is a provider job polled every 5 seconds. The finished video is
+stored in the profile's blob store and returned as `MEDIA:<path>`; a job
+still running after `video_gen.timeout_secs` returns `status = "timeout"`
+with the provider's `job_id`, so you can look it up on the provider's side.
+
+While `video_gen.provider = "xai"` and an xAI key or `xai-oauth` sign-in
+exists, the `video_gen` toolset also offers
+[`xai_video_edit`](../reference/tools.md#xai_video_edit) and
+[`xai_video_extend`](../reference/tools.md#xai_video_extend). They take the
+`video_url` an xAI result reports (a public HTTPS MP4 on an `x.ai` host);
+any other URL is refused before xAI is contacted. With another provider
+they are absent from the session.

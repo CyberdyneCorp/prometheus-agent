@@ -1,6 +1,7 @@
 //! Memory behaviour contracts (spec: memory). One test binary.
 
 mod approval;
+mod decay;
 mod import;
 mod journal;
 mod prompt;
