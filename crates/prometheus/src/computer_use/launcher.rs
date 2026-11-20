@@ -400,12 +400,7 @@ impl PrivateDaemon {
             let app = super::identity::bundle(driver).ok_or_else(|| {
                 format!("private computer-use runtimes on macOS start only through CuaDriver.app, and {} is not inside one: {INSTALL_HINT}", driver.display())
             })?;
-            let codesign = codesign(env);
-            super::identity::verify(
-                &app,
-                scope.config().computer_use.allow_unsigned_driver,
-                &codesign,
-            )?;
+            super::identity::verify(&app, scope.config().computer_use.allow_unsigned_driver)?;
             let mut open = std::process::Command::new("/usr/bin/open");
             open.args(["-n", "-g", "-a"])
                 .arg(&app)
@@ -487,18 +482,6 @@ fn socket_path() -> PathBuf {
     } else {
         std::env::temp_dir().join(format!("pmt-cua-{short}.sock"))
     }
-}
-
-/// `codesign` on the driver's `PATH`, else its standard location.
-fn codesign(env: &[(String, OsString)]) -> PathBuf {
-    env.iter()
-        .find(|(k, _)| k == "PATH")
-        .and_then(|(_, path)| {
-            pmt_tools::terminal::shell::find_all("codesign", path, None)
-                .into_iter()
-                .next()
-        })
-        .unwrap_or_else(|| PathBuf::from("/usr/bin/codesign"))
 }
 
 #[cfg(test)]

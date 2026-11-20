@@ -303,12 +303,8 @@ impl Ours<'_> {
                 format!("{} is not inside CuaDriver.app", self.driver.display()),
             );
         };
-        let codesign = Path::new("/usr/bin/codesign");
-        match super::identity::verify(
-            &app,
-            self.scope.config().computer_use.allow_unsigned_driver,
-            codesign,
-        ) {
+        match super::identity::verify(&app, self.scope.config().computer_use.allow_unsigned_driver)
+        {
             Ok(()) => row(
                 "bundle_identity",
                 "pass",

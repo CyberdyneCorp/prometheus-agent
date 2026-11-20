@@ -1,0 +1,67 @@
+/// A computer-use backend (spec: computer-use, Backend selection and
+/// availability): a desktop the plugin reaches through the imports it was
+/// granted (a remote machine or a hosted desktop service), selected by
+/// `computer_use.backend = "<name>"`.
+///
+/// The host keeps the `computer_use` tool's contract (actions, approvals,
+/// hard blocks, capture budgets, screenshot retention) and calls the
+/// backend with the driver tool names and JSON arguments `cua-driver`
+/// takes (`get_window_state`, `click`, `type_text`, `press_key`,
+/// `screenshot`, ...). A runtime's permission mode is fixed when it is
+/// launched; the host stops it and launches another when the mode must
+/// change.
+///
+/// Calls may run at the same time, each on its own instance: keep what
+/// must outlive one call (a runtime's remote session) in `state` or in the
+/// remote service, never in guest memory.
+package prometheus:computer-use-backend@1.0.0;
+
+interface plugin {
+    /// What a runtime is launched with.
+    record runtime-spec {
+        /// `standard`, `bounded` or `unrestricted`.
+        mode: string,
+        /// The reviewed capability manifest's contents (`bounded`).
+        manifest: option<string>,
+        /// Names the agent cursor overlay of this session.
+        session-label: string,
+        /// Show the agent cursor overlay.
+        overlay: bool,
+    }
+
+    /// An image part of a reply.
+    record image {
+        /// Its MIME type (`image/png`, `image/jpeg`).
+        mime: string,
+        data: list<u8>,
+    }
+
+    /// One driver tool call's answer.
+    record reply {
+        /// The call failed (the text says why).
+        is-error: bool,
+        text: string,
+        /// Structured content as a JSON object, or empty.
+        structured: string,
+        images: list<image>,
+    }
+
+    /// The name `computer_use.backend` selects (never `cua`).
+    name: func() -> string;
+    /// Readiness: `ok` names what is in use (shown by `prometheus
+    /// computer-use status`), `err` why the backend is unavailable.
+    check: func() -> result<string, string>;
+    /// Starts a runtime; the answer is its id.
+    launch: func(spec: runtime-spec) -> result<string, string>;
+    /// The driver tools runtime `runtime` offers.
+    tools: func(runtime: string) -> list<string>;
+    /// Calls driver tool `tool` with JSON object `arguments`.
+    call: func(runtime: string, tool: string, arguments: string) -> result<reply, string>;
+    /// Stops runtime `runtime`.
+    stop: func(runtime: string);
+}
+
+world computer-use-backend {
+    include prometheus:host/imports@1.0.0;
+    export plugin;
+}

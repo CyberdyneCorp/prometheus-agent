@@ -447,3 +447,120 @@ fn status_names_the_driver_and_the_mode() {
     assert_eq!(doc["source"], "driver_path");
     assert_eq!(doc["permission_mode"], "standard");
 }
+
+/// A bounded profile whose manifest is missing fails every session at
+/// start with the path, whatever toolsets the session selects: it never
+/// runs unbounded.
+#[test]
+fn a_bounded_session_without_its_manifest_fails_at_start_with_the_path() {
+    let home = mock_home();
+    let manifest = home.path().join("reviewed/manifest.yaml");
+    append_config(
+        home.path(),
+        &format!(
+            "\n[computer_use]\npermission_mode = \"bounded\"\ncapability_manifest = {:?}\n",
+            manifest.display().to_string()
+        ),
+    );
+    let f = Fixture {
+        bin: home.path().join("driver-bin"),
+        home,
+    };
+    for toolsets in [
+        &["--toolsets", "computer_use"][..],
+        &["--toolsets", "file"][..],
+    ] {
+        let file = f.home.path().join("script.toml");
+        std::fs::write(&file, DRIVE).unwrap();
+        let out = command(f.home.path())
+            .current_dir(f.home.path())
+            .args(["--json", "-z", "drive"])
+            .args(toolsets)
+            .arg("--mock-script")
+            .arg(&file)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(78), "{}", stderr(&out));
+        let err = stderr(&out);
+        assert!(err.contains("computer_use.manifest"), "{err}");
+        assert!(err.contains(&manifest.display().to_string()), "{err}");
+    }
+    assert!(f.log().is_empty(), "no driver ran");
+}
+
+/// `computer_use.driver_path` is never installed over or replaced.
+#[test]
+fn install_leaves_a_configured_driver_alone() {
+    let f = Fixture::new("{}", "");
+    for args in [
+        &["computer-use", "install"][..],
+        &["computer-use", "install", "--upgrade"][..],
+    ] {
+        let out = f.cli(args, &[]);
+        assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+        assert!(
+            stderr(&out).contains(&format!(
+                "computer_use.driver_path is set: {} is used as it is (never installed or replaced)",
+                f.bin.join("cua-driver").display()
+            )),
+            "{}",
+            stderr(&out)
+        );
+    }
+    assert!(
+        !f.home.path().join("runtimes/cua-driver").exists(),
+        "nothing installed"
+    );
+}
+
+/// `permissions grant` opens the settings pane of each missing grant on
+/// macOS (through `open`, a stand-in here).
+#[cfg(target_os = "macos")]
+#[test]
+fn permissions_grant_opens_the_pane_of_each_missing_grant() {
+    let f = Fixture::new(r#"{"screen_recording": false}"#, "");
+    let stand_in = f.home.path().join("open-bin");
+    std::fs::create_dir_all(&stand_in).unwrap();
+    let opened = stand_in.join("opened.log");
+    let open = stand_in.join("open");
+    std::fs::write(
+        &open,
+        format!(
+            "#!/bin/sh\necho \"$@\" >> {:?}\n",
+            opened.display().to_string()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = Fixture::path(&[stand_in]);
+    let out = f.cli(
+        &["computer-use", "permissions", "grant"],
+        &[("PATH", path.to_str().unwrap())],
+    );
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("grant it to CuaDriver (com.trycua.driver)"),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(
+        std::fs::read_to_string(&opened).unwrap(),
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture\n",
+        "only the missing grant's pane"
+    );
+}
+
+/// Elsewhere the prerequisites have no settings pane to open.
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn permissions_grant_has_nothing_to_open_off_macos() {
+    let f = Fixture::new("{}", "");
+    let out = f.cli(&["computer-use", "permissions", "grant"], &[]);
+    assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("nothing to grant here"),
+        "{}",
+        stderr(&out)
+    );
+}

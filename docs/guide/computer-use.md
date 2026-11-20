@@ -77,6 +77,19 @@ Refused in every mode, yolo included: shortcuts that empty the trash,
 force-delete, lock the screen or log out, and typed text matching the
 hardline command patterns (`curl ... | sh`, `rm -rf /`, fork bombs).
 
+## Plugin backends
+
+`computer_use.backend` selects the desktop: `cua` (default, the pinned
+driver above) or the name a `computer-use-backend` plugin registers (see
+[Writing a plugin](plugin-authoring.md)), such as a remote machine or a
+hosted desktop. The tool, its approvals, hard blocks, budgets and
+screenshot retention are the same; the plugin receives the driver calls and
+the runtime's permission mode. `prometheus computer-use status` shows the
+plugin's own readiness check; a name no enabled plugin provides fails
+`prometheus config validate` (exit 78) and leaves the tool
+`unavailable:computer-use backend '<name>' is not installed or not enabled`.
+`install`, `doctor` and `permissions` concern the local `cua-driver`.
+
 ## Permission modes
 
 The driver's runtime is launched with a fixed permission mode:
@@ -84,15 +97,18 @@ The driver's runtime is launched with a fixed permission mode:
 - `standard` (default): the driver's actions pass Prometheus' approvals;
 - `bounded`: `computer_use.permission_mode = "bounded"` with a reviewed
   `computer_use.capability_manifest`; a missing or unreadable manifest
-  fails the session at start;
+  fails every session of the profile at start (`computer_use.manifest`,
+  exit 78, naming the path), whatever toolsets it selects;
 - `unrestricted`: only while `/yolo` is on, for that session alone.
   `unrestricted` is not a config value (validation exits 78). Turning yolo
   off stops the session's unrestricted runtime.
 
 Bounded and unrestricted runtimes are private to their session. On macOS
-they start only through `CuaDriver.app` whose code signature carries the
-official identifier and team; `computer_use.allow_unsigned_driver = true`
-admits a local driver build.
+they start only through `CuaDriver.app` whose code signature
+`/usr/bin/codesign --verify` validates (nothing changed since signing)
+against the official identifier and team; `computer_use.allow_unsigned_driver
+= true` admits a local driver build, unsigned or with an intact ad-hoc
+signature.
 
 ## Which machine is driven
 

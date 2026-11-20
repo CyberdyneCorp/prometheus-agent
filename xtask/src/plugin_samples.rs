@@ -26,6 +26,7 @@ const WORLDS: &[&str] = &[
     "ui-panel",
     "delegation-router",
     "bench",
+    "computer-use-backend",
 ];
 
 /// The authoring guide's example plugins (`plugins/examples/<name>/`,

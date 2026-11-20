@@ -26,6 +26,7 @@ use pmt_config::schema::PluginsWasmConfig;
 use pmt_core::error::{Error, codes};
 use wasmtime::component::Component;
 
+pub use bindings::exports::prometheus::computer_use_backend::plugin as computer_use_world;
 pub use bindings::exports::prometheus::context_engine::plugin as context_engine_world;
 pub use bindings::exports::prometheus::delegation_router::plugin as delegation_router_world;
 pub use bindings::exports::prometheus::hook::extensions as extensions_world;

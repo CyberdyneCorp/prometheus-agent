@@ -195,8 +195,6 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     pmt_tools::selection::validate(&tools, &config.tools, &config.toolsets)?;
     // `local` and the first-party cloud browser providers.
     pmt_tools::browser::validate_provider(&config.browser, &[])?;
-    // `cua`, or a computer-use backend a plugin registers (none can yet).
-    crate::computer_use::check_backend(&config.computer_use, &[])?;
     // Provider blocks and the fallback chain name registry entries
     // (custom blocks need a base URL; chain entries a known provider,
     // plugin providers included).
@@ -223,6 +221,12 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
         crate::plugins_host::for_session(&scope, &std::env::current_dir().unwrap_or_default());
     crate::memory_provider::check_plugins(&scope.config().memory, &plugins)?;
     crate::context_engine::select(&scope.config().context, &plugins)?;
+    // `cua`, or the computer-use backend a loaded plugin provides.
+    let desktops = crate::computer_use::backend::plugin_backends(
+        &plugins,
+        &pmt_plugins::host::CallInfo::default(),
+    );
+    crate::computer_use::check_backend(&scope.config().computer_use, &desktops)?;
     if !ctx.json {
         eprintln!("{} is valid", file.path().display());
     }

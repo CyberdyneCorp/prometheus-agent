@@ -283,18 +283,30 @@ fn bind_terminal(inputs: &EnvInputs<'_>, terminal: Option<&Arc<Terminal>>, local
     }
 }
 
-/// The session's computer use; a bounded profile without a readable
-/// capability manifest fails the session (spec: computer-use, Permission
-/// modes are fixed per runtime).
+/// The session's computer use, over `cua` or the profile's plugin backend;
+/// a bounded profile without a readable capability manifest fails the
+/// session (spec: computer-use, Permission modes are fixed per runtime).
 fn computer_use(
     inputs: &EnvInputs<'_>,
 ) -> Result<Option<Arc<pmt_tools::computer_use::ComputerUseSession>>, Error> {
-    crate::computer_use::check_session_start(&inputs.config.get().config().computer_use)?;
+    let scope = inputs.config.get();
+    let config = &scope.config().computer_use;
+    crate::computer_use::check_session_start(config)?;
+    let plugin = (config.backend != pmt_config::schema::CUA_BACKEND)
+        .then(|| {
+            crate::computer_use::backend::plugin_backend(
+                &config.backend,
+                inputs.plugins,
+                &inputs.plugin_call,
+            )
+        })
+        .flatten();
     Ok(crate::computer_use::session_part(
         inputs.scope,
         inputs.session_id,
         inputs.image_input,
         inputs.launch,
+        plugin,
     ))
 }
 

@@ -7,12 +7,15 @@ use std::fmt::Write as _;
 
 use pmt_config::ProfileScope;
 use pmt_config::daemon::DaemonConfig;
+use pmt_config::schema::{CUA_BACKEND, ComputerUseConfig, ComputerUsePermission, Overlay};
 use pmt_core::error::{Error, codes};
+use pmt_plugins::computer_use::PluginDesktop;
+use pmt_plugins::host::CallInfo;
 use pmt_update::runtimes::Store;
 use serde_json::json;
 
 use crate::computer_use::binary::{self, INSTALL_HINT, RUNTIME, Source};
-use crate::computer_use::{doctor, launcher, platform};
+use crate::computer_use::{backend, doctor, launcher, platform};
 use crate::computer_use_cmd::{ComputerUseCommand, PermissionsCommand};
 use crate::context::Context;
 use crate::model_cmd::block_on;
@@ -80,6 +83,9 @@ fn status(
     env: &[(String, OsString)],
 ) -> Result<u8, Error> {
     let config = &scope.config().computer_use;
+    if config.backend != CUA_BACKEND {
+        return plugin_status(ctx, scope);
+    }
     let daemon = DaemonConfig::load(scope.home())?;
     let facts = platform::Facts::of(&|name: &str| {
         env.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone())
@@ -106,10 +112,7 @@ fn status(
         "version": version,
         "ready": problem.is_none(),
         "problem": problem,
-        "permission_mode": match config.permission_mode {
-            pmt_config::schema::ComputerUsePermission::Standard => "standard",
-            pmt_config::schema::ComputerUsePermission::Bounded => "bounded",
-        },
+        "permission_mode": permission_mode(config),
         "overlay": platform::overlay(config, &facts),
         "platform": facts.os,
     });
@@ -142,6 +145,58 @@ fn status(
         if body["overlay"] == true { "on" } else { "off" }
     );
     print_raw(&out)?;
+    Ok(u8::from(body["ready"] != true))
+}
+
+fn permission_mode(config: &ComputerUseConfig) -> &'static str {
+    match config.permission_mode {
+        ComputerUsePermission::Standard => "standard",
+        ComputerUsePermission::Bounded => "bounded",
+    }
+}
+
+/// The status of a backend an enabled plugin provides: its own readiness
+/// check.
+fn plugin_status(ctx: &Context<'_>, scope: &ProfileScope) -> Result<u8, Error> {
+    let config = &scope.config().computer_use;
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let plugins = crate::plugins_host::for_session(scope, &cwd);
+    let found = backend::plugin_backend(&config.backend, &plugins, &CallInfo::default());
+    let checked = found.as_ref().map(PluginDesktop::check);
+    let (detail, problem) = match checked {
+        None => (None, Some(backend::not_provided(&config.backend))),
+        Some(Ok(detail)) => (Some(detail), None),
+        Some(Err(why)) => (None, Some(why)),
+    };
+    let body = json!({
+        "backend": config.backend,
+        "plugin": found.as_ref().map(PluginDesktop::plugin),
+        "detail": detail,
+        "ready": problem.is_none(),
+        "problem": problem,
+        "permission_mode": permission_mode(config),
+        "overlay": config.overlay != Overlay::Off,
+    });
+    if ctx.json {
+        document("computer-use status", &body)?;
+    } else {
+        let mut out = String::new();
+        let _ = writeln!(out, "backend: {}", config.backend);
+        if let Some(plugin) = body["plugin"].as_str() {
+            let _ = writeln!(out, "plugin: {plugin}");
+        }
+        match (body["detail"].as_str(), body["problem"].as_str()) {
+            (Some(detail), _) => {
+                let _ = writeln!(out, "ready: {detail}");
+            }
+            (_, Some(problem)) => {
+                let _ = writeln!(out, "problem: {problem}");
+            }
+            _ => {}
+        }
+        let _ = writeln!(out, "permission mode: {}", permission_mode(config));
+        print_raw(&out)?;
+    }
     Ok(u8::from(body["ready"] != true))
 }
 

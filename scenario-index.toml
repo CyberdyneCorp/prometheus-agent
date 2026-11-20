@@ -5170,13 +5170,16 @@ capabilities = [
 
 [computer-use."Permission modes are fixed per runtime"]
 "Unrestricted via config" = ["crates/prometheus/tests/computer_use.rs::unrestricted_is_not_a_config_value", "crates/pmt-config/src/schema/computer_use.rs::unrestricted_is_not_a_permission_mode"]
+"Bounded manifest missing" = ["crates/prometheus/tests/computer_use.rs::a_bounded_session_without_its_manifest_fails_at_start_with_the_path"]
 "Yolo turned off" = ["crates/pmt-tools/src/computer_use/tests.rs::turning_yolo_off_stops_the_unrestricted_runtime"]
 
 [computer-use."Driver runtime management and identity"]
-"Unsigned bundle" = { tests = ["crates/prometheus/src/computer_use/identity.rs::an_unsigned_bundle_fails_the_signature_check", "crates/prometheus/tests/computer_use.rs::a_bounded_runtime_refuses_an_unsigned_bundle"], note = "macOS-only tests (the real codesign), run by the macOS CI jobs" }
+"Unsigned bundle" = { tests = ["crates/prometheus/src/computer_use/identity/tests.rs::an_unsigned_bundle_fails_the_signature_check", "crates/prometheus/tests/computer_use.rs::a_bounded_runtime_refuses_an_unsigned_bundle"], note = "macOS-only tests (the real codesign), run by the macOS CI jobs" }
+"Modified bundle" = { tests = ["crates/prometheus/src/computer_use/identity/tests.rs::a_signed_bundle_with_a_modified_executable_is_refused"], note = "macOS-only test (the real codesign on an ad-hoc signed bundle changed after signing), run by the macOS CI jobs" }
 
 [computer-use."Backend selection and availability"]
 "Driver missing" = ["crates/prometheus/tests/computer_use.rs::without_a_driver_and_lazy_installs_the_tool_is_unavailable"]
+"Plugin backend" = ["crates/prometheus/tests/computer_use_backends.rs::a_plugin_backend_is_selected_and_drives_its_desktop", "crates/prometheus/tests/computer_use_backends.rs::a_backend_no_enabled_plugin_provides_is_refused", "crates/pmt-plugins/tests/computer_use.rs::the_sample_backend_registers_launches_and_drives_its_desktop"]
 
 [computer-use."Which machine is driven"]
 "Container backend" = ["crates/prometheus/tests/computer_use.rs::a_container_session_captures_the_containers_display"]

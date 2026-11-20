@@ -54,6 +54,7 @@ pub const WORLDS: &[World] = &[
     world("ui-panel"),
     world("delegation-router"),
     world("bench"),
+    world("computer-use-backend"),
 ];
 
 const fn world(name: &'static str) -> World {
@@ -230,6 +231,7 @@ mod tests {
             "ui-panel",
             "delegation-router",
             "bench",
+            "computer-use-backend",
         ] {
             assert_eq!(
                 check(&world_ref(&format!("{name}@1"))).unwrap(),
