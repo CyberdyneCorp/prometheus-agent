@@ -87,6 +87,15 @@ fn record_path(scope: &ProfileScope) -> PathBuf {
     dir(scope).join("screen.json")
 }
 
+/// The profile's desktop container name. Outside the unix-only
+/// [`container`] module because the computer-use launcher names it on
+/// every target (the container placement is refused at run time where the
+/// screen cannot start).
+#[must_use]
+pub fn container_name(scope: &ProfileScope) -> String {
+    format!("pmt-screen-{}", short_id(scope))
+}
+
 /// A short digest of the profile directory: names the profile's socket
 /// directory, its desktop container and its directory on the SSH host.
 #[must_use]

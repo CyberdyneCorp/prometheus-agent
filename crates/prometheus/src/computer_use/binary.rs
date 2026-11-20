@@ -88,10 +88,11 @@ pub fn installed(
             ))
         };
     }
-    let store = Store::open(home);
-    if let Err(err) = store.pinned(RUNTIME) {
-        return Err(err.message().to_owned());
-    }
+    from_store(&Store::open(home), daemon)
+}
+
+/// [`installed`] for the managed runtime of `store`.
+fn from_store(store: &Store, daemon: &DaemonConfig) -> Result<Option<Driver>, String> {
     if let Some(installed) = store.installed(RUNTIME) {
         return Ok(Some(Driver {
             path: installed.exe(),
@@ -105,6 +106,11 @@ pub fn installed(
         return Err(format!(
             "{RUNTIME} is not installed and lazy installs are disabled"
         ));
+    }
+    // Only an install needs a pinned archive for this host, so the
+    // reasons above (no install would be attempted) come first.
+    if let Err(err) = store.pinned(RUNTIME) {
+        return Err(err.message().to_owned());
     }
     Ok(None)
 }
@@ -259,7 +265,45 @@ pub fn checked(driver: &Path, env: &[(String, OsString)]) -> Result<Manifest, St
 
 #[cfg(test)]
 mod tests {
-    use super::Manifest;
+    use pmt_config::daemon::DaemonConfig;
+    use pmt_update::runtimes::{RuntimeIndex, Store};
+
+    use super::{Manifest, from_store};
+
+    /// A host with no pinned `cua-driver` archive (musl Linux).
+    fn unpinned_host(dir: &std::path::Path) -> Store {
+        let store = Store::new(
+            dir.join("runtimes"),
+            RuntimeIndex::embedded(),
+            "linux-x64-musl".to_owned(),
+        );
+        assert!(store.pinned(super::RUNTIME).is_err(), "musl has no pin");
+        store
+    }
+
+    #[test]
+    fn without_a_pin_the_install_policy_is_reported_before_the_missing_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = unpinned_host(dir.path());
+        let mut daemon = DaemonConfig::default();
+        daemon.runtimes.allow_lazy_install = false;
+        assert_eq!(
+            from_store(&store, &daemon).unwrap_err(),
+            "cua-driver is not installed and lazy installs are disabled"
+        );
+        daemon.runtimes.exclude = vec![super::RUNTIME.to_owned()];
+        assert_eq!(
+            from_store(&store, &daemon).unwrap_err(),
+            "cua-driver is excluded (runtimes.exclude)"
+        );
+        // An install would be attempted: only then the missing archive counts.
+        let daemon = DaemonConfig::default();
+        assert!(
+            from_store(&store, &daemon)
+                .unwrap_err()
+                .contains("has no pinned archive for linux-x64-musl")
+        );
+    }
 
     const GOOD: &str = r#"{"binary_version": "0.21.0",
         "mcp_invocation": {"command": "cua-driver", "args": ["mcp"]},

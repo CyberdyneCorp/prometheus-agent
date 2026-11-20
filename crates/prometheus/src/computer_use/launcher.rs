@@ -266,7 +266,7 @@ impl CuaLauncher {
                     command.arg(format!("--env={TELEMETRY_VAR}=0"));
                 }
                 command
-                    .arg(crate::screen::container::name(&self.scope))
+                    .arg(crate::screen::container_name(&self.scope))
                     .args(&argv);
                 command
             }

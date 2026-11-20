@@ -2365,7 +2365,7 @@ export interface RoomGrantParams {
 
 /** `groups.log` result: one page of the log. */
 export interface RoomLog {
-  /** The member error summary ("<member> hit an error — <first line>"). */
+  /** The member error summary (`<member> hit an error — <first line>`). */
   activity?: Array<string>;
   /** The page. */
   entries: Array<RoomEntry>;

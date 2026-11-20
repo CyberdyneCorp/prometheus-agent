@@ -2556,7 +2556,7 @@ One room log entry.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `activity` | array of string | no | The member error summary ("<member> hit an error — <first line>"). |
+| `activity` | array of string | no | The member error summary (`<member> hit an error — <first line>`). |
 | `entries` | array of [`RoomEntry`](#roomentry) | yes | The page. |
 | `latest_seq` | integer | yes | The last entry of the log. |
 | `room` | [`Room`](#room) | yes | The room (with its members). |

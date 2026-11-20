@@ -244,7 +244,7 @@ pub struct RoomLog {
     pub entries: Vec<RoomEntry>,
     /// The last entry of the log.
     pub latest_seq: u64,
-    /// The member error summary ("<member> hit an error — <first line>").
+    /// The member error summary (`<member> hit an error — <first line>`).
     #[serde(default)]
     pub activity: Vec<String>,
 }

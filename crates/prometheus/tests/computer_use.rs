@@ -366,7 +366,8 @@ fn the_doctor_without_a_driver_exits_69_with_the_install_hint() {
     let out = common::run(home.path(), &["computer-use", "doctor"]);
     assert_eq!(out.status.code(), Some(69), "{}", stderr(&out));
     assert!(
-        stderr(&out).contains("prometheus computer-use install"),
+        stderr(&out).contains("lazy installs are disabled")
+            && stderr(&out).contains("prometheus computer-use install"),
         "{}",
         stderr(&out)
     );

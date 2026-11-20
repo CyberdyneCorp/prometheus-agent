@@ -6751,7 +6751,7 @@
       "properties": {
         "activity": {
           "default": [],
-          "description": "The member error summary (\"<member> hit an error — <first line>\").",
+          "description": "The member error summary (`<member> hit an error — <first line>`).",
           "items": {
             "type": "string"
           },
