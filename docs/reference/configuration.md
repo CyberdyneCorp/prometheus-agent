@@ -189,8 +189,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `bot_desktop.image` | string | `""` | any | `live` | The image of a screen placed in the container backend (empty: the release's desktop sandbox image, `prometheus-sandbox:<version>-desktop`). |
 | `bot_desktop.min_free_memory_bytes` | integer | `1610612736` | ≥ 0 | `live` | The screen refuses to start with less free memory than this on the host or its cgroup (`0`: no check). |
 | `bot_desktop.placement` | one of "auto", "terminal", "gateway" | `"auto"` | `"auto"`, `"terminal"`, `"gateway"` | `live` | Where the screen runs. |
-| `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Envelopes still queued (never drained by a courier) after this many seconds fail with `queued_expired` (`0`: never). |
+| `bot_mode.enabled` | boolean | `true` | any | `live` | The profile appears as a bot (rosters, bot messages, the bot protocol); `false` leaves its profile, sessions, routines and room history untouched but refuses incoming bot messages with `missing_config`. |
+| `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Bot messages still queued after this many seconds fail with `queued_expired` when drained (`0`: never). |
+| `bot_mode.max_hops` | integer | `4` | 1 to 64 | `live` | Consecutive bot-originated hops after which a chain of bot messages is cut with `hop_limit`. |
+| `bot_mode.protocol` | boolean | `true` | any | `live` | Canonical Bot Chats get the bot-messaging protocol section and the `message_agent` tool. |
 | `bot_mode.relay_turn_timeout_secs` | integer | `600` | 1 to 86400 | `live` | Seconds a relayed bot message's turn may take on the target before it fails. |
+| `bot_mode.turn_wait_secs` | integer | `120` | 1 to 86400 | `live` | Seconds a bot message waits for a busy target before it fails with `target_busy`. |
 | `browser.auto_local_for_private_urls` | boolean | `true` | any | `next_session` | With a cloud provider, private and LAN URLs open in a local sidecar browser instead of being refused or sent to the provider. |
 | `browser.cdp_url` | string | unset | any | `next_session` | Explicit CDP endpoint. |
 | `browser.chromium_args` | array of string | unset | any | `next_session` | Extra local browser arguments; ones that disable the Chromium sandbox or web security need the matching `security.sandbox.allow_degraded` entry. |
@@ -559,6 +563,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
+| `hosted_rooms.discussion.max_messages` | integer | `10` | 1 to 100 | `live` | Member messages one user message produces at most. |
+| `hosted_rooms.discussion.max_rounds` | integer | `3` | 1 to 20 | `live` | Serial rounds one user message drives at most. |
 | `image_gen.max_parallel_requests` | integer | `4` | ≥ 1 | `next_session` | Generations of one tool-call batch running at once (at most `agent.tool_concurrency`). |
 | `image_gen.model` | string | unset | any | `next_session` | The model (unset: the provider's default). The agent never picks it. |
 | `image_gen.openai.base_url` | string | unset | any | `next_session` | An OpenAI-compatible endpoint (`.../v1`); unset is OpenAI's API. |

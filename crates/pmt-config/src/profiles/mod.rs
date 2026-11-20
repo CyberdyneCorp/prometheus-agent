@@ -275,9 +275,27 @@ impl Home {
     /// `profile.protected`, `profile.not_found`, `profile.in_use` (75),
     /// `home.io`.
     pub fn delete_profile(&self, name: &ProfileName) -> Result<(), Error> {
+        self.delete_profile_held_by(name, None)
+    }
+
+    /// [`Home::delete_profile`] from the process `holder` (a daemon that
+    /// stopped serving the profile): its own runtime record does not count
+    /// as a use.
+    ///
+    /// # Errors
+    ///
+    /// As [`Home::delete_profile`].
+    pub fn delete_profile_held_by(
+        &self,
+        name: &ProfileName,
+        holder: Option<u32>,
+    ) -> Result<(), Error> {
         protect_default(name, "deleted")?;
         let profile = self.existing_profile(name)?;
-        ensure_unused(self.root(), name)?;
+        let used = user_of(self.root(), name)?;
+        if used.is_none_or(|(_, pid)| Some(pid) != holder) {
+            ensure_unused(self.root(), name)?;
+        }
         let store = profile_store(&profile)?;
         let tombstone = self.tombstone(name);
         private_dir(&self.root().join("profiles").join(TOMBSTONE_DIR))?;

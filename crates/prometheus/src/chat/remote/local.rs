@@ -122,6 +122,16 @@ impl Chat<'_, '_> {
                 self.switch(created).await;
                 return Ok(Some(Flow::Continue));
             }
+            // A canonical Bot Chat keeps its relationship: the daemon
+            // compresses it instead (spec: bot-mode, Canonical Bot Chat).
+            "new"
+                if crate::chat::session::bots::is_bot_chat(
+                    self.start.scope,
+                    &self.attached.session,
+                ) =>
+            {
+                return Ok(None);
+            }
             "new" => {
                 let created = open::claim(&self.attached.client, None, self.start).await;
                 self.switch(created).await;

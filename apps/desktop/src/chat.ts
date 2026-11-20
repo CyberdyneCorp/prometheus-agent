@@ -321,8 +321,12 @@ export class ChatView {
       this.problems.replaceChildren(notice(refused, "warn"));
       return true;
     }
-    if (head === "new") {
-      this.draft();
+    if (["new", "reset"].includes(head)) {
+      // The daemon compresses a canonical Bot Chat in place; any other
+      // session is left for a new draft (spec: bot-mode, Canonical Bot Chat).
+      const kept = this.sessionId ? await this.client.call<Dispatched>("command.dispatch", { session_id: this.sessionId, name: "new", args: "" }) : null;
+      if (kept && kept.type !== "refused") this.problems.replaceChildren(notice(kept.notice ?? "Compressed", "info"));
+      else this.draft();
       return true;
     }
     const args = text.slice(1 + head.length).trim();

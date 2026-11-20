@@ -354,12 +354,188 @@ export interface BlueprintsListParams {
   profile?: string | null;
 }
 
+/** A bot's avatar. */
+export type BotAvatar = {
+  kind: "blob";
+  /** A locked seed (the name's own seed otherwise). */
+  seed?: number | null;
+  /** One of [`SILHOUETTES`] (derived from the seed otherwise). */
+  silhouette?: string | null;
+} | {
+  /** One of [`COLOURS`]. */
+  color: string;
+  kind: "geometric";
+  /** One of [`SHAPES`]. */
+  shape: string;
+} | {
+  /** The image's SHA-256 (set by the daemon). */
+  blob?: string | null;
+  /** Base64 bytes: upload only, never returned. */
+  data?: string | null;
+  kind: "image";
+  /** `image/png`, `image/jpeg` or `image/webp`. */
+  mime: string;
+} | {
+  kind: "generated";
+  /** What to draw. */
+  prompt: string;
+} | {
+  /** The companion id. */
+  id: string;
+  kind: "pet";
+};
+
 /** `bot.chat.ensure` result. */
 export interface BotChat {
   /** Whether this call created it. */
   created: boolean;
   /** The profile's canonical Bot Chat. */
   session_id: string;
+}
+
+/** `bot.create` params. */
+export interface BotCreateParams {
+  /** Clone config, skills, `SOUL.md` and memory from this profile. */
+  clone_from?: string | null;
+  /** Copy the source's static API keys (never OAuth or single-use logins); default true. */
+  copy_api_keys?: boolean | null;
+  /** What it does. */
+  description?: string | null;
+  /** No bundled skills. */
+  empty?: boolean;
+  /** MCP servers to keep enabled. */
+  mcp_servers?: Array<string>;
+  /** Pin this model (`provider/model` or a model name). */
+  model?: string | null;
+  /** The new bot's profile name. */
+  name?: string;
+  /** A registered peer (or desktop connection) to create the bot on. */
+  on?: string | null;
+  /** The profile asking (the window's): it must be granted. */
+  profile?: string;
+  /** Skills to enable (the others stay as the profile has them). */
+  skills?: Array<string>;
+  /** The bot's `SOUL.md`. */
+  soul?: string | null;
+  /** Its title. */
+  title?: string | null;
+  /** `tools.enabled_toolsets`. */
+  toolsets?: Array<string>;
+}
+
+/** `bot.create` / `bot.duplicate` result. */
+export interface BotCreated {
+  /** The secrets copied from the source. */
+  copied_secrets?: Array<string>;
+  /** The machine it lives on (`local` or the peer). */
+  device: string;
+  /** Its roster handle. */
+  handle: string;
+  /** Its introduction (the Bot Chat's first message). */
+  introduction?: string | null;
+  /** The new bot's profile. */
+  profile: string;
+  /** Its canonical Bot Chat. */
+  session_id: string;
+}
+
+/** `bot.delete` params. */
+export interface BotDeleteParams {
+  /** Must be true. */
+  confirm?: boolean;
+  /** The bot. */
+  profile: string;
+}
+
+/** `bot.delete` result. */
+export interface BotDeleted {
+  /** The deleted profile. */
+  profile: string;
+}
+
+/** An empty result. */
+export type BotDone = Record<string, unknown>;
+
+/** `bot.duplicate` params. */
+export interface BotDuplicateParams {
+  /** The copy's profile name. */
+  name: string;
+  /** The bot to duplicate. */
+  profile: string;
+}
+
+/** A bot's metadata. */
+export interface BotMeta {
+  /** Its avatar. */
+  avatar?: BotAvatar;
+  /** What it does. */
+  description?: string | null;
+  /** The rooms it is a member of (read only). */
+  groups?: Array<string>;
+  /** Left out of the default roster and toasts (still reachable). */
+  hidden?: boolean;
+  /** Its roster section. */
+  section?: BotSection | null;
+  /** The bot's title (the profile name when unset). */
+  title?: string | null;
+}
+
+/** `bot.meta.get` params. */
+export interface BotMetaParams {
+  /** The bot. */
+  profile: string;
+}
+
+/** `bot.meta.update` params: each key of `changes` (`title`, `description`, `avatar`, `hidden`, `section`) replaces that field; `null` clears it. */
+export interface BotMetaUpdateParams {
+  /** The fields to change. */
+  changes: Record<string, unknown>;
+  /** The bot. */
+  profile: string;
+}
+
+/** One routine: a scheduled job of the bot named `[bot:<name>] <routine>`. */
+export interface BotRoutine {
+  /** The job id (`prometheus -p <bot> cron ...` takes it). */
+  job_id: string;
+  /** How the last run ended. */
+  last_status?: string | null;
+  /** The next run (RFC 3339). */
+  next_run_at?: string | null;
+  /** The routine's name (after the `[bot:<name>]` prefix). */
+  routine: string;
+  /** The schedule string. */
+  schedule: string;
+  /** `active`, `paused`, ... */
+  state: string;
+}
+
+/** `bot.routines.list` result. */
+export interface BotRoutines {
+  /** The bot's routines. */
+  routines: Array<BotRoutine>;
+}
+
+/** A roster section heading, stored on each member. */
+export interface BotSection {
+  /** Stable id. */
+  id: string;
+  /** Heading. */
+  name: string;
+}
+
+/** `bot.sections.delete` params. */
+export interface BotSectionDeleteParams {
+  /** The profile asking (the window's). */
+  profile: string;
+  /** The section. */
+  section_id: string;
+}
+
+/** `bot.sections.delete` result. */
+export interface BotSectionDeleted {
+  /** The bots moved to unassigned. */
+  moved: Array<string>;
 }
 
 /** One budget's standing in `usage.updated`. */
@@ -1989,6 +2165,22 @@ export interface RelayReply {
   signature: string;
 }
 
+/** `groups.replica_state` result. */
+export interface ReplicaState {
+  /** Its lineage. */
+  authority_epoch: number;
+  /** The authority. */
+  authority_gateway_id: string;
+  /** The last entry this gateway holds. */
+  last_seq: number;
+  /** The last entry the authority reported. */
+  latest_seq: number;
+  /** `authority`, `replica` or `demoted`. */
+  role: string;
+  /** The room. */
+  room_id: string;
+}
+
 /** A repository offered for project creation. */
 export interface RepoRow {
   /** When a scan last saw it (discovered rows; RFC 3339). */
@@ -2050,6 +2242,275 @@ export interface RewindParams {
   to_turn: number;
 }
 
+/** A room. */
+export interface Room {
+  /** The authority's lineage. */
+  authority_epoch: number;
+  /** The gateway that owns the log. */
+  authority_gateway_id: string;
+  /** `stop`/`halt`/`pause` next to a mention holds that member. */
+  detect_stop_directives: boolean;
+  /** The last log entry. */
+  latest_seq: number;
+  /** The members. */
+  members: Array<RoomMember>;
+  /** Unique display name. */
+  name: string;
+  /** A member asked for the user (`@user`). */
+  needs_you: boolean;
+  /** A picture (data URL or blob reference). */
+  picture?: string | null;
+  /** `authority`, `replica` or `demoted`. */
+  role: string;
+  /** Stable id. */
+  room_id: string;
+  /** A discussion is running. */
+  running: boolean;
+}
+
+/** `groups.promote` result. */
+export interface RoomAuthority {
+  /** Its lineage. */
+  authority_epoch: number;
+  /** The authority now. */
+  authority_gateway_id: string;
+}
+
+/** `groups.capabilities` result. */
+export interface RoomCapabilities {
+  /** This daemon drives the room's discussions itself (every member lives here, or it is the authority of a hosted room). */
+  driver: boolean;
+  /** Members on other gateways take part. */
+  hosted: boolean;
+  /** `hosted_rooms.discussion.max_messages`. */
+  max_messages: number;
+  /** `hosted_rooms.discussion.max_rounds`. */
+  max_rounds: number;
+}
+
+/** `groups.create` params. */
+export interface RoomCreateParams {
+  /** Default true. */
+  detect_stop_directives?: boolean | null;
+  /** 2 to 6 members: profiles of this home, or `<peer>/<agent>`. */
+  members: Array<string>;
+  /** Unique display name. */
+  name: string;
+  /** A picture. */
+  picture?: string | null;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+}
+
+/** `groups.delete` params. */
+export interface RoomDeleteParams {
+  /** Must be true. */
+  confirm?: boolean;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** `groups.demote` params (all required). */
+export interface RoomDemoteParams {
+  /** Its lineage. */
+  observed_epoch: number;
+  /** The new authority. */
+  observed_gateway_id: string;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** An empty result. */
+export type RoomDone = Record<string, unknown>;
+
+/** One room log entry. */
+export interface RoomEntry {
+  /** When (RFC 3339). */
+  at: string;
+  /** `user`, a member, or `room`. */
+  author?: string | null;
+  /** Details (outcome, failure reason, round). */
+  data?: unknown;
+  /** `message`, `turn.started`, `turn.settled`, `pass`, `held`, `released`, `settled`, `stopped`, `authority.lost`, ... */
+  kind: string;
+  /** Its sequence number. */
+  seq: number;
+  /** Its text. */
+  text?: string | null;
+}
+
+/** `groups.grant` result. */
+export interface RoomGrant {
+  /** The grant token (shown once; give it to the authority's owner). */
+  token: string;
+}
+
+/** `groups.grant` params: lets a room authority drive a member of this home. */
+export interface RoomGrantParams {
+  /** The authority's gateway id. */
+  authority: string;
+  /** The member (a profile of this home). */
+  member: string;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+  /** `post`, `stop`, `approve`. */
+  scopes: Array<string>;
+}
+
+/** `groups.log` result: one page of the log. */
+export interface RoomLog {
+  /** The member error summary ("<member> hit an error — <first line>"). */
+  activity?: Array<string>;
+  /** The page. */
+  entries: Array<RoomEntry>;
+  /** The last entry of the log. */
+  latest_seq: number;
+  /** The room (with its members). */
+  room: Room;
+}
+
+/** `groups.log` params. */
+export interface RoomLogParams {
+  /** Entries after this one. */
+  after_seq?: number;
+  /** At most this many (default 200). */
+  limit?: number | null;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** A room member. */
+export interface RoomMember {
+  /** The peer gateway it lives on (none: this home). */
+  gateway?: string | null;
+  /** Held by a stop directive: no turns until mentioned again. */
+  held: boolean;
+  /** Its handle in the room (`<profile>`, or `<peer>/<agent>`). */
+  member: string;
+  /** Its profile on its own machine. */
+  profile: string;
+  /** Why it is unreachable (a failure reason code). */
+  reason?: string | null;
+  /** `ok` or `unreachable`. */
+  state: string;
+}
+
+/** `groups.member_grant` params: the authority keeps a member gateway's grant. */
+export interface RoomMemberGrantParams {
+  /** The remote member (`<peer>/<agent>`). */
+  member: string;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+  /** The token its gateway issued. */
+  token: string;
+}
+
+/** `groups.compress_member` params. */
+export interface RoomMemberParams {
+  /** The member. */
+  member: string;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** Params naming a room. */
+export interface RoomParams {
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** `groups.post` params: a user message to the room. */
+export interface RoomPostParams {
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+  /** The message. */
+  text: string;
+}
+
+/** `groups.post` result. */
+export interface RoomPosted {
+  /** The members a stop directive in it holds now. */
+  held?: Array<string>;
+  /** The message's log entry. */
+  seq: number;
+}
+
+/** `groups.promote` params. */
+export interface RoomPromoteParams {
+  /** Must be true. */
+  confirm?: boolean;
+  /** Promote a replica that is missing entries. */
+  force_incomplete?: boolean;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** Why (kept in the log). */
+  reason?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** `groups.replicate` params. */
+export interface RoomReplicateParams {
+  /** The authority, a registered peer. */
+  from: string;
+  /** The profile whose peer registry names the authority. */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** `groups.revoke` params. */
+export interface RoomRevokeParams {
+  /** The authority. */
+  authority: string;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** `groups.update` params: rename (history and sessions stay), picture, stop directive detection. */
+export interface RoomUpdateParams {
+  /** Stop directive detection. */
+  detect_stop_directives?: boolean | null;
+  /** A new unique name. */
+  name?: string | null;
+  /** A new picture. */
+  picture?: string | null;
+  /** The profile asking (the window's). */
+  profile?: string | null;
+  /** The room. */
+  room_id: string;
+}
+
+/** `groups.list` result. */
+export interface Rooms {
+  /** Every room. */
+  rooms: Array<Room>;
+}
+
+/** `groups.list` params. */
+export interface RoomsParams {
+  /** The profile asking (the window's). */
+  profile?: string | null;
+}
+
 /** `bot.roster.list` result. */
 export interface Roster {
   /** Every agent. */
@@ -2062,8 +2523,8 @@ export interface Roster {
 export interface RosterAgent {
   /** Whether it accepts bot messages. */
   accepts_bot_messages?: boolean;
-  /** An avatar reference. */
-  avatar?: string | null;
+  /** Its avatar (a `BotAvatar`). */
+  avatar?: BotAvatar | null;
   /** What it does. */
   description?: string | null;
   /** Its model. */
@@ -2074,8 +2535,26 @@ export interface RosterAgent {
   title?: string | null;
 }
 
+/** A local bot's Bot Chat as the roster shows it. */
+export interface RosterChat {
+  /** It owns a running turn, wrote within the last 90 seconds, or has a worker heartbeat. */
+  active?: boolean;
+  /** Hidden from the default roster. */
+  hidden?: boolean;
+  /** When that message was written (RFC 3339). */
+  last_message_at?: string | null;
+  /** The latest message of its Bot Chat, shortened. */
+  preview?: string | null;
+  /** Its section. */
+  section?: BotSection | null;
+  /** Messages since the Bot Chat was last read. */
+  unread?: number;
+}
+
 /** `bot.roster.list` params. */
 export interface RosterParams {
+  /** Also list hidden bots. */
+  include_hidden?: boolean;
   /** Also list registered peers' agents and the agents attached desktops reported for their other connections. */
   include_remote?: boolean;
   /** The window's profile (its peers are the ones listed). */
@@ -2088,6 +2567,8 @@ export interface RosterParams {
 export interface RosterRow {
   /** The agent. */
   agent: RosterAgent;
+  /** A local bot's Bot Chat and presentation. */
+  chat?: RosterChat | null;
   /** `local`, the peer's name or the connection's label. */
   device: string;
   /** Why the source could not be reached. */
@@ -2794,6 +3275,24 @@ export interface Version {
   minor: number;
 }
 
+/** `voice.speak` params: read a message of a session aloud. */
+export interface VoiceSpeakParams {
+  /** The profile that owns the session (a bot speaks with its own voice). */
+  profile: string;
+  /** The session the text belongs to. */
+  session_id: string;
+  /** What to say. */
+  text: string;
+}
+
+/** `voice.speak` result. */
+export interface VoiceSpoken {
+  /** The audio, base64. */
+  audio: string;
+  /** The audio's media type. */
+  mime: string;
+}
+
 /** One archive. */
 export interface WorktreeArchiveInfo {
   /** Seconds since it was archived. */
@@ -2909,9 +3408,17 @@ export interface Methods {
   "artifacts.list": { params: ArtifactsListParams; result: ArtifactList };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
   "bot.chat.ensure": { params: ProfileParams; result: BotChat };
+  "bot.chat.read": { params: BotMetaParams; result: BotDone };
+  "bot.create": { params: BotCreateParams; result: BotCreated };
+  "bot.delete": { params: BotDeleteParams; result: BotDeleted };
+  "bot.duplicate": { params: BotDuplicateParams; result: BotCreated };
+  "bot.meta.get": { params: BotMetaParams; result: BotMeta };
+  "bot.meta.update": { params: BotMetaUpdateParams; result: BotMeta };
   "bot.relay.deliver": { params: RelayDeliverParams; result: RelayDelivered };
   "bot.relay.drain": { params: RelayDrainParams; result: RelayDrained };
   "bot.roster.list": { params: RosterParams; result: Roster };
+  "bot.routines.list": { params: BotMetaParams; result: BotRoutines };
+  "bot.sections.delete": { params: BotSectionDeleteParams; result: BotSectionDeleted };
   "center.list": { params: CenterParams; result: CenterList };
   "command.dispatch": { params: DispatchParams; result: Dispatched };
   "commands.catalog": { params: SessionRef; result: CommandCatalog };
@@ -2951,6 +3458,23 @@ export interface Methods {
   "git.review": { params: GitReviewParams; result: GitReview };
   "git.stage": { params: GitPaths; result: Ack };
   "git.unstage": { params: GitPaths; result: Ack };
+  "groups.capabilities": { params: RoomParams; result: RoomCapabilities };
+  "groups.compress_member": { params: RoomMemberParams; result: RoomDone };
+  "groups.create": { params: RoomCreateParams; result: Room };
+  "groups.delete": { params: RoomDeleteParams; result: RoomDone };
+  "groups.demote": { params: RoomDemoteParams; result: ReplicaState };
+  "groups.get": { params: RoomParams; result: Room };
+  "groups.grant": { params: RoomGrantParams; result: RoomGrant };
+  "groups.list": { params: RoomsParams; result: Rooms };
+  "groups.log": { params: RoomLogParams; result: RoomLog };
+  "groups.member_grant": { params: RoomMemberGrantParams; result: RoomDone };
+  "groups.post": { params: RoomPostParams; result: RoomPosted };
+  "groups.promote": { params: RoomPromoteParams; result: RoomAuthority };
+  "groups.replica_state": { params: RoomParams; result: ReplicaState };
+  "groups.replicate": { params: RoomReplicateParams; result: ReplicaState };
+  "groups.revoke": { params: RoomRevokeParams; result: RoomDone };
+  "groups.stop": { params: RoomParams; result: RoomDone };
+  "groups.update": { params: RoomUpdateParams; result: Room };
   "harness.diff": { params: EvolveParams; result: EvolveReply };
   "harness.log": { params: EvolveParams; result: HarnessVersions };
   "harness.rollback": { params: EvolveParams; result: EvolveReply };
@@ -3035,6 +3559,7 @@ export interface Methods {
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
   "vault.sources": { params: VaultSourcesParams; result: VaultSourceList };
+  "voice.speak": { params: VoiceSpeakParams; result: VoiceSpoken };
   "worktree.list": { params: WorktreeSessionParams; result: WorktreeListing };
   "worktree.new": { params: WorktreeNewParams; result: WorktreeCreated };
   "worktree.prune": { params: WorktreePruneParams; result: WorktreePruned };
@@ -3085,15 +3610,8 @@ export interface Events {
 }
 
 export const UNDECLARED = [
-  "bot.create",
-  "bot.meta.get",
-  "bot.meta.update",
   "grants.list",
   "grants.revoke",
-  "groups.capabilities",
-  "groups.log",
-  "groups.replica_state",
-  "groups.replicate",
   "tools.call",
   "tools.list",
   "voice.client_config",

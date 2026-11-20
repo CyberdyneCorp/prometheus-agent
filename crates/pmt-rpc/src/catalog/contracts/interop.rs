@@ -23,6 +23,9 @@ pub struct RosterParams {
     /// Ask every peer again now instead of using rows younger than 300 s.
     #[serde(default)]
     pub refresh: bool,
+    /// Also list hidden bots.
+    #[serde(default)]
+    pub include_hidden: bool,
 }
 
 /// An agent as a source reports it.
@@ -37,9 +40,9 @@ pub struct RosterAgent {
     /// What it does.
     #[serde(default)]
     pub description: Option<String>,
-    /// An avatar reference.
+    /// Its avatar (a `BotAvatar`).
     #[serde(default)]
-    pub avatar: Option<String>,
+    pub avatar: Option<super::BotAvatar>,
     /// Its model.
     #[serde(default)]
     pub model: Option<String>,
@@ -70,6 +73,28 @@ pub struct RosterRow {
     /// Why the source could not be reached.
     #[serde(default)]
     pub error: Option<String>,
+    /// A local bot's Bot Chat and presentation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chat: Option<RosterChat>,
+}
+
+/// A local bot's Bot Chat as the roster shows it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct RosterChat {
+    /// The latest message of its Bot Chat, shortened.
+    pub preview: Option<String>,
+    /// When that message was written (RFC 3339).
+    pub last_message_at: Option<String>,
+    /// Messages since the Bot Chat was last read.
+    pub unread: u64,
+    /// It owns a running turn, wrote within the last 90 seconds, or has a
+    /// worker heartbeat.
+    pub active: bool,
+    /// Hidden from the default roster.
+    pub hidden: bool,
+    /// Its section.
+    pub section: Option<super::BotSection>,
 }
 
 /// One source of the roster.

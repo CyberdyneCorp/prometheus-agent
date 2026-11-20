@@ -77,6 +77,10 @@ pub struct ChatArgs {
     /// Resume a session by id, id prefix, title or `latest`.
     #[arg(short = 'r', long, value_name = "REF", conflicts_with = "continue_")]
     pub resume: Option<String>,
+    /// Open the profile's canonical Bot Chat (created when it has none),
+    /// as the desktop's bot roster does.
+    #[arg(long, conflicts_with_all = ["resume", "continue_"])]
+    pub bot_chat: bool,
     /// Resume the most recent CLI session started in this directory, or
     /// with NAME the newest session of the lineage titled NAME.
     #[arg(short = 'c', long = "continue", value_name = "NAME", num_args = 0..=1, default_missing_value = "")]

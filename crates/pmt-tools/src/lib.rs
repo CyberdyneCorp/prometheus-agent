@@ -23,6 +23,7 @@
 
 pub mod agent_level;
 pub mod agent_level_a2a;
+pub mod agent_level_bots;
 pub mod agent_level_cron;
 pub mod agent_level_delegation;
 pub mod agent_level_desktop;

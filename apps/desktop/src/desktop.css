@@ -153,3 +153,13 @@ body { font-family: var(--ui-font,) system-ui, -apple-system, "Segoe UI", sans-s
 .screen-pane[data-control="other"] .screen-canvas {
   cursor: not-allowed;
 }
+.bots .bot-tools { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+.bots .bot-section ul { list-style: none; margin: 0; padding: 0; }
+.bots .bot-section li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 2px 0; }
+.bots .bot-section li[data-hidden="true"] { opacity: 0.6; }
+.bots button[name="open-bot"] { display: inline-flex; align-items: center; gap: 0.4rem; }
+.bots .bot-unread { background: var(--accent); color: #fff; border-radius: 9px; padding: 0 6px; font-size: 0.8em; }
+.bots .bot-active { color: #2f9e44; }
+.bots .bot-preview { flex: 1 1 100%; color: var(--muted, #868e96); font-size: 0.85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bots form { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
+.routines .schedule-picker { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }

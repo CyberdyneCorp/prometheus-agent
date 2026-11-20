@@ -125,6 +125,9 @@ Options:
   -r, --resume <REF>
           Resume a session by id, id prefix, title or `latest`
 
+      --bot-chat
+          Open the profile's canonical Bot Chat (created when it has none), as the desktop's bot roster does
+
   -c, --continue [<NAME>]
           Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
 

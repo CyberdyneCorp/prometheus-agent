@@ -152,6 +152,8 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
         // kanban, Kanban toolset and grants.
         ("kanban", strings(pmt_tools::agent_level_kanban::TOOLS)),
         ("a2a", strings(pmt_tools::agent_level_a2a::TOOLS)),
+        // bot-mode, `message_agent` tool.
+        ("bot", strings(pmt_tools::agent_level_bots::TOOLS)),
         // desktop-app, Desktop UI toolset contract; First-run onboarding
         // chat; projects, Project tool for GUI sessions.
         ("project", strings(&["project"])),
@@ -223,7 +225,7 @@ fn default_off_and_posture_flags() {
     };
     assert_eq!(
         flagged(|t| t.default_off),
-        ["x_search", "video", "video_gen", "kanban", "a2a"]
+        ["x_search", "video", "video_gen", "kanban", "a2a", "bot"]
     );
     assert_eq!(flagged(|t| t.posture), ["coding"]);
     // Default-off toolsets join `all` only when named explicitly.

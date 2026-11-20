@@ -243,6 +243,19 @@ impl Run<'_> {
 
     async fn builtin(&self, command: &'static Command, args: &str) -> Dispatched {
         let name = command.name;
+        // `/new` and `/reset` keep a canonical Bot Chat: it is compressed
+        // in place instead (spec: bot-mode, Canonical Bot Chat).
+        let bot_chat = || {
+            let live = &self.session.live;
+            self.session
+                .factory
+                .store
+                .session(live.id)
+                .is_ok_and(|row| row.bot_chat)
+        };
+        if name == "new" && bot_chat() {
+            return Box::pin(self.shared("compress", "")).await;
+        }
         if self.surface == Surface::Cli && CLIENT_COMMANDS.contains(&name) {
             return refused(format!("/{name} is handled by the client"));
         }

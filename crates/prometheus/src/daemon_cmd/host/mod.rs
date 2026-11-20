@@ -44,6 +44,8 @@ mod cron_continue;
 mod cron_fire;
 mod cron_managed;
 pub(super) use cron_managed::FireEndpoint;
+mod bot_delivery;
+mod bots;
 mod cron_send;
 #[cfg(feature = "dashboard")]
 mod dashboard;
@@ -72,6 +74,7 @@ mod projects;
 mod queue;
 mod reload;
 mod review;
+mod rooms;
 mod send_tool;
 #[cfg(feature = "dashboard")]
 mod session_file;
@@ -338,6 +341,10 @@ impl DaemonHost {
     /// Hands sessions the started messaging gateway (`send_message`).
     pub(super) fn set_gateway(&self, gateway: pmt_gateway::messaging::Gateway) {
         let _ = self.gateway.set(gateway);
+        // Bot deliveries and rooms run once turns can be submitted.
+        pmt_core::spawn::spawn(bot_delivery::schedule(
+            self.me.get().cloned().unwrap_or_default(),
+        ));
         // Plugins post, inject and act through the same gateway.
         crate::plugins_host::messaging::set_gateway(Arc::clone(&self.gateway));
     }
@@ -1187,6 +1194,14 @@ impl Host for DaemonHost {
                 .await
                 .map_err(|e| Error::new(&pmt_core::error::codes::RPC_INTERNAL, e.to_string()))?
         })
+    }
+
+    fn bots<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::bots::BotRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(self.bot_call(profile, request))
     }
 
     fn bot_roster(

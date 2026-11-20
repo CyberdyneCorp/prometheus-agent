@@ -333,6 +333,8 @@ pub fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String)
 pub mod a2a;
 #[cfg(feature = "gateway")]
 pub mod api;
+#[cfg(feature = "gateway")]
+pub mod bots;
 #[cfg(all(unix, feature = "dashboard"))]
 pub mod connections;
 #[cfg(feature = "dashboard")]

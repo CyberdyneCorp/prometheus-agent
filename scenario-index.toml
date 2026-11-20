@@ -82,6 +82,7 @@ partial = true
 capabilities = [
     "acp-adapter",
     "agent-interop",
+    "bot-mode",
     "desktop-app",
     "kanban",
     "distribution-and-update",
@@ -5090,3 +5091,65 @@ capabilities = [
 [workspace-architecture."Embeddable client SDKs"]
 "Python embedding" = { tests = ["crates/prometheus/tests/sdk_clients.rs::a_python_script_runs_a_turn_and_gets_its_events_and_usage", "crates/prometheus/tests/sdk_clients.rs::a_node_program_runs_a_turn_and_gets_its_events_and_usage", "crates/prometheus/tests/sdk_clients.rs::an_ephemeral_session_with_an_overlay_leaves_no_transcript"], note = "the mock provider's scripted read_file call; the Node and Rust tests run the same turn through the other two SDKs" }
 "Old SDK against a new protocol" = ["crates/prometheus/tests/sdk_clients.rs::every_sdk_refuses_a_newer_protocol_before_any_request", "crates/pmt-sdk/src/lib.rs::only_supported_majors_pass"]
+
+[bot-mode."A bot is a profile with backend metadata"]
+"Title follows the bot to a second desktop" = ["crates/prometheus/tests/bot_mode.rs::a_bots_metadata_is_the_same_for_every_client", "crates/prometheus/tests/desktop_e2e.rs::the_bots_pane_manages_bots_and_their_routines"]
+
+[bot-mode."Canonical Bot Chat"]
+"/new keeps the relationship" = ["crates/prometheus/tests/bot_mode.rs::new_in_a_bot_chat_compresses_it_in_place", "crates/prometheus/tests/desktop_e2e.rs::the_bots_pane_manages_bots_and_their_routines"]
+"Headless Bot Chat" = ["crates/prometheus/tests/bot_messages.rs::only_a_bot_chat_has_message_agent", "crates/prometheus/tests/bot_mode.rs::the_terminal_reaches_the_same_bot_chat_and_metadata"]
+
+[bot-mode."Creating, duplicating and deleting bots"]
+"OAuth not copied" = ["crates/prometheus/tests/bot_mode.rs::creating_duplicating_and_deleting_bots", "crates/prometheus/src/bot_host/create.rs::only_static_api_keys_are_copied"]
+"Create on a remote machine" = ["crates/prometheus/tests/bot_mode.rs::a_bot_created_on_a_peer_lives_there"]
+
+[bot-mode."Avatars"]
+"Deterministic default face" = ["crates/prometheus/src/bot_host/meta.rs::the_same_name_always_yields_the_same_face", "crates/prometheus/tests/bot_mode.rs::a_bots_metadata_is_the_same_for_every_client", "crates/prometheus/tests/desktop_e2e.rs::the_bots_pane_manages_bots_and_their_routines"]
+
+[bot-mode."Roster presentation, hiding and sections"]
+"Hidden bot still reachable" = ["crates/prometheus/tests/bot_messages.rs::a_message_reaches_a_hidden_bot_and_its_reply_comes_back"]
+
+[bot-mode."Bot voices"]
+"Two bots, two voices" = { tests = ["crates/prometheus/tests/bot_mode.rs::each_bot_reads_aloud_with_its_own_voice"], note = "the scenario's `tts.voice` is the voice key of the bot's TTS provider (here `tts.providers.fake.voice`): `voice.speak` synthesizes with the session owner's profile" }
+
+[bot-mode."Bot routines"]
+"Morning digest lands in the Bot Chat" = ["crates/prometheus/tests/bot_mode.rs::a_routine_delivers_into_the_bot_chat_and_is_an_ordinary_job", "crates/prometheus/tests/desktop_e2e.rs::the_bots_pane_manages_bots_and_their_routines"]
+
+[bot-mode."Bot protocol in canonical Bot Chats"]
+"New teammate mid-session" = ["crates/prometheus/tests/bot_messages.rs::a_new_teammate_arrives_as_a_notice_and_the_prompt_stays"]
+
+[bot-mode."message_agent tool"]
+"Friendly name cannot hijack a profile name" = ["crates/prometheus/src/bot_host/roster.rs::a_profile_name_wins_over_a_title"]
+"Busy target" = { tests = ["crates/prometheus/tests/bot_messages.rs::a_target_busy_past_the_wait_fails_with_target_busy"], note = "with bot_mode.turn_wait_secs = 2 against a 20-second turn instead of 120 s against a 10-minute one" }
+
+[bot-mode."Typed delivery failures and safe retry"]
+"Quota failure surfaces at once" = ["crates/prometheus/tests/bot_messages.rs::a_quota_failure_reaches_the_sender_without_a_retry", "crates/prometheus/src/bot_host/reasons.rs::provider_failures_map_to_their_reason"]
+"Retry keeps one copy" = ["crates/prometheus/tests/bot_messages.rs::a_server_error_is_retried_once_and_the_message_is_kept_once"]
+
+[bot-mode."Mentions from any chat"]
+"Mention is resolved, not forwarded" = ["crates/prometheus/tests/bot_messages.rs::a_mention_is_named_to_the_agent_and_never_forwarded", "crates/prometheus/src/bot_host/protocol.rs::mentions_skip_email_addresses_and_keep_handles"]
+
+[bot-mode."Group chats"]
+"Rooms do not spin" = ["crates/prometheus/tests/bot_rooms.rs::a_room_of_chatty_bots_stops_at_its_bounds"]
+"Silent round settles" = ["crates/prometheus/tests/bot_rooms.rs::a_fully_silent_round_settles_the_room"]
+
+[bot-mode."Room stop directives and held members"]
+"Stop word in prose" = ["crates/prometheus/src/bot_host/rooms.rs::a_stop_word_holds_only_next_to_the_mention"]
+"Release delivers skipped messages" = ["crates/prometheus/tests/bot_rooms.rs::a_held_member_hears_what_it_missed_when_released"]
+
+[bot-mode."Durable room driver"]
+"Client closed mid-discussion" = { tests = ["crates/prometheus/tests/bot_rooms.rs::a_room_of_chatty_bots_stops_at_its_bounds"], note = "every post comes from a one-shot `prometheus rpc call` client that disconnects at once; the daemon finishes the rounds and the log holds every reply" }
+
+[bot-mode."Hosted rooms across gateways"]
+"Remote member without a grant" = ["crates/prometheus/tests/bot_rooms.rs::a_room_hosted_across_two_gateways"]
+
+[bot-mode."Room authority transfer"]
+"Promotion without confirmation" = ["crates/prometheus/tests/bot_rooms.rs::promotion_needs_confirmation_and_a_demoted_authority_refuses_sends"]
+"Demoted authority refuses sends" = ["crates/prometheus/tests/bot_rooms.rs::promotion_needs_confirmation_and_a_demoted_authority_refuses_sends", "crates/prometheus/tests/bot_rooms.rs::a_room_hosted_across_two_gateways"]
+
+[bot-mode."Bot Mode off switch and CLI parity"]
+"Disabled bot not messageable" = ["crates/prometheus/tests/bot_messages.rs::a_bot_with_bot_mode_off_is_refused_and_untouched"]
+
+[desktop-app."Agent-to-agent messages from bot chats"]
+"Unknown teammate" = ["crates/prometheus/src/bot_host/roster.rs::an_unknown_target_lists_the_closest_names_first"]
+"Forged call outside a bot chat" = ["crates/prometheus/tests/bot_messages.rs::only_a_bot_chat_has_message_agent"]
