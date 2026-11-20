@@ -90,6 +90,16 @@ fn tick(
             });
         }
     }
+    if listens_to_peers(profile) {
+        // Peer listings older than five minutes are asked again, so the
+        // protocol roster of Bot Chats learns of peer agents without a
+        // desktop listing the roster.
+        let (host, profile) = (Arc::clone(host), Arc::clone(profile));
+        let name = profile.scope().name().to_string();
+        spawn_once(running, format!("peers:{name}"), async move {
+            Box::pin(host.refresh_peers(&profile, &name, false)).await;
+        });
+    }
     for row in profile.store.bot_messages_unnotified()? {
         let (host, profile) = (Arc::clone(host), Arc::clone(profile));
         spawn_once(running, format!("notify:{}", row.delivery_id), async move {
@@ -103,6 +113,13 @@ fn tick(
         });
     }
     Ok(())
+}
+
+/// Whether `profile` speaks the bot protocol and has peers to list.
+fn listens_to_peers(profile: &Profile) -> bool {
+    let scope = profile.scope();
+    let config = scope.config();
+    config.bot_mode.enabled && config.bot_mode.protocol && !config.peers.is_empty()
 }
 
 /// Runs `work` unless a task with the same key is still running, so a

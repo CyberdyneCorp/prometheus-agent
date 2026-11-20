@@ -2461,7 +2461,7 @@ A room.
 
 ### `RoomAuthority`
 
-`groups.promote` result.
+`groups.promote` result: the new authority and lineage. The old writer must already be fenced; pass these to its `groups.demote`.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -2503,7 +2503,7 @@ A room.
 
 ### `RoomDemoteParams`
 
-`groups.demote` params (all required).
+`groups.demote` params (all required): fences this gateway as an old writer. It adopts the newer lineage and refuses further room writes; fence the old writer like this (or stop its daemon) before promoting a replacement.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -2636,7 +2636,7 @@ Params naming a room.
 
 ### `RoomPromoteParams`
 
-`groups.promote` params.
+`groups.promote` params: makes this gateway the room authority. Fence the old writer first (stop its daemon, or have it run `groups.demote`): promotion never merges diverged histories, so an old writer still accepting messages forks the room.
 
 | Field | Type | Required | Description |
 |---|---|---|---|

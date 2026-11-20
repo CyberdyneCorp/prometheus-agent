@@ -2268,7 +2268,7 @@ export interface Room {
   running: boolean;
 }
 
-/** `groups.promote` result. */
+/** `groups.promote` result: the new authority and lineage. The old writer must already be fenced; pass these to its `groups.demote`. */
 export interface RoomAuthority {
   /** Its lineage. */
   authority_epoch: number;
@@ -2312,7 +2312,7 @@ export interface RoomDeleteParams {
   room_id: string;
 }
 
-/** `groups.demote` params (all required). */
+/** `groups.demote` params (all required): fences this gateway as an old writer. It adopts the newer lineage and refuses further room writes; fence the old writer like this (or stop its daemon) before promoting a replacement. */
 export interface RoomDemoteParams {
   /** Its lineage. */
   observed_epoch: number;
@@ -2451,7 +2451,7 @@ export interface RoomPosted {
   seq: number;
 }
 
-/** `groups.promote` params. */
+/** `groups.promote` params: makes this gateway the room authority. Fence the old writer first (stop its daemon, or have it run `groups.demote`): promotion never merges diverged histories, so an old writer still accepting messages forks the room. */
 export interface RoomPromoteParams {
   /** Must be true. */
   confirm?: boolean;

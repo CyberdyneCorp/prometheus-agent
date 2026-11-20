@@ -109,8 +109,12 @@ impl DaemonHost {
     pub(super) async fn roster(&self, params: RosterParams) -> Result<Roster, Error> {
         let profile = self.profile(&params.profile)?;
         let mut candidates: Vec<Candidate> = Vec::new();
+        let home = profile.scope().home().to_path_buf();
+        let heartbeats = pmt_core::spawn::blocking(move || super::bots::worker_heartbeats(&home))
+            .await
+            .unwrap_or_default();
         for (_, served) in self.all_profiles() {
-            let Some((agent, chat)) = self.local_bot(&served).await else {
+            let Some((agent, chat)) = self.local_bot(&served, &heartbeats).await else {
                 continue;
             };
             if chat.hidden && !params.include_hidden {
@@ -156,7 +160,7 @@ impl DaemonHost {
 
     /// Lists every registered peer of `profile` whose listing is older
     /// than [`FRESH`] (all of them with `force`), at once.
-    async fn refresh_peers(&self, profile: &Arc<Profile>, name: &str, force: bool) {
+    pub(super) async fn refresh_peers(&self, profile: &Arc<Profile>, name: &str, force: bool) {
         let scope = profile.scope();
         let peers: Vec<String> = scope.config().peers.keys().cloned().collect();
         let due: Vec<String> = peers
@@ -201,12 +205,34 @@ impl DaemonHost {
             };
             self.roster.put(key, listing);
         }
+        self.remember_remote(profile, name);
+    }
+
+    /// Saves `name`'s cached remote rows for its Bot Chats' protocol
+    /// roster (a change reaches them as a `roster.update` notice).
+    fn remember_remote(&self, profile: &Profile, name: &str) {
+        let mut remote = crate::bot_host::protocol::Remote::default();
+        for (peer, listing) in self.roster.of_kind(name, "peer") {
+            let machine = listing.host.clone().unwrap_or_else(|| peer.clone());
+            for agent in &listing.agents {
+                remote.peer(&peer, agent, &machine);
+            }
+        }
+        for (connection, listing) in self.roster.of_kind(name, "connection") {
+            for agent in &listing.agents {
+                remote.connection(&connection, agent);
+            }
+        }
+        if let Err(err) = crate::bot_host::protocol::remember_remote(&profile.store, &remote) {
+            tracing::warn!("remote bot roster not saved: {}", err.message());
+        }
     }
 
     /// `bot.relay.drain`.
     pub(super) fn drain(&self, params: &RelayDrainParams) -> Result<RelayDrained, Error> {
         let profile = self.profile(&params.profile)?;
         self.roster.report(&params.profile, &params.connections);
+        self.remember_remote(&profile, &params.profile);
         let timing = crate::a2a_host::relay::timing(&profile.scope().config().bot_mode);
         let now = Timestamp::now();
         let timed_out = profile.store.relay_time_out(now, timing)?;

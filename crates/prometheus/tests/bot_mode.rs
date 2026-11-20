@@ -10,6 +10,8 @@ mod common;
 
 use std::time::Duration;
 
+use base64::Engine as _;
+
 use serde_json::{Value, json};
 
 use self::common::bots::{self, bot, bot_chat, call, client, said, store, wait, wait_said};
@@ -176,6 +178,18 @@ fn creating_duplicating_and_deleting_bots() {
     );
     runtime.block_on(async {
         let c = client(home.path(), &["default", "scout"]).await;
+        // An image avatar lives in the source profile's blobs; the copy
+        // must get its own copy of the bytes.
+        let png = base64::engine::general_purpose::STANDARD.encode(b"\x89PNG\r\n\x1a\nface");
+        let avatar = call(
+            &c,
+            "bot.meta.update",
+            json!({"profile": "scout", "changes": {
+                "avatar": {"kind": "image", "mime": "image/png", "data": png}
+            }}),
+        )
+        .await;
+        let blob = avatar["avatar"]["blob"].as_str().unwrap().to_owned();
         let copy = call(
             &c,
             "bot.duplicate",
@@ -186,6 +200,18 @@ fn creating_duplicating_and_deleting_bots() {
         let c = client(home.path(), &["default", "scout", "scout-2"]).await;
         let meta = call(&c, "bot.meta.get", json!({"profile": "scout-2"})).await;
         assert_eq!(meta["title"], "Scout");
+        assert_eq!(meta["avatar"]["kind"], "image", "{meta}");
+        assert_eq!(meta["avatar"]["blob"], blob.as_str());
+        // The copy holds the image itself: keeping it by its blob works.
+        let kept = call(
+            &c,
+            "bot.meta.update",
+            json!({"profile": "scout-2", "changes": {
+                "avatar": {"kind": "image", "mime": "image/png", "blob": blob}
+            }}),
+        )
+        .await;
+        assert_eq!(kept["avatar"]["blob"], blob.as_str());
         call(
             &c,
             "bot.delete",

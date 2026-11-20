@@ -6481,7 +6481,7 @@
     },
     "RoomAuthority": {
       "additionalProperties": false,
-      "description": "`groups.promote` result.",
+      "description": "`groups.promote` result: the new authority and lineage. The old writer\nmust already be fenced; pass these to its `groups.demote`.",
       "properties": {
         "authority_epoch": {
           "description": "Its lineage.",
@@ -6608,7 +6608,7 @@
     },
     "RoomDemoteParams": {
       "additionalProperties": false,
-      "description": "`groups.demote` params (all required).",
+      "description": "`groups.demote` params (all required): fences this gateway as an old\nwriter. It adopts the newer lineage and refuses further room writes;\nfence the old writer like this (or stop its daemon) before promoting a\nreplacement.",
       "properties": {
         "observed_epoch": {
           "description": "Its lineage.",
@@ -7000,7 +7000,7 @@
     },
     "RoomPromoteParams": {
       "additionalProperties": false,
-      "description": "`groups.promote` params.",
+      "description": "`groups.promote` params: makes this gateway the room authority.\nFence the old writer first (stop its daemon, or have it run\n`groups.demote`): promotion never merges diverged histories, so an old\nwriter still accepting messages forks the room.",
       "properties": {
         "confirm": {
           "default": false,

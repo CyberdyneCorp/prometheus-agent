@@ -3,6 +3,8 @@
 //! shows on the roster. `groups.*` go to the room driver
 //! ([`super::rooms`]); deliveries run in [`super::bot_delivery`].
 
+use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -405,7 +407,14 @@ impl DaemonHost {
 
     /// A local bot as the roster shows it; `None` when Bot Mode is off for
     /// it (it leaves every roster).
-    pub(super) async fn local_bot(&self, profile: &Profile) -> Option<(RosterAgent, RosterChat)> {
+    ///
+    /// `heartbeats` are the profiles with a live kanban worker
+    /// ([`worker_heartbeats`]): they count as active too.
+    pub(super) async fn local_bot(
+        &self,
+        profile: &Profile,
+        heartbeats: &HashSet<String>,
+    ) -> Option<(RosterAgent, RosterChat)> {
         let scope = profile.scope();
         let config = scope.config();
         if !config.bot_mode.enabled {
@@ -431,7 +440,7 @@ impl DaemonHost {
             .values()
             .any(|s| s.busy.load(std::sync::atomic::Ordering::Acquire));
         let mut chat = chat_of(&profile.store).unwrap_or_default();
-        chat.active |= running;
+        chat.active |= running || heartbeats.contains(&agent.name);
         chat.hidden = found.hidden;
         chat.section = found.section;
         Some((agent, chat))
@@ -469,11 +478,98 @@ fn chat_of(store: &pmt_store::Store) -> Result<RosterChat, Error> {
     })
 }
 
+/// How recent a worker heartbeat keeps a bot active: two beats, so one
+/// late beat does not flicker the flag.
+const HEARTBEAT_WINDOW_MS: i64 = 2 * pmt_kanban::dispatch::HEARTBEAT_MS;
+
+/// The profiles of `home` running a kanban worker that heartbeat within
+/// [`HEARTBEAT_WINDOW_MS`] (spec: bot-mode, Roster presentation: active
+/// when the bot has a worker heartbeat). A home without boards has none;
+/// listing never creates them.
+pub(super) fn worker_heartbeats(home: &Path) -> HashSet<String> {
+    if !home.join("kanban").is_dir() {
+        return HashSet::new();
+    }
+    let Ok(boards) = pmt_kanban::Boards::open(home) else {
+        return HashSet::new();
+    };
+    let since = pmt_kanban::now_ms() - HEARTBEAT_WINDOW_MS;
+    boards
+        .live()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|slug| boards.board(slug).ok())
+        .flat_map(|board| board.open_runs().unwrap_or_default())
+        .filter(|run| run.role == "worker" && run.heartbeat_at.is_some_and(|at| at >= since))
+        .map(|run| run.profile)
+        .collect()
+}
+
 /// The first line of `text`, at most 120 characters.
 fn preview(text: &str) -> String {
     let line = text.trim().lines().next().unwrap_or_default();
     match line.char_indices().nth(120) {
         Some((cut, _)) => format!("{}…", &line[..cut]),
         None => line.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pmt_kanban::{Actor, Boards, ClaimOutcome, NewTask, Role};
+
+    use super::*;
+
+    /// Scenario part (Roster presentation): a bot whose kanban worker
+    /// heartbeats is active; a silent one is not.
+    #[test]
+    fn a_recent_worker_heartbeat_marks_its_profile_active() {
+        let home = tempfile::tempdir().unwrap();
+        assert!(worker_heartbeats(home.path()).is_empty());
+        assert!(
+            !home.path().join("kanban").exists(),
+            "listing creates no boards"
+        );
+        let mut board = Boards::open(home.path()).unwrap().board("default").unwrap();
+        let now = pmt_kanban::now_ms();
+        let exists = |_: &str| true;
+        let mut claim = |profile: &str| {
+            let mut task = NewTask::titled("digest");
+            task.assignee = Some(profile.to_owned());
+            let id = board
+                .create(&Actor::user("cli"), &task, &exists, now)
+                .unwrap()
+                .id;
+            let claimed = board
+                .claim(
+                    &Actor::dispatcher(),
+                    &id,
+                    profile,
+                    Role::Worker,
+                    900_000,
+                    now,
+                )
+                .unwrap();
+            let ClaimOutcome::Claimed(claim) = claimed else {
+                panic!("not claimed: {claimed:?}");
+            };
+            claim.run_id
+        };
+        let (busy, silent) = (claim("research"), claim("scribe"));
+        board
+            .heartbeat(&Actor::worker("research", &busy), &busy, None, 900_000, now)
+            .unwrap();
+        let stale = now - HEARTBEAT_WINDOW_MS - 1;
+        board
+            .heartbeat(
+                &Actor::worker("scribe", &silent),
+                &silent,
+                None,
+                900_000,
+                stale,
+            )
+            .unwrap();
+        let active = worker_heartbeats(home.path());
+        assert_eq!(active, HashSet::from(["research".to_owned()]));
     }
 }

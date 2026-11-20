@@ -348,6 +348,41 @@ fn a_mention_is_named_to_the_agent_and_never_forwarded() {
     assert!(bot_chat(home.path(), "researcher").is_none());
 }
 
+/// Scenario: New teammate mid-session, for an agent of another desktop
+/// connection: the roster the desktop reports reaches the Bot Chat as a
+/// `roster.update` notice naming its handle, title, role and machine.
+#[test]
+fn an_agent_of_another_connection_arrives_as_a_notice() {
+    let home = bots::home(
+        "[[rule]]\nuser = \"[roster.update] added @writer@Laptop: Writer — drafts the docs \
+         (machine: Laptop)\"\ntext = \"welcome writer\"\n\
+         [[rule]]\nrepeat = true\ntext = \"ok\"\n",
+    );
+    let _daemon = daemon::start(home.path(), &[]);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let c = runtime.block_on(client(home.path(), &["default"]));
+    let id = runtime.block_on(tell(&c, "default", "hello"));
+    wait_said(home.path(), "default", "assistant", "ok");
+    runtime.block_on(async {
+        call(
+            &c,
+            "bot.relay.drain",
+            json!({"profile": "default", "connections": [{"label": "Laptop", "agents": [
+                {"name": "writer", "title": "Writer", "description": "drafts the docs",
+                 "accepts_bot_messages": true}
+            ]}]}),
+        )
+        .await;
+        call(
+            &c,
+            "prompt.submit",
+            json!({"session_id": id, "text": "again", "files": []}),
+        )
+        .await;
+    });
+    wait_said(home.path(), "default", "assistant", "welcome writer");
+}
+
 /// Scenario: New teammate mid-session.
 #[test]
 fn a_new_teammate_arrives_as_a_notice_and_the_prompt_stays() {

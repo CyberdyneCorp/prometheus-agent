@@ -316,3 +316,60 @@ fn demote(store: &Store, p: &RoomDemoteParams) -> Result<Value, Error> {
     }
     to_value(&state_of(store, &store.room(&room.id)?)?)
 }
+
+#[cfg(test)]
+mod tests {
+    use pmt_config::{Home, Launch, Overrides, ProfileName, ProfileScope};
+
+    use super::*;
+
+    fn entry(seq: u64) -> EntryRow {
+        EntryRow {
+            seq,
+            kind: "message".to_owned(),
+            author: Some("ann".to_owned()),
+            text: Some(format!("entry {seq}")),
+            data: None,
+            at: 0,
+        }
+    }
+
+    /// A replica promoted while missing entries is refused with
+    /// `replica_incomplete` (and stays a replica) unless
+    /// `force_incomplete` is set.
+    #[test]
+    fn an_incomplete_replica_is_promoted_only_when_forced() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = Home::open(dir.path()).unwrap();
+        let profile = home.profile(&ProfileName::default_profile()).unwrap();
+        let scope = ProfileScope::open(profile, &Overrides::default(), Launch::Other).unwrap();
+        let store = Store::open(&scope).unwrap();
+        let room = RoomRow {
+            id: "room_1".to_owned(),
+            name: "Ops".to_owned(),
+            authority_gateway: "gw_old".to_owned(),
+            latest_seq: 5,
+            ..room_stub()
+        };
+        store.room_replicate(&room, &[entry(1), entry(2)]).unwrap();
+        let mut params = RoomPromoteParams {
+            profile: None,
+            room_id: room.id.clone(),
+            confirm: true,
+            reason: None,
+            force_incomplete: false,
+        };
+        let refused = promote(&store, &params).unwrap_err();
+        assert_eq!(
+            refused.code().code,
+            codes::ROOM_REPLICA_INCOMPLETE.code,
+            "{refused:?}"
+        );
+        assert!(refused.message().contains("up to 2 of 5"), "{refused:?}");
+        assert_eq!(store.room(&room.id).unwrap().role, "replica");
+        params.force_incomplete = true;
+        let promoted = promote(&store, &params).unwrap();
+        assert_eq!(promoted["authority_epoch"], 2);
+        assert_eq!(store.room(&room.id).unwrap().role, "authority");
+    }
+}

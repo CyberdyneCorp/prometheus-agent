@@ -280,7 +280,10 @@ pub struct ReplicaState {
     pub authority_epoch: u64,
 }
 
-/// `groups.promote` params.
+/// `groups.promote` params: makes this gateway the room authority.
+/// Fence the old writer first (stop its daemon, or have it run
+/// `groups.demote`): promotion never merges diverged histories, so an old
+/// writer still accepting messages forks the room.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RoomPromoteParams {
@@ -300,7 +303,8 @@ pub struct RoomPromoteParams {
     pub force_incomplete: bool,
 }
 
-/// `groups.promote` result.
+/// `groups.promote` result: the new authority and lineage. The old writer
+/// must already be fenced; pass these to its `groups.demote`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RoomAuthority {
@@ -310,7 +314,10 @@ pub struct RoomAuthority {
     pub authority_epoch: u64,
 }
 
-/// `groups.demote` params (all required).
+/// `groups.demote` params (all required): fences this gateway as an old
+/// writer. It adopts the newer lineage and refuses further room writes;
+/// fence the old writer like this (or stop its daemon) before promoting a
+/// replacement.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RoomDemoteParams {

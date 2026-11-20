@@ -37,14 +37,17 @@ without bundled skills) with its Bot Chat and an introduction. Static API
 keys (`*_KEY` secrets) of the source are copied unless `copy_api_keys` is
 false; subscription sign-ins (`OAUTH_*`) and gateway-owned secrets never
 are. With `on` naming a registered peer the bot is created on that
-machine. `bot.duplicate` and `bot.delete` (never `default`) complete the
-set.
+machine. `bot.duplicate` (config, skills, `SOUL.md`, memory and
+metadata, an image avatar included) and `bot.delete` (never `default`)
+complete the set.
 
 ## The Bots pane
 
 The desktop's **Bots** pane lists the connection's bots with their
-avatar, latest message, unread count and an active dot, grouped under the
-section stored on each bot. **Edit** changes a bot's title, description,
+avatar, latest message, unread count and an active dot (a running turn, a
+Bot Chat message in the last 90 seconds, or a kanban worker of that bot
+that heartbeat in the last two minutes), grouped under the section stored
+on each bot. **Edit** changes a bot's title, description,
 section and hidden flag (a hidden bot leaves the default roster but can
 still be messaged; **Show hidden** brings it back), duplicates or deletes
 it, and manages its routines. **Delete section** moves the section's bots
@@ -54,7 +57,11 @@ Opening a bot opens its Bot Chat and marks it read.
 ## Messaging other bots
 
 A canonical Bot Chat has the [`message_agent`](../reference/tools.md#message_agent)
-tool and a protocol section listing its teammates. A target is a profile
+tool and a protocol section listing its teammates: the other local bots,
+each registered peer's agents (`@<peer>/<agent>`, from the daemon's peer
+listing, refreshed every five minutes) and the agents a desktop reported
+for its other connections (`@<agent>@<connection>`), each with its title,
+role and machine. A target is a profile
 name, the `@`-tag of a title (`@research-buddy`), `@prometheus` for the
 default profile, `<peer>/<agent>` for a peer gateway, or
 `<handle>@<connection>` for another desktop connection. The tool returns

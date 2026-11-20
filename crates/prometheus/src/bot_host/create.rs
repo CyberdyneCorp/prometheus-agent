@@ -7,10 +7,12 @@
 //! then serves the profile, creates its canonical Bot Chat and runs its
 //! introduction turn.
 
+use base64::Engine as _;
 use pmt_config::profiles::CloneFrom;
 use pmt_config::{Home, Launch, Overrides, ProfileDir, ProfileName, ProfileScope};
 use pmt_core::error::{Error, codes};
-use pmt_rpc::contracts::BotCreateParams;
+use pmt_rpc::contracts::{BotAvatar, BotCreateParams};
+use pmt_store::blobs::BlobRef;
 use serde_json::{Map, Value};
 
 use super::meta;
@@ -227,16 +229,47 @@ pub fn duplicate(home: &Home, source: &str, name: &str) -> Result<Made, Error> {
         ..BotCreateParams::default()
     };
     let made = create(home, source, &params)?;
-    let from = pmt_store::Store::open(&open(home, &ProfileName::parse(source)?)?)?;
-    let mut copied = meta::read(&from)?;
+    let new = ProfileName::parse(&made.profile)?;
+    let copied = (|| {
+        let from = pmt_store::Store::open(&open(home, &ProfileName::parse(source)?)?)?;
+        let changes = copied_meta(&from)?;
+        write_meta(home, &home.existing_profile(&new)?, &changes)
+    })();
+    if let Err(err) = copied {
+        if let Ok(profile) = home.existing_profile(&new) {
+            let _ = std::fs::remove_dir_all(profile.path());
+        }
+        return Err(err);
+    }
+    Ok(made)
+}
+
+/// `from`'s metadata as `bot.meta.update` changes for a copy. Blobs are
+/// per profile, so an image avatar travels as its bytes and the copy
+/// stores them in its own blobs.
+fn copied_meta(from: &pmt_store::Store) -> Result<Map<String, Value>, Error> {
+    let mut copied = meta::read(from)?;
     copied.groups.clear();
+    if let BotAvatar::Image {
+        blob: Some(blob),
+        mime,
+        ..
+    } = &copied.avatar
+    {
+        let reference = BlobRef::parse(&format!("blob:sha256:{blob}"))
+            .ok_or_else(|| Error::new(&codes::RPC_INTERNAL, "bot metadata: bad avatar blob"))?;
+        let bytes = from.get_blob(&reference)?;
+        copied.avatar = BotAvatar::Image {
+            blob: None,
+            mime: mime.clone(),
+            data: Some(base64::engine::general_purpose::STANDARD.encode(bytes)),
+        };
+    }
     let value = serde_json::to_value(&copied)
         .map_err(|e| Error::new(&codes::RPC_INTERNAL, format!("bot metadata: {e}")))?;
     let mut changes = value.as_object().cloned().unwrap_or_default();
     changes.remove("groups");
-    let new = ProfileName::parse(&made.profile)?;
-    write_meta(home, &home.existing_profile(&new)?, &changes)?;
-    Ok(made)
+    Ok(changes)
 }
 
 #[cfg(test)]

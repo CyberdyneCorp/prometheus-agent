@@ -5116,7 +5116,7 @@ capabilities = [
 "Morning digest lands in the Bot Chat" = ["crates/prometheus/tests/bot_mode.rs::a_routine_delivers_into_the_bot_chat_and_is_an_ordinary_job", "crates/prometheus/tests/desktop_e2e.rs::the_bots_pane_manages_bots_and_their_routines"]
 
 [bot-mode."Bot protocol in canonical Bot Chats"]
-"New teammate mid-session" = ["crates/prometheus/tests/bot_messages.rs::a_new_teammate_arrives_as_a_notice_and_the_prompt_stays"]
+"New teammate mid-session" = ["crates/prometheus/tests/bot_messages.rs::a_new_teammate_arrives_as_a_notice_and_the_prompt_stays", "crates/prometheus/tests/bot_messages.rs::an_agent_of_another_connection_arrives_as_a_notice", "crates/prometheus/src/bot_host/protocol.rs::peer_agents_are_listed_and_their_arrival_is_a_notice"]
 
 [bot-mode."message_agent tool"]
 "Friendly name cannot hijack a profile name" = ["crates/prometheus/src/bot_host/roster.rs::a_profile_name_wins_over_a_title"]
