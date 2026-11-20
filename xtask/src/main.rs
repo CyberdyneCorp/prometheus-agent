@@ -293,7 +293,7 @@ mod tests {
 
         struct Changed;
         impl pmt_rpc::contracts::Method for Changed {
-            const NAME: &'static str = "wake.feed";
+            const NAME: &'static str = "tools.call";
             type Params = pmt_rpc::contracts::SessionRef;
             type Result = pmt_rpc::contracts::Ack;
         }
