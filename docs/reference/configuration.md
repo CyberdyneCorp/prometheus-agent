@@ -251,6 +251,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `compression.target_ratio` | number | `0.2` | 0.1 to 0.8 | `next_session` | Target size after compaction as a fraction of the input budget. |
 | `compression.threshold` | number | `0.5` | > 0.0, < 1.0 | `next_session` | Fraction of the input budget at which compaction triggers. |
 | `compression.threshold_tokens` | integer | `0` | ≥ 0 | `next_session` | Lower absolute trigger in tokens; `0` is off. |
+| `computer_use.allow_unsigned_driver` | boolean | `false` | any | `next_session` | Launch private runtimes through a driver bundle that is not signed by the official identity (macOS; local driver builds only). |
+| `computer_use.autostart` | boolean | `false` | any | `next_session` | Register a per-logon driver task on Windows so a service session (Session 0) can drive the interactive desktop. |
+| `computer_use.ax_max_elements` | integer | `200` | ≥ 0 | `next_session` | Bound on the driver's accessibility walk per capture (`0`: the driver's default). At most 100 elements reach the model; the rest are written to a session cache file named in the result. |
+| `computer_use.backend` | string | `"cua"` | any | `next_session` | The computer-use backend: `cua` (the pinned `cua-driver`) or a backend an installed plugin registers. |
+| `computer_use.capability_manifest` | string | unset | any | `next_session` | The reviewed capability manifest a `bounded` runtime is launched with (required for `bounded`). |
+| `computer_use.capture_after_mode` | one of "som", "vision", "ax" | `"som"` | `"som"`, `"vision"`, `"ax"` | `next_session` | The capture mode of `capture_after`. |
+| `computer_use.driver_path` | string | unset | any | `next_session` | A driver binary to use instead of the managed `cua-driver` runtime (never repaired or replaced). |
+| `computer_use.driver_telemetry` | boolean | `false` | any | `next_session` | Leave the driver's own telemetry on (it is disabled in the driver's environment otherwise). |
+| `computer_use.max_image_dimension` | integer | `1456` | ≥ 0 | `next_session` | The longest image edge of a capture, in pixels (`0`: no cap). |
+| `computer_use.native_wayland` | boolean | `false` | any | `next_session` | Use native Wayland input on Linux instead of `XWayland`. |
+| `computer_use.overlay` | one of "auto", "on", "off" | `"auto"` | `"auto"`, `"on"`, `"off"` | `next_session` | The driver's agent cursor overlay: `auto` (off on macOS, headless or WSL Linux, containers and Linux X11), `on` or `off`. |
+| `computer_use.permission_mode` | one of "standard", "bounded" | `"standard"` | `"standard"`, `"bounded"` | `next_session` | The driver runtime's permission mode: `standard` (the driver asks through Prometheus' approvals) or `bounded` (a reviewed capability manifest is the boundary). `unrestricted` is never a config value: only `/yolo` launches it, for that session. |
 | `connectors.connect_timeout_secs` | integer | `300` | 1 to 3600 | `next_session` | How long a connection card or `connectors connect` waits for the user to finish signing in. |
 | `connectors.enabled` | boolean | `true` | any | `next_session` | Offer hosted connectors when the profile has a Nous sign-in. |
 | `connectors.gateway_url` | string | `"https://connector-gateway.nousresearch.com"` | any | `next_session` | The connector gateway's origin (a self-hosted gateway, or a test server); `https` except on loopback. |

@@ -195,6 +195,8 @@ fn validate(ctx: &Context<'_>) -> Result<u8, Error> {
     pmt_tools::selection::validate(&tools, &config.tools, &config.toolsets)?;
     // `local` and the first-party cloud browser providers.
     pmt_tools::browser::validate_provider(&config.browser, &[])?;
+    // `cua`, or a computer-use backend a plugin registers (none can yet).
+    crate::computer_use::check_backend(&config.computer_use, &[])?;
     // Provider blocks and the fallback chain name registry entries
     // (custom blocks need a base URL; chain entries a known provider,
     // plugin providers included).

@@ -453,3 +453,40 @@ async fn without_voice_bubbles_a_spoken_reply_is_an_audio_file() {
     })
     .await;
 }
+
+/// Scenario: User asks for a screenshot on Telegram (computer-use): the
+/// agent answers with a `MEDIA:` line naming its latest retained capture,
+/// which goes out as an image attachment.
+#[tokio::test]
+async fn a_requested_screenshot_is_sent_as_an_image_attachment() {
+    let h = Harness::start(Setup::new(&open("telegram"))).await;
+    let shots = h
+        .home
+        .path()
+        .join("profiles")
+        .join("default")
+        .join("cache")
+        .join("computer-use");
+    std::fs::create_dir_all(&shots).unwrap();
+    let capture = shots.join("capture-01JSCREEN.png");
+    std::fs::write(&capture, "png").unwrap();
+    h.dm(
+        "telegram",
+        "1",
+        &format!("say:Here is my screen\nMEDIA:{}", capture.display()),
+    )
+    .await;
+    let adapter = h.adapter("telegram");
+    eventually("the reply", || !adapter.all().is_empty()).await;
+    let did = adapter.all();
+    let Did::Send(sent) = &did[0] else {
+        panic!("{did:?}")
+    };
+    assert!(sent.text.starts_with("Here is my screen"));
+    assert_eq!(sent.attachments.len(), 1);
+    assert!(sent.attachments[0].path.ends_with("capture-01JSCREEN.png"));
+    assert!(
+        !sent.attachments[0].as_document,
+        "sent as an image, not a file"
+    );
+}

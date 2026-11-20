@@ -26,5 +26,5 @@ clarify                exposed
 execute_code           exposed
 delegate_task          exposed
 cronjob                exposed
-computer_use           unregistered
+computer_use           exposed
 manage_connections     exposed

@@ -270,6 +270,7 @@ impl Factory {
             Some(spec) => self.child_gate(id, spec, environment),
             None => self.gate(id, Some(model), Some(environment)),
         }?;
+        bind_computer_use(environment, &gate.gate);
         self.models
             .codex_gates()
             .register(id, &gate.gate, registry, self.options.cwd.clone());
@@ -379,5 +380,17 @@ impl Factory {
         } else if let Some(run) = &self.options.rollout {
             tools.replay_from(Arc::clone(&run.recorder) as Arc<dyn crate::replay::ToolReplay>);
         }
+    }
+}
+
+/// Binds a session's computer use to its gate's yolo state: `/yolo`
+/// launches unrestricted runtimes for this session only.
+pub(super) fn bind_computer_use(
+    environment: &env::Attached,
+    gate: &Arc<pmt_tools::approval::CommandGate>,
+) {
+    if let Some(computer_use) = &environment.computer_use {
+        let gate = Arc::downgrade(gate);
+        computer_use.bind_yolo(Arc::new(move || gate.upgrade().is_some_and(|g| g.yolo())));
     }
 }

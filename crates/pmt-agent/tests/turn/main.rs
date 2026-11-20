@@ -23,6 +23,7 @@ mod prompt;
 mod reasoning;
 mod recovery;
 mod references;
+mod screenshots;
 mod session_tools;
 mod size;
 mod steering;

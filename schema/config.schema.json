@@ -1531,6 +1531,26 @@
       "type": "string",
       "x-capability": true
     },
+    "CaptureMode": {
+      "description": "What a capture returns.",
+      "oneOf": [
+        {
+          "const": "som",
+          "description": "A screenshot with numbered element overlays plus the elements.",
+          "type": "string"
+        },
+        {
+          "const": "vision",
+          "description": "Pixels only.",
+          "type": "string"
+        },
+        {
+          "const": "ax",
+          "description": "Accessibility elements only, no image.",
+          "type": "string"
+        }
+      ]
+    },
     "ChatPolicy": {
       "additionalProperties": false,
       "description": "One `[[gateway.chat_policies]]` entry: what sessions of the chats it\nmatches get. A policy is resolved once when a session is created and\nfrozen for that session.",
@@ -2096,6 +2116,99 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "ComputerUseConfig": {
+      "additionalProperties": false,
+      "description": "The `[computer_use]` section.",
+      "properties": {
+        "allow_unsigned_driver": {
+          "default": false,
+          "description": "Launch private runtimes through a driver bundle that is not signed\nby the official identity (macOS; local driver builds only).",
+          "type": "boolean"
+        },
+        "autostart": {
+          "default": false,
+          "description": "Register a per-logon driver task on Windows so a service session\n(Session 0) can drive the interactive desktop.",
+          "type": "boolean"
+        },
+        "ax_max_elements": {
+          "default": 200,
+          "description": "Bound on the driver's accessibility walk per capture (`0`: the\ndriver's default). At most 100 elements reach the model; the rest\nare written to a session cache file named in the result.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "backend": {
+          "default": "cua",
+          "description": "The computer-use backend: `cua` (the pinned `cua-driver`) or a\nbackend an installed plugin registers.",
+          "type": "string"
+        },
+        "capability_manifest": {
+          "default": null,
+          "description": "The reviewed capability manifest a `bounded` runtime is launched\nwith (required for `bounded`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capture_after_mode": {
+          "$ref": "#/$defs/CaptureMode",
+          "default": "som",
+          "description": "The capture mode of `capture_after`."
+        },
+        "driver_path": {
+          "default": null,
+          "description": "A driver binary to use instead of the managed `cua-driver` runtime\n(never repaired or replaced).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver_telemetry": {
+          "default": false,
+          "description": "Leave the driver's own telemetry on (it is disabled in the\ndriver's environment otherwise).",
+          "type": "boolean"
+        },
+        "max_image_dimension": {
+          "default": 1456,
+          "description": "The longest image edge of a capture, in pixels (`0`: no cap).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "native_wayland": {
+          "default": false,
+          "description": "Use native Wayland input on Linux instead of `XWayland`.",
+          "type": "boolean"
+        },
+        "overlay": {
+          "$ref": "#/$defs/Overlay",
+          "default": "auto",
+          "description": "The driver's agent cursor overlay: `auto` (off on macOS, headless\nor WSL Linux, containers and Linux X11), `on` or `off`."
+        },
+        "permission_mode": {
+          "$ref": "#/$defs/ComputerUsePermission",
+          "default": "standard",
+          "description": "The driver runtime's permission mode: `standard` (the driver asks\nthrough Prometheus' approvals) or `bounded` (a reviewed capability\nmanifest is the boundary). `unrestricted` is never a config value:\nonly `/yolo` launches it, for that session."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ComputerUsePermission": {
+      "description": "The permission modes config may choose.",
+      "oneOf": [
+        {
+          "const": "standard",
+          "description": "The driver's actions pass Prometheus' approval gate.",
+          "type": "string"
+        },
+        {
+          "const": "bounded",
+          "description": "A reviewed `computer_use.capability_manifest` bounds the runtime.",
+          "type": "string"
+        }
+      ]
     },
     "ConnectorsConfig": {
       "additionalProperties": false,
@@ -7543,6 +7656,26 @@
         }
       },
       "type": "object"
+    },
+    "Overlay": {
+      "description": "The agent cursor overlay setting.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Decided by the platform.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "Always shown.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never shown.",
+          "type": "string"
+        }
+      ]
     },
     "PeerGateway": {
       "additionalProperties": false,
@@ -13058,6 +13191,24 @@
         "threshold_tokens": 0
       },
       "description": "Context compression."
+    },
+    "computer_use": {
+      "$ref": "#/$defs/ComputerUseConfig",
+      "default": {
+        "allow_unsigned_driver": false,
+        "autostart": false,
+        "ax_max_elements": 200,
+        "backend": "cua",
+        "capability_manifest": null,
+        "capture_after_mode": "som",
+        "driver_path": null,
+        "driver_telemetry": false,
+        "max_image_dimension": 1456,
+        "native_wayland": false,
+        "overlay": "auto",
+        "permission_mode": "standard"
+      },
+      "description": "The desktop driver of the `computer_use` tool."
     },
     "connectors": {
       "$ref": "#/$defs/ConnectorsConfig",

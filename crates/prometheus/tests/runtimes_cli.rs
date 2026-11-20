@@ -31,7 +31,7 @@ fn an_unknown_runtime_exits_2_naming_the_expected_ones() {
     assert_eq!(code(&out), 2);
     assert!(
         common::stderr(&out)
-            .contains("unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda)"),
+            .contains("unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda|cua-driver)"),
         "{}",
         common::stderr(&out)
     );

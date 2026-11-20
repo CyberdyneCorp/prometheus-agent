@@ -103,6 +103,7 @@ fn tools(runs: &Arc<AtomicUsize>) -> Vec<RegisteredTool> {
                 "render costs about 20 credits; 90 credits used in this conversation (limit 100)"
                     .into(),
             once_only: true,
+            builtin: false,
         })
     });
     vec![

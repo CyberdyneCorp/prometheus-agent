@@ -83,6 +83,7 @@ capabilities = [
     "acp-adapter",
     "agent-interop",
     "bot-mode",
+    "computer-use",
     "desktop-app",
     "kanban",
     "distribution-and-update",
@@ -5153,3 +5154,44 @@ capabilities = [
 [desktop-app."Agent-to-agent messages from bot chats"]
 "Unknown teammate" = ["crates/prometheus/src/bot_host/roster.rs::an_unknown_target_lists_the_closest_names_first"]
 "Forged call outside a bot chat" = ["crates/prometheus/tests/bot_messages.rs::only_a_bot_chat_has_message_agent"]
+
+[computer-use."computer_use tool actions"]
+"Background click" = ["crates/pmt-tools/src/computer_use/tests.rs::a_click_lands_in_the_target_window_in_the_background", "crates/prometheus/tests/computer_use.rs::capture_click_and_type_drive_the_desktop_under_approval"]
+"Stale element" = ["crates/pmt-tools/src/computer_use/tests.rs::an_element_missing_from_the_latest_capture_is_stale"]
+
+[computer-use."Capture modes and payload budget"]
+"Text-only model" = ["crates/pmt-tools/src/computer_use/tests.rs::a_text_only_model_is_offered_only_ax_captures"]
+
+[computer-use."Approval of non-capture actions"]
+"Cron run" = ["crates/pmt-tools/src/computer_use/tests.rs::cron_runs_cannot_type_unless_approved_by_policy", "crates/prometheus/tests/computer_use.rs::unattended_runs_refuse_input_by_default"]
+
+[computer-use."Hard-blocked keys and typed payloads"]
+"Lock screen under yolo" = ["crates/pmt-tools/src/computer_use/tests.rs::the_lock_screen_shortcut_is_refused_under_yolo", "crates/pmt-tools/src/computer_use/safety.rs::destructive_shortcuts_are_blocked_however_they_are_spelled"]
+
+[computer-use."Permission modes are fixed per runtime"]
+"Unrestricted via config" = ["crates/prometheus/tests/computer_use.rs::unrestricted_is_not_a_config_value", "crates/pmt-config/src/schema/computer_use.rs::unrestricted_is_not_a_permission_mode"]
+"Yolo turned off" = ["crates/pmt-tools/src/computer_use/tests.rs::turning_yolo_off_stops_the_unrestricted_runtime"]
+
+[computer-use."Driver runtime management and identity"]
+"Unsigned bundle" = { tests = ["crates/prometheus/src/computer_use/identity.rs::an_unsigned_bundle_fails_the_signature_check", "crates/prometheus/tests/computer_use.rs::a_bounded_runtime_refuses_an_unsigned_bundle"], note = "macOS-only tests (the real codesign), run by the macOS CI jobs" }
+
+[computer-use."Backend selection and availability"]
+"Driver missing" = ["crates/prometheus/tests/computer_use.rs::without_a_driver_and_lazy_installs_the_tool_is_unavailable"]
+
+[computer-use."Which machine is driven"]
+"Container backend" = ["crates/prometheus/tests/computer_use.rs::a_container_session_captures_the_containers_display"]
+
+[computer-use."Platform prerequisites"]
+"Missing Screen Recording" = { tests = ["crates/prometheus/tests/computer_use.rs::permissions_status_lists_each_grant_and_fails_on_a_missing_one"], note = "asserts `screen_recording: missing` on the macOS CI jobs (the driver reports the grant); elsewhere the platform's own prerequisite" }
+
+[computer-use."Computer-use CLI and doctor"]
+"Driver not installed" = ["crates/prometheus/tests/computer_use.rs::the_doctor_without_a_driver_exits_69_with_the_install_hint"]
+
+[computer-use."Screenshot retention and delivery"]
+"User asks for a screenshot on Telegram" = ["crates/pmt-gateway/tests/messaging/media.rs::a_requested_screenshot_is_sent_as_an_image_attachment"]
+
+[computer-use."Screenshot context budget"]
+"Below the limit" = ["crates/pmt-agent/tests/turn/screenshots.rs::thirty_screenshots_stay_and_the_prefix_never_changes", "crates/pmt-agent/src/turn/screenshots.rs::below_the_limit_nothing_is_retired"]
+
+[computer-use."Agent cursor overlay"]
+"X11 desktop" = ["crates/prometheus/src/computer_use/platform.rs::the_overlay_is_off_on_x11_and_on_on_wayland", "crates/prometheus/tests/computer_use.rs::capture_click_and_type_drive_the_desktop_under_approval"]

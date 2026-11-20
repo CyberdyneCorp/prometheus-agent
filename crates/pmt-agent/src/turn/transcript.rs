@@ -82,6 +82,60 @@ pub struct ImageRef {
     /// The description sent instead of the pixels.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Width and height in pixels, when known (the screenshot budget).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pixels: Option<(u32, u32)>,
+    /// Size in bytes, when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<u64>,
+}
+
+/// The largest tool image kept with its row.
+const MAX_TOOL_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// Stores the images `result` attached (its image media parts) in the
+/// session blob store and records them on its tool `row`, so requests
+/// carry them as pixels (spec: computer-use, Screenshot context budget).
+/// An unreadable image is skipped: the result text still names its path.
+pub fn keep_tool_images(row: &mut NewMessage, result: &ToolResult, store: &pmt_store::Store) {
+    let images: Vec<ImageRef> = result
+        .content
+        .iter()
+        .filter_map(|part| match part {
+            pmt_tools::Content::Media { mime, path } if mime.starts_with("image/") => {
+                tool_image(store, mime, std::path::Path::new(path))
+            }
+            _ => None,
+        })
+        .collect();
+    if images.is_empty() {
+        return;
+    }
+    let metadata = row.metadata.get_or_insert_with(|| json!({}));
+    metadata[IMAGES] = json!(images);
+}
+
+fn tool_image(store: &pmt_store::Store, mime: &str, path: &std::path::Path) -> Option<ImageRef> {
+    let size = std::fs::metadata(path).ok()?.len();
+    if size > MAX_TOOL_IMAGE_BYTES {
+        return None;
+    }
+    let bytes = std::fs::read(path).ok()?;
+    let pixels = pmt_tools::vision::ImageData::sniff(bytes.clone())
+        .and_then(|image| image.dimensions())
+        .ok();
+    let blob = store.put_blob(&bytes).ok()?;
+    Some(ImageRef {
+        blob: blob.to_string(),
+        media_type: mime.to_owned(),
+        name: path.file_name().map_or_else(
+            || "screenshot".to_owned(),
+            |n| n.to_string_lossy().into_owned(),
+        ),
+        description: None,
+        pixels,
+        bytes: Some(size),
+    })
 }
 
 /// The images stored on `row` (none for rows without attachments).

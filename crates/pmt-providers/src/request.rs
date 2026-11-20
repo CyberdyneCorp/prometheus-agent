@@ -299,11 +299,20 @@ impl Request {
     }
 }
 
+/// What introduces the images tool results returned: the user-role
+/// message carrying them after the tool results (tool messages carry
+/// text only on most wire formats). It is not something the user said.
+pub const TOOL_IMAGES: &str = "Images returned by the tool calls above:";
+
+/// The tokens one embedded image counts for in context estimates.
+pub const IMAGE_TOKENS: usize = 1_500;
+
 fn part_len(part: &Part) -> usize {
     match part {
         Part::Text { text } => text.len(),
-        // Providers bill images by size class; a fixed share is enough here.
-        Part::Image { .. } => 4 * 1_000,
+        // Providers bill images by size class; each counts as a flat
+        // IMAGE_TOKENS (spec: computer-use, Screenshot context budget).
+        Part::Image { .. } => 4 * IMAGE_TOKENS,
         Part::ToolCall {
             name, arguments, ..
         } => name.len() + arguments.len(),

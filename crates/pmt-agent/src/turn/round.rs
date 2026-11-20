@@ -136,7 +136,9 @@ impl Turn<'_> {
                 self.observe_evidence(call);
             }
             let nonce = pmt_core::provenance::nonce(&self.agent.setup.session.to_string());
-            self.append(&transcript::tool_row(call, &outcome.result, &nonce))?;
+            let mut row = transcript::tool_row(call, &outcome.result, &nonce);
+            transcript::keep_tool_images(&mut row, &outcome.result, &self.agent.setup.store);
+            self.append(&row)?;
             self.emit(Event::ToolResult(result_event(call, outcome)))
                 .await;
             steps.push(StepCall {

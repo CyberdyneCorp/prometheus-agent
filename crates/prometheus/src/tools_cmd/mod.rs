@@ -57,6 +57,7 @@ use crate::output::{document, print_raw};
 #[must_use]
 pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
     let browser = crate::runtimes_cmd::browser::probe(home.to_path_buf());
+    let computer_use = crate::computer_use::probe(home.to_path_buf());
     let mut tools: Vec<RegisteredTool> =
         pmt_tools::builtin_tools(&pmt_tools::environments::Environments::process())
             .into_iter()
@@ -65,6 +66,8 @@ pub fn builtin_tools(home: &Path) -> Vec<RegisteredTool> {
                 // `browser_close_profile`) need no local runtime.
                 if tool.descriptor.toolset == pmt_tools::browser::TOOLSET && tool.probe.is_none() {
                     tool.with_probe(Arc::clone(&browser))
+                } else if tool.descriptor.name == pmt_tools::computer_use::NAME {
+                    tool.with_probe(Arc::clone(&computer_use))
                 } else {
                     tool
                 }

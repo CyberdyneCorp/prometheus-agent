@@ -38,6 +38,8 @@ pub struct SessionEnv {
     pub vault: Option<Arc<crate::browser::vault::VaultSession>>,
     /// Language-server diagnostics after file edits (`None`: off).
     pub lsp: Option<crate::lsp::SessionDiagnostics>,
+    /// `computer_use`'s driver runtime and sticky target.
+    pub computer_use: Option<Arc<crate::computer_use::ComputerUseSession>>,
 }
 
 /// Read grants for the files the session's own tools point the model at

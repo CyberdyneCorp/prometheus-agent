@@ -125,6 +125,15 @@ error_codes! {
     /// The bot screen cannot run here.
     SCREEN_UNAVAILABLE = ("screen.unavailable", Unavailable,
         "The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`).");
+    /// The computer-use driver cannot be used.
+    COMPUTER_USE_UNAVAILABLE = ("computer_use.unavailable", Unavailable,
+        "The computer-use driver cannot be used: `cua-driver` is not installed (`prometheus computer-use install`), its version is outside the supported contract, it did not start, or a platform prerequisite is missing (`prometheus computer-use doctor`).");
+    /// The driver's identity check failed.
+    COMPUTER_USE_IDENTITY = ("computer_use.identity", Config,
+        "A private computer-use runtime (bounded, or unrestricted under `/yolo`) is launched on macOS only through a `CuaDriver.app` bundle whose code signature has the official identifier and team; set `computer_use.allow_unsigned_driver = true` only for a local driver build.");
+    /// A bounded runtime has no readable capability manifest.
+    COMPUTER_USE_MANIFEST = ("computer_use.manifest", Config,
+        "`computer_use.permission_mode = \"bounded\"` needs a readable `computer_use.capability_manifest`; the session refuses to start rather than run the driver unbounded.");
     /// A profile distribution's manifest or content is invalid.
     PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
         "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");

@@ -22,6 +22,7 @@ mod api_server;
 mod automation;
 mod bot_desktop;
 mod bot_mode;
+mod computer_use;
 mod connectors;
 mod cron;
 mod curator;
@@ -72,6 +73,9 @@ pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use bot_desktop::{BotDesktopConfig, ScreenPlacement};
 pub use bot_mode::{BotModeConfig, DiscussionConfig, HostedRoomsConfig};
+pub use computer_use::{
+    CUA_BACKEND, CaptureMode, ComputerUseConfig, ComputerUsePermission, Overlay,
+};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{
     ContinuableSurface, CronConfig, CronDeliveryConfig, CronManagedConfig, CronProvider,
@@ -212,6 +216,8 @@ pub struct Config {
     pub auxiliary: AuxiliaryConfig,
     /// Browser tool sessions.
     pub browser: BrowserConfig,
+    /// The desktop driver of the `computer_use` tool.
+    pub computer_use: ComputerUseConfig,
     /// Hard token and cost budgets (`0` = off).
     pub budgets: BudgetsConfig,
     /// What input typed while a turn runs does.
@@ -377,6 +383,7 @@ impl Default for Config {
             hosted_rooms: HostedRoomsConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
+            computer_use: ComputerUseConfig::default(),
             budgets: BudgetsConfig::default(),
             busy: BusyConfig::default(),
             cli: CliConfig::default(),

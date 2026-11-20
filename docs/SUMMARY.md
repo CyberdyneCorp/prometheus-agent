@@ -54,6 +54,7 @@
 - [The OpenAI-compatible API server](guide/api-server.md)
 - [Agents on other machines: A2A and peers](guide/agent-interop.md)
 - [Bot Mode](guide/bot-mode.md)
+- [Computer use](guide/computer-use.md)
 - [The web dashboard](guide/dashboard.md)
 - [The desktop app](guide/desktop.md)
 - [Migrating from Hermes and other agents](guide/migration.md)

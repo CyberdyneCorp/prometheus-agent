@@ -683,9 +683,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 76. M3 Computer use
 
-- [ ] 76.1 Implement the `computer_use` tool actions (background clicks, stale elements), capture modes with the payload budget and the screenshot context budget, approval of non-capture actions (refused in cron), hard-blocked keys and typed payloads, and permission modes fixed per runtime; verify with a mock driver (spec: computer-use)
+- [x] 76.1 Implement the `computer_use` tool actions (background clicks, stale elements), capture modes with the payload budget and the screenshot context budget, approval of non-capture actions (refused in cron), hard-blocked keys and typed payloads, and permission modes fixed per runtime; verify with a mock driver (spec: computer-use)
 - [ ] 76.2 Implement driver runtime management and identity (`cua-driver`, unsigned bundles refused), backend selection and availability, which machine is driven (container backends use `prometheus-sandbox-desktop`), platform prerequisites (e.g. Screen Recording permission) and the agent cursor overlay; verify per OS in CI where available (spec: computer-use)
-- [ ] 76.3 Implement the computer-use CLI and doctor and screenshot retention and delivery to messaging platforms; verify with CLI tests and the fake adapter (spec: computer-use)
+- [x] 76.3 Implement the computer-use CLI and doctor and screenshot retention and delivery to messaging platforms; verify with CLI tests and the fake adapter (spec: computer-use)
 
 ## 77. M3 Voice: streaming, barge-in, voice channels and wake word
 

@@ -19126,7 +19126,181 @@ The bot screen: the virtual desktop the agent's headed browsers act on and the d
 Usage: prometheus computer-use [OPTIONS] <COMMAND>
 
 Commands:
-  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  install      Install the pinned `cua-driver` runtime
+  status       The backend, driver, permission mode, overlay and prerequisites
+  doctor       Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+  permissions  The platform grants the driver needs
+  screen       The bot screen: the virtual desktop the agent's headed browsers act on
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use install`
+
+```text
+Install the pinned `cua-driver` runtime
+
+Usage: prometheus computer-use install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --upgrade
+          Replace an installed driver with this build's pinned version
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use status`
+
+```text
+The backend, driver, permission mode, overlay and prerequisites
+
+Usage: prometheus computer-use status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use doctor`
+
+```text
+Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+
+Usage: prometheus computer-use doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --include <CHECK>
+          Run only this check (repeatable)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --skip <CHECK>
+          Skip this check (repeatable)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use permissions`
+
+```text
+The platform grants the driver needs
+
+Usage: prometheus computer-use permissions [OPTIONS] <COMMAND>
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -19159,6 +19333,121 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus computer-use permissions status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus computer-use permissions status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use permissions grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus computer-use permissions grant [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use permissions help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use permissions help [COMMAND]
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use permissions help status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus computer-use permissions help status
+```
+
+## `prometheus computer-use permissions help grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus computer-use permissions help grant
+```
+
+## `prometheus computer-use permissions help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use permissions help help
 ```
 
 ## `prometheus computer-use screen`
@@ -19479,8 +19768,64 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus computer-use help [COMMAND]
 
 Commands:
-  screen  The bot screen: the virtual desktop the agent's headed browsers act on
-  help    Print this message or the help of the given subcommand(s)
+  install      Install the pinned `cua-driver` runtime
+  status       The backend, driver, permission mode, overlay and prerequisites
+  doctor       Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+  permissions  The platform grants the driver needs
+  screen       The bot screen: the virtual desktop the agent's headed browsers act on
+  help         Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use help install`
+
+```text
+Install the pinned `cua-driver` runtime
+
+Usage: prometheus computer-use help install
+```
+
+## `prometheus computer-use help status`
+
+```text
+The backend, driver, permission mode, overlay and prerequisites
+
+Usage: prometheus computer-use help status
+```
+
+## `prometheus computer-use help doctor`
+
+```text
+Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+
+Usage: prometheus computer-use help doctor
+```
+
+## `prometheus computer-use help permissions`
+
+```text
+The platform grants the driver needs
+
+Usage: prometheus computer-use help permissions [COMMAND]
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
+```
+
+## `prometheus computer-use help permissions status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus computer-use help permissions status
+```
+
+## `prometheus computer-use help permissions grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus computer-use help permissions grant
 ```
 
 ## `prometheus computer-use help screen`
@@ -40499,7 +40844,63 @@ The bot screen: the virtual desktop the agent's headed browsers act on and the d
 Usage: prometheus help computer-use [COMMAND]
 
 Commands:
-  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  install      Install the pinned `cua-driver` runtime
+  status       The backend, driver, permission mode, overlay and prerequisites
+  doctor       Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+  permissions  The platform grants the driver needs
+  screen       The bot screen: the virtual desktop the agent's headed browsers act on
+```
+
+## `prometheus help computer-use install`
+
+```text
+Install the pinned `cua-driver` runtime
+
+Usage: prometheus help computer-use install
+```
+
+## `prometheus help computer-use status`
+
+```text
+The backend, driver, permission mode, overlay and prerequisites
+
+Usage: prometheus help computer-use status
+```
+
+## `prometheus help computer-use doctor`
+
+```text
+Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+
+Usage: prometheus help computer-use doctor
+```
+
+## `prometheus help computer-use permissions`
+
+```text
+The platform grants the driver needs
+
+Usage: prometheus help computer-use permissions [COMMAND]
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
+```
+
+## `prometheus help computer-use permissions status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus help computer-use permissions status
+```
+
+## `prometheus help computer-use permissions grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus help computer-use permissions grant
 ```
 
 ## `prometheus help computer-use screen`
@@ -43437,6 +43838,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.profile_info.v1` | `prometheus profile info` |
 | `prometheus.egress_status.v1` | `prometheus egress status` |
 | `prometheus.screen_status.v1` | `prometheus computer-use screen status` |
+| `prometheus.computer_use_status.v1` | `prometheus computer-use status` |
+| `prometheus.computer_use_doctor.v1` | `prometheus computer-use doctor` |
+| `prometheus.computer_use_permissions.v1` | `prometheus computer-use permissions status` |
 | `prometheus.security_scan.v1` | `prometheus security scan` |
 | `prometheus.sessions.v1` | `prometheus sessions list` |
 | `prometheus.session.v1` | `prometheus sessions show` |

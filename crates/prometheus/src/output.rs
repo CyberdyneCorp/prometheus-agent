@@ -200,6 +200,18 @@ pub const JSON_SHAPES: &[JsonShape] = &[
         command: "computer-use screen status",
     },
     JsonShape {
+        schema: "prometheus.computer_use_status.v1",
+        command: "computer-use status",
+    },
+    JsonShape {
+        schema: "prometheus.computer_use_doctor.v1",
+        command: "computer-use doctor",
+    },
+    JsonShape {
+        schema: "prometheus.computer_use_permissions.v1",
+        command: "computer-use permissions status",
+    },
+    JsonShape {
         schema: "prometheus.security_scan.v1",
         command: "security scan",
     },

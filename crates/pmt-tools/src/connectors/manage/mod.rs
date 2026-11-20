@@ -320,6 +320,7 @@ fn guard() -> CallGuard {
             rule_key: format!("{NAME}:{action}"),
             reason: format!("{action} MCP server {}", names.join(", ")),
             once_only: true,
+            builtin: false,
         })
     })
 }

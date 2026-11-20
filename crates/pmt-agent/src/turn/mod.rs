@@ -39,6 +39,7 @@ mod replay;
 mod resume;
 mod round;
 mod run;
+pub mod screenshots;
 mod selection;
 mod server_compaction;
 mod steer;

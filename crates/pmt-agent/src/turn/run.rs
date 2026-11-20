@@ -556,11 +556,13 @@ impl<'a> Turn<'a> {
             rows.retain(|r| keep.contains(&r.id) || Some(r.id) == current);
         }
         let vision = &self.config.vision;
+        let retired = super::screenshots::retired(&setup.store, setup.session, &rows);
         let replay = super::replay::Replay::of(
             &rows,
             vision.replay_recent_images,
             self.user_row,
             vision.embed_target_bytes,
+            retired,
         );
         let mut cache =
             CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string());
