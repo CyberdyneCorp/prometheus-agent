@@ -27,3 +27,6 @@ create-missing = false
 "reference/error-codes.md" = { enable = false }
 "reference/configuration.md" = { enable = false }
 "hermes-parity.md" = { enable = false }
+# The OpenBot study is long research notes, not a guide; leaving it out keeps
+# the index under the limit.
+"research/openbot.md" = { enable = false }

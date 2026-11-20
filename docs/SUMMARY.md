@@ -73,3 +73,4 @@
 # Project
 
 - [Hermes parity](hermes-parity.md)
+- [Study: OpenBot](research/openbot.md)
