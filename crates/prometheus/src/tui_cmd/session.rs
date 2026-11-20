@@ -373,6 +373,7 @@ impl Tui<'_> {
             Done::Completed(start, completions) => self.completed(start, &completions),
             Done::Switched(Ok((session, attached)), prompt) => {
                 self.switched(session, &attached, prompt).await;
+                self.wake_session_ready();
             }
             Done::Branched(Ok((session, attached)), restore) => {
                 self.switched(session, &attached, None).await;

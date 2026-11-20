@@ -348,6 +348,7 @@ impl pmt_api::ApiHost for DaemonHost {
                     run_budget_secs: None,
                     input_id: None,
                     author: None,
+                    voice: false,
                 };
                 Box::pin(self.submit_turn(
                     &profile,

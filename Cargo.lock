@@ -3970,8 +3970,11 @@ dependencies = [
 name = "pmt-voice"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "pmt-config",
  "pmt-core",
+ "serde",
+ "serde_json",
  "tempfile",
  "tokio",
  "tracing",

@@ -11,11 +11,13 @@
 
 pub mod audio;
 pub mod chunk;
+pub mod client;
 pub mod command;
 pub mod command_tts;
 pub mod edge;
 pub mod fit;
 pub mod local;
+pub mod realtime;
 pub mod stream;
 pub mod stt;
 pub mod tool;

@@ -242,6 +242,7 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
     let shown = tui.link.session.clone();
     tui.memory_summary(&shown).await;
     tui.offer_prune().await;
+    tui.arm_wake();
     if let Some(first) = &open.launch.first {
         tui.submit(first.clone(), open.launch.images.clone());
     }
@@ -249,6 +250,7 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
     let ending = tui
         .run(&mut screen, &keys, &mut results, &mut signals)
         .await;
+    tui.voice.wake.lock().await.disarm();
     // Restore first: stopping the reader is bounded but may give up on it.
     drop(guard);
     keys.stop();
@@ -295,6 +297,11 @@ impl<'a> Tui<'a> {
         };
         let history = History::load(history::path_in(open.scope.dir()), Redactor::default());
         let status_bar = StatusBar::new(open.scope, &open.env);
+        let voice = super::voice::Voice::new(
+            crate::chat::voice::VoiceClient::new(open.scope, &open.env, &open.launch.cwd, "tui"),
+            crate::chat::wake::WakeClient::new(open.scope, &open.env, "tui"),
+            &done,
+        );
         let mut app = App::new(Theme::new(theme, open.no_color), status);
         if let Some(branded) = &branded {
             app.prompt = branded.prompt_symbol();
@@ -337,12 +344,7 @@ impl<'a> Tui<'a> {
             subscribed: HashSet::new(),
             previews: Vec::new(),
             restore: None,
-            voice: super::voice::Voice::new(crate::chat::voice::VoiceClient::new(
-                open.scope,
-                &open.env,
-                &open.launch.cwd,
-                "tui",
-            )),
+            voice,
         };
         tui.shown_changed();
         tui
@@ -484,6 +486,12 @@ impl<'a> Tui<'a> {
     /// Submits `text` (with `images`) as a prompt in the shown session;
     /// the admission comes back as [`Done::Submitted`].
     pub(super) fn submit(&mut self, text: String, images: Vec<PromptImage>) {
+        self.submit_as(text, images, false);
+    }
+
+    /// Like [`Tui::submit`]; `voice` marks a spoken message (it runs on
+    /// the voice route).
+    pub(super) fn submit_as(&mut self, text: String, images: Vec<PromptImage>, voice: bool) {
         let session = self.link.session.clone();
         let params = pmt_rpc::contracts::SubmitParams {
             session_id: session.clone(),
@@ -493,6 +501,7 @@ impl<'a> Tui<'a> {
             run_budget_secs: self.open.launch.run_budget,
             input_id: Some(ulid::Ulid::generate().to_string()),
             author: None,
+            voice,
         };
         let client = self.link.client.clone();
         self.background(async move {

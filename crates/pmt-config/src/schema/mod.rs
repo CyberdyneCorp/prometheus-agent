@@ -54,6 +54,7 @@ mod state;
 mod tool_gateway;
 mod tools;
 mod voice;
+mod wake;
 mod webhook;
 
 use schemars::JsonSchema;
@@ -171,7 +172,11 @@ pub use tools::{
     ToolSearchConfig, ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
     WebXaiConfig, WindowsShell,
 };
-pub use voice::VoiceModeConfig;
+pub use voice::{RealtimeVoiceConfig, VoiceChatMode, VoiceModeConfig};
+pub use wake::{
+    OpenWakeWordConfig, PorcupineConfig, SherpaConfig, WakeCapture, WakeConfig, WakeEngine,
+    WakeSurface,
+};
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
 };
@@ -353,8 +358,13 @@ pub struct Config {
     pub ui: UiConfig,
     /// The credential vault.
     pub vault: VaultConfig,
-    /// Voice conversations on the CLI, TUI and desktop.
-    pub voice: VoiceModeConfig,
+    /// Voice conversations on the CLI, TUI and desktop (boxed: read by the
+    /// voice surfaces only, kept out of every future that holds a
+    /// configuration).
+    pub voice: Box<VoiceModeConfig>,
+    /// The on-device wake word listener (boxed: rarely read, kept out of
+    /// every future that holds a configuration).
+    pub wake: Box<WakeConfig>,
     /// Video generation's provider selection.
     pub video_gen: VideoGenConfig,
     /// Image input routing.
@@ -449,7 +459,8 @@ impl Default for Config {
             tts: TtsConfig::default(),
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
-            voice: VoiceModeConfig::default(),
+            voice: Box::default(),
+            wake: Box::default(),
             video_gen: VideoGenConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),

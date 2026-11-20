@@ -52,6 +52,7 @@ cmd_paste = "ceangail íomhá na gearrthaisce leis an gcéad teachtaireacht eile
 cmd_terminal_setup = "cuir Ctrl+V chuig an TUI in VS Code, Cursor nó Windsurf"
 cmd_handoff = "lean an seisiún seo i gcomhrá: /handoff <ardán>[:<chat>[:<thread>]]"
 cmd_voice = "mód gutha: /voice [on|off|tts|status]; labhraíonn an eochair taifeadta"
+cmd_wake = "focal múscailte: /wake [on|off|status]; cloistear anseo é, freagraítear os ard é"
 clip_ssh = "thar SSH: ní leatsa an ghearrthaisce anseo"
 clip_missing = "níor aimsíodh {0} ar PATH"
 clip_no_display = "gan taispeáint: níl WAYLAND_DISPLAY ná DISPLAY socraithe"

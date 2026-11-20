@@ -278,6 +278,7 @@ impl Tui<'_> {
             Local::New | Local::Resume | Local::Fork => self.switch(command, args),
             Local::Handoff => self.handoff(args),
             Local::Voice => self.voice_command(args),
+            Local::Wake => self.wake_command(args),
             Local::Pane => self.pane_command(args),
             Local::Timeline => self.open_timeline(),
             Local::Language => self.open_languages(),

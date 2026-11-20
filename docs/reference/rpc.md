@@ -211,9 +211,13 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `vault.list` | `security-boundaries` | 1.0 | [`VaultListParams`](#vaultlistparams) | [`VaultItems`](#vaultitems) |
 | `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
 | `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
-| `voice.client_config` | `voice-mode` | 1.0 | not served yet | |
+| `voice.client_config` | `voice-mode` | 1.0 | [`VoiceProfileParams`](#voiceprofileparams) | [`VoiceClientConfig`](#voiceclientconfig) |
 | `voice.speak` | `voice-mode` | 1.0 | [`VoiceSpeakParams`](#voicespeakparams) | [`VoiceSpoken`](#voicespoken) |
-| `wake.feed` | `voice-mode` | 1.0 | not served yet | |
+| `voice.transcribe` | `voice-mode` | 1.0 | [`VoiceTranscribeParams`](#voicetranscribeparams) | [`VoiceTranscript`](#voicetranscript) |
+| `wake.arm` | `voice-mode` | 1.0 | [`WakeArmParams`](#wakearmparams) | [`WakeArmed`](#wakearmed) |
+| `wake.disarm` | `voice-mode` | 1.0 | [`WakeProfileParams`](#wakeprofileparams) | [`WakeState`](#wakestate) |
+| `wake.feed` | `voice-mode` | 1.0 | [`WakeFeedParams`](#wakefeedparams) | [`WakeState`](#wakestate) |
+| `wake.status` | `voice-mode` | 1.0 | [`WakeProfileParams`](#wakeprofileparams) | [`WakeState`](#wakestate) |
 | `worktree.list` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeListing`](#worktreelisting) |
 | `worktree.new` | `git-worktrees` | 1.0 | [`WorktreeNewParams`](#worktreenewparams) | [`WorktreeCreated`](#worktreecreated) |
 | `worktree.prune` | `git-worktrees` | 1.0 | [`WorktreePruneParams`](#worktreepruneparams) | [`WorktreePruned`](#worktreepruned) |
@@ -266,7 +270,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
 | `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
-| `wake.detected` | `voice-mode` | 1.0 | not served yet |
+| `wake.detected` | `voice-mode` | 1.0 | [`WakeDetected`](#wakedetected) |
 
 ## Types
 
@@ -833,6 +837,21 @@ Which client is attaching.
 | `dashboard` | The web dashboard. |
 | `acp` | The ACP adapter. |
 | `eval` | `prometheus eval`. |
+
+### `ClientSpeech`
+
+How a client reaches one speech provider.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `api_key` | string or null | no | The credential (direct only): kept in memory for the voice session only. |
+| `base_url` | string | no | The API base URL (direct only). |
+| `language` | string or null | no | The spoken language (transcription). |
+| `model` | string | yes | Its model. |
+| `path` | string | yes | `direct` (the client calls the provider), `relay` (through the daemon: `voice.transcribe`, `voice.speak`) or `none`. |
+| `provider` | string | yes | The provider id. |
+| `reason` | string or null | no | Why the relay path (or none). |
+| `voice` | string | no | The voice (speech). |
 
 ### `CommandCatalog`
 
@@ -3124,6 +3143,7 @@ One subcommand of a `commands.catalog` entry.
 | `run_budget_secs` | integer or null | no | Wall-clock budget of this turn in seconds (`--run-budget`). |
 | `session_id` | string | yes | The session. |
 | `text` | string | yes | The prompt. |
+| `voice` | boolean | no | A spoken message of a voice conversation: the turn runs on the `[auxiliary.voice_chat]` route and reasoning (spec: voice-mode, Voice turn model and reasoning). |
 
 ### `Submitted`
 
@@ -3429,6 +3449,25 @@ A `<major>.<minor>` protocol version on the wire.
 | `major` | integer | yes | Incompatible revisions. |
 | `minor` | integer | yes | Backward-compatible additions. |
 
+### `VoiceClientConfig`
+
+`voice.client_config` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `chat_mode` | string | yes | `voice.chat_mode` (`chained` or `realtime`). |
+| `client_direct` | boolean | yes | `voice.client_direct`. |
+| `stt` | [`ClientSpeech`](#clientspeech) | yes | Speech-to-text. |
+| `tts` | [`ClientSpeech`](#clientspeech) | yes | Text-to-speech. |
+
+### `VoiceProfileParams`
+
+A profile's voice settings.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+
 ### `VoiceSpeakParams`
 
 `voice.speak` params: read a message of a session aloud.
@@ -3447,6 +3486,80 @@ A `<major>.<minor>` protocol version on the wire.
 |---|---|---|---|
 | `audio` | string | yes | The audio, base64. |
 | `mime` | string | yes | The audio's media type. |
+
+### `VoiceTranscribeParams`
+
+`voice.transcribe` params: a recording relayed through the daemon.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio` | string | yes | The recording (WAV, Ogg, MP3 or `WebM`), base64. |
+| `profile` | string | yes | The profile whose speech-to-text provider transcribes. |
+| `session_id` | string or null | no | The session the words go to (metered calls are billed to it). |
+
+### `VoiceTranscript`
+
+`voice.transcribe` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `provider` | string | yes | The provider that transcribed it. |
+| `text` | string | yes | The text. |
+
+### `WakeArmParams`
+
+`wake.arm` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `client_capture` | boolean | no | The client sends the audio (`wake.feed`) instead of the daemon opening its own microphone (used when `wake.capture = "auto"`). |
+| `profile` | string | yes | The profile whose wake word listens. |
+
+### `WakeArmed`
+
+`wake.arm` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `capture` | string | yes | `local` (the daemon's microphone) or `client` (`wake.feed`). |
+| `engine` | string | yes | The engine listening. |
+| `phrase` | string | yes | The phrase it listens for. |
+
+### `WakeDetected`
+
+`wake.detected` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `phrase` | string | yes | The phrase heard. |
+| `profile` | string | yes | The profile the phrase wakes (another profile's under profile routing: the desktop switches to it). |
+
+### `WakeFeedParams`
+
+`wake.feed` params: audio from the client's microphone.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pcm` | string | yes | 16 kHz mono 16-bit little-endian PCM, base64. |
+| `profile` | string | yes | The profile whose listener takes the audio. |
+
+### `WakeProfileParams`
+
+A profile's wake listener.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+
+### `WakeState`
+
+`wake.status` result (and the empty answer of `wake.feed` and `wake.disarm`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `armed` | boolean | yes | The daemon's listener for the profile is armed. |
+| `error` | string or null | no | Why the listener stopped or could not arm. |
+| `report` | string | no | The `/wake status` report (phrase, engine, owner, capture, input device, audio host API, what is missing, a silent microphone). |
 
 ### `WorktreeArchiveInfo`
 

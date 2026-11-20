@@ -28,6 +28,7 @@ pub mod terminal;
 pub mod theme;
 pub mod usage_file;
 pub mod voice;
+pub mod wake;
 pub mod worktree;
 
 use std::path::{Path, PathBuf};

@@ -630,6 +630,26 @@ export interface ClientCapabilities {
 /** Which client is attaching. */
 export type ClientKind = "cli" | "tui" | "desktop" | "dashboard" | "acp" | "eval";
 
+/** How a client reaches one speech provider. */
+export interface ClientSpeech {
+  /** The credential (direct only): kept in memory for the voice session only. */
+  api_key?: string | null;
+  /** The API base URL (direct only). */
+  base_url?: string;
+  /** The spoken language (transcription). */
+  language?: string | null;
+  /** Its model. */
+  model: string;
+  /** `direct` (the client calls the provider), `relay` (through the daemon: `voice.transcribe`, `voice.speak`) or `none`. */
+  path: string;
+  /** The provider id. */
+  provider: string;
+  /** Why the relay path (or none). */
+  reason?: string | null;
+  /** The voice (speech). */
+  voice?: string;
+}
+
 /** `commands.catalog` result. */
 export interface CommandCatalog {
   /** Every command of the session, by name. */
@@ -2965,6 +2985,8 @@ export interface SubmitParams {
   session_id: string;
   /** The prompt. */
   text: string;
+  /** A spoken message of a voice conversation: the turn runs on the `[auxiliary.voice_chat]` route and reasoning (spec: voice-mode, Voice turn model and reasoning). */
+  voice?: boolean;
 }
 
 /** `prompt.submit` result: the input was admitted; its turn's output arrives as events. */
@@ -3275,6 +3297,24 @@ export interface Version {
   minor: number;
 }
 
+/** `voice.client_config` result. */
+export interface VoiceClientConfig {
+  /** `voice.chat_mode` (`chained` or `realtime`). */
+  chat_mode: string;
+  /** `voice.client_direct`. */
+  client_direct: boolean;
+  /** Speech-to-text. */
+  stt: ClientSpeech;
+  /** Text-to-speech. */
+  tts: ClientSpeech;
+}
+
+/** A profile's voice settings. */
+export interface VoiceProfileParams {
+  /** The profile. */
+  profile: string;
+}
+
 /** `voice.speak` params: read a message of a session aloud. */
 export interface VoiceSpeakParams {
   /** The profile that owns the session (a bot speaks with its own voice). */
@@ -3291,6 +3331,74 @@ export interface VoiceSpoken {
   audio: string;
   /** The audio's media type. */
   mime: string;
+}
+
+/** `voice.transcribe` params: a recording relayed through the daemon. */
+export interface VoiceTranscribeParams {
+  /** The recording (WAV, Ogg, MP3 or `WebM`), base64. */
+  audio: string;
+  /** The profile whose speech-to-text provider transcribes. */
+  profile: string;
+  /** The session the words go to (metered calls are billed to it). */
+  session_id?: string | null;
+}
+
+/** `voice.transcribe` result. */
+export interface VoiceTranscript {
+  /** The provider that transcribed it. */
+  provider: string;
+  /** The text. */
+  text: string;
+}
+
+/** `wake.arm` params. */
+export interface WakeArmParams {
+  /** The client sends the audio (`wake.feed`) instead of the daemon opening its own microphone (used when `wake.capture = "auto"`). */
+  client_capture?: boolean;
+  /** The profile whose wake word listens. */
+  profile: string;
+}
+
+/** `wake.arm` result. */
+export interface WakeArmed {
+  /** `local` (the daemon's microphone) or `client` (`wake.feed`). */
+  capture: string;
+  /** The engine listening. */
+  engine: string;
+  /** The phrase it listens for. */
+  phrase: string;
+}
+
+/** `wake.detected` payload. */
+export interface WakeDetected {
+  /** The phrase heard. */
+  phrase: string;
+  /** The profile the phrase wakes (another profile's under profile routing: the desktop switches to it). */
+  profile: string;
+}
+
+/** `wake.feed` params: audio from the client's microphone. */
+export interface WakeFeedParams {
+  /** 16 kHz mono 16-bit little-endian PCM, base64. */
+  pcm: string;
+  /** The profile whose listener takes the audio. */
+  profile: string;
+}
+
+/** A profile's wake listener. */
+export interface WakeProfileParams {
+  /** The profile. */
+  profile: string;
+}
+
+/** `wake.status` result (and the empty answer of `wake.feed` and `wake.disarm`). */
+export interface WakeState {
+  /** The daemon's listener for the profile is armed. */
+  armed: boolean;
+  /** Why the listener stopped or could not arm. */
+  error?: string | null;
+  /** The `/wake status` report (phrase, engine, owner, capture, input device, audio host API, what is missing, a silent microphone). */
+  report?: string;
 }
 
 /** One archive. */
@@ -3559,7 +3667,13 @@ export interface Methods {
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
   "vault.sources": { params: VaultSourcesParams; result: VaultSourceList };
+  "voice.client_config": { params: VoiceProfileParams; result: VoiceClientConfig };
   "voice.speak": { params: VoiceSpeakParams; result: VoiceSpoken };
+  "voice.transcribe": { params: VoiceTranscribeParams; result: VoiceTranscript };
+  "wake.arm": { params: WakeArmParams; result: WakeArmed };
+  "wake.disarm": { params: WakeProfileParams; result: WakeState };
+  "wake.feed": { params: WakeFeedParams; result: WakeState };
+  "wake.status": { params: WakeProfileParams; result: WakeState };
   "worktree.list": { params: WorktreeSessionParams; result: WorktreeListing };
   "worktree.new": { params: WorktreeNewParams; result: WorktreeCreated };
   "worktree.prune": { params: WorktreePruneParams; result: WorktreePruned };
@@ -3607,6 +3721,7 @@ export interface Events {
   "turn.finished": TurnFinished;
   "ui.prefs.changed": UiPrefs;
   "usage.updated": UsageUpdated;
+  "wake.detected": WakeDetected;
 }
 
 export const UNDECLARED = [
@@ -3614,8 +3729,5 @@ export const UNDECLARED = [
   "grants.revoke",
   "tools.call",
   "tools.list",
-  "voice.client_config",
-  "wake.feed",
   "achievement.unlocked",
-  "wake.detected",
 ] as const;

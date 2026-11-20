@@ -205,6 +205,7 @@ impl DaemonHost {
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let author = pmt_gateway::Author {
             client_kind: "bot-create".to_owned(),

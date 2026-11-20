@@ -42,6 +42,7 @@
   "tui.cmd_timeline",
   "tui.cmd_update",
   "tui.cmd_voice",
+  "tui.cmd_wake",
   "tui.copied",
   "tui.ctx",
   "tui.default_model",

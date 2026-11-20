@@ -80,6 +80,7 @@ impl Repl {
             options.deltas = Arc::new(super::voice::Spoken(Arc::clone(mouth)));
         }
         let interrupt = options.interrupt.clone();
+        let voice = self.voice_turn(&live, &interrupt).await;
         let prompt = self.prompt();
         self.input.request(&prompt);
         self.input.set_busy(true);
@@ -116,6 +117,10 @@ impl Repl {
                 &plan,
             ));
         }
+        if let Some((turn, watcher)) = voice {
+            watcher.abort();
+            turn.end(&live);
+        }
         if let Some(back) = live.model.end_turn() {
             let route = format!(
                 "{}/{}",
@@ -130,6 +135,42 @@ impl Repl {
         }
         self.spacer();
         self.live = Some(live);
+    }
+
+    /// A voice turn about to run: its route and reasoning (spec:
+    /// voice-mode, Voice turn model and reasoning), and a watcher that
+    /// interrupts it when the user speaks over the reply.
+    async fn voice_turn(
+        &mut self,
+        live: &Live,
+        interrupt: &Interrupt,
+    ) -> Option<(
+        crate::chat::session::voice_route::VoiceTurn,
+        tokio::task::JoinHandle<()>,
+    )> {
+        let cut = self.voice_cut.clone()?;
+        let turn = match crate::chat::session::voice_route::begin(
+            &self.factory.models,
+            &self.factory.store,
+            live,
+        )
+        .await
+        {
+            Ok(turn) => turn,
+            Err(err) => {
+                self.error(&err);
+                return None;
+            }
+        };
+        if let Some(notice) = &turn.notice {
+            self.notice(notice);
+        }
+        let interrupt = interrupt.clone();
+        let watcher = pmt_core::spawn::spawn(async move {
+            cut.cancelled().await;
+            interrupt.stop(Issuer::User);
+        });
+        Some((turn, watcher))
     }
 
     /// Awaits `turn` while serving input and prompts.

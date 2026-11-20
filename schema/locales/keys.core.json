@@ -619,6 +619,7 @@
   "slash.desc.verbose",
   "slash.desc.version",
   "slash.desc.voice",
+  "slash.desc.wake",
   "slash.desc.whoami",
   "slash.desc.worktree",
   "slash.desc.yolo",

@@ -10,15 +10,16 @@
 
 use std::sync::Arc;
 
-use pmt_rpc::contracts::TurnFinished;
+use pmt_core::cancel::CancelToken;
+use pmt_rpc::contracts::{InterruptParams, SessionInterrupt, TurnFinished};
 use pmt_voice::converse::{self, Ended, Host, Interjection};
-use pmt_voice::record::Level;
 use pmt_voice::speaker::Mouth;
 use serde_json::Value;
 use tokio::sync::{Mutex, mpsc, oneshot};
 
 use super::screen::{Done, Tui};
 use crate::chat::voice::VoiceClient;
+use crate::chat::wake::{WakeClient, Woken};
 
 /// The status-line row the level meter uses.
 const METER_ROW: &str = "voice";
@@ -27,6 +28,8 @@ const METER_ROW: &str = "voice";
 pub(super) enum Ask {
     /// `/voice` answered: the line to show and whether voice mode is on.
     Said(String, bool),
+    /// The user spoke over the voice turn's reply: interrupt the turn.
+    Cut,
     /// Submit a transcript; answer once its turn has finished.
     Turn {
         text: String,
@@ -39,10 +42,16 @@ pub(super) enum Ask {
         line: String,
         done: oneshot::Sender<bool>,
     },
-    /// The input level while recording.
-    Level(Level),
+    /// The meter line (input level and live transcript) while recording.
+    Level(String),
     /// The conversation ended.
     Ended(Ended),
+    /// `/wake` answered.
+    WakeSaid(String),
+    /// The wake listener heard its phrase.
+    Woken(pmt_voice::wake::engine::Detection),
+    /// A wake's request was answered (or failed): listening resumes.
+    WakeAnswered(Result<(), String>),
 }
 
 /// A conversation running beside the screen.
@@ -70,14 +79,31 @@ pub(super) struct Voice {
     /// Voice mode is on (the record key talks).
     pub(super) on: bool,
     pub(super) talk: Option<Talk>,
+    /// `/wake` and this terminal's wake listener.
+    pub(super) wake: Arc<Mutex<WakeClient>>,
+    /// Where the listener hands its detections (to the screen).
+    woken: Woken,
+    /// A wake waits for its new session before recording the request.
+    wake_pending: bool,
 }
 
 impl Voice {
-    pub(super) fn new(client: VoiceClient) -> Self {
+    pub(super) fn new(
+        client: VoiceClient,
+        wake: WakeClient,
+        done: &mpsc::UnboundedSender<Done>,
+    ) -> Self {
+        let done = done.clone();
+        let woken: Woken = Arc::new(move |detection| {
+            let _ = done.send(Done::Voice(Ask::Woken(detection)));
+        });
         Self {
             client: Arc::new(Mutex::new(client)),
             on: false,
             talk: None,
+            wake: Arc::new(Mutex::new(wake)),
+            woken,
+            wake_pending: false,
         }
     }
 }
@@ -89,13 +115,21 @@ struct Channel {
 }
 
 impl Host for Channel {
-    async fn turn(&mut self, text: String, mouth: Option<Arc<Mouth>>) {
+    async fn turn(&mut self, text: String, mouth: Option<Arc<Mouth>>, cut: CancelToken) {
         let (done, finished) = oneshot::channel();
         if self
             .asks
             .send(Done::Voice(Ask::Turn { text, mouth, done }))
-            .is_ok()
+            .is_err()
         {
+            return;
+        }
+        tokio::pin!(finished);
+        tokio::select! {
+            _ = &mut finished => return,
+            () = cut.cancelled() => {}
+        }
+        if self.asks.send(Done::Voice(Ask::Cut)).is_ok() {
             let _ = finished.await;
         }
     }
@@ -137,6 +171,108 @@ impl Tui<'_> {
         });
     }
 
+    /// `/wake [on|off|status]`, answered in the background.
+    pub(super) fn wake_command(&self, args: &str) {
+        let (client, wake) = (Arc::clone(&self.voice.client), Arc::clone(&self.voice.wake));
+        let woken = Arc::clone(&self.voice.woken);
+        let args = args.to_owned();
+        self.background(async move {
+            let mut client = client.lock().await;
+            let said = wake.lock().await.command(&args, &mut client, &woken).await;
+            Done::Voice(Ask::WakeSaid(said))
+        });
+    }
+
+    /// Arms the wake listener at startup when `wake.enabled` is set.
+    pub(super) fn arm_wake(&self) {
+        let (client, wake) = (Arc::clone(&self.voice.client), Arc::clone(&self.voice.wake));
+        let woken = Arc::clone(&self.voice.woken);
+        let done = self.done.clone();
+        pmt_core::spawn::spawn(async move {
+            let mut client = client.lock().await;
+            if let Some(said) = wake.lock().await.start(&mut client, &woken).await {
+                let _ = done.send(Done::Voice(Ask::WakeSaid(said)));
+            }
+        });
+    }
+
+    /// The wake phrase was heard: a new session first (unless
+    /// `wake.start_new_session = false`), then one request answered
+    /// aloud.
+    fn woken(&mut self, detection: &pmt_voice::wake::engine::Detection) {
+        let elsewhere = self
+            .voice
+            .wake
+            .try_lock()
+            .ok()
+            .and_then(|wake| wake.elsewhere(detection));
+        if let Some(elsewhere) = elsewhere {
+            self.notice(elsewhere);
+            let wake = Arc::clone(&self.voice.wake);
+            pmt_core::spawn::spawn(async move { wake.lock().await.resume() });
+            return;
+        }
+        if self.voice.talk.is_some() {
+            // A voice conversation holds the microphone: the wake waits.
+            let wake = Arc::clone(&self.voice.wake);
+            pmt_core::spawn::spawn(async move { wake.lock().await.resume() });
+            return;
+        }
+        self.notice(format!("Heard \"{}\".", detection.phrase));
+        if self.open.scope.config().wake.start_new_session {
+            self.voice.wake_pending = true;
+            self.start_session(None, None);
+        } else {
+            self.answer_wake();
+        }
+    }
+
+    /// The new session of a wake is shown: record the request now.
+    pub(super) fn wake_session_ready(&mut self) {
+        if std::mem::take(&mut self.voice.wake_pending) {
+            self.answer_wake();
+        }
+    }
+
+    /// Records the request after a wake and answers it aloud.
+    fn answer_wake(&mut self) {
+        let (interject, interjections) = mpsc::unbounded_channel();
+        self.voice.talk = Some(Talk {
+            interject,
+            turn: None,
+        });
+        let asks = self.done.clone();
+        let client = Arc::clone(&self.voice.client);
+        let key = pmt_voice::mode::record_key(&self.open.scope.config().voice);
+        let session = self.link.session.clone();
+        let strings = pmt_config::language::strings(self.open.scope.dir(), pmt_i18n::Surface::Core);
+        pmt_core::spawn::spawn(async move {
+            let lines = asks.clone();
+            let show: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line| {
+                let _ = lines.send(Done::Voice(Ask::Level(line)));
+            });
+            let (meter, partial) = crate::chat::voice::status_feed(strings, key, show);
+            let kit = client
+                .lock()
+                .await
+                .kit(meter, partial, &session, true)
+                .await;
+            let answered = match kit {
+                Ok(kit) => {
+                    let mut host = Channel {
+                        asks: asks.clone(),
+                        interjections,
+                    };
+                    pmt_voice::wake::listener::answer(&mut host, &kit)
+                        .await
+                        .map(|_| ())
+                }
+                Err(why) => Err(why),
+            };
+            let _ = asks.send(Done::Voice(Ask::WakeAnswered(answered)));
+        });
+    }
+
     /// The record key: starts a conversation, or stops the one running.
     pub(super) fn record_key(&mut self) {
         if let Some(talk) = &self.voice.talk {
@@ -152,13 +288,23 @@ impl Tui<'_> {
         let client = Arc::clone(&self.voice.client);
         let key = pmt_voice::mode::record_key(&self.open.scope.config().voice);
         let session = self.link.session.clone();
-        self.notice(pmt_i18n::t!(self.strings(), "tui.listening", 0 = key));
+        self.notice(pmt_i18n::t!(
+            self.strings(),
+            "tui.listening",
+            0 = key.clone()
+        ));
+        let strings = pmt_config::language::strings(self.open.scope.dir(), pmt_i18n::Surface::Core);
         pmt_core::spawn::spawn(async move {
-            let levels = asks.clone();
-            let meter: pmt_voice::record::Meter = Arc::new(move |level| {
-                let _ = levels.send(Done::Voice(Ask::Level(level)));
+            let lines = asks.clone();
+            let show: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line| {
+                let _ = lines.send(Done::Voice(Ask::Level(line)));
             });
-            let kit = client.lock().await.kit(meter, &session).await;
+            let (meter, partial) = crate::chat::voice::status_feed(strings, key, show);
+            let kit = {
+                let mut client = client.lock().await;
+                let spoken = client.mode.spoken;
+                client.kit(meter, partial, &session, spoken).await
+            };
             let ended = match kit {
                 Ok(kit) => {
                     let mut host = Channel {
@@ -203,30 +349,43 @@ impl Tui<'_> {
                         early: Vec::new(),
                     });
                 }
-                self.submit(text, Vec::new());
+                self.submit_as(text, Vec::new(), true);
+            }
+            Ask::Cut => {
+                let params = InterruptParams {
+                    session_id: self.link.session.clone(),
+                    turn_id: None,
+                };
+                let client = self.link.client.clone();
+                pmt_core::spawn::spawn(async move {
+                    let _ = client.call_typed::<SessionInterrupt>(&params).await;
+                });
             }
             Ask::Typed { line, done } => {
                 self.run_line(&line);
                 let _ = done.send(self.voice.on);
             }
-            Ask::Level(level) => {
-                let key = pmt_voice::mode::record_key(&self.open.scope.config().voice);
-                self.app.status.automation.insert(
-                    METER_ROW.to_owned(),
-                    crate::chat::voice::meter_line(
-                        &pmt_config::language::strings(
-                            self.open.scope.dir(),
-                            pmt_i18n::Surface::Core,
-                        ),
-                        level,
-                        &key,
-                    ),
-                );
+            Ask::Level(line) => {
+                self.app
+                    .status
+                    .automation
+                    .insert(METER_ROW.to_owned(), line);
             }
             Ask::Ended(ended) => {
                 self.app.status.automation.remove(METER_ROW);
                 self.voice.talk = None;
                 self.notice(ended.message());
+            }
+            Ask::WakeSaid(said) => self.notice(said),
+            Ask::Woken(detection) => self.woken(&detection),
+            Ask::WakeAnswered(answered) => {
+                self.app.status.automation.remove(METER_ROW);
+                self.voice.talk = None;
+                if let Err(why) = answered {
+                    self.notice(why);
+                }
+                let wake = Arc::clone(&self.voice.wake);
+                pmt_core::spawn::spawn(async move { wake.lock().await.resume() });
             }
         }
     }

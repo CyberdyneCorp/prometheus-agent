@@ -78,7 +78,7 @@ pub(super) async fn background(ctx: &Ctx<'_>, args: &str) -> Result<String, Erro
     .pop()
     .expect("one admission per task");
     let target = ctx.live.model.target();
-    let live = open_session(ctx, &target).await?;
+    let live = Box::pin(open_session(ctx, &target)).await?;
     let interrupt = Interrupt::default();
     let stop = interrupt.clone();
     let task = Registry::process().add(NewTask {

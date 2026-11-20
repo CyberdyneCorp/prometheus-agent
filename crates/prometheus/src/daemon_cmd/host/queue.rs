@@ -297,6 +297,7 @@ async fn job(session: &Loaded, saved: Saved, link: &Link) -> Result<Queued, Erro
         run_budget_secs: None,
         input_id: None,
         author: None,
+        voice: false,
     };
     let input = setup::input(&session.factory, &session.live, &params).await?;
     Ok(Queued {
@@ -308,6 +309,7 @@ async fn job(session: &Loaded, saved: Saved, link: &Link) -> Result<Queued, Erro
         resume: None,
         api: None,
         entry: Some(saved),
+        voice: false,
     })
 }
 

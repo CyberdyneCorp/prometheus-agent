@@ -115,6 +115,7 @@ capabilities = [
     "i18n",
     "observability",
     "workspace-architecture",
+    "voice-mode",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -5198,3 +5199,35 @@ capabilities = [
 
 [computer-use."Agent cursor overlay"]
 "X11 desktop" = ["crates/prometheus/src/computer_use/platform.rs::the_overlay_is_off_on_x11_and_on_on_wayland", "crates/prometheus/tests/computer_use.rs::capture_click_and_type_drive_the_desktop_under_approval"]
+
+# Group 77 (voice: streaming, barge-in, voice channels, wake word, desktop)
+
+[voice-mode."Live streaming transcription"]
+"Streaming failure falls back" = ["crates/pmt-voice/tests/barge_stream.rs::a_streaming_failure_falls_back_to_the_saved_recording", "crates/pmt-media/tests/realtime_stt.rs::a_dropped_socket_is_reported_to_the_caller", "crates/pmt-voice/tests/barge_stream.rs::a_streaming_session_shows_partial_text_and_supplies_the_transcript", "crates/pmt-media/tests/realtime_stt.rs::openai_streams_partial_text_and_the_final_transcript"]
+
+[voice-mode."Barge-in"]
+"Talk over playback" = ["crates/pmt-voice/tests/barge_stream.rs::talking_over_playback_stops_it_and_submits_the_utterance_with_a_note", "crates/pmt-voice/tests/barge_stream.rs::the_monitor_fires_within_300_ms_of_the_user_starting_to_speak", "crates/pmt-voice/src/barge.rs::the_floor_comes_from_the_quiet_room_at_turn_start", "crates/pmt-voice/tests/barge_stream.rs::typing_over_the_playback_stops_it"]
+"Stop phrase mid-generation" = ["crates/pmt-voice/tests/barge_stream.rs::a_stop_phrase_said_while_the_reply_generates_interrupts_the_turn_and_ends"]
+
+[voice-mode."Voice turn model and reasoning"]
+"Faster model for speech" = { tests = ["crates/prometheus/tests/voice_turns.rs::a_spoken_turn_runs_on_the_voice_route_and_a_typed_one_on_the_sessions", "crates/prometheus/tests/voice_turns.rs::an_attached_spoken_turn_runs_on_the_voice_route", "crates/prometheus/tests/voice_turns.rs::a_voice_model_too_small_for_the_conversation_is_skipped_with_one_notice", "crates/prometheus/src/chat/session/voice_route.rs::voice_turns_reason_at_none_unless_configured"], note = "the mock model stands for openrouter: `[auxiliary.voice_chat] model = \"voice\"` answers the spoken turn and the session's `alpha` the typed follow-up, in process and attached to the daemon" }
+
+[voice-mode."Recording retention and privacy (upgrade)"]
+"Recording removed after use" = ["crates/prometheus/tests/voice_turns.rs::a_spoken_turn_runs_on_the_voice_route_and_a_typed_one_on_the_sessions", "crates/prometheus/tests/voice_line.rs::a_spoken_question_is_answered_aloud_and_listening_resumes_until_silence", "crates/prometheus/tests/voice_turns.rs::kept_recordings_stay_after_transcription"]
+
+[voice-mode."Wake word listener"]
+"Hands-free request" = ["crates/prometheus/tests/wake_line.rs::a_hands_free_request_opens_a_session_is_answered_aloud_and_listening_resumes", "crates/prometheus/tests/wake_line.rs::the_tui_answers_a_hands_free_request", "crates/pmt-voice/tests/wake.rs::a_wake_phrase_is_answered_aloud_then_listening_resumes"]
+"Refuses without TTS" = ["crates/prometheus/tests/wake_line.rs::wake_refuses_to_arm_without_tts_and_names_what_is_missing", "crates/pmt-voice/src/wake/command.rs::arming_names_the_missing_tts_provider"]
+
+[voice-mode."Wake engines and false-trigger control"]
+"Ambient spike ignored" = { tests = ["crates/pmt-voice/tests/wake.rs::an_ambient_spike_does_not_fire_but_a_held_phrase_does", "crates/pmt-voice/src/wake/engine.rs::one_spiking_frame_does_not_fire_but_three_in_a_row_do"], note = "a stand-in worker speaks the engine protocol and scores one spiking frame, a quiet one, then three held frames; the real openWakeWord driver sends the same scores" }
+"Explicit engine not silently swapped" = ["crates/prometheus/tests/wake_line.rs::an_explicit_engine_is_not_swapped_for_another", "crates/pmt-voice/src/wake/engine.rs::a_named_engine_is_never_swapped"]
+
+[voice-mode."Single wake listener ownership across surfaces"]
+"Second surface does not steal the mic" = ["crates/prometheus/tests/wake_line.rs::a_line_interface_does_not_steal_the_tuis_microphone", "crates/prometheus/tests/wake_line.rs::a_second_terminal_does_not_steal_the_microphone_and_a_silent_one_is_reported", "crates/pmt-voice/src/wake/owner.rs::a_second_surface_does_not_steal_the_microphone"]
+
+[voice-mode."Wake capture location for remote clients"]
+"Headless backend with desktop microphone" = ["crates/prometheus/tests/wake_daemon.rs::a_headless_daemon_detects_the_wake_phrase_in_frames_the_desktop_sends"]
+
+[voice-mode."Wake and voice diagnostics"]
+"Silent microphone reported" = ["crates/prometheus/tests/wake_line.rs::a_second_terminal_does_not_steal_the_microphone_and_a_silent_one_is_reported", "crates/pmt-voice/tests/wake.rs::a_microphone_of_zeros_is_reported_as_silent", "crates/pmt-voice/src/wake/command.rs::a_silent_microphone_is_reported_with_the_permission_hint", "crates/prometheus/tests/wake_line.rs::doctor_reports_the_wake_phrase_engine_device_and_host_api"]

@@ -7,6 +7,7 @@
 
 use std::sync::Arc;
 
+use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
 use pmt_voice::converse::{self, Host, Interjection};
 use pmt_voice::speaker::Mouth;
@@ -33,14 +34,15 @@ impl Chat<'_, '_> {
         let status = self.lines.status_line();
         let quiet = self.start.ui.quiet;
         let key = pmt_voice::mode::record_key(&self.start.scope.config().voice);
-        let strings = self.strings();
-        let meter: pmt_voice::record::Meter = Arc::new(move |level| {
+        let show: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line| {
             if !quiet {
-                status.show(Some(crate::chat::voice::meter_line(&strings, level, &key)));
+                status.show(Some(line));
             }
         });
+        let (meter, partial) = crate::chat::voice::status_feed(self.strings(), key, show);
         let session = self.attached.session.clone();
-        let kit = match self.voice.kit(meter, &session).await {
+        let spoken = self.voice.mode.spoken;
+        let kit = match self.voice.kit(meter, partial, &session, spoken).await {
             Ok(kit) => kit,
             Err(why) => {
                 self.screen.notice(&why);
@@ -63,6 +65,79 @@ impl Chat<'_, '_> {
     }
 }
 
+impl Chat<'_, '_> {
+    /// `/wake [on|off|status]`.
+    pub(super) async fn wake_command(&mut self, args: &str) {
+        let woken = Arc::clone(&self.woken.0);
+        let said = self.wake.command(args, &mut self.voice, &woken).await;
+        self.screen.notice(&said);
+    }
+
+    /// Arms the wake listener at startup when `wake.enabled` is set.
+    pub(super) async fn arm_wake(&mut self) {
+        let woken = Arc::clone(&self.woken.0);
+        if let Some(said) = self.wake.start(&mut self.voice, &woken).await {
+            self.screen.notice(&said);
+        }
+    }
+
+    /// The wake phrase was heard at the idle prompt: a new session (unless
+    /// `wake.start_new_session = false`), one spoken request answered
+    /// aloud, then listening resumes.
+    ///
+    /// # Errors
+    ///
+    /// The connection to the daemon was lost.
+    pub(super) async fn woken(
+        &mut self,
+        detection: pmt_voice::wake::engine::Detection,
+    ) -> Result<Flow, Error> {
+        if let Some(elsewhere) = self.wake.elsewhere(&detection) {
+            self.screen.notice(&elsewhere);
+            self.wake.resume();
+            return Ok(Flow::Continue);
+        }
+        self.screen
+            .notice(&format!("Heard \"{}\".", detection.phrase));
+        if self.start.scope.config().wake.start_new_session {
+            let created = super::open::claim(&self.attached.client, None, self.start).await;
+            self.switch(created).await;
+        }
+        let status = self.lines.status_line();
+        let quiet = self.start.ui.quiet;
+        let key = pmt_voice::mode::record_key(&self.start.scope.config().voice);
+        let show: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line| {
+            if !quiet {
+                status.show(Some(line));
+            }
+        });
+        let (meter, partial) = crate::chat::voice::status_feed(self.strings(), key, show);
+        let session = self.attached.session.clone();
+        let kit = self.voice.kit(meter, partial, &session, true).await;
+        let (answered, lost) = match kit {
+            Ok(kit) => {
+                let mut host = Attached {
+                    chat: self,
+                    exit: false,
+                    lost: None,
+                };
+                let answered = pmt_voice::wake::listener::answer(&mut host, &kit).await;
+                (answered, host.lost)
+            }
+            Err(why) => (Err(why), None),
+        };
+        self.lines.status_line().show(None);
+        if let Some(err) = lost {
+            return Err(err);
+        }
+        if let Err(why) = answered {
+            self.screen.notice(&why);
+        }
+        self.wake.resume();
+        Ok(Flow::Continue)
+    }
+}
+
 /// The attached line interface as the conversation's surface.
 struct Attached<'c, 'a, 'b> {
     chat: &'c mut Chat<'a, 'b>,
@@ -73,9 +148,11 @@ struct Attached<'c, 'a, 'b> {
 }
 
 impl Host for Attached<'_, '_, '_> {
-    async fn turn(&mut self, text: String, mouth: Option<Arc<Mouth>>) {
+    async fn turn(&mut self, text: String, mouth: Option<Arc<Mouth>>, cut: CancelToken) {
         self.chat.mouth = mouth;
+        self.chat.voice_cut = Some(cut);
         let sent = Box::pin(self.chat.submit(text)).await;
+        self.chat.voice_cut = None;
         self.chat.mouth = None;
         if let Err(err) = sent {
             self.lost = Some(err);

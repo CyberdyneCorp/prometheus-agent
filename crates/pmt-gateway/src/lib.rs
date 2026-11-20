@@ -58,6 +58,7 @@ pub mod ui;
 pub mod ui_prefs;
 pub mod upkeep;
 pub mod vault;
+pub mod voice;
 pub mod workspace;
 pub mod worktree;
 

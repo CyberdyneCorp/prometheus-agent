@@ -25,6 +25,9 @@ pub(super) struct Prompt {
     pub text: String,
     /// The images that go with it.
     pub images: Vec<PromptImage>,
+    /// A voice turn: it runs on the voice route, and cancelling the token
+    /// (the user spoke over the reply) interrupts it.
+    pub voice: Option<pmt_core::cancel::CancelToken>,
 }
 
 /// Who answers the turn's requests.
@@ -91,7 +94,9 @@ pub(super) async fn run(
         run_budget_secs: attached.run_budget,
         input_id: None,
         author: None,
+        voice: prompt.voice.is_some(),
     };
+    let cut = prompt.voice.unwrap_or_default();
     let submitted = attached
         .client
         .call_typed::<PromptSubmit>(&params)
@@ -105,6 +110,7 @@ pub(super) async fn run(
     }
     let turn_id = submitted.turn_id;
     let mut asking: Option<Asking> = None;
+    let mut cut_sent = false;
     loop {
         tokio::select! {
             event = attached.inbox.events.recv() => {
@@ -125,6 +131,10 @@ pub(super) async fn run(
             }
             Some(call) = attached.inbox.requests.recv() => {
                 asking = ask(attached, call, asker, out, &mut outcome).await;
+            }
+            () = cut.cancelled(), if !cut_sent => {
+                cut_sent = true;
+                interrupt(attached).await;
             }
             code = signals.next(), if outcome.signal.is_none() => {
                 outcome.signal = Some(code);

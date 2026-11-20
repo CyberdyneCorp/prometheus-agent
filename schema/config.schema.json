@@ -1031,6 +1031,17 @@
             "null"
           ]
         },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reasoning effort of this task's calls; read by `voice_chat` (unset:\n`none`, or the model's lowest accepted effort)."
+        },
         "timeout_secs": {
           "description": "Timeout; unset uses the task default (120 s for `vision` and\n`compression`, 30 s for `approval` and `title`, 600 s for `curator`\nand `evolution`).",
           "format": "uint64",
@@ -7491,6 +7502,18 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OpenWakeWordConfig": {
+      "additionalProperties": false,
+      "description": "`[wake.openwakeword]`.",
+      "properties": {
+        "model": {
+          "default": "hey_jarvis",
+          "description": "A built-in model name or an absolute `.onnx`/`.tflite` path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "OpenaiRuntime": {
       "description": "`model.openai_runtime`.",
       "oneOf": [
@@ -8471,6 +8494,18 @@
         }
       ]
     },
+    "PorcupineConfig": {
+      "additionalProperties": false,
+      "description": "`[wake.porcupine]`.",
+      "properties": {
+        "keyword": {
+          "default": "jarvis",
+          "description": "A built-in keyword or an absolute `.ppn` path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "PreferCredential": {
       "description": "Credential preference.",
       "oneOf": [
@@ -9294,6 +9329,35 @@
       },
       "type": "object"
     },
+    "RealtimeVoiceConfig": {
+      "additionalProperties": false,
+      "description": "`[voice.realtime]`.",
+      "properties": {
+        "instructions": {
+          "description": "Extra instructions for the voice layer (the agent keeps its own\nsystem prompt).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "default": "gpt-realtime",
+          "description": "The realtime model.",
+          "type": "string"
+        },
+        "provider": {
+          "default": "openai",
+          "description": "The realtime provider (`openai`; its key stays on the daemon).",
+          "type": "string"
+        },
+        "voice": {
+          "default": "marin",
+          "description": "The voice it speaks with.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "ReasoningLevel": {
       "description": "Reasoning effort levels, in increasing order.",
       "oneOf": [
@@ -10086,6 +10150,20 @@
       "required": [
         "command"
       ],
+      "type": "object"
+    },
+    "SherpaConfig": {
+      "additionalProperties": false,
+      "description": "`[wake.sherpa]`.",
+      "properties": {
+        "model_dir": {
+          "description": "A keyword-spotting model directory (unset: the default model,\ndownloaded once into the profile's models directory).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ShutdownConfig": {
@@ -12128,6 +12206,21 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "VoiceChatMode": {
+      "description": "`voice.chat_mode`.",
+      "oneOf": [
+        {
+          "const": "chained",
+          "description": "Record, transcribe, run the turn, speak the reply.",
+          "type": "string"
+        },
+        {
+          "const": "realtime",
+          "description": "A full-duplex realtime voice model (desktop only).",
+          "type": "string"
+        }
+      ]
+    },
     "VoiceConfig": {
       "additionalProperties": false,
       "description": "`[gateway.voice]`.",
@@ -12159,14 +12252,42 @@
           "description": "Turn spoken replies on whenever voice mode starts.",
           "type": "boolean"
         },
+        "barge_in": {
+          "default": true,
+          "description": "Keep the microphone live while a reply generates and plays:\nspeaking interrupts it.",
+          "type": "boolean"
+        },
+        "barge_in_threshold_multiplier": {
+          "default": 3.0,
+          "description": "How far above the quiet room's level (calibrated at turn start)\nspeech must rise to interrupt a reply.",
+          "format": "double",
+          "maximum": 10.0,
+          "minimum": 1.0,
+          "type": "number"
+        },
         "beep_enabled": {
           "default": true,
           "description": "Play a start beep (880 Hz) and an end double beep (660 Hz) around\neach recording.",
           "type": "boolean"
         },
+        "chat_mode": {
+          "$ref": "#/$defs/VoiceChatMode",
+          "default": "chained",
+          "description": "`chained` (record, transcribe, turn, speak) or `realtime` (one\nfull-duplex realtime voice session on the desktop that hands work\nto the agent)."
+        },
+        "client_direct": {
+          "default": true,
+          "description": "A desktop attached to a remote daemon talks to cloud speech\nproviders itself, so audio never crosses the daemon link.",
+          "type": "boolean"
+        },
         "hallucination_filter": {
           "default": true,
           "description": "Drop transcripts that are known silence hallucinations (\"thanks\nfor watching\", one phrase repeated).",
+          "type": "boolean"
+        },
+        "keep_recordings": {
+          "default": false,
+          "description": "Keep recordings under `cache/voice/` after transcription (they\nthen expire after `gateway.media.cache_max_age_secs`); off deletes\neach as soon as it is transcribed.",
           "type": "boolean"
         },
         "max_recording_secs": {
@@ -12183,6 +12304,15 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "realtime": {
+          "$ref": "#/$defs/RealtimeVoiceConfig",
+          "default": {
+            "model": "gpt-realtime",
+            "provider": "openai",
+            "voice": "marin"
+          },
+          "description": "The realtime voice session of `chat_mode = \"realtime\"`."
         },
         "record_key": {
           "$ref": "#/$defs/KeyChord",
@@ -12224,6 +12354,11 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "stt_streaming": {
+          "default": false,
+          "description": "Transcribe while the user speaks when the STT provider streams\n(partial text shown live); a failed stream falls back to\ntranscribing the whole recording.",
+          "type": "boolean"
         }
       },
       "type": "object",
@@ -12275,6 +12410,161 @@
         {
           "const": "always",
           "description": "Always.",
+          "type": "string"
+        }
+      ]
+    },
+    "WakeCapture": {
+      "description": "`wake.capture`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Client capture when the desktop arms with `client_capture`, else\nlocal.",
+          "type": "string"
+        },
+        {
+          "const": "local",
+          "description": "The microphone of the host running the engine.",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "description": "PCM frames an attached client sends (`wake.feed`).",
+          "type": "string"
+        }
+      ]
+    },
+    "WakeConfig": {
+      "additionalProperties": false,
+      "description": "The `[wake]` section.",
+      "properties": {
+        "capture": {
+          "$ref": "#/$defs/WakeCapture",
+          "default": "auto",
+          "description": "Where the wake audio is captured."
+        },
+        "confirmation_frames": {
+          "default": 3,
+          "description": "Consecutive over-threshold frames before `openwakeword` fires.",
+          "format": "uint32",
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Listen for the wake phrase (`/wake on|off` writes it).",
+          "type": "boolean"
+        },
+        "engine": {
+          "$ref": "#/$defs/WakeEngine",
+          "default": "auto",
+          "description": "The detection engine; `auto` takes the first one this host\nsupports (`openwakeword`, `sherpa`, `porcupine`)."
+        },
+        "input_device": {
+          "description": "The input device: an index or an unambiguous name substring\n(unset: the default device).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openwakeword": {
+          "$ref": "#/$defs/OpenWakeWordConfig",
+          "default": {
+            "model": "hey_jarvis"
+          },
+          "description": "`openwakeword` settings."
+        },
+        "phrase": {
+          "default": "hey prometheus",
+          "description": "The wake phrase: what `sherpa` listens for, a label for the\nmodel-keyed engines.",
+          "type": "string"
+        },
+        "porcupine": {
+          "$ref": "#/$defs/PorcupineConfig",
+          "default": {
+            "keyword": "jarvis"
+          },
+          "description": "`porcupine` settings (access key: secret `PORCUPINE_ACCESS_KEY`)."
+        },
+        "profile_routing": {
+          "default": true,
+          "description": "With `sherpa`, also listen for the phrases of the other profiles\nwith wake enabled.",
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "default": 0.6,
+          "description": "Stricter when higher, for every engine.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "sherpa": {
+          "$ref": "#/$defs/SherpaConfig",
+          "default": {},
+          "description": "`sherpa` settings."
+        },
+        "start_new_session": {
+          "default": true,
+          "description": "A wake opens a new session; off continues the current one.",
+          "type": "boolean"
+        },
+        "surface": {
+          "$ref": "#/$defs/WakeSurface",
+          "default": "auto",
+          "description": "Which local surface owns the microphone (`auto`: the first to arm)."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "WakeEngine": {
+      "description": "`wake.engine`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The first supported engine, in the order below.",
+          "type": "string"
+        },
+        {
+          "const": "openwakeword",
+          "description": "openWakeWord models (free, on-device).",
+          "type": "string"
+        },
+        {
+          "const": "sherpa",
+          "description": "sherpa-onnx keyword spotting (any typed phrase).",
+          "type": "string"
+        },
+        {
+          "const": "porcupine",
+          "description": "Picovoice Porcupine (needs an access key).",
+          "type": "string"
+        }
+      ]
+    },
+    "WakeSurface": {
+      "description": "`wake.surface`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The first eligible local surface to arm.",
+          "type": "string"
+        },
+        {
+          "const": "cli",
+          "description": "The line interface.",
+          "type": "string"
+        },
+        {
+          "const": "tui",
+          "description": "The terminal UI.",
+          "type": "string"
+        },
+        {
+          "const": "gui",
+          "description": "The desktop app.",
           "type": "string"
         }
       ]
@@ -14308,10 +14598,20 @@
       "$ref": "#/$defs/VoiceModeConfig",
       "default": {
         "auto_tts": false,
+        "barge_in": true,
+        "barge_in_threshold_multiplier": 3.0,
         "beep_enabled": true,
+        "chat_mode": "chained",
+        "client_direct": true,
         "hallucination_filter": true,
+        "keep_recordings": false,
         "max_recording_secs": 120,
         "no_speech_timeout_secs": 15,
+        "realtime": {
+          "model": "gpt-realtime",
+          "provider": "openai",
+          "voice": "marin"
+        },
         "record_key": "ctrl+b",
         "silence_duration_ms": 3000,
         "silence_threshold": 200,
@@ -14322,9 +14622,32 @@
           "goodbye",
           "cancel",
           "that's all"
-        ]
+        ],
+        "stt_streaming": false
       },
-      "description": "Voice conversations on the CLI, TUI and desktop."
+      "description": "Voice conversations on the CLI, TUI and desktop (boxed: read by the\nvoice surfaces only, kept out of every future that holds a\nconfiguration)."
+    },
+    "wake": {
+      "$ref": "#/$defs/WakeConfig",
+      "default": {
+        "capture": "auto",
+        "confirmation_frames": 3,
+        "enabled": false,
+        "engine": "auto",
+        "openwakeword": {
+          "model": "hey_jarvis"
+        },
+        "phrase": "hey prometheus",
+        "porcupine": {
+          "keyword": "jarvis"
+        },
+        "profile_routing": true,
+        "sensitivity": 0.6,
+        "sherpa": {},
+        "start_new_session": true,
+        "surface": "auto"
+      },
+      "description": "The on-device wake word listener (boxed: rarely read, kept out of\nevery future that holds a configuration)."
     },
     "web": {
       "$ref": "#/$defs/WebConfig",

@@ -138,6 +138,10 @@ impl Repl {
                 self.voice_command(args).await;
                 return Flow::Continue;
             }
+            "wake" => {
+                self.wake_command(args).await;
+                return Flow::Continue;
+            }
             "retry" | "learn" | "tools" | "model" | "moa" | "plan" => {
                 return Box::pin(self.session_reply(name, args)).await;
             }

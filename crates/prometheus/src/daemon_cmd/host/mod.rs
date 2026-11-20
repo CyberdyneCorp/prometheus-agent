@@ -85,6 +85,8 @@ mod subagents;
 mod turn_results;
 mod turns;
 mod usage_events;
+mod voice_client;
+mod wake;
 mod workspace_fs;
 mod worktrees;
 
@@ -202,6 +204,8 @@ pub(super) struct DaemonHost {
     api_keys: api::KeyCache,
     /// The union roster's remote sources, as last listed.
     roster: interop::RosterCache,
+    /// The desktop's wake listeners, by profile.
+    wake: wake::Listeners,
     /// The API server, once started (it is told when the daemon drains).
     api: std::sync::OnceLock<pmt_api::ApiServer>,
     /// The host itself, for work that outlives the request that started it
@@ -310,6 +314,7 @@ impl DaemonHost {
             gateway: Arc::default(),
             api_keys: api::KeyCache::default(),
             roster: interop::RosterCache::default(),
+            wake: wake::Listeners::default(),
             api: std::sync::OnceLock::new(),
             me: std::sync::OnceLock::new(),
             #[cfg(feature = "dashboard")]
@@ -410,7 +415,7 @@ impl DaemonHost {
             .lock()
             .expect("setups poisoned")
             .remove(&id)
-            .or_else(|| frozen_policy(profile, &row))
+            .or_else(|| setup::frozen_policy(profile, &row))
             .unwrap_or_default();
         let factory = self.factory_of(profile, cwd, &setup, &row)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
@@ -1211,6 +1216,14 @@ impl Host for DaemonHost {
         Box::pin(self.roster(params))
     }
 
+    fn voice<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::voice::VoiceCall,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(self.voice_call(profile, request))
+    }
+
     fn relay_drain(
         &self,
         params: pmt_rpc::contracts::RelayDrainParams,
@@ -1476,18 +1489,4 @@ fn still_stored(
         loaded.remove(&id);
     }
     found
-}
-
-/// The setup of the chat policy frozen with a gateway session, which keeps
-/// shaping it after a daemon restart (spec: messaging-gateway, Per-chat
-/// policies).
-fn frozen_policy(profile: &Profile, row: &pmt_store::Session) -> Option<SessionSetup> {
-    let pmt_store::Origin::Gateway { platform, .. } = &row.origin else {
-        return None;
-    };
-    let text = profile.store.session_policy(row.id).ok().flatten()?;
-    let policy: pmt_config::schema::ChatPolicy = serde_json::from_str(&text).ok()?;
-    Some(pmt_gateway::messaging::policy::session_setup(
-        &policy, platform,
-    ))
 }

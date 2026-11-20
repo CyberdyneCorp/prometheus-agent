@@ -78,48 +78,56 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.approval.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.approval.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.approval.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.approval.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.approval.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.commit_message.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.commit_message.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.commit_message.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.commit_message.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.commit_message.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.commit_message.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.commit_message.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.compression.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.compression.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.compression.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.compression.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.compression.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.compression.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.compression.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.curator.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.curator.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.curator.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.curator.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.curator.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.curator.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.curator.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.eval_judge.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.eval_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.eval_judge.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.eval_judge.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.eval_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.eval_judge.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.eval_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.evolution.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.evolution.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.evolution.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.evolution.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.evolution.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.evolution.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.evolution.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.goal_judge.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.goal_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.goal_judge.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.goal_judge.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.goal_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.goal_judge.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.goal_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.kanban.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.kanban.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.kanban.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.kanban.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.kanban.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.kanban.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.kanban.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.max_concurrency` | integer | `8` | ≥ 1 | `next_session` | Auxiliary calls in flight at once across the profile's sessions; further calls wait. |
 | `auxiliary.memory.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
@@ -127,42 +135,49 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.memory.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.memory.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.profile.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.profile.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.profile.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.profile.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.profile.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.profile.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.profile.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.schedule.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.schedule.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.schedule.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.schedule.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.schedule.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.schedule.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.schedule.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.side_question.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.side_question.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.side_question.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.side_question.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.side_question.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.side_question.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.side_question.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.skill_review.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.skill_review.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.skill_review.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.skill_review.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.skill_review.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.skill_review.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.skill_review.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.title.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.title.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.title.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.title.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.title.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.title.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.title.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.trajectory_compress.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.trajectory_compress.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.trajectory_compress.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.trajectory_compress.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.trajectory_compress.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.trajectory_compress.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.trajectory_compress.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.transient_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable auxiliary failure. |
 | `auxiliary.vision.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
@@ -170,18 +185,21 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.vision.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.vision.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.vision.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.vision.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.vision.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.voice_chat.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.voice_chat.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.voice_chat.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.voice_chat.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.voice_chat.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.voice_chat.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.voice_chat.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.web_extract.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.web_extract.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.web_extract.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.web_extract.reasoning_effort` | one of "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra" | unset | `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"`, `"ultra"` | `next_session` | Reasoning effort of this task's calls; read by `voice_chat` (unset: `none`, or the model's lowest accepted effort). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `bot_desktop.auto_start` | boolean | `false` | any | `live` | Start the screen on the first `computer_use` call or headed browser launch instead of only on `prometheus computer-use screen start`. |
 | `bot_desktop.geometry` | string | `"1440x900"` | any | `live` | The screen's size, `<width>x<height>` in pixels. |
@@ -1146,15 +1164,38 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
 | `vision.replay_recent_images` | integer | `3` | ≥ 0 | `next_session` | Newest user images re-sent when history is rebuilt from storage; `0` disables. |
 | `voice.auto_tts` | boolean | `false` | any | `live` | Turn spoken replies on whenever voice mode starts. |
+| `voice.barge_in` | boolean | `true` | any | `live` | Keep the microphone live while a reply generates and plays: speaking interrupts it. |
+| `voice.barge_in_threshold_multiplier` | number | `3.0` | 1.0 to 10.0 | `live` | How far above the quiet room's level (calibrated at turn start) speech must rise to interrupt a reply. |
 | `voice.beep_enabled` | boolean | `true` | any | `live` | Play a start beep (880 Hz) and an end double beep (660 Hz) around each recording. |
+| `voice.chat_mode` | one of "chained", "realtime" | `"chained"` | `"chained"`, `"realtime"` | `live` | `chained` (record, transcribe, turn, speak) or `realtime` (one full-duplex realtime voice session on the desktop that hands work to the agent). |
+| `voice.client_direct` | boolean | `true` | any | `live` | A desktop attached to a remote daemon talks to cloud speech providers itself, so audio never crosses the daemon link. |
 | `voice.hallucination_filter` | boolean | `true` | any | `live` | Drop transcripts that are known silence hallucinations ("thanks for watching", one phrase repeated). |
+| `voice.keep_recordings` | boolean | `false` | any | `live` | Keep recordings under `cache/voice/` after transcription (they then expire after `gateway.media.cache_max_age_secs`); off deletes each as soon as it is transcribed. |
 | `voice.max_recording_secs` | integer | `120` | 5 to 600 | `live` | The longest recording; it stops there. |
 | `voice.no_speech_timeout_secs` | integer | `15` | ≥ 0 | `live` | A recording with no confirmed speech by then ends without being transcribed. |
+| `voice.realtime.instructions` | string | unset | any | `live` | Extra instructions for the voice layer (the agent keeps its own system prompt). |
+| `voice.realtime.model` | string | `"gpt-realtime"` | any | `live` | The realtime model. |
+| `voice.realtime.provider` | string | `"openai"` | any | `live` | The realtime provider (`openai`; its key stays on the daemon). |
+| `voice.realtime.voice` | string | `"marin"` | any | `live` | The voice it speaks with. |
 | `voice.record_key` | string | `"ctrl+b"` | any | `live` | The key that starts a recording in voice mode, and stops the continuous loop when pressed during one. |
 | `voice.silence_duration_ms` | integer | `3000` | ≥ 0 | `live` | Continuous quiet after confirmed speech that ends the recording. |
 | `voice.silence_threshold` | integer | `200` | 1 to 32767 | `live` | Input level (RMS, 0-32767) above which audio counts as speech. |
 | `voice.speech_confirm_ms` | integer | `300` | ≥ 0 | `live` | How long the level must stay above the threshold before speech is confirmed (dips shorter than 200 ms are tolerated). |
 | `voice.stop_phrases` | array of string | `["stop","never mind","goodbye","cancel","that's all"]` | any | `live` | Whole utterances that end the voice conversation instead of being sent (case and surrounding punctuation ignored); `[]` disables. |
+| `voice.stt_streaming` | boolean | `false` | any | `live` | Transcribe while the user speaks when the STT provider streams (partial text shown live); a failed stream falls back to transcribing the whole recording. |
+| `wake.capture` | one of "auto", "local", "client" | `"auto"` | `"auto"`, `"local"`, `"client"` | `live` | Where the wake audio is captured. |
+| `wake.confirmation_frames` | integer | `3` | 1 to 10 | `live` | Consecutive over-threshold frames before `openwakeword` fires. |
+| `wake.enabled` | boolean | `false` | any | `live` | Listen for the wake phrase (`/wake on\|off` writes it). |
+| `wake.engine` | one of "auto", "openwakeword", "sherpa", "porcupine" | `"auto"` | `"auto"`, `"openwakeword"`, `"sherpa"`, `"porcupine"` | `live` | The detection engine; `auto` takes the first one this host supports (`openwakeword`, `sherpa`, `porcupine`). |
+| `wake.input_device` | string | unset | any | `live` | The input device: an index or an unambiguous name substring (unset: the default device). |
+| `wake.openwakeword.model` | string | `"hey_jarvis"` | any | `live` | A built-in model name or an absolute `.onnx`/`.tflite` path. |
+| `wake.phrase` | string | `"hey prometheus"` | any | `live` | The wake phrase: what `sherpa` listens for, a label for the model-keyed engines. |
+| `wake.porcupine.keyword` | string | `"jarvis"` | any | `live` | A built-in keyword or an absolute `.ppn` path. |
+| `wake.profile_routing` | boolean | `true` | any | `live` | With `sherpa`, also listen for the phrases of the other profiles with wake enabled. |
+| `wake.sensitivity` | number | `0.6` | 0.0 to 1.0 | `live` | Stricter when higher, for every engine. |
+| `wake.sherpa.model_dir` | string | unset | any | `live` | A keyword-spotting model directory (unset: the default model, downloaded once into the profile's models directory). |
+| `wake.start_new_session` | boolean | `true` | any | `live` | A wake opens a new session; off continues the current one. |
+| `wake.surface` | one of "auto", "cli", "tui", "gui" | `"auto"` | `"auto"`, `"cli"`, `"tui"`, `"gui"` | `live` | Which local surface owns the microphone (`auto`: the first to arm). |
 | `web.backend` | string | `"auto"` | any | `next_session` | Shared backend for web search and extract (`auto` picks the first with credentials). |
 | `web.cache_enabled` | boolean | `true` | any | `next_session` | Serve repeat searches and extractions from a cache. |
 | `web.cache_exempt_hosts` | array of string | `[]` | any | `next_session` | Hosts never cached (exact, `*.` wildcard or domain suffix), beside local, private and single-label hosts which never are. |

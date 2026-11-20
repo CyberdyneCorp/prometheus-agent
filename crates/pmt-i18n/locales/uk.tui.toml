@@ -52,6 +52,7 @@ cmd_paste = "прикріпити зображення з буфера обмі�
 cmd_terminal_setup = "щоб Ctrl+V доходив до TUI у VS Code, Cursor чи Windsurf"
 cmd_handoff = "продовжити цей сеанс у чаті: /handoff <платформа>[:<chat>[:<thread>]]"
 cmd_voice = "голосовий режим: /voice [on|off|tts|status]; говоріть клавішею запису"
+cmd_wake = "слово активації: /wake [on|off|status]; чути тут, відповідь уголос"
 clip_ssh = "робота через SSH: тутешній буфер обміну не ваш"
 clip_missing = "{0} не знайдено в PATH"
 clip_no_display = "немає дисплея: WAYLAND_DISPLAY і DISPLAY не задано"

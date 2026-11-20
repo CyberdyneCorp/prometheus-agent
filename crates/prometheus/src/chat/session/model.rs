@@ -1113,6 +1113,12 @@ impl SwitchableModel {
         *self.session.lock().unwrap_or_else(PoisonError::into_inner) = session;
     }
 
+    /// The reasoning level the next request sends.
+    #[must_use]
+    pub fn reasoning_now(&self) -> Option<ReasoningLevel> {
+        self.model().reasoning()
+    }
+
     /// Sends `level` from the next request without changing the session
     /// level (a `/model --reasoning` choice).
     pub fn set_reasoning(&self, level: Option<ReasoningLevel>) {

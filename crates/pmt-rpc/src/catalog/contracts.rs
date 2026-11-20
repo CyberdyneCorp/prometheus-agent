@@ -104,6 +104,7 @@ mod tui;
 mod turn;
 mod ui;
 mod upkeep;
+mod voice;
 mod workspace;
 mod worktree;
 pub use acp::*;
@@ -134,6 +135,7 @@ pub use tui::*;
 pub use turn::*;
 pub use ui::*;
 pub use upkeep::*;
+pub use voice::*;
 pub use workspace::*;
 pub use worktree::*;
 
@@ -858,6 +860,11 @@ pub struct SubmitParams {
     /// rpc.forged_author`.
     #[serde(default)]
     pub author: Option<Value>,
+    /// A spoken message of a voice conversation: the turn runs on the
+    /// `[auxiliary.voice_chat]` route and reasoning (spec: voice-mode,
+    /// Voice turn model and reasoning).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub voice: bool,
 }
 
 /// An image attached to a prompt: a file the daemon reads (checked like

@@ -38,6 +38,9 @@ const VOICE: &[Surface] = &[
     Surface::Desktop,
     Surface::Gateway,
 ];
+/// `/wake`: the wake word of a terminal surface (the desktop has its ear
+/// control).
+const WAKE: &[Surface] = &[Surface::Cli, Surface::Tui];
 /// Profile-wide reports: the interactive surfaces, never a chat.
 const INTERACTIVE: &[Surface] = &[
     Surface::Cli,
@@ -775,6 +778,16 @@ pub static BUILTINS: &[Command] = &[
         "slash.desc.voice",
         &[arg("mode", ArgKind::Word, false)],
         VOICE,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "wake",
+        &[],
+        Config,
+        "slash.desc.wake",
+        &[arg("mode", ArgKind::Word, false)],
+        WAKE,
         Immediate,
         Effect::None,
     ),

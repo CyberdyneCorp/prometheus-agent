@@ -52,6 +52,7 @@ fn other_surface_turn(
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let submitted = client.call_typed::<PromptSubmit>(&submit).await.unwrap();
         (client, inbox, submitted.turn_id)

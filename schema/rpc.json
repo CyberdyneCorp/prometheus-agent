@@ -1795,6 +1795,59 @@
         }
       ]
     },
+    "ClientSpeech": {
+      "additionalProperties": false,
+      "description": "How a client reaches one speech provider.",
+      "properties": {
+        "api_key": {
+          "description": "The credential (direct only): kept in memory for the voice session\nonly.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_url": {
+          "description": "The API base URL (direct only).",
+          "type": "string"
+        },
+        "language": {
+          "description": "The spoken language (transcription).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Its model.",
+          "type": "string"
+        },
+        "path": {
+          "description": "`direct` (the client calls the provider), `relay` (through the\ndaemon: `voice.transcribe`, `voice.speak`) or `none`.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "The provider id.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why the relay path (or none).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "voice": {
+          "description": "The voice (speech).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "provider",
+        "model"
+      ],
+      "type": "object"
+    },
     "CommandCatalog": {
       "additionalProperties": false,
       "description": "`commands.catalog` result.",
@@ -8536,6 +8589,10 @@
         "text": {
           "description": "The prompt.",
           "type": "string"
+        },
+        "voice": {
+          "description": "A spoken message of a voice conversation: the turn runs on the\n`[auxiliary.voice_chat]` route and reasoning (spec: voice-mode,\nVoice turn model and reasoning).",
+          "type": "boolean"
         }
       },
       "required": [
@@ -9404,6 +9461,49 @@
       ],
       "type": "object"
     },
+    "VoiceClientConfig": {
+      "additionalProperties": false,
+      "description": "`voice.client_config` result.",
+      "properties": {
+        "chat_mode": {
+          "description": "`voice.chat_mode` (`chained` or `realtime`).",
+          "type": "string"
+        },
+        "client_direct": {
+          "description": "`voice.client_direct`.",
+          "type": "boolean"
+        },
+        "stt": {
+          "$ref": "#/$defs/ClientSpeech",
+          "description": "Speech-to-text."
+        },
+        "tts": {
+          "$ref": "#/$defs/ClientSpeech",
+          "description": "Text-to-speech."
+        }
+      },
+      "required": [
+        "client_direct",
+        "chat_mode",
+        "stt",
+        "tts"
+      ],
+      "type": "object"
+    },
+    "VoiceProfileParams": {
+      "additionalProperties": false,
+      "description": "A profile's voice settings.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
     "VoiceSpeakParams": {
       "additionalProperties": false,
       "description": "`voice.speak` params: read a message of a session aloud.",
@@ -9444,6 +9544,171 @@
       "required": [
         "mime",
         "audio"
+      ],
+      "type": "object"
+    },
+    "VoiceTranscribeParams": {
+      "additionalProperties": false,
+      "description": "`voice.transcribe` params: a recording relayed through the daemon.",
+      "properties": {
+        "audio": {
+          "description": "The recording (WAV, Ogg, MP3 or `WebM`), base64.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile whose speech-to-text provider transcribes.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session the words go to (metered calls are billed to it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "audio"
+      ],
+      "type": "object"
+    },
+    "VoiceTranscript": {
+      "additionalProperties": false,
+      "description": "`voice.transcribe` result.",
+      "properties": {
+        "provider": {
+          "description": "The provider that transcribed it.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "WakeArmParams": {
+      "additionalProperties": false,
+      "description": "`wake.arm` params.",
+      "properties": {
+        "client_capture": {
+          "default": false,
+          "description": "The client sends the audio (`wake.feed`) instead of the daemon\nopening its own microphone (used when `wake.capture = \"auto\"`).",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "The profile whose wake word listens.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "WakeArmed": {
+      "additionalProperties": false,
+      "description": "`wake.arm` result.",
+      "properties": {
+        "capture": {
+          "description": "`local` (the daemon's microphone) or `client` (`wake.feed`).",
+          "type": "string"
+        },
+        "engine": {
+          "description": "The engine listening.",
+          "type": "string"
+        },
+        "phrase": {
+          "description": "The phrase it listens for.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "engine",
+        "phrase",
+        "capture"
+      ],
+      "type": "object"
+    },
+    "WakeDetected": {
+      "additionalProperties": false,
+      "description": "`wake.detected` payload.",
+      "properties": {
+        "phrase": {
+          "description": "The phrase heard.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile the phrase wakes (another profile's under profile\nrouting: the desktop switches to it).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "phrase"
+      ],
+      "type": "object"
+    },
+    "WakeFeedParams": {
+      "additionalProperties": false,
+      "description": "`wake.feed` params: audio from the client's microphone.",
+      "properties": {
+        "pcm": {
+          "description": "16 kHz mono 16-bit little-endian PCM, base64.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile whose listener takes the audio.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "pcm"
+      ],
+      "type": "object"
+    },
+    "WakeProfileParams": {
+      "additionalProperties": false,
+      "description": "A profile's wake listener.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "WakeState": {
+      "additionalProperties": false,
+      "description": "`wake.status` result (and the empty answer of `wake.feed` and\n`wake.disarm`).",
+      "properties": {
+        "armed": {
+          "description": "The daemon's listener for the profile is armed.",
+          "type": "boolean"
+        },
+        "error": {
+          "description": "Why the listener stopped or could not arm.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report": {
+          "description": "The `/wake status` report (phrase, engine, owner, capture, input\ndevice, audio host API, what is missing, a silent microphone).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "armed"
       ],
       "type": "object"
     },
@@ -9902,8 +10167,10 @@
       "since": "1.0"
     },
     "wake.detected": {
-      "declared": false,
       "owner": "voice-mode",
+      "payload": {
+        "$ref": "#/$defs/WakeDetected"
+      },
       "since": "1.0"
     }
   },
@@ -11565,8 +11832,13 @@
       "since": "1.0"
     },
     "voice.client_config": {
-      "declared": false,
       "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceClientConfig"
+      },
       "since": "1.0"
     },
     "voice.speak": {
@@ -11579,9 +11851,54 @@
       },
       "since": "1.0"
     },
-    "wake.feed": {
-      "declared": false,
+    "voice.transcribe": {
       "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceTranscribeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceTranscript"
+      },
+      "since": "1.0"
+    },
+    "wake.arm": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeArmParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeArmed"
+      },
+      "since": "1.0"
+    },
+    "wake.disarm": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeState"
+      },
+      "since": "1.0"
+    },
+    "wake.feed": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeFeedParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeState"
+      },
+      "since": "1.0"
+    },
+    "wake.status": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeState"
+      },
       "since": "1.0"
     },
     "worktree.list": {

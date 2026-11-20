@@ -44,6 +44,8 @@ pub enum Local {
     Handoff,
     /// Voice mode: `/voice [on|off|tts|status]` (recorded and spoken here).
     Voice,
+    /// The wake word: `/wake [on|off|status]` (listened for here).
+    Wake,
     /// Show a split pane: `/pane subagents|tools|off`.
     Pane,
     /// Open the session timeline.
@@ -188,6 +190,12 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "voice",
         aliases: &[],
         key: "tui.cmd_voice",
+    },
+    LocalCommand {
+        command: Local::Wake,
+        name: "wake",
+        aliases: &[],
+        key: "tui.cmd_wake",
     },
     LocalCommand {
         command: Local::Pane,

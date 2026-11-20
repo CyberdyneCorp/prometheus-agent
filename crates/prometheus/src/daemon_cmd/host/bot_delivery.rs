@@ -281,6 +281,7 @@ impl DaemonHost {
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let author = Author {
             client_kind: DELIVERED_KIND.to_owned(),
@@ -416,6 +417,7 @@ impl DaemonHost {
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let author = Author {
             client_kind: OUTCOME_KIND.to_owned(),

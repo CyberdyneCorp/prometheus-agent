@@ -667,6 +667,17 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no bots")) })
     }
 
+    /// One voice call (`wake.*`, `voice.client_config`,
+    /// `voice.transcribe`) for `profile`: the method's result.
+    fn voice<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::voice::VoiceCall,
+    ) -> HostFuture<'a, serde_json::Value> {
+        let _ = (profile, request);
+        Box::pin(async { Err(not_served("this host has no voice methods")) })
+    }
+
     /// The union roster seen from `params.profile` (`bot.roster.list`).
     fn bot_roster(
         &self,

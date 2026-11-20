@@ -95,6 +95,10 @@ impl Chat<'_, '_> {
                 self.voice_command(args).await;
                 return Ok(Some(Flow::Continue));
             }
+            "wake" => {
+                self.wake_command(args).await;
+                return Ok(Some(Flow::Continue));
+            }
             "handoff" => {
                 let scope = self.start.scope;
                 let handed = crate::chat::handoff::handoff(

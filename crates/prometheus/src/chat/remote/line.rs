@@ -200,6 +200,16 @@ pub(super) struct Chat<'a, 'b> {
     /// Speaks the answer of the turn being run (a voice turn with spoken
     /// replies on).
     pub(super) mouth: Option<std::sync::Arc<pmt_voice::speaker::Mouth>>,
+    /// Set while a voice turn runs: cancelled when the user speaks over
+    /// the reply (the turn is interrupted).
+    pub(super) voice_cut: Option<pmt_core::cancel::CancelToken>,
+    /// `/wake` and this terminal's wake listener.
+    pub(super) wake: crate::chat::wake::WakeClient,
+    /// Where the listener hands its detections.
+    pub(super) woken: (
+        crate::chat::wake::Woken,
+        tokio::sync::mpsc::UnboundedReceiver<pmt_voice::wake::engine::Detection>,
+    ),
 }
 
 /// What the loop does after a line.
@@ -242,6 +252,9 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         prune: false,
         voice: crate::chat::voice::VoiceClient::new(start.scope, start.launch, start.cwd, "cli"),
         mouth: None,
+        voice_cut: None,
+        wake: crate::chat::wake::WakeClient::new(start.scope, start.launch, "cli"),
+        woken: crate::chat::wake::channel(),
     };
     chat.refresh_model().await;
     let banner = pmt_i18n::t!(
@@ -264,7 +277,9 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
     if let Some(first) = &start.first {
         chat.submit(first.clone()).await?;
     }
+    chat.arm_wake().await;
     let status = chat.main_loop().await;
+    chat.wake.disarm();
     chat.memory_summary().await;
     status
 }
@@ -287,6 +302,12 @@ impl Chat<'_, '_> {
                     _ = self.signals.next() => Typed::Interrupt,
                     Some(event) = self.attached.inbox.events.recv() => {
                         self.on_idle_event(&event);
+                        continue;
+                    }
+                    Some(detection) = self.woken.1.recv() => {
+                        if let Flow::Exit = self.woken(detection).await? {
+                            return Ok(0);
+                        }
                         continue;
                     }
                 }
@@ -359,7 +380,13 @@ impl Chat<'_, '_> {
             .into_iter()
             .map(|path| pmt_rpc::contracts::PromptImage::Path(path.to_string_lossy().into_owned()))
             .collect();
-        self.run_turn(Prompt { text, images }).await
+        let voice = self.voice_cut.clone();
+        self.run_turn(Prompt {
+            text,
+            images,
+            voice,
+        })
+        .await
     }
 
     pub(super) async fn run_turn(&mut self, prompt: Prompt) -> Result<(), Error> {
@@ -485,6 +512,7 @@ impl Chat<'_, '_> {
                 self.run_turn(Prompt {
                     text: message,
                     images,
+                    voice: None,
                 })
                 .await?;
             }

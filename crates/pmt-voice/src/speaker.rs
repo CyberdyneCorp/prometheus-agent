@@ -8,7 +8,7 @@
 
 use std::sync::{Arc, Mutex, PoisonError};
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 
 use crate::device::{Clip, Player, Synth};
@@ -22,6 +22,9 @@ pub struct Mouth {
     sentences: Mutex<Sentences>,
     to_say: Mutex<Option<mpsc::UnboundedSender<String>>>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    /// `true` once the last clip has played (the sender drops when the
+    /// player task is stopped).
+    played: watch::Receiver<bool>,
 }
 
 impl Mouth {
@@ -46,17 +49,20 @@ impl Mouth {
                 }
             }
         });
+        let (done, finished) = watch::channel(false);
         let play = pmt_core::spawn::spawn(async move {
             while let Some(clip) = playing.recv().await {
                 if let Err(why) = player.play(clip).await {
                     tracing::warn!(%why, "a spoken sentence was not played");
                 }
             }
+            let _ = done.send(true);
         });
         Arc::new(Self {
             sentences: Mutex::new(Sentences::new()),
             to_say: Mutex::new(Some(to_say)),
             tasks: Mutex::new(vec![synthesize, play]),
+            played: finished,
         })
     }
 
@@ -79,7 +85,8 @@ impl Mouth {
     }
 
     /// The reply is complete: speaks what is left and waits until every
-    /// sentence has played.
+    /// sentence has played (or [`Mouth::stop`] cut it short). Cancel safe:
+    /// dropping it leaves the speech running.
     pub async fn finish(&self) {
         let rest = self
             .sentences
@@ -91,13 +98,12 @@ impl Mouth {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .take();
-        let tasks = std::mem::take(&mut *self.tasks.lock().unwrap_or_else(PoisonError::into_inner));
-        for task in tasks {
-            let _ = task.await;
-        }
+        let mut played = self.played.clone();
+        let _ = played.wait_for(|done| *done).await;
     }
 
-    /// Stops speaking now: nothing more is synthesized or played.
+    /// Stops speaking now: the clip playing is cut and nothing more is
+    /// synthesized or played.
     pub fn stop(&self) {
         self.to_say
             .lock()

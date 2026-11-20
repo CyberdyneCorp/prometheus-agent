@@ -307,6 +307,7 @@ impl DaemonHost {
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let author = Author {
             client_kind: "relay".to_owned(),

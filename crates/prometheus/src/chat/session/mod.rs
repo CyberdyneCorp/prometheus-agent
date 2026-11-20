@@ -51,6 +51,7 @@ mod tool_state;
 pub mod tools;
 mod trace;
 pub mod vision;
+pub mod voice_route;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};

@@ -114,6 +114,7 @@ impl DaemonHost {
             resume: Some((unfinished, choice)),
             api: None,
             entry: None,
+            voice: false,
         };
         let turn_id = job.turn_id.clone();
         let admission = if session.busy.swap(true, Ordering::AcqRel) {

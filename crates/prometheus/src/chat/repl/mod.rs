@@ -115,6 +115,17 @@ struct Repl {
     /// Speaks the reply of the turn being run (a voice turn with spoken
     /// replies on).
     mouth: Option<Arc<pmt_voice::speaker::Mouth>>,
+    /// Set while a voice turn runs: it takes the voice route, and
+    /// cancelling it (the user spoke over the reply) interrupts the turn.
+    voice_cut: Option<pmt_core::cancel::CancelToken>,
+    /// `/wake` and this terminal's wake listener.
+    wake: crate::chat::wake::WakeClient,
+    /// Where the listener hands its detections, and where the idle prompt
+    /// takes them.
+    woken: (
+        crate::chat::wake::Woken,
+        mpsc::UnboundedReceiver<pmt_voice::wake::engine::Detection>,
+    ),
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -245,6 +256,9 @@ pub async fn run(
         wakeup: None,
         voice: crate::chat::voice::VoiceClient::new(&factory_scope, &launch, &factory_cwd, "cli"),
         mouth: None,
+        voice_cut: None,
+        wake: crate::chat::wake::WakeClient::new(&factory_scope, &launch, "cli"),
+        woken: crate::chat::wake::channel(),
     };
     repl.attach(live);
     let notices = print_notices(asks.notices, repl.input.printer(), repl.strings());
@@ -259,8 +273,10 @@ pub async fn run(
         Box::pin(repl.offer_resume()).await;
     }
     repl.offer_autoprune();
+    repl.arm_wake().await;
     repl.spacer();
     let status = Box::pin(repl.main_loop()).await;
+    repl.wake.disarm();
     notices.abort();
     let _ = notices.await;
     Ok(status)
@@ -341,6 +357,9 @@ impl Repl {
                 self.notice(self.strings().get("cli.subagents_done"));
                 self.queue.push_back(completion);
                 return Flow::Continue;
+            }
+            Some(detection) = self.woken.1.recv() => {
+                return Box::pin(self.woken(detection)).await;
             }
         };
         match event {
