@@ -247,8 +247,13 @@ impl Engine {
         let dir = self.root.join(self.dir_name(backend));
         let result = (|| {
             for file in &build.files {
-                pmt_update::runtimes::extract::unpack(&self.archive(file), file.format, &staging)
-                    .map_err(|reason| {
+                pmt_update::runtimes::extract::unpack(
+                    &self.archive(file),
+                    file.format,
+                    &staging,
+                    &build.exe,
+                )
+                .map_err(|reason| {
                     Error::new(
                         &codes::RUNTIME_IO,
                         format!("cannot unpack {}: {reason}", file.file_name()),

@@ -133,6 +133,7 @@ pub fn settings_of(scope: &ProfileScope) -> Settings {
         archive_max_file_bytes: w.archive_max_file_bytes,
         max_total_bytes: w.max_total_bytes,
         archive_retention_secs: w.archive_retention_secs,
+        install_state_retention_secs: w.install_state_retention_secs,
     }
 }
 

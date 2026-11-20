@@ -1,0 +1,8 @@
+· delegate_task
+
+dispatched both
+
+› [desktop-7] hello from the desk
+────────────────────────────────────────────────────────────────────────────────
+›
+  default │ mock/m1 │ with desktop-7

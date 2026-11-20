@@ -1,0 +1,512 @@
+//! Freezing a job's task (spec: harness-evolution, Evolution task
+//! capture).
+//!
+//! `task/` holds `task.md` (the statement), `source/` (the workspace the
+//! rollouts re-run in) and `task.toml`. A git workspace is captured as its
+//! HEAD commit (`repo.toml`) plus `uncommitted.patch`, built through a
+//! private index and a private object directory (the user's objects are an
+//! alternate, read only), so nothing under the user's `.git` changes; any other
+//! workspace as a copy of the files the session read or modified. Leak
+//! globs are excluded, text is redacted, and the whole snapshot is capped.
+//!
+//! A leak-glob file already tracked at HEAD cannot be left out of a commit
+//! id, and a deletion hunk in the patch would carry its content. So
+//! `repo.toml` lists such paths under `excluded` and whoever materialises
+//! the workspace removes them ([`RepoSnapshot::remove_excluded`]).
+
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use pmt_core::error::{Error, codes};
+use pmt_core::secret::Redactor;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest as _, Sha256};
+
+/// `task.toml`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskMeta {
+    /// The experience-library domain (empty until the classifier ran).
+    pub domain: String,
+    /// Where the domain came from.
+    #[serde(default)]
+    pub domain_source: crate::experience::domain::Source,
+    /// Toolsets the rollouts get.
+    #[serde(default)]
+    pub toolsets: Vec<String>,
+    /// The model the task ran on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The execution backend.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+    /// The session the task came from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_session: Option<String>,
+    /// SHA-256 (16 hex) over `task.md` and every file of `source/`.
+    #[serde(default)]
+    pub fingerprint: String,
+}
+
+/// What to freeze.
+#[derive(Debug, Clone)]
+pub struct Capture {
+    /// The task statement (`task.md`).
+    pub statement: String,
+    /// The workspace, if the task has one.
+    pub workspace: Option<PathBuf>,
+    /// The files to copy from a workspace that is not a git repository:
+    /// `None` copies the whole workspace (a task file), `Some` only these
+    /// (the files a session read or modified).
+    pub files: Option<Vec<PathBuf>>,
+    /// `task.toml` (its fingerprint is computed here).
+    pub meta: TaskMeta,
+    /// `evolve.leak_globs`.
+    pub leak_globs: Vec<String>,
+    /// `evolve.task.max_source_bytes`.
+    pub max_source_bytes: u64,
+    /// The profile's redactor.
+    pub redactor: Redactor,
+}
+
+/// `source/repo.toml` of a git workspace.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepoSnapshot {
+    /// The HEAD commit the rollout workspace is checked out at.
+    pub commit: String,
+    /// The repository the commit is read from (a rollout clones it
+    /// `--shared`, reading its objects and never writing to it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root: Option<String>,
+    /// Paths tracked at `commit` that match a leak glob: they are not in
+    /// `uncommitted.patch` and must be deleted from the materialised
+    /// workspace.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded: Vec<String>,
+}
+
+impl RepoSnapshot {
+    /// Reads `repo.toml` from a task's `source/` directory.
+    ///
+    /// # Errors
+    ///
+    /// `harness.io` when the file is missing or not valid.
+    pub fn read(source: &Path) -> Result<Self, Error> {
+        let path = source.join("repo.toml");
+        let text = std::fs::read_to_string(&path).map_err(|e| io(&path, &e))?;
+        toml::from_str(&text).map_err(|e| Error::new(&codes::HARNESS_IO, e.message().to_owned()))
+    }
+
+    /// Deletes every `excluded` path from `workspace` (a checkout of
+    /// `commit` with the patch applied). A path already gone is fine.
+    ///
+    /// # Errors
+    ///
+    /// `harness.io` when a file cannot be removed.
+    pub fn remove_excluded(&self, workspace: &Path) -> Result<(), Error> {
+        for relative in &self.excluded {
+            let path = workspace.join(relative);
+            match std::fs::remove_file(&path) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(io(&path, &e)),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Matches leak globs against full relative paths, leading dots included.
+#[derive(Debug, Clone)]
+pub struct LeakGlobs(Vec<glob::Pattern>);
+
+impl LeakGlobs {
+    /// Compiles `globs` (an unparsable glob is skipped with a warning; the
+    /// config check reports it).
+    #[must_use]
+    pub fn new(globs: &[String]) -> Self {
+        Self(
+            globs
+                .iter()
+                .filter_map(|g| match glob::Pattern::new(g) {
+                    Ok(p) => Some(p),
+                    Err(err) => {
+                        tracing::warn!(glob = %g, error = %err, "evolve.leak_globs entry skipped");
+                        None
+                    }
+                })
+                .collect(),
+        )
+    }
+
+    /// Whether the relative POSIX `path` matches a glob.
+    #[must_use]
+    pub fn matches(&self, path: &str) -> bool {
+        let options = glob::MatchOptions {
+            case_sensitive: true,
+            require_literal_separator: true,
+            require_literal_leading_dot: false,
+        };
+        self.0.iter().any(|p| p.matches_with(path, options))
+    }
+}
+
+/// Freezes `capture` into `dir` (`<job>/task`) and returns `task.toml`.
+///
+/// # Errors
+///
+/// `evolve.invalid_task` (exit 65) when the snapshot exceeds the cap or
+/// git fails; `harness.io` for file errors.
+pub fn capture(dir: &Path, capture: &Capture) -> Result<TaskMeta, Error> {
+    let source = dir.join("source");
+    std::fs::create_dir_all(&source).map_err(|e| io(&source, &e))?;
+    let statement = capture.redactor.redact_all(&capture.statement);
+    write(&dir.join("task.md"), statement.as_bytes())?;
+    let leaks = LeakGlobs::new(&capture.leak_globs);
+    let mut snapshot = Snapshot {
+        root: source.clone(),
+        leaks,
+        redactor: capture.redactor.clone(),
+        bytes: 0,
+        cap: capture.max_source_bytes,
+    };
+    if let Some(workspace) = &capture.workspace {
+        match git_root(workspace) {
+            Some(root) => snapshot.git(&root, dir)?,
+            None => snapshot.files(workspace, capture.files.as_deref())?,
+        }
+    }
+    let mut meta = capture.meta.clone();
+    meta.fingerprint = fingerprint(dir)?;
+    let text = toml::to_string(&meta).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
+    write(&dir.join("task.toml"), text.as_bytes())?;
+    Ok(meta)
+}
+
+/// Recomputes the fingerprint in `task.toml` after `task.md` was edited.
+///
+/// # Errors
+///
+/// `harness.io`.
+pub fn refingerprint(dir: &Path) -> Result<(), Error> {
+    let path = dir.join("task.toml");
+    let text = std::fs::read_to_string(&path).map_err(|e| io(&path, &e))?;
+    let mut meta: TaskMeta = toml::from_str(&text)
+        .map_err(|e| Error::new(&codes::HARNESS_IO, e.message().to_owned()))?;
+    let statement = dir.join("task.md");
+    let edited = std::fs::read_to_string(&statement).map_err(|e| io(&statement, &e))?;
+    if edited.trim().is_empty() {
+        return Err(Error::new(
+            &codes::EVOLVE_INVALID_TASK,
+            "the task statement is empty",
+        ));
+    }
+    meta.fingerprint = fingerprint(dir)?;
+    let text = toml::to_string(&meta).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
+    write(&path, text.as_bytes())
+}
+
+/// Whether a file carries an eval verdict marker in its name or content
+/// (it is left out like a leak-glob match).
+fn verdict(relative: &str, bytes: &[u8]) -> bool {
+    relative.contains(crate::engine::tripwire::VERDICT_CANARY)
+        || crate::engine::tripwire::check_text(relative, &String::from_utf8_lossy(bytes)).is_err()
+}
+
+/// The files of the repository at `root` (tracked, and untracked but not
+/// ignored) that carry a verdict marker.
+fn verdict_files(root: &Path) -> Result<Vec<String>, Error> {
+    let listed = git(
+        root,
+        &[
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ],
+        None,
+    )?;
+    Ok(listed
+        .split('\0')
+        .filter(|relative| !relative.is_empty())
+        .filter(|relative| {
+            std::fs::read(root.join(relative)).is_ok_and(|bytes| verdict(relative, &bytes))
+        })
+        .map(str::to_owned)
+        .collect())
+}
+
+struct Snapshot {
+    root: PathBuf,
+    leaks: LeakGlobs,
+    redactor: Redactor,
+    bytes: u64,
+    cap: u64,
+}
+
+impl Snapshot {
+    /// Adds `bytes` to the snapshot, failing past the cap.
+    fn charge(&mut self, bytes: usize) -> Result<(), Error> {
+        self.bytes += u64::try_from(bytes).unwrap_or(u64::MAX);
+        if self.bytes > self.cap {
+            return Err(Error::new(
+                &codes::EVOLVE_INVALID_TASK,
+                format!(
+                    "the task snapshot exceeds evolve.task.max_source_bytes ({} bytes)",
+                    self.cap
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Text is redacted; other bytes are copied as they are.
+    fn redacted(&self, bytes: Vec<u8>) -> Vec<u8> {
+        match String::from_utf8(bytes) {
+            Ok(text) => self.redactor.redact_all(&text).into_bytes(),
+            Err(raw) => raw.into_bytes(),
+        }
+    }
+
+    /// `repo.toml` and `uncommitted.patch` of the repository at `root`.
+    fn git(&mut self, root: &Path, job_task: &Path) -> Result<(), Error> {
+        let head = git(root, &["rev-parse", "HEAD"], None)?;
+        let private = Private::new(root, job_task)?;
+        let env = Some(&private);
+        let verdicts = verdict_files(root)?;
+        let excludes: Vec<String> = self
+            .leaks
+            .0
+            .iter()
+            .map(|p| format!(":(exclude,glob){}", p.as_str()))
+            .chain(verdicts.iter().map(|v| format!(":(exclude,literal){v}")))
+            .collect();
+        let patch = (|| {
+            git(root, &["read-tree", "HEAD"], env)?;
+            let mut add = vec!["add", "-A", "--", "."];
+            add.extend(excludes.iter().map(String::as_str));
+            git(root, &add, env)?;
+            git(root, &["diff", "--cached", "--binary", "HEAD"], env)
+        })();
+        private.remove();
+        let patch = self.redacted(patch?.into_bytes());
+        self.charge(patch.len())?;
+        write(&self.root.join("uncommitted.patch"), &patch)?;
+        let tracked = git(root, &["ls-tree", "-r", "-z", "--name-only", "HEAD"], None)?;
+        let repo = RepoSnapshot {
+            commit: head.trim().to_owned(),
+            root: Some(root.to_string_lossy().into_owned()),
+            excluded: tracked
+                .split('\0')
+                .filter(|path| {
+                    !path.is_empty()
+                        && (self.leaks.matches(path) || verdicts.iter().any(|v| v == path))
+                })
+                .map(str::to_owned)
+                .collect(),
+        };
+        let text =
+            toml::to_string(&repo).map_err(|e| Error::new(&codes::HARNESS_IO, e.to_string()))?;
+        write(&self.root.join("repo.toml"), text.as_bytes())
+    }
+
+    /// Copies `files` (or the whole workspace) under `workspace`.
+    fn files(&mut self, workspace: &Path, files: Option<&[PathBuf]>) -> Result<(), Error> {
+        let paths = match files {
+            Some(files) => files
+                .iter()
+                .map(|f| {
+                    if f.is_absolute() {
+                        f.clone()
+                    } else {
+                        workspace.join(f)
+                    }
+                })
+                .collect(),
+            None => walk(workspace),
+        };
+        let base = workspace
+            .canonicalize()
+            .unwrap_or_else(|_| workspace.to_path_buf());
+        let mut seen = std::collections::BTreeSet::new();
+        for path in paths {
+            let Ok(real) = path.canonicalize() else {
+                continue;
+            };
+            let Ok(relative) = real.strip_prefix(&base) else {
+                continue;
+            };
+            let relative = relative.to_string_lossy().replace('\\', "/");
+            if !real.is_file() || self.leaks.matches(&relative) || !seen.insert(relative.clone()) {
+                continue;
+            }
+            self.copy(&real, &relative)?;
+        }
+        Ok(())
+    }
+
+    /// Copies one workspace file to `source/<relative>`, redacted and
+    /// charged; a file carrying a verdict marker is left out.
+    fn copy(&mut self, real: &Path, relative: &str) -> Result<(), Error> {
+        let bytes = std::fs::read(real).map_err(|e| io(real, &e))?;
+        if verdict(relative, &bytes) {
+            return Ok(());
+        }
+        let bytes = self.redacted(bytes);
+        self.charge(bytes.len())?;
+        let target = self.root.join(relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| io(parent, &e))?;
+        }
+        write(&target, &bytes)
+    }
+}
+
+/// Every regular file under `dir`, skipping `.git` and symlinks.
+fn walk(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() && entry.file_name() != ".git" {
+            out.extend(walk(&entry.path()));
+        } else if kind.is_file() {
+            out.push(entry.path());
+        }
+    }
+    out
+}
+
+/// The repository root of `dir`, when it is inside a git work tree.
+fn git_root(dir: &Path) -> Option<PathBuf> {
+    git(dir, &["rev-parse", "--show-toplevel"], None)
+        .ok()
+        .map(|out| PathBuf::from(out.trim()))
+}
+
+/// Where the patch capture keeps its index and the blobs `git add` writes:
+/// under the job, so the user's index and object store stay byte-identical.
+struct Private {
+    index: PathBuf,
+    objects: PathBuf,
+    alternate: PathBuf,
+}
+
+impl Private {
+    fn new(root: &Path, job_task: &Path) -> Result<Self, Error> {
+        // `git -C <root>` resolves relative paths against the repository,
+        // so every path is made absolute first.
+        let absolute =
+            |name: &str| std::path::absolute(job_task.join(name)).unwrap_or(job_task.join(name));
+        let objects = absolute(".capture-objects");
+        std::fs::create_dir_all(&objects).map_err(|e| io(&objects, &e))?;
+        let alternate = git(
+            root,
+            &[
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "objects",
+            ],
+            None,
+        )?;
+        Ok(Self {
+            index: absolute(".capture-index"),
+            objects,
+            alternate: PathBuf::from(alternate.trim()),
+        })
+    }
+
+    fn remove(&self) {
+        let _ = std::fs::remove_file(&self.index);
+        let _ = std::fs::remove_dir_all(&self.objects);
+    }
+}
+
+fn git(dir: &Path, args: &[&str], private: Option<&Private>) -> Result<String, Error> {
+    let mut command = Command::new("git");
+    // No auto gc or maintenance may start in the user's repository because
+    // of us (a detached one would also rewrite `.git` behind our back).
+    command
+        .args(["-c", "gc.auto=0", "-c", "maintenance.auto=false"])
+        .arg("-C")
+        .arg(dir)
+        .args(args);
+    if let Some(private) = private {
+        command
+            .env("GIT_INDEX_FILE", &private.index)
+            .env("GIT_OBJECT_DIRECTORY", &private.objects)
+            .env("GIT_ALTERNATE_OBJECT_DIRECTORIES", &private.alternate);
+    }
+    let output = command.output().map_err(|e| {
+        Error::new(
+            &codes::EVOLVE_INVALID_TASK,
+            format!("git could not run: {e}"),
+        )
+    })?;
+    if !output.status.success() {
+        return Err(Error::new(
+            &codes::EVOLVE_INVALID_TASK,
+            format!(
+                "git {} failed: {}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr).trim()
+            ),
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// SHA-256 (16 hex) over `task.md` and `source/`, path order.
+fn fingerprint(dir: &Path) -> Result<String, Error> {
+    let mut files = vec![dir.join("task.md")];
+    let mut sources = walk(&dir.join("source"));
+    sources.sort();
+    files.extend(sources);
+    let mut hash = Sha256::new();
+    for path in files {
+        let relative = path.strip_prefix(dir).unwrap_or(&path);
+        hash.update(relative.to_string_lossy().replace('\\', "/").as_bytes());
+        hash.update([0]);
+        hash.update(std::fs::read(&path).map_err(|e| io(&path, &e))?);
+        hash.update([0]);
+    }
+    Ok(hash.finalize()[..8]
+        .iter()
+        .fold(String::new(), |mut hex, b| {
+            let _ = write!(hex, "{b:02x}");
+            hex
+        }))
+}
+
+fn write(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    std::fs::write(path, bytes).map_err(|e| io(path, &e))
+}
+
+fn io(path: &Path, err: &std::io::Error) -> Error {
+    Error::io(&codes::HARNESS_IO, path, err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn leak_globs_match_full_paths_with_leading_dots() {
+        let globs = LeakGlobs::new(&[
+            ".answers/**".to_owned(),
+            "**/*rubric*".to_owned(),
+            "**/expected/**".to_owned(),
+        ]);
+        assert!(globs.matches(".answers/q1.txt"));
+        assert!(globs.matches("rubric.md"));
+        assert!(globs.matches("grader/the_rubric.txt"));
+        assert!(globs.matches("a/expected/out.txt"));
+        assert!(!globs.matches("src/main.rs"));
+        assert!(!globs.matches("answers/q1.txt"));
+    }
+}

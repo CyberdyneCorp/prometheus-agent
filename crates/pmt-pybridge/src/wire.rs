@@ -24,6 +24,7 @@ pub const SIDECAR_METHODS: &[&str] = &[
     "command.invoke",
     "provider.call",
     "event.deliver",
+    "bench.invoke",
 ];
 /// The one sidecar-to-host method.
 pub const HOST_CALL: &str = "host.call";

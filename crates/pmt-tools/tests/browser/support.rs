@@ -45,6 +45,8 @@ pub(crate) struct Fixture {
     pub(crate) display: Display,
     /// The default browser the managers it builds detect.
     pub(crate) detect: Arc<dyn Detect>,
+    /// The bot screen the managers it builds see.
+    pub(crate) screen: Option<pmt_tools::browser::ScreenHook>,
 }
 
 impl Fixture {
@@ -67,6 +69,7 @@ impl Fixture {
             allow_degraded: Vec::new(),
             display: Display::none(),
             detect: Arc::new(NoDefaultBrowser),
+            screen: None,
         }
     }
 
@@ -146,6 +149,7 @@ impl Fixture {
             display: self.display.clone(),
             detect: Arc::clone(&self.detect),
             profile_dir: self.profile.clone(),
+            screen: self.screen.clone(),
         })
     }
 

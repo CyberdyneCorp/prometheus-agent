@@ -15,6 +15,7 @@ pub mod discover;
 pub mod exit;
 pub mod git;
 pub mod inspect;
+pub mod install_state;
 pub mod names;
 pub mod registry;
 pub mod repo;

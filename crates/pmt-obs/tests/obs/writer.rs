@@ -30,6 +30,7 @@ fn tool_result(output: &str) -> Event {
         duration_ms: Some(5),
         output: Some(output.to_owned()),
         error: None,
+        taint: None,
     })
 }
 
@@ -124,6 +125,7 @@ fn a_full_queue_slows_producers_down_and_loses_nothing() {
                     let event = Event::UserMessage(MessageText {
                         message_id: None,
                         text,
+                        author: None,
                     });
                     writer.record(Emit::now(event)).await.unwrap();
                 }

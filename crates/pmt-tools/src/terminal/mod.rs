@@ -38,4 +38,6 @@ pub mod windows_shell;
 
 pub use args::TerminalArgs;
 pub use result::{Status, TerminalResult};
-pub use session::{BeforeCommand, PathSource, SecretSource, Terminal, TerminalSetup};
+pub use session::{
+    AfterCommand, BeforeCommand, CommandEnd, PathSource, SecretSource, Terminal, TerminalSetup,
+};

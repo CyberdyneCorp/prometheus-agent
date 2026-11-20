@@ -189,6 +189,12 @@ pub struct TuiKeys {
     pub expand_paste: Option<KeyChord>,
     /// Move to the startup banner's section headers (default `Ctrl+B`).
     pub banner: Option<KeyChord>,
+    /// Show or hide the subagents pane (default `F2`).
+    pub pane_subagents: Option<KeyChord>,
+    /// Show or hide the tool-output pane (default `F3`).
+    pub pane_tools: Option<KeyChord>,
+    /// Open the session timeline (default `Ctrl+T`).
+    pub timeline: Option<KeyChord>,
 }
 
 /// Interactive interfaces.

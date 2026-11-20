@@ -213,6 +213,13 @@ impl ShellRunner {
         }
     }
 
+    /// The same runner named `label` in logs and answers.
+    #[must_use]
+    pub fn labelled(mut self, label: String) -> Self {
+        self.label = label;
+        self
+    }
+
     /// Runs the hook once on `stdin`.
     pub async fn run(&self, stdin: &Value, cwd: Option<&str>) -> Ran {
         let mut command = match super::sandboxed(&self.scope, &self.program, &self.scripts, cwd) {

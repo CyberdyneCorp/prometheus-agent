@@ -146,6 +146,11 @@ pub struct ChatArgs {
     /// Integration tag recorded on the session.
     #[arg(long, value_name = "TAG")]
     pub source: Option<String>,
+    /// The session's experience-library domain: evolution jobs of the
+    /// session file their lessons there, and (with
+    /// `experience.session_lessons`) the session starts with its lessons.
+    #[arg(long, value_name = "NAME")]
+    pub domain: Option<String>,
     /// Put the session id in the system prompt.
     #[arg(long)]
     pub pass_session_id: bool,

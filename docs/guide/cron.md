@@ -25,6 +25,7 @@ Every schedule parses to exactly one kind; nothing is guessed:
 | `interval` | `every 30m`, `every 2h`, `every 1d` (units `s`, `m`, `h`, `d`, `w`; at least 60 s) |
 | `cron` | a five-field expression (`0 9 * * 1-5`) or an exact phrase: `every monday 9am`, `weekdays at 9:30`, `weekends at 10am`, `every day at 18:00`, `daily at noon` |
 | `once` | an RFC 3339 time, `at 9am` (the next 9 am), `at 2026-12-01 07:30`, `tomorrow at 18:00`, `in 30m` |
+| `rrule` | an RFC 5545 rule such as `FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;BYHOUR=12;BYMINUTE=0`, only as the translation of a natural-language schedule (below) |
 
 A bare duration is refused: `ambiguous schedule '30m': use 'every 30m' for
 a recurring interval or 'in 30m' for a one-shot`. Anything else outside the
@@ -37,6 +38,32 @@ $ prometheus cron add "every 10s" --prompt "check the disks" --yes # exits 65
 error: interval must be at least 60s
 $ prometheus cron list
 no cron jobs
+```
+
+Free-form text the grammar rejects goes through `--nl` (`cron add --nl
+"every other thursday at noon"`, `cron edit <job> --nl ...`) or the
+[`cronjob`](../reference/tools.md#cronjob) tool's `schedule_text`: the `schedule` auxiliary model
+(`[auxiliary.schedule]`, default the main model) translates it into the
+grammar or an RFC 5545 rule, and the answer is used only when it parses
+(otherwise `could not translate schedule: <text>` and nothing is saved). The
+echo starts with `translated "<text>" to:` and is confirmed like any other.
+Rules may use `FREQ` (`HOURLY` to `YEARLY`), `INTERVAL`, `BYMONTH`,
+`BYMONTHDAY`, `BYDAY` (ordinals such as `1MO` or `-1FR` in monthly rules),
+`BYSETPOS`, `BYHOUR`, `BYMINUTE`, `WKST`, and one of `COUNT` (that many
+instances) or `UNTIL` (inclusive: a day `20271224` or a wall-clock time
+`20271224T170000` in the job's zone, or a UTC time `20271224T170000Z`) to
+end it, so `every weekday at 9 until Dec 24` works; a job whose rule ends
+is completed after its last instance. A rule starts when the job is
+created: intervals count from that week, month or year, parts it leaves
+out take their value from that moment, and its instances (the ones
+`COUNT` counts) come strictly after it.
+
+```text
+$ prometheus cron add --nl "first business day of each month at 8" --prompt "close the books" --yes
+translated "first business day of each month at 8" to:
+rrule FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=1;BYHOUR=8;BYMINUTE=0 (Europe/Lisbon)
+  next: Tue 2026-12-01 08:00 WET (2026-12-01T08:00:00Z)
+  ...
 ```
 
 Schedules run in the job's zone (`--tz`), else `cron.timezone`, else the
@@ -64,6 +91,10 @@ command refuses with exit 4.
   the last 4 KiB of its standard error.
 - `--no-agent` (with `--script`): the script is the whole job; its output
   is delivered as it is, and empty output delivers nothing.
+- `--evolve-task <file>` (with no prompt, skill or script): each run
+  queues a [harness evolution](harness.md) job for the task file (relative
+  to the profile directory) with `trigger = "cron"` and the job's id,
+  instead of starting an agent; the run's output names the queued job.
 
 Toolsets (`--toolsets web,file`, `none` for no tools) default to
 `cron.default_toolsets`, else the cron surface's default
@@ -175,8 +206,8 @@ exits 2 listing their ids. Run records are kept for
 64 KiB are kept in the blob store.
 
 `cron doctor` reports the trigger in effect (and why it differs from
-`cron.provider`: the `managed` scheduler is not in this build, so it falls
-back to `builtin` with a warning at every daemon start), the tick lease
+`cron.provider`: a `managed` provider missing `cron.managed.endpoint`,
+`jwks_url` or `audience` falls back to `builtin`), the tick lease
 holder, due-but-unfired occurrences, jobs in `error` or `blocked_config`,
 undelivered outbox rows and every `cron.*` setting with its source. It
 exits 1 when a job is in `error` or a delivery outcome is `unknown`.
@@ -421,6 +452,38 @@ cron_job = "pr-review-sweeper"
 prompt = "Review {review.state} on pull request {pull_request.number}"
 ```
 
-## Not in this build yet
+## A managed scheduler
 
-- Natural-language schedules (`--nl`, `schedule_text`) are refused.
+With `cron.provider = "managed"` an external scheduler decides when each
+occurrence fires; claiming, running, delivery and history stay the same.
+
+```toml
+[cron]
+provider = "managed"
+
+[cron.managed]
+endpoint = "https://scheduler.example.com/v1/arm"  # where one-shots are armed
+jwks_url = "https://scheduler.example.com/.well-known/jwks.json"
+audience = "prometheus-home-1"
+callback_url = "https://agent.example.com/api/cron/fire"  # sent with each arm
+token_secret = "CRON_MANAGED_TOKEN"  # optional bearer for arm requests
+```
+
+Every enabled job is armed once per occurrence: a `POST` to the endpoint
+with `job_id`, `profile`, `fire_at` (RFC 3339) and `dedup_key =
+"<job_id>:<fire_at>"`, after every job change (CLI or `cronjob` tool),
+after each fire and on every scheduler pass of the daemon (so at daemon
+start). What was armed is kept in `<profile>/cron/managed-armed.json`. The
+daemon accepts fires on `POST /api/cron/fire` of its shared HTTP listener
+(`daemon.toml gateway.http.listen`, started when a served profile uses the
+managed trigger) with a body of `job_id`, `fire_at` and `dedup_key` and a
+bearer JWT signed by a key of `jwks_url` with `ES256` or `RS256` (symmetric
+tokens are refused), whose `aud` is `audience`, `purpose` is `cron_fire`
+and `exp` (and `nbf`) hold within 30 seconds; a `dedup_key` claim, when
+present, must be the fire's. Answers: 401 `{"error":"invalid fire token"}`,
+503 with `Retry-After: 60` while `prometheus pause` is on, otherwise 200
+whether the fire started the run (`started`) or the occurrence was already
+claimed (`already_handled`): a repeated fire runs it once. While the
+scheduler cannot be reached the daemon falls back to the built-in trigger
+(one warning per daemon start). `prometheus cron tick` always ticks with
+the built-in trigger.

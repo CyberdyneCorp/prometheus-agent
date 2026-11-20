@@ -11,7 +11,12 @@
 //! `HOME`, `LANG`, `SYSTEMROOT` (and on Windows `PATHEXT` and
 //! `USERPROFILE`), `TMPDIR` (the scratch directory), its `env` values and
 //! its `env_secrets` from the secrets store, so no other secret (a
-//! provider key) reaches it. An `http` server is reached through the
+//! provider key) reaches it. Under credential injection it holds the
+//! placeholder of each mapped secret instead of its value, its proxy puts
+//! the value in on TLS requests to the mapped hosts, and its CA bundle
+//! (`SSL_CERT_FILE` and friends, in its scratch directory) trusts the
+//! egress CA (spec: security-boundaries, Credential injection at the
+//! egress proxy). An `http` server is reached through the
 //! profile's outbound HTTP client (presenting `client_cert` when set),
 //! with its `headers`, its identity header and, by `auth`, the
 //! `auth_secret` bearer token or the OAuth access token. `${NAME}`
@@ -32,6 +37,8 @@ use pmt_mcp::server::Launcher;
 use pmt_net::OutboundPolicy;
 use pmt_net::egress::Proxy;
 use pmt_sandbox::{Paths, Policy, Sandbox};
+
+use crate::egress::injection::ChildInjection;
 
 /// Variables a `stdio` server (and a catalog entry's bootstrap command)
 /// inherits from this process.
@@ -77,7 +84,9 @@ fn stdio(
     let scratch = scratch(scope, name);
     std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
     let workspace = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
-    let fill = |text: &str| super::placeholders::fill(scope, &workspace, text);
+    let injection =
+        crate::egress::injection::for_children(scope).map_err(|e| e.message().to_owned())?;
+    let fill = |text: &str| super::placeholders::fill(scope, &workspace, injection.as_ref(), text);
     let command_text = fill(&server.command)?;
     let program = program(&command_text);
     let capabilities = baseline(&config.security).union(&declared(server, program.as_deref())?);
@@ -96,8 +105,15 @@ fn stdio(
     ));
     let requester = format!("mcp:{name}");
     let observer = crate::egress::attributed(scope, Arc::clone(caller));
-    let proxy = crate::egress::child_proxy(scope, &capabilities, hosts, &requester, observer)
-        .map_err(|e| e.message().to_owned())?;
+    let injecting = injection.as_ref().map(|i| Arc::clone(&i.injection));
+    let proxy = crate::egress::child_proxy(
+        scope,
+        &capabilities,
+        (hosts, injecting),
+        &requester,
+        observer,
+    )
+    .map_err(|e| e.message().to_owned())?;
     let mut policy = Policy::from_set(&capabilities, &paths);
     if let Some(proxy) = &proxy {
         policy = crate::egress::through(policy, proxy);
@@ -128,16 +144,39 @@ fn stdio(
     for (key, value) in &server.env {
         command.env(key, fill(value)?);
     }
-    let only = pmt_config::secrets::surface::SurfaceOnly::of(config);
+    secrets(scope, server, injection.as_ref(), &scratch, &mut command)?;
+    Ok(Launch::Stdio(tokio::process::Command::from(command)))
+}
+
+/// Puts the server's `env_secrets` (placeholders for the injected ones)
+/// and, when injecting, the CA bundle trusting the egress CA into
+/// `command`'s environment.
+fn secrets(
+    scope: &ProfileScope,
+    server: &McpServerConfig,
+    injection: Option<&ChildInjection>,
+    scratch: &Path,
+    command: &mut std::process::Command,
+) -> Result<(), String> {
+    let only = pmt_config::secrets::surface::SurfaceOnly::of(scope.config());
     for secret in &server.env_secrets {
         only.check(secret).map_err(|e| e.message().to_owned())?;
         let value = scope
             .secrets()
             .resolve(secret)
             .map_err(|e| e.message().to_owned())?;
-        command.env(secret, value.expose());
+        command.env(
+            secret,
+            crate::egress::injection::child_value(injection, secret, value.expose()),
+        );
     }
-    Ok(Launch::Stdio(tokio::process::Command::from(command)))
+    crate::egress::injection::trust_egress_ca(
+        scope,
+        injection,
+        &scratch.join("ca-bundle.pem"),
+        command,
+    )
+    .map_err(|e| e.message().to_owned())
 }
 
 /// The program `command` names: a path, or found on `PATH`.
@@ -195,7 +234,8 @@ fn http(scope: &ProfileScope, name: &str, server: &McpServerConfig) -> Result<La
     }
     .map_err(|e| e.message().to_owned())?;
     let workspace = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
-    let fill = |text: &str| super::placeholders::fill(scope, &workspace, text);
+    // Prometheus itself talks to an `http` server: real values.
+    let fill = |text: &str| super::placeholders::fill(scope, &workspace, None, text);
     let mut headers = server
         .headers
         .iter()

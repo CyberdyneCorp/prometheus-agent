@@ -233,6 +233,7 @@ impl Delegator {
             tracing::warn!(error = %err, subagent_id = %entry.subagent_id, "subagent result not recorded");
         }
         entry.finish(&result);
+        crate::live::Feeds::process().finish(&entry.subagent_id, result.status.as_str());
         if self.ctx.config.progress_events {
             let event = Event::SubagentFinished(SubagentFinished {
                 subagent_id: entry.subagent_id.clone(),

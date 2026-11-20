@@ -82,6 +82,7 @@ pub(crate) fn check_at_open(
     database: &Path,
     quarantine_dir: &Path,
     supported: u32,
+    crypt: Option<&crate::crypt::Crypt>,
 ) -> Result<Option<Quarantined>, Error> {
     let marker = corrupt_marker(database);
     let flagged = marker.exists();
@@ -94,7 +95,7 @@ pub(crate) fn check_at_open(
     } else if empty {
         None
     } else {
-        problem(database, supported)
+        problem(database, supported, crypt)
     };
     let Some(reason) = reason else {
         return Ok(None);
@@ -111,8 +112,8 @@ fn first_check(database: &Path) -> bool {
 }
 
 /// Why the file fails the check, `None` when it passes.
-fn problem(database: &Path, supported: u32) -> Option<String> {
-    let conn = match Connection::open(database) {
+fn problem(database: &Path, supported: u32, crypt: Option<&crate::crypt::Crypt>) -> Option<String> {
+    let conn = match crate::crypt::open(database, crypt) {
         Ok(conn) => conn,
         Err(e) => return Some(e.to_string()),
     };
@@ -171,7 +172,11 @@ impl Store {
             salvaged: BTreeMap::new(),
             lost: BTreeMap::new(),
         };
-        if let Some(source) = open_source(&quarantined.path, &self.profile_id().to_string()) {
+        if let Some(source) = open_source(
+            &quarantined.path,
+            &self.profile_id().to_string(),
+            self.crypt(),
+        ) {
             self.write(|tx| {
                 for table in CANONICAL_TABLES {
                     let (copied, lost) = copy_table(&source, tx, table)?;
@@ -199,9 +204,13 @@ impl Store {
 
 /// The quarantined file, when it may be salvaged into this profile: a file
 /// whose readable `store_meta` names another profile is not.
-fn open_source(path: &Path, profile_id: &str) -> Option<Connection> {
+fn open_source(
+    path: &Path,
+    profile_id: &str,
+    crypt: Option<&crate::crypt::Crypt>,
+) -> Option<Connection> {
     let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let conn = Connection::open_with_flags(path, flags).ok()?;
+    let conn = crate::crypt::connect(path, flags, crypt).ok()?;
     let owner: Option<String> = conn
         .query_row(
             "SELECT value FROM store_meta WHERE key = 'profile_id'",

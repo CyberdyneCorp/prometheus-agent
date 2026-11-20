@@ -64,12 +64,14 @@ fn flags<'a>(job: &'a Job, config: &'a pmt_config::schema::CronConfig) -> RouteF
             provider: job.spec.provider.as_deref(),
             model: job.spec.model.as_deref(),
             mock_script: None,
+            unrecorded: false,
         };
     }
     RouteFlags {
         provider: config.model_provider.as_deref(),
         model: config.model.as_deref(),
         mock_script: None,
+        unrecorded: false,
     }
 }
 
@@ -108,6 +110,7 @@ fn factory(
             notepad: notepad.map(std::path::Path::to_path_buf),
             trace: run_id.map(pmt_obs::otel::context::cron_run),
         }),
+        domain: job.spec.domain.clone(),
         ..Options::default()
     };
     Factory::with_store(

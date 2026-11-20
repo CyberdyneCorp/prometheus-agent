@@ -506,6 +506,17 @@ impl ProcessRegistry {
         self.register(entry, supervisor, tracking)
     }
 
+    /// Resolves once process `id` of this registry has exited (or was
+    /// killed); `None` for an unknown id.
+    pub fn exited(&self, id: &str) -> Option<impl Future<Output = ()> + Send + 'static> {
+        let entry = self.lock().iter().find(|e| e.id == id).cloned()?;
+        let mut state = entry.state.subscribe();
+        Some(async move {
+            // A dropped sender means the process is gone too.
+            let _ = state.wait_for(|s| *s != State::Running).await;
+        })
+    }
+
     /// Takes over a process handed off by a subagent: it reports to this
     /// session, which is told when it exits.
     ///

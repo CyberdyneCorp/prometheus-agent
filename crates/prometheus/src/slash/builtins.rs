@@ -56,19 +56,38 @@ const CHATS: &[Surface] = &[
 /// The subcommands of built-ins, for the per-surface palette (spec:
 /// desktop-app, Slash palette from one command registry; skills, Skill
 /// write approval and the hub commands in chat).
-pub(super) const SUBCOMMANDS: &[(&str, &[super::Subcommand])] = &[(
-    "skills",
-    &[
-        sub("pending"),
-        sub("diff"),
-        sub("approve"),
-        sub("reject"),
-        sub("approval"),
-        sub("search"),
-        sub("install"),
-        sub("inspect"),
-    ],
-)];
+pub(super) const SUBCOMMANDS: &[(&str, &[super::Subcommand])] = &[
+    (
+        "skills",
+        &[
+            sub("pending"),
+            sub("diff"),
+            sub("approve"),
+            sub("reject"),
+            sub("approval"),
+            sub("search"),
+            sub("install"),
+            sub("inspect"),
+        ],
+    ),
+    (
+        "connectors",
+        &[
+            on("list", TERMINALS),
+            on("connect", TERMINALS),
+            on("reconnect", TERMINALS),
+            on("rename", TERMINALS),
+            // Removing an account needs an explicit confirmation, which
+            // only the TUI and the desktop carry.
+            on("disconnect", &[Surface::Tui, Surface::Desktop]),
+        ],
+    ),
+];
+
+/// A subcommand of `surfaces`.
+const fn on(name: &'static str, surfaces: &'static [Surface]) -> super::Subcommand {
+    super::Subcommand { name, surfaces }
+}
 
 /// A chat-surface subcommand.
 const fn sub(name: &'static str) -> super::Subcommand {
@@ -328,6 +347,30 @@ pub static BUILTINS: &[Command] = &[
         Immediate,
         Effect::None,
     ),
+    // Queues a job and answers at once; the job never runs in the turn
+    // (spec: harness-evolution, On-demand and scheduled triggers).
+    command(
+        "evolve",
+        &[],
+        Session,
+        "slash.desc.evolve",
+        &[text("args")],
+        CHATS,
+        Immediate,
+        Effect::None,
+    ),
+    // The session's experience-library domain tag (spec:
+    // experience-library, Domain resolution for a job).
+    command(
+        "domain",
+        &[],
+        Session,
+        "slash.desc.domain",
+        &[text("args")],
+        CHATS,
+        Immediate,
+        Effect::None,
+    ),
     command(
         "loop",
         &["proactive"],
@@ -563,6 +606,20 @@ pub static BUILTINS: &[Command] = &[
         Effect::Immediate,
     ),
     command(
+        "codex-runtime",
+        &["codex_runtime"],
+        Model,
+        "slash.desc.codex_runtime",
+        &[arg(
+            "mode",
+            ArgKind::Choice(&["auto", "codex_app_server", "on", "off", "status"]),
+            false,
+        )],
+        CHATS,
+        BusyPolicy::Reject,
+        Effect::NextSession,
+    ),
+    command(
         "personality",
         &[],
         Model,
@@ -629,6 +686,23 @@ pub static BUILTINS: &[Command] = &[
         &[
             arg("action", ArgKind::Choice(&["status", "reload"]), false),
             NOW,
+        ],
+        TERMINALS,
+        BusyPolicy::Reject,
+        Effect::Immediate,
+    ),
+    command(
+        "connectors",
+        &[],
+        Tools,
+        "slash.desc.connectors",
+        &[
+            arg(
+                "action",
+                ArgKind::Choice(&["list", "connect", "reconnect", "rename", "disconnect"]),
+                false,
+            ),
+            text("args"),
         ],
         TERMINALS,
         BusyPolicy::Reject,
@@ -1091,6 +1165,26 @@ pub static BUILTINS: &[Command] = &[
         Config,
         "slash.desc.sethome",
         &[],
+        GATEWAY,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "link",
+        &[],
+        Info,
+        "slash.desc.link",
+        &[text("code")],
+        GATEWAY,
+        Immediate,
+        Effect::None,
+    ),
+    command(
+        "unlink",
+        &[],
+        Info,
+        "slash.desc.unlink",
+        &[text("platform")],
         GATEWAY,
         Immediate,
         Effect::None,

@@ -1,7 +1,10 @@
 //! The binary's side of the plugin host (spec: plugin-system): one wasmtime
 //! runtime per process, started only when some plugin is to be loaded, and
 //! one live set of plugin instances per profile, shared by every session
-//! of the profile in the process.
+//! of the profile in the process. A profile has a second set, with the
+//! plugins `prometheus plugins dev` serves, for the sessions a developer
+//! attends ([`for_attended`]); unattended ones (gateway, cron) never see
+//! dev plugins.
 //!
 //! The set is replaced as a whole: when its plugins, their files, their
 //! grants or `[plugins]` change (checked when a session starts) or on an
@@ -18,6 +21,7 @@ pub mod bridge;
 pub mod catalog;
 pub mod dashboard;
 pub mod desktop;
+pub mod dev;
 #[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;
@@ -60,21 +64,59 @@ struct Generation {
     number: u64,
     fingerprint: String,
     loaded: Arc<Loaded>,
+    /// The dev registrations it was loaded with ([`dev::stamp`]).
+    dev_stamp: String,
 }
 
 /// A profile's live plugin set.
 struct Handle {
     current: Mutex<Arc<Generation>>,
+    /// It holds the plugins `plugins dev` serves.
+    dev: bool,
+    /// The scope and working directory of the last load, for a reload a
+    /// dev plugin's rebuild triggers.
+    origin: Mutex<Option<(ProfileScope, PathBuf)>>,
+    /// When the dev registrations were last looked at.
+    dev_checked: Mutex<Option<std::time::Instant>>,
 }
 
 impl Handle {
     fn generation(&self) -> Arc<Generation> {
         Arc::clone(&self.current.lock().unwrap_or_else(PoisonError::into_inner))
     }
+
+    /// Reloads the set when a `plugins dev` registration changed (a
+    /// rebuild), looking at most every 250 ms (spec: Plugin development
+    /// loop: the new hook handles the next event without a restart).
+    fn follow_dev(&self) {
+        if !self.dev {
+            return;
+        }
+        {
+            let mut checked = self
+                .dev_checked
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            if !due(&mut checked, std::time::Duration::from_millis(250)) {
+                return;
+            }
+        }
+        let origin = self
+            .origin
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        if let Some((scope, cwd)) = origin
+            && dev::stamp(scope.dir()) != self.generation().dev_stamp
+        {
+            let _ = refresh(&scope, &cwd, false, true);
+        }
+    }
 }
 
 impl HookSource for Handle {
     fn hooks(&self) -> Arc<Hooks> {
+        self.follow_dev();
         Arc::clone(&self.generation().loaded.hooks)
     }
 }
@@ -83,9 +125,39 @@ impl HookSource for Handle {
 #[derive(Clone)]
 pub struct ProfilePlugins {
     handle: Arc<Handle>,
+    /// Where hook callbacks are read: the live set's, unless a session
+    /// replaced it ([`ProfilePlugins::with_hooks`]).
+    hooks: Arc<dyn HookSource>,
 }
 
 impl ProfilePlugins {
+    fn of(handle: Arc<Handle>) -> Self {
+        let hooks = Arc::clone(&handle) as Arc<dyn HookSource>;
+        Self { handle, hooks }
+    }
+
+    /// The same plugin set with hook callbacks read from `hooks` (a
+    /// harness-evolution rollout's candidate hooks).
+    #[must_use]
+    pub fn with_hooks(&self, hooks: Arc<dyn HookSource>) -> Self {
+        Self {
+            handle: Arc::clone(&self.handle),
+            hooks,
+        }
+    }
+
+    /// Where this view reads hook callbacks.
+    #[must_use]
+    pub fn hook_source(&self) -> Arc<dyn HookSource> {
+        Arc::clone(&self.hooks)
+    }
+
+    /// The hook callbacks current now.
+    #[must_use]
+    pub fn hooks(&self) -> Arc<Hooks> {
+        self.hooks.hooks()
+    }
+
     /// The current set.
     #[must_use]
     pub fn current(&self) -> Arc<Loaded> {
@@ -102,10 +174,7 @@ impl ProfilePlugins {
     /// set is current at each call.
     #[must_use]
     pub fn tool_hooks(&self, call: CallInfo) -> Arc<dyn ToolHooks> {
-        Arc::new(PluginToolHooks::live(
-            Arc::clone(&self.handle) as Arc<dyn HookSource>,
-            call,
-        ))
+        Arc::new(PluginToolHooks::live(Arc::clone(&self.hooks), call))
     }
 
     /// [`ProfilePlugins::tool_hooks`] behind the first-party
@@ -133,7 +202,7 @@ impl ProfilePlugins {
         call: CallInfo,
     ) -> Arc<dyn pmt_providers::caller::ErrorClassifier> {
         Arc::new(pmt_plugins::hooks::PluginErrorClassifier::new(
-            Arc::clone(&self.handle) as Arc<dyn HookSource>,
+            Arc::clone(&self.hooks),
             call,
         ))
     }
@@ -141,12 +210,9 @@ impl ProfilePlugins {
     /// The turn loop's hook seam for one session.
     #[must_use]
     pub fn turn_hooks(&self, call: CallInfo) -> Arc<dyn TurnHooks> {
-        let observers = Observers::start(
-            Arc::clone(&self.handle) as Arc<dyn HookSource>,
-            call.clone(),
-        );
+        let observers = Observers::start(Arc::clone(&self.hooks), call.clone());
         Arc::new(SessionTurnHooks {
-            handle: Arc::clone(&self.handle),
+            hooks: Arc::clone(&self.hooks),
             call,
             observers,
         })
@@ -155,7 +221,7 @@ impl ProfilePlugins {
     /// Fires an observer hook of this profile and waits for its callbacks
     /// (whatever they answer is discarded).
     pub async fn fire_observer(&self, call: &CallInfo, hook: &str, fields: Map<String, Value>) {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         if hooks.handles(hook) {
             hooks.fire(hook, &Payload::new(fields), call).await;
         }
@@ -164,7 +230,7 @@ impl ProfilePlugins {
     /// Queues an observer hook of this profile (fired off the caller's
     /// path; answers discarded).
     pub fn observe(&self, call: CallInfo, hook: &'static str, fields: Map<String, Value>) {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         if !hooks.handles(hook) {
             return;
         }
@@ -178,14 +244,14 @@ impl ProfilePlugins {
 }
 
 struct SessionTurnHooks {
-    handle: Arc<Handle>,
+    hooks: Arc<dyn HookSource>,
     call: CallInfo,
     observers: Observers,
 }
 
 impl TurnHooks for SessionTurnHooks {
     fn holds_stream(&self) -> bool {
-        self.handle.hooks().holds_stream()
+        self.hooks.hooks().holds_stream()
     }
 
     fn transform_llm_output<'a>(
@@ -193,7 +259,7 @@ impl TurnHooks for SessionTurnHooks {
         reply: FinalReply<'a>,
         held: bool,
     ) -> BoxFuture<'a, Transformed> {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         Box::pin(async move {
             let fields = object(json!({
                 "session_id": reply.session_id,
@@ -210,7 +276,7 @@ impl TurnHooks for SessionTurnHooks {
     }
 
     fn pre_verify<'a>(&'a self, verify: Verify<'a>) -> BoxFuture<'a, Option<String>> {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         Box::pin(async move {
             let fields = object(json!({
                 "session_id": verify.session_id,
@@ -227,7 +293,7 @@ impl TurnHooks for SessionTurnHooks {
 
     fn observe(&self, hook: &'static str, payload: Map<String, Value>) {
         // Checked here so a stream nobody watches queues nothing per token.
-        if self.handle.hooks().handles(hook) {
+        if self.hooks.hooks().handles(hook) {
             self.observers.fire(hook, payload);
         }
     }
@@ -237,7 +303,7 @@ impl TurnHooks for SessionTurnHooks {
         session_id: &'a str,
         user_message: &'a str,
     ) -> BoxFuture<'a, Option<String>> {
-        let hooks = self.handle.hooks();
+        let hooks = self.hooks.hooks();
         Box::pin(async move {
             if !hooks.handles("pre_llm_call") {
                 return None;
@@ -262,7 +328,7 @@ pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
     let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
     let plugins = for_session(scope, &cwd);
     let each = vec![skill_fields(skill, action)];
-    outside::fire_blocking(&plugins.handle.hooks(), "on_skill_lifecycle", each, &cwd);
+    outside::fire_blocking(&plugins.hooks(), "on_skill_lifecycle", each, &cwd);
 }
 
 /// Fires kanban lifecycle hooks (spec: plugin-system, Kanban lifecycle
@@ -271,7 +337,7 @@ pub fn skill_changed(scope: &ProfileScope, skill: &str, action: &str) {
 pub fn kanban_fired(scope: &ProfileScope, fired: Vec<(&'static str, Map<String, Value>)>) {
     let cwd = std::env::current_dir().unwrap_or_else(|_| scope.dir().to_path_buf());
     let plugins = for_session(scope, &cwd);
-    let hooks = plugins.handle.hooks();
+    let hooks = plugins.hooks();
     for (hook, payload) in fired {
         outside::fire_blocking(&hooks, hook, vec![payload], &cwd);
     }
@@ -286,7 +352,7 @@ pub fn sessions_deleted(scope: &ProfileScope, sessions: &[String]) {
         .iter()
         .map(|id| object(json!({ "session_id": id })))
         .collect();
-    outside::fire_blocking(&plugins.handle.hooks(), "on_session_delete", each, &cwd);
+    outside::fire_blocking(&plugins.hooks(), "on_session_delete", each, &cwd);
 }
 
 fn object(value: Value) -> Map<String, Value> {
@@ -296,9 +362,12 @@ fn object(value: Value) -> Map<String, Value> {
     }
 }
 
-/// Every profile's live set in this process, by profile directory.
-fn handles() -> &'static Mutex<HashMap<PathBuf, Arc<Handle>>> {
-    static HANDLES: OnceLock<Mutex<HashMap<PathBuf, Arc<Handle>>>> = OnceLock::new();
+/// Live sets by profile directory and whether the set holds dev plugins.
+type Sets = HashMap<(PathBuf, bool), Arc<Handle>>;
+
+/// Every profile's live sets in this process.
+fn handles() -> &'static Mutex<Sets> {
+    static HANDLES: OnceLock<Mutex<Sets>> = OnceLock::new();
     HANDLES.get_or_init(Mutex::default)
 }
 
@@ -317,7 +386,7 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
     let existing = handles()
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
-        .get(&key)
+        .get(&(key.clone(), dev::allowed()))
         .cloned();
     let due = due(&mut last, every);
     if let Some(at) = last {
@@ -328,8 +397,8 @@ pub fn current(scope: &ProfileScope, every: std::time::Duration) -> ProfilePlugi
             .insert(key, at);
     }
     match existing {
-        Some(handle) if !due => ProfilePlugins { handle },
-        _ => refresh(scope, scope.dir(), false),
+        Some(handle) if !due => ProfilePlugins::of(handle),
+        _ => refresh(scope, scope.dir(), false, dev::allowed()),
     }
 }
 
@@ -351,23 +420,48 @@ fn due(last: &mut Option<std::time::Instant>, every: std::time::Duration) -> boo
 /// list`.
 #[must_use]
 pub fn for_session(scope: &ProfileScope, cwd: &Path) -> ProfilePlugins {
-    refresh(scope, cwd, false)
+    refresh(scope, cwd, false, dev::allowed())
 }
 
-/// Replaces the profile's live set with a fresh load even when nothing
-/// changed (`plugins reload`).
+/// [`for_session`] for a daemon session: one a person `attended` at a
+/// client (TUI, desktop...) also loads the plugins `plugins dev` serves
+/// (spec: plugin-system, Plugin development loop).
+#[must_use]
+pub fn for_attended(scope: &ProfileScope, cwd: &Path, attended: bool) -> ProfilePlugins {
+    refresh(scope, cwd, false, attended || dev::allowed())
+}
+
+/// Replaces the profile's live sets with fresh loads even when nothing
+/// changed (`plugins reload`); the set with the dev plugins comes back
+/// when this process has one.
 #[must_use]
 pub fn reload(scope: &ProfileScope, cwd: &Path) -> ProfilePlugins {
-    refresh(scope, cwd, true)
+    let base = refresh(scope, cwd, true, dev::allowed());
+    let dev_set = (scope.dir().to_path_buf(), true);
+    if !dev::allowed()
+        && handles()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains_key(&dev_set)
+    {
+        return refresh(scope, cwd, true, true);
+    }
+    base
 }
 
-fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
+fn refresh(scope: &ProfileScope, cwd: &Path, force: bool, with_dev: bool) -> ProfilePlugins {
     let version = running_version();
     let blocked = catalog::kill_list(scope);
-    let inputs = inputs(scope, cwd, &version, &blocked);
+    let (dev_stamp, dev_dirs) = if with_dev {
+        (dev::stamp(scope.dir()), dev::live(scope.dir()))
+    } else {
+        (String::new(), Vec::new())
+    };
+    let mut inputs = inputs(scope, cwd, &version, &blocked);
+    inputs.dev = &dev_dirs;
     let statuses: Vec<Status> = survey(&inputs).into_iter().map(|(_, s)| s).collect();
-    let fingerprint = fingerprint(scope, &statuses);
-    let key = scope.dir().to_path_buf();
+    let fingerprint = format!("{}|{dev_stamp}", fingerprint(scope, &statuses));
+    let key = (scope.dir().to_path_buf(), with_dev);
     let existing = handles()
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
@@ -377,9 +471,7 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
         && !force
         && handle.generation().fingerprint == fingerprint
     {
-        return ProfilePlugins {
-            handle: Arc::clone(handle),
-        };
+        return ProfilePlugins::of(Arc::clone(handle));
     }
     let loaded = Arc::new(load_now(scope, &inputs, statuses));
     let handle = existing.unwrap_or_else(|| {
@@ -387,9 +479,13 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
             number: 0,
             fingerprint: String::new(),
             loaded: Arc::clone(&loaded),
+            dev_stamp: String::new(),
         });
         let handle = Arc::new(Handle {
             current: Mutex::new(first),
+            dev: with_dev,
+            origin: Mutex::new(None),
+            dev_checked: Mutex::new(None),
         });
         Arc::clone(
             handles()
@@ -408,10 +504,13 @@ fn refresh(scope: &ProfileScope, cwd: &Path, force: bool) -> ProfilePlugins {
             number: current.number + 1,
             fingerprint,
             loaded: Arc::clone(&loaded),
+            dev_stamp,
         });
     }
+    *handle.origin.lock().unwrap_or_else(PoisonError::into_inner) =
+        Some((scope.clone(), cwd.to_path_buf()));
     outside::plugins_loaded(&loaded, cwd);
-    ProfilePlugins { handle }
+    ProfilePlugins::of(handle)
 }
 
 /// Loads when some plugin is to be instantiated; otherwise reports the
@@ -535,5 +634,6 @@ pub fn inputs<'a>(
         running: version,
         blocked,
         profile_config: Some(scope.config()),
+        dev: &[],
     }
 }

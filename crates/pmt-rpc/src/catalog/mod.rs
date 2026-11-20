@@ -145,8 +145,13 @@ pub fn declare_builtin(d: &mut Declarations) {
         .method::<c::LocalUse>()
         .method::<c::LocalStart>()
         .method::<c::LocalStop>()
+        .event::<c::LocalModelContextGrownEvent>()
         .method::<c::FilesUndo>()
         .method::<c::FilesRollback>()
+        .method::<c::ScreenTakeover>()
+        .method::<c::ScreenHandback>()
+        .method::<c::ScreenTicketCall>()
+        .method::<c::ScreenBrowser>()
         .method::<c::LspStatusCall>()
         .method::<c::MemorySummaryCall>()
         .method::<c::AutopruneOfferCall>()
@@ -171,6 +176,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .server_request::<c::SecretAsk>()
         .server_request::<c::SudoAsk>()
         .event::<c::AdapterStateChanged>()
+        .event::<c::MessageDelivery>()
         .event::<c::AutomationStateChanged>()
         .event::<c::RequestCancelled>()
         .event::<c::RequestDone>()
@@ -178,7 +184,44 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::TurnEnded>()
         .event::<c::UsageUpdatedEvent>()
         .event::<c::HealthChangedEvent>();
+    declare_evolution(d);
     declare_desktop(d);
+    declare_live(d);
+}
+
+/// Split panes, the session timeline and shared live sessions (spec: tui,
+/// M3 upgrades).
+fn declare_live(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::SubagentSubscribe>()
+        .method::<c::SessionTimeline>()
+        .method::<c::SessionRewind>()
+        .event::<c::SessionPresence>()
+        .event::<c::SubagentStreamed>();
+}
+
+/// Harness evolution and its experience library (spec:
+/// harness-evolution, experience-library).
+fn declare_evolution(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::EvolveStart>()
+        .method::<c::EvolveStatus>()
+        .method::<c::EvolveList>()
+        .method::<c::EvolveCancel>()
+        .method::<c::EvolveChoose>()
+        .method::<c::EvolveProposalsList>()
+        .method::<c::EvolveProposalsAdopt>()
+        .method::<c::EvolveProposalsReject>()
+        .method::<c::HarnessLog>()
+        .method::<c::HarnessDiff>()
+        .method::<c::HarnessRollback>()
+        .method::<c::ExperienceList>()
+        .method::<c::ExperienceShow>()
+        .method::<c::ExperienceDomainsList>()
+        .method::<c::ExperiencePin>()
+        .method::<c::ExperienceForget>()
+        .method::<c::ExperienceDisable>()
+        .method::<c::ExperienceRestore>();
 }
 
 /// The desktop app's names (spec: desktop-app).
@@ -186,6 +229,7 @@ fn declare_desktop(d: &mut Declarations) {
     use self::contracts as c;
     d.method::<c::ConfigPatch>()
         .method::<c::ConfigReload>()
+        .method::<c::I18nLanguages>()
         .method::<c::BotChatEnsure>()
         .method::<c::BotRosterList>()
         .method::<c::BotRelayDrain>()

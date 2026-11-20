@@ -123,6 +123,49 @@ locked key, and `prometheus doctor config` reports both files and whether
 they were loaded. An invalid managed file stops every command (exit 78)
 until it is fixed.
 
+### Remote configuration
+
+An organisation can serve every profile's configuration from a
+configuration plane instead of `config.toml`. The backend is chosen only
+in `managed.toml` (which wins) or `<home>/daemon.toml`, never per profile:
+
+```toml
+[config_backend]
+kind = "remote"                         # default "file"
+url = "https://config.example.com"
+instance_id = "laptop-42"               # required
+token_secret = "CONFIG_PLANE_TOKEN"     # managed secret, else the profile's secrets.toml
+poll_secs = 300
+```
+
+At process start each profile's document is fetched from
+`<url>/v1/instances/<instance_id>/profiles/<profile>/config` with
+`Authorization: Bearer <token>`. It answers
+`{"version": "..", "layers": [{"level": "global", "values": {..}, "locked": ["approvals.mode"]}, ..]}`;
+the levels `global`, `tenant`, `group`, `owner`, `agent` and `profile`
+are merged in that order (a later level wins, a lower level's lock holds
+for every level above it). An unreachable plane is retried for up to 30 s
+and then stops the command with exit 78 naming the URL: Prometheus never
+falls back to `config.toml` or to defaults. The configuration is kept in
+memory only; the daemon re-fetches it every `poll_secs` and applies
+changes through the live-reload classes above. Every writer (`config
+set|unset|edit|patch`, setup, the dashboard) sends only the keys it
+changed, at the `profile` level, as
+`PATCH` with `If-Match: <version>` and body
+`{"set": {"<key>": value}, "unset": ["<key>"]}`: a key a level locks is
+refused with `config key '<key>' is locked by the <level> level`, and a
+document that changed since it was read fails with
+`config.remote_conflict` (exit 75). A credential is refused in remote
+values exactly as in `config.toml`; this and every other validation error
+about a served value names the plane URL, the profile and the level that
+served the key (fix it on the plane; the local `config.toml` is not
+read). `profile create --clone-from` (or
+`--clone-all`) clones the source's plane configuration the same way: the
+keys that differ are written at the new profile's level (without
+`gateway.platforms` unless `--clone-channels`), and the plane token is
+copied into the new profile's `secrets.toml` when no managed token applies,
+since the clone could not load its configuration without it.
+
 ## Secrets are not configuration
 
 API keys and tokens never go into `config.toml`. A value that looks like a
@@ -187,6 +230,49 @@ A profile resolves a secret from, in order:
    `override_existing = true` its values come before the store and the
    environment. `prometheus secrets list` shows them as `command`. Windows
    has no command source.
+4. Bitwarden Secrets Manager and 1Password, both off by default (their CLIs,
+   `bws` and `op`, are never run, nor installed, while off):
+
+   ```toml
+   [secrets.bitwarden]
+   enabled = true
+   access_token_secret = "BWS_ACCESS_TOKEN"   # a secret in the store
+   project_id = "e1b2..."                     # optional; server_url too
+   cache_ttl_secs = 300
+
+   [secrets.onepassword]
+   enabled = true
+   access_token_secret = "OP_SERVICE_ACCOUNT_TOKEN"
+   map = { GITHUB_TOKEN = "op://Dev/GitHub/token" }
+   ```
+
+   The CLI is the newest managed install under `<home>/runtimes/<name>/`,
+   else the one on `PATH`. Its bootstrap token is read only from the stored
+   secret `access_token_secret` names (never from the environment) and
+   handed to it through `BWS_ACCESS_TOKEN` / `OP_SERVICE_ACCOUNT_TOKEN`,
+   never as an argument. A name the store and the environment do not have
+   comes from a mapped 1Password entry first, then from the Bitwarden
+   project (every secret by its key; the first entry of a key wins), then
+   from the helper command. Resolved values stay in memory for at most
+   `cache_ttl_secs` and are never written to disk. A failing source (missing
+   CLI or token, a refused token, unreadable output) fails the lookup with
+   `secret.source_failed` instead of reusing an older value.
+
+   `prometheus secrets bitwarden setup [--project-id ID] [--server-url URL] [-y]`
+   and `prometheus secrets onepassword setup [--vault NAME] [-y]` install
+   the pinned CLI into `<home>/runtimes/` (after asking, or with `-y`),
+   read the token at a hidden prompt (or from stdin), check it with the CLI
+   and only then store it and turn the source on. `status` shows the CLI
+   version, whether the token works and the names the source supplies,
+   never values; `bitwarden token` replaces the token only after the new
+   one was accepted (a refused one exits 78 and keeps the old);
+   `onepassword map <NAME> <op://...>` and `unmap <NAME>` edit the
+   mappings; `sync` previews the names the source would add and those
+   another source shadows, and writes only with `--apply` (Bitwarden
+   records the accepted names in `secrets.bitwarden.names`, after which
+   only those keys are read; 1Password maps the vault's items titled like
+   secret names to `op://<vault>/<item>/credential`); `bitwarden install`
+   installs the CLI alone and `disable` turns a source off.
 
 A gateway serving several profiles never hands one profile's launch
 environment to another. The environment is read for secrets only: any other
@@ -291,6 +377,67 @@ that passes `--home <that home>` as well. Every new
 profile gets one unless `--no-alias` is given. A reserved name, a
 `prometheus` subcommand or an existing executable on `PATH` is refused
 (exit 2 naming it); a launcher written earlier is rewritten.
+
+### Descriptions
+
+`prometheus profile describe <name> --text "<text>"` stores a description
+(at most 500 characters) that `profile list`, `profile show` and kanban
+assignment (`kanban assignees`, the decomposition prompt) show.
+`--auto` writes one with the `auxiliary.profile` route from the profile's
+name, identity file, model and skills; an existing description is kept
+(`description exists; use --overwrite`) unless `--overwrite` is given, and
+`--all` describes every profile that has none.
+
+### Distributions
+
+A distribution is a git repository (or a directory) that a profile can be
+installed from and updated with:
+
+```toml
+# distribution.toml
+name = "research-bot"
+version = "1.2.0"
+description = "Finds and summarises sources."
+prometheus_requires = ">=0.1, <1"
+author = "Ana"
+license = "MIT"
+owned = ["SOUL.md", "skills/web-research", "mcp.toml", "cron.toml"]   # optional
+
+[[secrets_required]]
+name = "EXA_API_KEY"
+description = "web search"
+required = true
+```
+
+Beside it: `SOUL.md`, an initial `config.toml`, `skills/<entry>/`,
+`mcp.toml` (`[servers.<name>]`, written to `mcp.servers`) and `cron.toml`
+(`[[jobs]]` with `id`, `name`, `schedule`, `prompt`). Nothing else is
+installed: credential stores, `state.db`, sessions, memory, logs and
+snapshots are never copied even when the repository holds them (the
+preview lists them as `never installed`). `owned` may name only
+`SOUL.md`, `mcp.toml`, `cron.toml` and `skills/<entry>[/...]`; any other
+path (`run/...`, `sessions/...`, a nested `secrets.toml`) makes the
+manifest invalid (`profile.distribution_invalid`, exit 65).
+`prometheus profile install <git-url|dir> [--name N] [--alias] [--force] [-y]`
+previews the files and secrets, asks (exit 4 without a terminal and
+without `-y`), refuses an incompatible `prometheus_requires` with exit 78,
+asks for missing required secrets (one line of stdin each when not on a
+terminal) and adds the cron jobs paused.
+`prometheus profile update <name> [--force-config] [-y]` replaces the
+owned files (identity, each skill entry, MCP servers), merges cron jobs by
+their distribution id (an existing job keeps its paused state, new ones
+arrive paused, dropped ones are removed) and keeps your `config.toml`
+unless `--force-config`. `prometheus profile info <name>` shows the origin,
+commit, version and last update (recorded in `<profile>/distribution.json`),
+and `profile delete` shows it before asking.
+
+### Identity
+
+`prometheus profile identity move <from> <to>` copies a profile's identity
+file and its identity memory (the core-tier entries about the user) to
+another profile; `prometheus profile identity purge <name>` removes them
+after a snapshot labelled `pre-identity-purge` (reason `manual`). Both ask
+first (`--yes` skips it) and take effect from the next session.
 
 ### Export and import
 

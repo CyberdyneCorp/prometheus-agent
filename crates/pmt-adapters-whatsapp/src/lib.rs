@@ -353,17 +353,26 @@ impl Poll {
                 Err(err) => return self.lost(&err).await,
             };
             for raw in events.as_array().into_iter().flatten() {
-                if let Some((inbound, from_me)) = normalize::event(raw, &self.aliases)
-                    && self.session.admits(&inbound, from_me)
-                {
-                    let inbound = self.session.enrich(inbound, raw);
-                    self.link.submit(inbound).await;
-                }
+                self.handle(raw).await;
             }
             tokio::select! {
                 () = self.stop.cancelled() => return,
                 () = tokio::time::sleep(POLL_INTERVAL) => {}
             }
+        }
+    }
+
+    /// One queued bridge event: a receipt of an own send, or a message.
+    async fn handle(&self, raw: &serde_json::Value) {
+        if let Some(receipt) = normalize::receipt(raw) {
+            self.link.receipt(receipt);
+            return;
+        }
+        if let Some((inbound, from_me)) = normalize::event(raw, &self.aliases)
+            && self.session.admits(&inbound, from_me)
+        {
+            let inbound = self.session.enrich(inbound, raw);
+            self.link.submit(inbound).await;
         }
     }
 
@@ -426,6 +435,9 @@ impl Adapter for Whatsapp {
             media_in: all,
             media_out: out,
             private_replies: true,
+            // The bridge queues `delivery_status` events of its own sends.
+            delivery_receipts: true,
+            read_receipts: true,
             ..Descriptor::new(PLATFORM, limit)
         }
     }

@@ -49,6 +49,8 @@ pub struct Scope<'a> {
     pub cron_skills: &'a BTreeSet<String>,
     /// Now.
     pub now: Timestamp,
+    /// Runs a merged skill's evals when `skills.eval_gate` is on.
+    pub eval_gate: Option<&'a dyn crate::evals::Gate>,
 }
 
 impl Scope<'_> {

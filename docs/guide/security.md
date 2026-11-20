@@ -162,6 +162,141 @@ reason, and a record in the security audit log; a refusal of a child shared
 by sessions (an MCP stdio server, a python sidecar) belongs to the session
 whose call was in flight.
 
+### Credential injection
+
+With credential injection, sandboxed children (a session's processes,
+stdio MCP servers, python plugin sidecars) never hold the secrets they use
+against an API:
+
+```toml
+[security.egress]
+credential_injection = true
+
+[security.egress.inject]
+GITHUB_TOKEN = ["api.github.com"]
+OPENAI_API_KEY = ["api.openai.com"]
+```
+
+Each mapped secret the profile holds gets a fresh placeholder
+(`pmt-egress-<32 hex>`) per session (and per start of an MCP server or
+plugin sidecar), and the children receive the placeholder wherever they
+would receive the secret: the processes started from the session's
+environment (terminal commands, with the secrets their loaded skills
+declare), an MCP server's `env_secrets` and `${NAME}` entries, a sidecar's
+granted secrets. Their CA bundle (`SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`) also trusts
+the profile's egress CA, `<profile>/egress/ca.crt` (its key `ca.key` is
+0600 and never leaves the host). Their own egress proxy terminates their TLS
+with a certificate that CA signs for the host, verifies the real server
+itself (platform roots plus `network.extra_ca_file`), and replaces a
+placeholder in the request head with the real value only when the host
+matches that secret's patterns and the request's own `Host` header (and an
+absolute-form target, when there is one) names that same host, so a
+request fronted to another tenant of a shared server never gets the value.
+A placeholder bound for any other host, in
+the head or later in the stream, ends the request before it is forwarded:
+the child gets `403` (`credential misdirected`) and the session an
+`egress.denied` event with reason `credential_misdirected`. Plain HTTP never
+carries a real value, and a tunnel that is not TLS is only scanned. Each
+intercepted request is sent with `Connection: close`. A client that pins
+certificates or ignores the CA bundle cannot reach injected hosts. An
+MCP server reached over HTTP is called by Prometheus itself, with the real
+values.
+
+### The egress proxy of containers and remote sandboxes
+
+Container sessions cannot use a session's loopback proxy, so with
+credential injection on each profile also has an egress proxy process of
+its own, owned by the gateway daemon (which starts it with the profile and
+stops it with itself) or started by hand:
+
+```text
+prometheus egress status [--json] [--show-tokens]
+prometheus egress start | stop | restart | reload
+prometheus egress rotate [--confirm]
+```
+
+It records itself in `<profile>/run/egress-proxy.json` (created exclusively,
+never through a link) with a nonce of its own start; every command reaches
+it over its loopback control port with that nonce, so a recycled pid is
+never signalled (`stop` is graceful and kills only after 5 seconds, and only
+a process that just answered with the nonce). It serves an ephemeral
+loopback listener and the container listener on
+`security.egress.proxy_port` (9090), bound where containers of
+`terminal.container.runtime` reach the host: loopback where Docker Desktop
+or a Podman machine forwards the host alias; a rootful runtime's bridge
+gateway on Linux, bound even before the bridge exists (Podman creates it
+with its first container); for a rootless runtime on Linux, whose bridge
+lives in its own network namespace and which reaches the host at the
+host's own address (slirp4netns, pasta), that address, where the listener
+serves only connections coming from the host itself and the relay maps the
+host alias to it. Never `0.0.0.0`. If the host no longer holds the address
+when the proxy binds, the listener falls back to loopback with a warning
+(containers cannot reach it then); a port still in use is retried for 5
+seconds, and any listener that does not bind then fails the start. `start`
+returns once the proxy reports that it serves (or exits with its reason):
+its container runtime probe and credential fetch are bounded by their own
+timeouts, so a loaded host delays a start instead of failing it. `status`
+shows the listeners, the mode, each mapping with its placeholder cut to
+its first and last characters (`--show-tokens` shows them whole), the
+denied connections, and the provider secrets the profile holds that are
+not injected (sandboxes would get their real value). `reload` applies
+allowlist, denylist and mapping changes without dropping connections;
+`/egress status` in a session adds a line for this proxy.
+
+The placeholders are kept in `<profile>/egress/mappings.json` (0600): new
+mappings get one, existing ones keep theirs. `prometheus egress rotate`
+(type `rotate`, or `--confirm`) backs the file up as
+`mappings.json.bak-<seconds>` (0600) and mints new placeholders for every
+mapping; container sessions read them again for each command, so the next
+command already uses them.
+
+A container session joins the profile's egress-only network,
+`pmt-egress-<profile>-<home digest>`: an `--internal` runtime network with
+no route off it, whose only other member is the relay container
+`pmt-egress-relay-<profile>-<home digest>`. The relay runs the session
+image (it uses the image's `socat`, `python3` or busybox `nc -e`), without
+capabilities and read-only, and forwards every connection to the proxy's
+bridge port on the host (`host.docker.internal` or
+`host.containers.internal`; under Podman it joins the `podman` network by
+name, since a rootless Podman's implicit network cannot join another);
+`prometheus egress stop` removes it. The
+container gets `HTTP(S)_PROXY=http://prometheus-egress:<bridge port>`, the
+profile's egress CA mounted read-only at `/etc/prometheus/egress/ca.crt`
+and a bundle of the platform roots, `network.extra_ca_file` and that CA at
+`/etc/prometheus/egress/ca-bundle.pem`, which `SSL_CERT_FILE`,
+`REQUESTS_CA_BUNDLE` and `CURL_CA_BUNDLE` name (`NODE_EXTRA_CA_CERTS`
+names the CA, with `NODE_OPTIONS=--use-openssl-ca`).
+
+An SSH session opens a second SSH connection of its own carrying a reverse
+forward (`-R 127.0.0.1:0:<proxy loopback>`, the server picks the port) and
+uploads the bundle and the CA to `~/.cache/prometheus-terminal/egress/`;
+every command gets the proxy at `http://127.0.0.1:<that port>`, the same CA
+variables and the current placeholders. A server that refuses forwarding
+(`AllowTcpForwarding no`) runs no command: the session reports why. Plugin
+remote sandboxes cannot reach the proxy on this host, and singularity
+instances share its network, so while credential injection is on they are
+refused with `egress.proxy_unreachable`.
+
+With `security.egress.enforce_on_container = true` (the default) a container
+or SSH session refuses every command with `egress proxy is not running` while the
+proxy is down, rather than run with real credentials. A mapping without
+hosts (`OPENAI_API_KEY = []`) may be sent only to the built-in provider
+hosts (`openrouter.ai`, `*.openrouter.ai`, `api.openai.com`,
+`api.anthropic.com`, `generativelanguage.googleapis.com`, `api.x.ai`,
+`api.mistral.ai`, `api.groq.com`, `api.together.xyz`, `api.deepseek.com`,
+`inference.nousresearch.com`) plus `security.egress.inject_extra_hosts`.
+Upstream, the proxy refuses private and metadata addresses whatever the
+allowlists say.
+
+`security.egress.credential_source = "bitwarden"` reads the mapped values
+from the Bitwarden project of `[secrets.bitwarden]` at every proxy start
+instead of the secrets store, taking only the keys the external source
+would (secret names, and the names `prometheus secrets bitwarden sync --apply`
+accepted, once it has recorded any); a missing token, project id or mapped
+secret stops the start naming what is missing, unless
+`security.egress.allow_store_fallback = true`.
+
 ### Website blocklist
 
 Hosts you never want reached are refused in every mode, by the web tools,
@@ -226,6 +361,25 @@ remediation. `prometheus doctor --ack <id>` adds the id to
 `security.acked_advisories`, which silences the startup warning only:
 `doctor security` keeps showing it, marked `(acknowledged)`. An id the
 catalog does not have exits 66.
+
+## Dependency vulnerability scan
+
+`prometheus security scan [--json] [--fail-on low|moderate|high|critical]
+[--skip-runtimes] [--skip-plugins] [--skip-mcp]` checks the exact versions
+of the managed runtimes indexed by OSV (`uv`), the python-bridge
+environments' `bridge.lock` pins, the plugins' dependency manifests
+(`requirements.txt` pins, `package-lock.json`) and the MCP servers pinned
+with `npx`/`bunx`/`uvx` against the OSV database (`security.scan.osv_url`,
+`https://api.osv.dev` by default; a mirror may stand in). It is the only
+thing that contacts OSV, and only when you run it. Findings are grouped by
+component with their advisory id, severity and first fixed version; an
+advisory without a severity counts as moderate. It exits 1 when a finding
+is at or above `--fail-on` (default `critical`), 0 otherwise, and 69 when
+OSV cannot be reached, so a CI job can gate on it:
+
+```yaml
+- run: prometheus security scan --fail-on high
+```
 
 ## Security audit log
 

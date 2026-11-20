@@ -10,37 +10,10 @@ use pmt_tui::keys::Bindings;
 use pmt_tui::status::Status;
 use pmt_tui::theme::Theme;
 use pmt_tui::transcript::Kind;
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
 
-fn screen(app: &App, width: u16, height: u16) -> String {
-    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-    terminal.draw(|frame| app.render(frame)).unwrap();
-    let buffer = terminal.backend().buffer().clone();
-    let mut text = String::new();
-    for y in 0..height {
-        let mut row = String::new();
-        for x in 0..width {
-            row.push_str(buffer[(x, y)].symbol());
-        }
-        text.push_str(row.trim_end());
-        text.push('\n');
-    }
-    text
-}
+mod common;
 
-fn check(name: &str, actual: &str) {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/snapshots")
-        .join(format!("{name}.txt"));
-    if std::env::var_os("PMT_UPDATE_SNAPSHOTS").is_some() {
-        std::fs::write(&path, actual).unwrap();
-        return;
-    }
-    let expected = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("{}: {e} (PMT_UPDATE_SNAPSHOTS=1 writes it)", path.display()));
-    assert_eq!(actual, expected, "snapshot {name} differs");
-}
+use common::{check, screen};
 
 fn app() -> App {
     let status = Status {
@@ -98,6 +71,7 @@ fn an_approval_card_sits_above_the_composer_and_counts_in_the_status() {
         title: "approval needed: terminal rm -rf build".into(),
         body: "dangerous-pattern: recursive delete (rm -rf)".into(),
         hint: "[o]nce  [s]ession  [a]lways  [d]eny   (answer within 300 s)".into(),
+        ..Card::default()
     });
     check("approval-80x14", &screen(&app, 80, 14));
 }

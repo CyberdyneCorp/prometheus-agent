@@ -77,6 +77,7 @@ pub const FILES: &[File] = &[
     file!("tasks/memory_write/files/README.md"),
     file!("tasks/memory_write/grader/grader.toml"),
     file!("tasks/memory_write/mock.toml"),
+    file!("tasks/memory_write/run.toml"),
     file!("tasks/memory_write/task.toml"),
     file!("tasks/parallel_tools/files/OWNERS.md"),
     file!("tasks/parallel_tools/files/README.md"),

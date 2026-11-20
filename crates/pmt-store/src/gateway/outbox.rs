@@ -471,6 +471,51 @@ impl Store {
         .map(drop)
     }
 
+    /// A delivery or read receipt for the message `platform` sent with id
+    /// `platform_message_id`: the entry moves to `delivered` or `read`
+    /// (never back from `read`); `None` for an id no entry sent or a
+    /// receipt that changes nothing (spec: platform-adapters, Delivery and
+    /// read receipts).
+    ///
+    /// # Errors
+    ///
+    /// `store.sqlite`.
+    pub fn outbound_receipt(
+        &self,
+        platform: &str,
+        platform_message_id: &str,
+        state: OutboundState,
+    ) -> Result<Option<Outbound>, Error> {
+        let from = match state {
+            OutboundState::Delivered => "('sent', 'unknown')",
+            OutboundState::Read => "('sent', 'unknown', 'delivered')",
+            _ => return Ok(None),
+        };
+        let now = millis(Timestamp::now());
+        let id: Option<i64> = self.write(|tx| {
+            let id: Option<i64> = tx
+                .query_row(
+                    &format!(
+                        "SELECT id FROM gateway_outbox WHERE platform = ?1 AND \
+                         platform_message_id = ?2 AND state IN {from} ORDER BY id DESC LIMIT 1"
+                    ),
+                    params![platform, platform_message_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(sql)?;
+            if let Some(id) = id {
+                tx.execute(
+                    "UPDATE gateway_outbox SET state = ?2, updated_at = ?3 WHERE id = ?1",
+                    params![id, state.as_str(), now],
+                )
+                .map_err(sql)?;
+            }
+            Ok(id)
+        })?;
+        id.map_or(Ok(None), |id| self.outbound(id))
+    }
+
     /// The entry is given up (`failed`) or its outcome is unknown.
     ///
     /// # Errors

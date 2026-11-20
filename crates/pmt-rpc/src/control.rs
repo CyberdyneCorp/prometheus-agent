@@ -25,6 +25,9 @@ pub enum Purpose {
     Acp,
     /// `prometheus eval`.
     Eval,
+    /// The bot screen's display stream (`/screen`, RFB over WebSocket);
+    /// never the client protocol.
+    Display,
 }
 
 impl Purpose {
@@ -37,6 +40,7 @@ impl Purpose {
             Self::ProfileAdmin => "profile-admin",
             Self::Acp => "acp",
             Self::Eval => "eval",
+            Self::Display => "display",
         }
     }
 }

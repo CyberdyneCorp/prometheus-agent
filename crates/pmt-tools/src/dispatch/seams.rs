@@ -130,13 +130,26 @@ pub struct GateRequest<'a> {
     pub escalation: Option<&'a Escalation>,
     /// The tool's own per-call rule ([`crate::RegisteredTool::guard`]).
     pub guarded: Option<&'a Escalation>,
+    /// Where the untrusted content of a tainted turn came from (`web`,
+    /// `mcp:<server>`...); `None` when the call's turn is not tainted
+    /// (spec: tool-system, Taint-aware escalation).
+    pub tainted: Option<&'a str>,
 }
 
 /// The approval gate's answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum GateVerdict {
     /// Run the call.
     Allow,
+    /// Run the call with `arguments` instead: a person reviewed the file
+    /// edit it makes and kept only part of it, or edited it (spec: tui,
+    /// Inline diff review for file edits). `note` goes with its result.
+    Revised {
+        /// The arguments the tool runs with.
+        arguments: Value,
+        /// What the result tells the model about the review.
+        note: String,
+    },
     /// Never run (hardline, deny rule): `status = "blocked"`.
     Blocked(String),
     /// Refused (denied approval, unattended deny): `status = "denied"`.
@@ -147,6 +160,12 @@ pub enum GateVerdict {
 pub trait ApprovalGate: Send + Sync {
     /// Decides whether the call may run.
     fn check<'a>(&'a self, request: GateRequest<'a>) -> SeamFuture<'a, GateVerdict>;
+
+    /// `approvals.taint_policy` as of now; the dispatcher tracks tainted
+    /// turns unless it is `off` (the default of gates without approvals).
+    fn taint_policy(&self) -> pmt_config::schema::TaintPolicy {
+        pmt_config::schema::TaintPolicy::Off
+    }
 }
 
 /// Allows every call, escalations included (tests and tools-only setups;

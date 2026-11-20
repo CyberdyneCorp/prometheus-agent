@@ -10,15 +10,20 @@ use pmt_cron::schedule::Echo;
 use serde_json::json;
 
 use super::{Env, JobFlags};
-use crate::cron_host::{profile_zone, scripts_dir};
+use crate::cron_host::{profile_zone, scripts_dir, translate};
 use crate::output::{document, print_error, print_raw};
 
-/// Shows `echo` and asks; `false` (after printing the refusal) when the
-/// job must not be saved.
-fn confirmed(env: &Env<'_>, echo: &Echo, yes: bool) -> Result<bool, Error> {
+/// Shows `echo` (with the free-form text it was translated from) and
+/// asks; `false` (after printing the refusal) when the job must not be
+/// saved.
+fn confirmed(env: &Env<'_>, echo: &Echo, flags: &JobFlags) -> Result<bool, Error> {
     if !env.ctx.json {
+        if let Some(text) = &flags.schedule_text {
+            println!("translated \"{}\" to:", text.trim());
+        }
         println!("{}", echo.render());
     }
+    let yes = flags.yes;
     if yes {
         return Ok(true);
     }
@@ -61,15 +66,16 @@ pub(super) fn add(
     let runner = env.runner();
     let scripts = scripts_dir(&env.scope);
     let profile = runner.profile(&scripts);
-    let spec = flags
-        .fields(schedule, &env.scope)?
-        .new_spec(now, &profile.zone)?;
+    let mut fields = flags.fields(schedule, &env.scope)?;
+    let zone = translate::zone_of(&fields, &profile.zone)?;
+    translate::fill(&env.scope, &env.store, env.ctx.launch, &mut fields, &zone)?;
+    let spec = fields.new_spec(now, &profile.zone)?;
     let mut checked = spec.clone();
     if checked.deliver.is_empty() {
         checked.deliver = ops::default_deliver(None);
     }
     let echo = ops::check(&profile, &checked, now)?;
-    if !confirmed(env, &echo, flags.yes)? {
+    if !confirmed(env, &echo, flags)? {
         return Ok(pmt_core::exit::APPROVAL_REQUIRED);
     }
     let new = ops::NewJob {
@@ -94,12 +100,17 @@ pub(super) fn edit(
     let runner = env.runner();
     let scripts = scripts_dir(&env.scope);
     let profile = runner.profile(&scripts);
-    let fields = flags.fields(schedule, &env.scope)?;
+    let mut fields = flags.fields(schedule, &env.scope)?;
     if fields.reschedules() {
         let mut spec = ops::find(&env.store, key)?.spec;
+        let job_zone = spec
+            .zone(&profile.zone)
+            .unwrap_or_else(|_| profile.zone.clone());
+        let zone = translate::zone_of(&fields, &job_zone)?;
+        translate::fill(&env.scope, &env.store, env.ctx.launch, &mut fields, &zone)?;
         fields.apply(&mut spec, now, &profile.zone)?;
         let echo = ops::check(&profile, &spec, now)?;
-        if !confirmed(env, &echo, flags.yes)? {
+        if !confirmed(env, &echo, flags)? {
             return Ok(pmt_core::exit::APPROVAL_REQUIRED);
         }
     }

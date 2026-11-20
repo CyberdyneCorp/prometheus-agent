@@ -33,6 +33,9 @@ pub struct Fields {
     pub schedule: Option<String>,
     /// A free-form schedule for the auxiliary model.
     pub schedule_text: Option<String>,
+    /// What the auxiliary model translated `schedule_text` to (the caller
+    /// translates before applying: [`crate::schedule::translate`]).
+    pub translated: Option<Schedule>,
     /// The prompt.
     pub prompt: Option<String>,
     /// Preloaded skills.
@@ -82,6 +85,12 @@ pub struct Fields {
     /// The fallback chain as `provider/model` entries: `["none"]` declares
     /// `[]` (fallback off), `[""]` removes the declaration.
     pub fallback: Option<Vec<String>>,
+    /// An evolution task file (relative to the profile directory): the job
+    /// becomes `kind = "evolve"`; an empty string makes it an agent job.
+    pub evolve_task: Option<String>,
+    /// The experience-library domain (already normalised); an empty string
+    /// removes it.
+    pub domain: Option<String>,
 }
 
 fn invalid(message: String) -> Error {
@@ -173,18 +182,15 @@ impl Fields {
         now: Timestamp,
         profile_zone: &TimeZone,
     ) -> Result<(), Error> {
-        if self.schedule_text.is_some() {
-            return Err(Error::new(
-                &codes::CRON_INVALID_SCHEDULE,
-                "natural-language schedules (schedule_text, --nl) are not available in this \
-                 build: give the schedule in the grammar ('every 30m', 'weekdays at 9:30', \
-                 a cron expression, 'tomorrow at 9am')",
-            ));
-        }
         set(&mut spec.timezone, self.timezone.as_ref());
-        if let Some(text) = &self.schedule {
-            let zone = spec.zone(profile_zone).map_err(invalid)?;
-            spec.schedule = Schedule::parse(text, now, &zone)?;
+        match (&self.schedule_text, &self.translated, &self.schedule) {
+            (Some(text), None, _) => return Err(crate::schedule::translate::refused(text)),
+            (Some(_), Some(translated), _) => spec.schedule = translated.clone(),
+            (None, _, Some(text)) => {
+                let zone = spec.zone(profile_zone).map_err(invalid)?;
+                spec.schedule = Schedule::parse(text, now, &zone)?;
+            }
+            (None, _, None) => {}
         }
         self.apply_payload(spec);
         self.apply_routing(spec);
@@ -207,6 +213,17 @@ impl Fields {
     }
 
     fn apply_payload(&self, spec: &mut JobSpec) {
+        if let Some(domain) = &self.domain {
+            set(&mut spec.domain, Some(domain));
+        }
+        if let Some(task) = &self.evolve_task {
+            set(&mut spec.task, Some(task));
+            spec.kind = if spec.task.is_some() {
+                crate::job::JobKind::Evolve
+            } else {
+                crate::job::JobKind::Agent
+            };
+        }
         if let Some(prompt) = &self.prompt {
             spec.prompt.clone_from(prompt);
         }

@@ -289,7 +289,7 @@ impl Store {
         links: &[crate::legacy::LegacyLink],
     ) -> Result<(), Error> {
         self.ensure_writable()?;
-        let blob_dir = self.location().blobs().to_path_buf();
+        let blob_dir = self.blobs();
         let redactor = self.redactor();
         let prepared = sessions
             .iter()
@@ -326,7 +326,7 @@ impl Store {
         link: &crate::legacy::LegacyLink,
     ) -> Result<(), Error> {
         self.ensure_writable()?;
-        let blob_dir = self.location().blobs().to_path_buf();
+        let blob_dir = self.blobs();
         let redactor = self.redactor();
         let rows = messages
             .iter()

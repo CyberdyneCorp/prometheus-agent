@@ -399,3 +399,37 @@ fn archiving_a_running_task_terminates_its_worker() {
     assert_eq!(event.payload["signal"], "signalled");
     assert!(board.subscriptions(Some(&id)).unwrap().is_empty());
 }
+
+/// An evolve task always lands in review and only a person approves it:
+/// a reviewer profile is refused.
+#[test]
+fn only_a_person_approves_an_evolve_task() {
+    let home = Home::new();
+    let mut board = home.board();
+    let mut new = NewTask::titled("evolve the harness");
+    new.assignee = Some("writer".to_owned());
+    new.reviewer = Some("qa".to_owned());
+    new.kind = pmt_kanban::TaskKind::Evolve {
+        target_task: "task.toml".to_owned(),
+        mode: pmt_kanban::model::EvolveMode::Parallel,
+        budget_k: 1,
+    };
+    let id = board.create(&user(), &new, &profiles, T0).unwrap().id;
+    let run = claim(&mut board, &id);
+    assert_eq!(
+        board
+            .complete(&Actor::worker("writer", &run), &id, &evidence("diff"), T0)
+            .unwrap(),
+        Status::Review
+    );
+    let refused = board
+        .approve(&Actor::reviewer("qa"), &id, None, T0)
+        .unwrap_err();
+    assert!(
+        refused.message().contains("only a person approves it"),
+        "{refused}"
+    );
+    assert_eq!(board.task(&id).unwrap().status, Status::Review);
+    board.approve(&user(), &id, None, T0).unwrap();
+    assert_eq!(board.task(&id).unwrap().status, Status::Done);
+}

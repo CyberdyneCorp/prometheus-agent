@@ -166,7 +166,20 @@ async fn decide(
         Ok(inbound) => inbound,
         Err(admission) => return admission,
     };
-    if let Some(limited) = limit(shared, owner, platform, &inbound, gateway).await {
+    // An account linked to a person: its rate limits are the person's,
+    // and under `dm_mode = "shared"` its DMs are the person's conversation.
+    let person = shared
+        .store(owner)
+        .and_then(|store| store.person_of(platform, &inbound.sender_id).ok().flatten());
+    if let Some(limited) = limit(
+        shared,
+        owner,
+        platform,
+        (&inbound, person.as_deref()),
+        gateway,
+    )
+    .await
+    {
         return limited;
     }
     let mut inbound = inbound;
@@ -174,7 +187,8 @@ async fn decide(
         Some(scope) => inbound::prepare(shared, owner, platform, &scope, &mut inbound).await,
         None => inbound::Prepared::default(),
     };
-    let (routing, key) = super::profile_routes::routing(shared, owner, platform, &inbound, gateway);
+    let (routing, key) =
+        super::profile_routes::routing(shared, owner, platform, (&inbound, person), gateway);
     lane::input(shared, &key, routing, inbound, prepared)
 }
 
@@ -182,10 +196,9 @@ async fn decide(
 pub(crate) fn routing_of(
     owner: &str,
     platform: &str,
-    inbound: &Inbound,
+    (inbound, person_id): (&Inbound, Option<String>),
     gateway: &GatewayConfig,
 ) -> (Routing, super::key::SessionKey) {
-    let (group_per_user, thread_per_user) = gateway.sessions_for(platform);
     let routing = Routing {
         adapter: format!("{owner}/{platform}"),
         profile: owner.to_owned(),
@@ -195,12 +208,9 @@ pub(crate) fn routing_of(
         chat_type: inbound.chat_type,
         thread_id: inbound.thread_id.clone(),
         sender_id: inbound.sender_id.clone(),
-        person_id: None,
+        person_id,
     };
-    let key = routing.key(Isolation {
-        group_per_user,
-        thread_per_user,
-    });
+    let key = routing.key(Isolation::of(gateway, platform));
     (routing, key)
 }
 
@@ -242,7 +252,7 @@ async fn limit(
     shared: &Shared,
     owner: &str,
     platform: &str,
-    inbound: &Inbound,
+    (inbound, person): (&Inbound, Option<&str>),
     gateway: &GatewayConfig,
 ) -> Option<Admission> {
     let table = gateway.platform(platform);
@@ -256,7 +266,10 @@ async fn limit(
         config = config.with(over);
     }
     let turn = inbound.callback.is_none() && !inbound.text.trim_start().starts_with('/');
-    let sender = format!("{owner}\u{1f}{platform}\u{1f}{}", inbound.sender_id);
+    let sender = match person {
+        Some(person) => format!("{owner}\u{1f}person\u{1f}{person}"),
+        None => format!("{owner}\u{1f}{platform}\u{1f}{}", inbound.sender_id),
+    };
     let now = Instant::now();
     if let Verdict::Limited { wait, notify } = shared.limits.check(&sender, &config, turn, now) {
         tracing::info!(profile = owner, platform, "message dropped: rate limit");

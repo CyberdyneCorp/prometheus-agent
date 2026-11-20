@@ -8,6 +8,8 @@
 //! - [`session::SessionSnapshots`]: what a session records — every
 //!   file-tool change (for `/undo`) and, once per project per turn, a
 //!   checkpoint of the project (for `/rollback`).
+//! - [`workspace`]: what each terminal command changed in the workspace
+//!   (`files.snapshot.terminal = "workspace"`), journaled for `/undo`.
 //! - [`restore`]: undo, rollback listing, diff and restore.
 //! - [`manage`]: status and pruning.
 //! - [`worktree`]: the `/diff` command.
@@ -22,6 +24,7 @@ pub mod restore;
 pub mod session;
 pub mod store;
 pub mod tree;
+pub mod workspace;
 pub mod worktree;
 
 pub use session::{SessionSnapshots, Settings, TurnSource};

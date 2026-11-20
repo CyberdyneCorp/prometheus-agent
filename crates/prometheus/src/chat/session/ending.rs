@@ -14,12 +14,16 @@ use pmt_store::{EndReason, Store};
 use super::{Live, lifecycle};
 
 impl Live {
-    /// Records `session.start` for `session` on `target`'s route, then
-    /// one `security.downgrade` per allowed hardening downgrade.
+    /// Records `session.start` for `session` on `target`'s route, the
+    /// routing policy's choice of it (`provider.route_selected`), then one
+    /// `security.downgrade` per allowed hardening downgrade and the
+    /// experience lessons injected at this open.
     pub(super) async fn emit_start(
         &self,
         session: &pmt_store::Session,
         target: &pmt_providers::resolve::Target,
+        lessons: &[String],
+        routed: Option<Box<pmt_obs::trajectory::payload::RouteSelected>>,
     ) {
         self.emit(Event::SessionStart(SessionStart {
             source: session.source.as_str().to_owned(),
@@ -29,9 +33,13 @@ impl Live {
             trace_id: None, // stamped from the session's trace
         }))
         .await;
+        if let Some(routed) = routed {
+            self.emit(Event::ProviderRouteSelected(*routed)).await;
+        }
         for event in self.downgrades.events() {
             self.emit(event).await;
         }
+        self.emit_lessons(lessons).await;
         // The gateway fires its own sessions' start through its hooks.
         if self.surface() != "gateway" {
             let fields = lifecycle::session_start(&self.id.to_string(), self.surface());
@@ -112,13 +120,19 @@ impl Live {
             delegation.close();
         }
         pmt_tools::code_exec::kernel::close_session(&self.id.to_string());
+        pmt_providers::codex::close(&self.id.to_string());
         crate::memory_provider::close(&self.id.to_string()).await;
         self.emit(Event::SessionEnd(SessionEnd {
             reason: reason.as_str().to_owned(),
         }))
         .await;
-        if let Err(err) = store.end_session(self.id, reason) {
-            tracing::warn!(error = %err, session = %self.id, "could not end the session");
+        match store.end_session(self.id, reason) {
+            // Only the end that ends the row runs the automatic trigger.
+            Ok(true) => self.evolve_after_end(store, reason),
+            Ok(false) => {}
+            Err(err) => {
+                tracing::warn!(error = %err, session = %self.id, "could not end the session");
+            }
         }
         // The gateway fires its own sessions' end through its hooks.
         if self.surface() != "gateway" {
@@ -142,5 +156,19 @@ impl Live {
             tracing::info!(session = %self.id, "{text}");
         }
         self.place.release();
+    }
+
+    /// Queues an automatic evolution job when the session qualifies and
+    /// tells the user on the session's own surface (spec:
+    /// harness-evolution, Automatic triggers after failed or long tasks):
+    /// the line interface or stderr, a messaging chat, or the daemon
+    /// session's clients as `command.notice`.
+    fn evolve_after_end(&self, store: &Store, reason: EndReason) {
+        let Some(notice) = crate::evolve_cmd::auto::after_end(&self.scope, store, self.id, reason)
+        else {
+            return;
+        };
+        tracing::info!(session = %self.id, "{notice}");
+        self.memory.setup().notices.say(notice);
     }
 }

@@ -9,6 +9,7 @@
 
 mod args;
 mod engine;
+pub mod growth;
 mod models;
 pub(crate) mod quickstart;
 pub mod rpc;
@@ -140,6 +141,15 @@ impl Local {
 
     fn fixture(&self, name: &str) -> Option<String> {
         std::fs::read_to_string(self.fixtures.as_ref()?.join(name)).ok()
+    }
+
+    /// The same, reading its fixtures from `dir` (debug builds' tests).
+    #[cfg(debug_assertions)]
+    pub(crate) fn with_fixtures(self, dir: Option<PathBuf>) -> Self {
+        Self {
+            fixtures: dir.or(self.fixtures),
+            ..self
+        }
     }
 }
 

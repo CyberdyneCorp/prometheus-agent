@@ -1,0 +1,61 @@
+/// A benchmark adapter (spec: replay-and-evaluation, Benchmark adapter
+/// protocol): the same JSON-RPC methods a subprocess adapter answers over
+/// stdio, reached through `plugin.call`. A `bench` plugin provides the
+/// adapter named by its plugin id (`prometheus eval run bench:<id>`).
+///
+/// The plugin has no filesystem: `files` reaches only the directory the
+/// call in progress is about (the task workspace during `bench.prepare`,
+/// the task's run directory during `bench.deliverables` and
+/// `bench.score`), and `requests.request` is the stdio protocol's
+/// adapter-to-host request: the host offers no method, and while
+/// `prometheus eval run` executes tasks a score push is refused with code
+/// -32002 (scores are accepted only by `prometheus eval judge`).
+package prometheus:bench@1.0.0;
+
+interface types {
+    /// A JSON-RPC error.
+    record rpc-error {
+        /// The JSON-RPC error code.
+        code: s64,
+        /// What went wrong.
+        message: string,
+    }
+}
+
+/// The directory of the call in progress. Paths are relative and
+/// `/`-separated; absolute paths, `..` and symbolic links are refused, and
+/// outside `bench.prepare`, `bench.deliverables` and `bench.score` every
+/// call fails.
+interface files {
+    /// The bytes of `path`.
+    read: func(path: string) -> result<list<u8>, string>;
+    /// Writes `path`, creating its parent directories.
+    write: func(path: string, contents: list<u8>) -> result<_, string>;
+    /// Every file below the directory, sorted.
+    entries: func() -> result<list<string>, string>;
+}
+
+/// Requests to the host (`params` and the answer are JSON).
+interface requests {
+    use types.{rpc-error};
+
+    /// Sends request `method`; the host answers every one with an error.
+    request: func(method: string, params: string) -> result<string, rpc-error>;
+}
+
+interface plugin {
+    use types.{rpc-error};
+
+    /// One protocol call: `method` is `bench.describe`, `bench.tasks`,
+    /// `bench.task`, `bench.prepare`, `bench.deliverables`,
+    /// `bench.preflight` or `bench.score`; `params` and the result are
+    /// JSON as over stdio.
+    call: func(method: string, params: string) -> result<string, rpc-error>;
+}
+
+world bench {
+    include prometheus:host/imports@1.0.0;
+    import files;
+    import requests;
+    export plugin;
+}

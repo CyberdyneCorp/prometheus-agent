@@ -36,6 +36,10 @@ pub struct ServeArgs {
     /// non-loopback address needs `mcp_server.allow_remote = true`.
     #[arg(long, value_name = "ADDR")]
     pub http: Option<String>,
+    /// Expose exactly these tools (comma-separated) instead of
+    /// `mcp_server.expose_toolsets` (the Codex runtime's callback server).
+    #[arg(long, value_name = "TOOLS", value_delimiter = ',')]
+    pub tools: Option<Vec<String>>,
 }
 
 /// Runs `mcp serve` until the client leaves (stdio) or Ctrl-C (HTTP).
@@ -55,7 +59,7 @@ pub(super) fn run(args: &ServeArgs, ctx: &Context<'_>) -> Result<u8, Error> {
         .build()
         .map_err(|e| Error::new(&codes::TASK_PANICKED, format!("no async runtime: {e}")))?;
     runtime.block_on(async {
-        let host = host(scope.clone(), ctx).await?;
+        let host = host(scope.clone(), ctx, args.tools.as_deref()).await?;
         match address {
             None => pmt_mcp::serve::stdio(host)
                 .await
@@ -87,6 +91,7 @@ fn address(scope: &ProfileScope, addr: &str) -> Result<SocketAddr, Error> {
 async fn host(
     scope: ProfileScope,
     ctx: &Context<'_>,
+    only: Option<&[String]>,
 ) -> Result<Arc<dyn pmt_mcp::serve::Host>, Error> {
     let options = crate::chat::session::Options {
         interactive: false,
@@ -98,13 +103,14 @@ async fn host(
         provider: None,
         model: None,
         mock_script: None,
+        unrecorded: false,
     };
     let factory = Factory::new(scope, ctx.launch, &flags, None, options)?;
     let mut session = NewSession::new(Source::Cli);
     session.source_tag = Some(SOURCE_TAG.to_owned());
     session.cwd = Some(factory.options.cwd.to_string_lossy().into_owned());
     let id = factory.store.create_session(&session)?.id;
-    let host = factory.serve_host(id).await?;
+    let host = factory.serve_host(id, only).await?;
     // The factory's shared tools live as long as the server.
     let factory = Arc::new(factory);
     Ok(Arc::new(Served {

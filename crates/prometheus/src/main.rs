@@ -90,6 +90,7 @@ fn main() -> ExitCode {
         ),
     };
     pmt_config::managed::init(&managed_dir, owner);
+    prometheus::config_plane::register();
     // A quick command never shadows a command of the shared registry
     // (spec: messaging-gateway, Gateway slash commands, quick commands and
     // hooks): the names are reserved before any config loads.
@@ -113,6 +114,7 @@ fn main() -> ExitCode {
     let reporter = startup::crash_reporter(home, &launch);
     let outcome = panic::catch_main(&reporter, || run(&cli, &launch));
     startup::flush_export();
+    prometheus::relay_host::stop();
     // Python-bridge sidecars and their children end with the process.
     prometheus::plugins_host::bridge::shutdown_all();
     match outcome {
@@ -235,6 +237,7 @@ fn run(cli: &Cli, launch: &LaunchEnv) -> u8 {
         }
         Some(Command::Uninstall(args)) => prometheus::uninstall_cmd::run(args, &ctx),
         Some(Command::Pause(args)) => prometheus::pause_cmd::run(args, &ctx),
+        Some(Command::Identity { command }) => prometheus::identity_cmd::run(command, &ctx),
         Some(Command::Portal { command }) => prometheus::portal_cmd::run(command, &ctx),
         #[cfg(feature = "gateway")]
         Some(Command::Daemon { command }) => prometheus::daemon_cmd::run(command, &ctx),
@@ -316,9 +319,18 @@ fn web(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
 fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
     match command {
         Command::Security { command } => prometheus::security_cmd::run(command, ctx),
+        Command::Egress { command } => prometheus::egress_cmd::run(command, ctx),
+        Command::ComputerUse { command } => prometheus::computer_use_cmd::run(command, ctx),
+        Command::CodexRuntime { command } => prometheus::codex_runtime_cmd::run(command, ctx),
         Command::Browser { command } => prometheus::browser_cmd::run(command, ctx),
         Command::Lsp { command } => prometheus::lsp_cmd::run(command, ctx),
         Command::Cron { command } => prometheus::cron_cmd::run(command, ctx),
+        Command::Harness { command } => prometheus::harness_cmd::run(command, ctx),
+        Command::Experience { command } => prometheus::experience_cmd::run(command, ctx),
+        #[cfg(feature = "evolve")]
+        Command::Evolve { command } => prometheus::evolve_cmd::run(command, ctx),
+        #[cfg(feature = "eval")]
+        Command::Eval { command } => prometheus::eval_cmd::run(command, ctx),
         Command::Kanban(args) => prometheus::kanban_cmd::run(args, ctx),
         Command::Cache { command } => prometheus::cache_cmd::run(command, ctx),
         Command::Replay { command } => prometheus::replay_cmd::run(command, ctx),

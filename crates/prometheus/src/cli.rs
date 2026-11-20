@@ -163,6 +163,35 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::cron_cmd::CronCommand,
     },
+    /// The profile's harness: validate, history, diff, rollback and
+    /// manual edits (works without `evolve.enabled`).
+    Harness {
+        /// The harness subcommand.
+        #[command(subcommand)]
+        command: crate::harness_cmd::HarnessCommand,
+    },
+    /// The experience library: entries, domains, pin, forget, restore,
+    /// export, import and rebuild.
+    Experience {
+        /// The experience subcommand.
+        #[command(subcommand)]
+        command: crate::experience_cmd::ExperienceCommand,
+    },
+    /// Evaluation: suites, runs, post-hoc judging, reports, benchmark
+    /// adapters, session capture and batch datasets.
+    #[cfg(feature = "eval")]
+    Eval {
+        /// The eval subcommand.
+        #[command(subcommand)]
+        command: crate::eval_cmd::EvalCommand,
+    },
+    /// Harness evolution jobs (opt-in: `evolve.enabled = true`).
+    #[cfg(feature = "evolve")]
+    Evolve {
+        /// The evolve subcommand.
+        #[command(subcommand)]
+        command: crate::evolve_cmd::EvolveCommand,
+    },
     /// Kanban boards shared by every profile: tasks, dependencies, the
     /// dispatcher, workers, review, notifications, export and import.
     Kanban(crate::kanban_cmd::KanbanArgs),
@@ -211,6 +240,27 @@ pub enum Command {
         /// The security subcommand.
         #[command(subcommand)]
         command: SecurityCommand,
+    },
+    /// Who runs turns on the OpenAI providers: Prometheus, or the Codex
+    /// app-server (from the next session); migrate the profile's MCP
+    /// servers into the Codex config.
+    CodexRuntime {
+        /// The codex-runtime subcommand.
+        #[command(subcommand)]
+        command: crate::codex_runtime_cmd::CodexRuntimeCommand,
+    },
+    /// The bot screen: the virtual desktop the agent's headed browsers
+    /// act on and the desktop app streams.
+    ComputerUse {
+        /// The computer-use subcommand.
+        #[command(subcommand)]
+        command: crate::computer_use_cmd::ComputerUseCommand,
+    },
+    /// The profile's egress proxy for container and remote sandboxes.
+    Egress {
+        /// The egress subcommand.
+        #[command(subcommand)]
+        command: crate::egress_cmd::EgressCommand,
     },
     /// Back up the whole home to a .tar.zst archive, or restore one.
     Backup {
@@ -362,6 +412,12 @@ pub enum Command {
     /// Emergency pause: no new turns or scheduled jobs on any profile of
     /// this home until `pause off` (running turns finish).
     Pause(crate::pause_cmd::PauseArgs),
+    /// Messaging accounts linked across platforms with `/link`.
+    Identity {
+        /// The identity subcommand.
+        #[command(subcommand)]
+        command: crate::identity_cmd::IdentityCommand,
+    },
     /// The Nous Portal subscription and its tool gateway routing.
     Portal {
         /// The portal subcommand.
@@ -578,6 +634,39 @@ pub struct DemoArgs {
     /// Keep the directory afterwards.
     #[arg(long, help = "Keep the demo's home and repository afterwards")]
     pub keep: bool,
+    /// Run the offline self-improvement demo: two accounting tasks through
+    /// harness evolution (re-running with the same --output resumes).
+    #[arg(long, conflicts_with = "keep")]
+    pub evolve: bool,
+    /// `--evolve`: candidates per mode.
+    #[arg(long, value_name = "N", default_value_t = 2, requires = "evolve", value_parser = clap::value_parser!(u8).range(1..=8))]
+    pub k: u8,
+    /// `--evolve`: the evolution modes.
+    #[arg(long, value_enum, default_value = "parallel", requires = "evolve")]
+    pub mode: DemoMode,
+}
+
+/// `demo --evolve --mode` and `evolve demo --mode` values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum DemoMode {
+    /// Independent proposals, then composition.
+    Parallel,
+    /// One proposal building on the last.
+    Sequential,
+    /// Both, one proposal each.
+    Both,
+}
+
+impl DemoMode {
+    /// The evolution mode.
+    #[must_use]
+    pub const fn mode(self) -> pmt_config::schema::EvolveMode {
+        match self {
+            Self::Parallel => pmt_config::schema::EvolveMode::Parallel,
+            Self::Sequential => pmt_config::schema::EvolveMode::Sequential,
+            Self::Both => pmt_config::schema::EvolveMode::Both,
+        }
+    }
 }
 
 /// `prometheus smoke-suite` flags.
@@ -943,6 +1032,9 @@ pub enum TrajectoryCommand {
     /// JSON line per session, redacted; sessions that ended in an error
     /// are left out unless `--include-failed`.
     Export(crate::trajectory_export::ExportArgs),
+    /// Compress `ShareGPT` records over a token target: head and tail
+    /// kept, one summary turn in between.
+    Compress(crate::trajectory_compress::CompressArgs),
 }
 
 /// `trajectory show --format` values.
@@ -986,6 +1078,9 @@ pub enum SecurityCommand {
         #[command(subcommand)]
         command: AuditCommand,
     },
+    /// Check runtimes, bridge environments, plugin and MCP packages
+    /// against the OSV vulnerability database.
+    Scan(crate::security_scan::ScanArgs),
 }
 
 /// `prometheus security audit` subcommands.
@@ -1027,6 +1122,18 @@ pub enum SecretsCommand {
         /// Target backend.
         #[arg(long, value_enum)]
         to: SecretsBackendArg,
+    },
+    /// The Bitwarden Secrets Manager source (`bws`).
+    Bitwarden {
+        /// The bitwarden subcommand.
+        #[command(subcommand)]
+        command: crate::secret_sources_cmd::BitwardenCommand,
+    },
+    /// The 1Password source (`op`).
+    Onepassword {
+        /// The onepassword subcommand.
+        #[command(subcommand)]
+        command: crate::secret_sources_cmd::OnePasswordCommand,
     },
 }
 
@@ -1190,6 +1297,23 @@ pub enum ProfileCommand {
         /// Do not ask for confirmation.
         #[arg(long)]
         yes: bool,
+    },
+    /// Set or generate a profile's description.
+    Describe(crate::profile_cmd::args::DescribeArgs),
+    /// Install a profile distribution from a git URL or a directory.
+    Install(crate::profile_cmd::args::InstallArgs),
+    /// Update a profile from the distribution it was installed from.
+    Update(crate::profile_cmd::args::UpdateArgs),
+    /// Show where a profile's distribution came from.
+    Info {
+        /// Profile name.
+        name: String,
+    },
+    /// Move or purge a profile's identity.
+    Identity {
+        /// The identity subcommand.
+        #[command(subcommand)]
+        command: crate::profile_cmd::args::IdentityCommand,
     },
 }
 

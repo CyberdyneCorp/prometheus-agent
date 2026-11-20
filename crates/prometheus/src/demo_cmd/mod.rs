@@ -11,6 +11,7 @@
 //! the canonical rendering and exits 0 only when the final answer
 //! reports the expected total.
 
+pub mod evolve;
 mod place;
 mod scenario;
 
@@ -48,6 +49,14 @@ const SOURCE_TAG: &str = "demo";
 /// `demo.output_not_empty` (2), `demo.io` (74) and the errors of starting
 /// the session; a session that ran reports its own verdict instead.
 pub fn run(args: &DemoArgs, launch: &LaunchEnv) -> Result<u8, Error> {
+    if args.evolve {
+        let settings = evolve::Settings {
+            k: args.k,
+            mode: args.mode.mode(),
+            output: args.output.clone(),
+        };
+        return evolve::demo(&settings, launch);
+    }
     let place = Place::prepare(args.output.as_deref())?;
     let started = Instant::now();
     let outcome = scenario::write(&place.repository(), &place.mock_script())
@@ -131,6 +140,7 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         provider: Some(pmt_providers::mock::PROVIDER_ID),
         model: Some(pmt_providers::mock::DEFAULT_MODEL),
         mock_script: Some(&mock_script),
+        unrecorded: false,
     };
     let options = Options {
         interactive: false,
@@ -149,6 +159,11 @@ fn run_session(place: &Place, launch: &LaunchEnv) -> Result<Session, Error> {
         cron: None,
         kanban: None,
         replay: None,
+        rollout: None,
+        harness_tree: None,
+        memory_store: None,
+        domain: None,
+        dev_plugins: false,
     };
     let factory = Factory::new(scope, launch, &flags, None, options)?;
     crate::model_cmd::block_on(session(factory, &flags))?

@@ -105,3 +105,56 @@ impl Store {
         Ok(self.legacy_links(source)?.get(legacy_id).map(|(id, _)| *id))
     }
 }
+
+impl Store {
+    /// Takes back what a re-run appended to an imported session: every
+    /// message after the first `keep` (in `seq` order) is deleted with
+    /// its index entries and embeddings, the session's counters follow,
+    /// and the link is set back to `link` (its earlier carried count).
+    /// Returns how many messages were removed.
+    ///
+    /// # Errors
+    ///
+    /// `session.not_found`, `store.sqlite`, blob read errors.
+    pub fn retract_linked(&self, link: &LegacyLink, keep: u64) -> Result<u64, Error> {
+        self.ensure_writable()?;
+        let all = self.messages(link.session, crate::messages::Visibility::All)?;
+        let keep = usize::try_from(keep).unwrap_or(usize::MAX).min(all.len());
+        let cut = keep
+            .checked_sub(1)
+            .and_then(|i| all.get(i))
+            .map_or(-1, |m| i64::try_from(m.seq).unwrap_or(i64::MAX));
+        let tool_calls: i64 = all[keep..]
+            .iter()
+            .map(|m| match &m.tool_calls {
+                None | Some(serde_json::Value::Null) => 0,
+                Some(serde_json::Value::Array(calls)) => i64::try_from(calls.len()).unwrap_or(0),
+                Some(_) => 1,
+            })
+            .sum();
+        let session = link.session.to_string();
+        self.write(|tx| {
+            crate::index::remove_after(tx, &session, cut)?;
+            tx.execute(
+                "DELETE FROM message_embeddings WHERE message_id IN \
+                 (SELECT id FROM messages WHERE session_id = ?1 AND seq > ?2)",
+                params![session, cut],
+            )
+            .map_err(sql)?;
+            let removed = tx
+                .execute(
+                    "DELETE FROM messages WHERE session_id = ?1 AND seq > ?2",
+                    params![session, cut],
+                )
+                .map_err(sql)?;
+            tx.execute(
+                "UPDATE sessions SET message_count = message_count - ?2, \
+                 tool_call_count = max(tool_call_count - ?3, 0) WHERE id = ?1",
+                params![session, i64::try_from(removed).unwrap_or(0), tool_calls],
+            )
+            .map_err(sql)?;
+            insert(tx, std::slice::from_ref(link))?;
+            Ok(u64::try_from(removed).unwrap_or(0))
+        })
+    }
+}

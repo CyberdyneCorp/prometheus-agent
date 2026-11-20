@@ -147,6 +147,14 @@ impl Fresh {
         }
         let before = dest.store.memory_entries(None)?;
         import(&self.items)?;
+        for entry in dest.store.memory_entries(None)? {
+            if !before.iter().any(|b| b.id == entry.id) {
+                dest.journal(crate::journal::Item::Memory {
+                    id: entry.id,
+                    content: entry.content,
+                });
+            }
+        }
         dest.on_undo(move |store| {
             store.memory_batch(None, |batch| {
                 batch.entries.clone_from(&before);

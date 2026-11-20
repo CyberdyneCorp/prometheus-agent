@@ -189,11 +189,14 @@ impl Selection {
         hidden: &[&str],
     ) -> Result<Self, Error> {
         let folded = surface.folded_toolsets();
-        for gated in [
-            crate::agent_level_desktop::DESKTOP_UI,
-            crate::agent_level_desktop::ONBOARDING,
-        ] {
-            if folded.contains(&gated) {
+        // A gated toolset that is not registered (yet) is neither taken
+        // out nor folded in.
+        let registered = |name: &&&str| registry.toolset(name).is_some();
+        for gated in crate::agent_level_desktop::SURFACE_GATED
+            .iter()
+            .filter(registered)
+        {
+            if folded.contains(gated) {
                 continue;
             }
             let members = registry.members(gated)?;
@@ -201,7 +204,7 @@ impl Selection {
             self.toolsets.retain(|t| t != gated);
         }
         self.tools.retain(|t| !hidden.contains(&t.as_str()));
-        for name in folded {
+        for name in folded.iter().filter(registered) {
             if disabled.iter().any(|d| d == name) {
                 let members = registry.members(name)?;
                 self.tools.retain(|t| !members.contains(t));

@@ -8,6 +8,10 @@
 //! computed lazily and stored per (entry, model, content hash); text bound
 //! for a remote embedding model is redacted first. An embedding failure
 //! degrades to lexical ranking with a WARN.
+//!
+//! The relevance is then multiplied by the entry's salience (spec: memory,
+//! Decay, expiry and dormancy), so a stale entry ranks below a fresh one
+//! of equal relevance; `min_score` judges relevance alone.
 
 use std::collections::BTreeMap;
 
@@ -20,7 +24,7 @@ use pmt_store::memory_index::{Embedding, content_sha};
 use pmt_store::{MemoryEntry, MemoryStatus, MemoryTier, Store};
 use serde::Serialize;
 
-use crate::{budget, snapshot};
+use crate::{budget, decay};
 
 /// Weight of the cosine similarity in the hybrid score.
 pub const COSINE_WEIGHT: f64 = 0.6;
@@ -52,8 +56,30 @@ pub struct Scored {
     /// Cosine similarity to the query (hybrid only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cosine: Option<f64>,
-    /// The ranking score.
+    /// The entry's salience at ranking time (1 for pinned entries).
+    pub salience: f64,
+    /// The ranking score: relevance times salience.
     pub score: f64,
+}
+
+/// What [`rank_with`] ranks against.
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+    /// The time salience and expiry are judged at.
+    pub now: Timestamp,
+    /// Rank dormant entries too (`memory search --all`).
+    pub include_dormant: bool,
+}
+
+impl Options {
+    /// Now, active entries only (recall).
+    #[must_use]
+    pub fn now() -> Self {
+        Self {
+            now: Timestamp::now(),
+            include_dormant: false,
+        }
+    }
 }
 
 /// The query words handed to FTS5 (stop words and short words dropped;
@@ -70,18 +96,24 @@ fn words(query: &str) -> Vec<String> {
     out
 }
 
-/// The archival entries recall may return.
-fn eligible(store: &Store, config: &MemoryConfig) -> Result<Vec<MemoryEntry>, Error> {
+/// The archival entries recall may return: active ones that are not due
+/// to fall dormant (every one with `include_dormant`).
+fn eligible(
+    store: &Store,
+    config: &MemoryConfig,
+    options: Options,
+) -> Result<Vec<MemoryEntry>, Error> {
     let targets = budget::enabled(config);
-    let now = Timestamp::now();
+    let awake = |e: &MemoryEntry| {
+        e.status != MemoryStatus::Dormant && !decay::due_dormant(e, options.now, &config.decay)
+    };
     Ok(store
         .memory_entries(None)?
         .into_iter()
         .filter(|e| {
             e.tier == MemoryTier::Archival
-                && e.status != MemoryStatus::Dormant
                 && targets.contains(&e.target)
-                && !snapshot::expired(e, now)
+                && (options.include_dormant || awake(e))
         })
         .collect())
 }
@@ -104,7 +136,7 @@ fn cosine(a: &[f32], b: &[f32]) -> f64 {
     }
 }
 
-/// Ranks `query` against the eligible entries, best first.
+/// Ranks `query` against the eligible entries now, best first.
 ///
 /// # Errors
 ///
@@ -116,7 +148,23 @@ pub async fn rank(
     redactor: &Redactor,
     query: &str,
 ) -> Result<Vec<Scored>, Error> {
-    let entries = eligible(db, config)?;
+    rank_with(db, config, embedder, redactor, query, Options::now()).await
+}
+
+/// [`rank`] with explicit [`Options`].
+///
+/// # Errors
+///
+/// As [`rank`].
+pub async fn rank_with(
+    db: &Store,
+    config: &MemoryConfig,
+    embedder: Option<&dyn Embedder>,
+    redactor: &Redactor,
+    query: &str,
+    options: Options,
+) -> Result<Vec<Scored>, Error> {
+    let entries = eligible(db, config, options)?;
     let hits: BTreeMap<String, f64> = db.memory_bm25(&words(query))?.into_iter().collect();
     let best = hits.values().copied().fold(0.0_f64, f64::max);
     let bm25 = |id: &str| {
@@ -150,12 +198,14 @@ pub async fn rank(
                 None if hits.contains_key(&entry.id) => (None, lexical),
                 None => return None,
             };
+            let salience = decay::salience(&entry, options.now, &config.decay);
             Some(Scored {
                 id: entry.id.clone(),
                 entry,
                 bm25: lexical,
                 cosine,
-                score,
+                salience,
+                score: score * salience,
             })
         })
         .collect();

@@ -10,7 +10,7 @@ mod price;
 use pmt_core::error::{Error, codes};
 use serde::{Deserialize, Serialize};
 
-pub use price::{Fit, MIN_BITS, MIN_WINDOW, Priced, SPEED_FLOOR, price};
+pub use price::{Fit, MIN_BITS, MIN_WINDOW, Priced, SPEED_FLOOR, price, shape};
 
 const EMBEDDED: &str = include_str!("../../catalog.json");
 /// `schema` of the catalog.
@@ -74,6 +74,14 @@ pub struct Entry {
     /// The distribution's default model (recommended whenever it fits).
     #[serde(default)]
     pub vendor_default: bool,
+    /// The share of the weights that are mixture-of-experts expert
+    /// tensors (the first to move to system RAM); 0 for a dense model.
+    #[serde(default)]
+    pub expert_share: f64,
+    /// The model predicts several tokens at once (its draft buffers count
+    /// toward the memory a window needs).
+    #[serde(default)]
+    pub mtp: bool,
     /// Quantisations, any order.
     pub quants: Vec<Quant>,
     /// The vision projector, for models that see images.

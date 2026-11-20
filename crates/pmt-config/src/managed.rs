@@ -60,6 +60,7 @@ pub struct Managed {
     values: Vec<(String, Value)>,
     locked: Vec<String>,
     secrets: Option<BTreeMap<String, SecretString>>,
+    backend: Option<crate::remote::ConfigBackend>,
 }
 
 /// Who must own the managed secrets file.
@@ -184,6 +185,9 @@ impl Managed {
                 self.locked.push(key.to_owned());
             }
         }
+        if let Some(item) = doc.remove("config_backend") {
+            self.backend = Some(parse_backend(path, item)?);
+        }
         let rest = doc.to_string();
         crate::parse::config(path, &rest).map_err(|e| invalid(path, e.message()))?;
         collect(doc.as_item(), "", &mut self.values);
@@ -194,6 +198,13 @@ impl Managed {
     #[must_use]
     pub fn dir(&self) -> &Path {
         &self.dir
+    }
+
+    /// `[config_backend]` of `managed.toml`, when set (it wins over
+    /// `daemon.toml`'s).
+    #[must_use]
+    pub fn backend(&self) -> Option<&crate::remote::ConfigBackend> {
+        self.backend.as_ref()
     }
 
     /// `managed.toml`.
@@ -263,6 +274,28 @@ impl Managed {
     pub fn secrets(&self) -> impl Iterator<Item = (&String, &SecretString)> {
         self.secrets.iter().flatten()
     }
+}
+
+/// `[config_backend]` of `managed.toml`, validated.
+fn parse_backend(
+    path: &Path,
+    item: toml_edit::Item,
+) -> Result<crate::remote::ConfigBackend, Error> {
+    #[derive(serde::Deserialize)]
+    struct Wrapper {
+        config_backend: crate::remote::ConfigBackend,
+    }
+    if item.as_table_like().is_none() {
+        return Err(invalid(path, "`config_backend` must be a table"));
+    }
+    let mut wrapper = DocumentMut::new();
+    wrapper.insert("config_backend", item);
+    let parsed: Wrapper =
+        toml::from_str(&wrapper.to_string()).map_err(|e| invalid(path, e.message()))?;
+    if let Some(problem) = parsed.config_backend.problem() {
+        return Err(invalid(path, &problem));
+    }
+    Ok(parsed.config_backend)
 }
 
 fn read(path: &Path) -> Result<Option<String>, Error> {

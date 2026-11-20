@@ -21,7 +21,7 @@ use pmt_core::panic::CrashReporter;
 use pmt_core::secret::Redactor;
 use pmt_providers::request::Tool;
 use pmt_store::Store;
-use pmt_tools::approval::{ApprovalRequest, CommandGate, Context, Decision, Floors, GateSetup};
+use pmt_tools::approval::{ApprovalRequest, CommandGate, Context, Floors, GateSetup, Reply};
 use pmt_tools::budget::ResultBudget;
 use pmt_tools::dispatch::ToolHooks;
 use pmt_tools::probe::ProbeCache;
@@ -37,7 +37,7 @@ pub struct Gate {
     /// The gate.
     pub gate: Arc<CommandGate>,
     /// Prompts to show (interactive sessions only).
-    pub prompts: Option<pmt_core::human::Surface<ApprovalRequest, Decision>>,
+    pub prompts: Option<pmt_core::human::Surface<ApprovalRequest, Reply>>,
 }
 
 /// What builds a session's gate.
@@ -117,7 +117,7 @@ pub fn gate(inputs: &GateInputs<'_>) -> Result<Gate, Error> {
 /// As [`gate`].
 pub fn child_gate(
     inputs: &GateInputs<'_>,
-    channel: Channel<ApprovalRequest, Decision>,
+    channel: Channel<ApprovalRequest, Reply>,
 ) -> Result<Arc<CommandGate>, Error> {
     let mut approvals = inputs.scope.config().approvals.clone();
     approvals.mode = pmt_config::schema::ApprovalMode::Manual;
@@ -131,7 +131,7 @@ pub fn child_gate(
 
 fn build_gate(
     inputs: &GateInputs<'_>,
-    channel: Channel<ApprovalRequest, Decision>,
+    channel: Channel<ApprovalRequest, Reply>,
     context: Context,
     approvals: pmt_config::schema::ApprovalsConfig,
 ) -> Result<CommandGate, Error> {
@@ -271,6 +271,7 @@ pub fn surface_of(session: &pmt_store::Session) -> SessionSurface {
             SessionSurface::Onboarding
         }
         Source::Desktop => SessionSurface::Desktop,
+        Source::Dashboard => SessionSurface::Dashboard,
         Source::Cron => SessionSurface::Cron,
         Source::Api if session.source_tag.as_deref() == Some(A2A_TAG) => SessionSurface::A2a,
         Source::Api => SessionSurface::Api,
@@ -777,7 +778,10 @@ async fn replayed(
     journal: Option<Arc<dyn pmt_agent::turn::CallJournal>>,
 ) -> ToolBatch {
     use crate::replay::ToolAnswer;
-    let answers: Vec<ToolAnswer> = calls.iter().map(|call| replay.answer(call)).collect();
+    let answers: Vec<ToolAnswer> = calls
+        .iter()
+        .map(|call| replay.answer(call, tools.declared(&call.name).as_ref()))
+        .collect();
     let live: Vec<RequestedCall> = calls
         .iter()
         .zip(&answers)

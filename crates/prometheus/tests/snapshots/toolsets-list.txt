@@ -90,8 +90,8 @@
   process  (1 tool)
     Background process management
     tools: process
-  project  (1 tool)  [default-off]
-    Switch or create the session's project (on by default for desktop and tui)
+  project  (1 tool)
+    Switch or create the session's project (desktop, tui and dashboard sessions)
     tools: project
   safe  (4 tools)
     Web, vision and image generation; nothing that executes
@@ -117,9 +117,9 @@
   video  (1 tool)  [default-off]
     Video analysis
     tools: video_analyze
-  video_gen  (1 tool)  [default-off]
+  video_gen  (3 tools)  [default-off]
     Video generation
-    tools: video_generate
+    tools: video_generate, xai_video_edit, xai_video_extend
   vision  (1 tool)
     Image analysis
     tools: vision_analyze

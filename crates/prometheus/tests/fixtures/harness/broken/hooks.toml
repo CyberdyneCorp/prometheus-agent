@@ -1,0 +1,5 @@
+network = ["api.example.com"]
+
+[[hooks]]
+event = "on_magic"
+command = "python3 scripts/fix.py"

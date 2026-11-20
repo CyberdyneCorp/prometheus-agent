@@ -1,0 +1,65 @@
+# The mock script of the evolution end-to-end tests. Rollouts receive the
+# task statement (TASK-...); improver sessions their mission (# Mission:);
+# the reflector distils one high-confidence lesson.
+
+[[rule]]
+user = "TASK-APPROVAL"
+step = 0
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "rm -rf ~/important" }
+
+[[rule]]
+user = "TASK-DELETE"
+step = 0
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "rm ledger.csv && find . -type f -not -path './.git/*' | sort" }
+
+[[rule]]
+user = "TASK-MESSAGE"
+step = 0
+[[rule.tool_calls]]
+name = "send_message"
+arguments = { target = "telegram:42", message = "Total: 10.00" }
+
+[[rule]]
+user = "TASK-"
+text = "Total: 10.00"
+
+[[rule]]
+user = "# Mission: experience."
+text = "<edits>\ncomponent: GUARDRAILS.md\ncandidates: inv1, agg1\nchange: state the total with two decimals\nobserved: base1 step 2 printed the total\nverdict: helped\n</edits>\n<experience>\ncue: ledger totals\nlesson: state the total with two decimals\nevidence: rollouts/base1.md step 2 printed Total: 10.00\nconfidence: high because every rollout agrees\n</experience>"
+
+[[rule]]
+user = "# Mission: classify"
+text = "accounting"
+
+[[rule]]
+user = "# Mission: select"
+text = "```choice\nB\n```\n<why>it states the total</why>"
+
+[[rule]]
+user = "# Mission:"
+step = 0
+[[rule.tool_calls]]
+name = "terminal"
+arguments = { command = "python3 context/pool/inv1/harness/scripts/fix.py" }
+
+[[rule]]
+user = "# Mission:"
+step = 1
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "context/harness/GUARDRAILS.md" }
+
+[[rule]]
+user = "# Mission:"
+step = 2
+[[rule.tool_calls]]
+name = "write_file"
+arguments = { path = "context/harness/GUARDRAILS.md", content = "Always state the total with two decimals.\n" }
+
+[[rule]]
+user = "# Mission:"
+text = "Added a guardrail (rollouts/base1.md, step 2: the total)."

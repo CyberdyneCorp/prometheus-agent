@@ -197,24 +197,31 @@ impl Lane {
 
     async fn while_busy(&mut self, pending: Pending) {
         let busy = self.busy();
-        match busy.input_mode {
+        let message = pending.reply_to.clone();
+        let key = match busy.input_mode {
             BusyInputMode::Queue => {
                 self.queue_human(pending);
-                self.ack(&busy, "gateway.busy_queued");
+                Some("gateway.busy_queued")
             }
             BusyInputMode::Interrupt => {
                 self.queue_human(pending);
                 self.interrupt().await;
-                self.ack(&busy, "gateway.busy_interrupting");
+                Some("gateway.busy_interrupting")
             }
             BusyInputMode::Steer => {
                 let steered = pending.images.is_empty() && self.steer(&pending.text).await;
-                if steered {
-                    self.ack(&busy, "gateway.busy_steered");
-                } else {
+                if !steered {
                     self.queue_human(pending);
                 }
+                steered.then_some("gateway.busy_steered")
             }
+        };
+        // Where the platform takes reactions, the follow-up itself is
+        // marked instead of a busy text.
+        if let Some(key) = key
+            && !(busy.ack && self.react_busy(message.as_ref()).await)
+        {
+            self.ack(&busy, key);
         }
     }
 

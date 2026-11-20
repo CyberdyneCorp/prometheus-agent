@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use jiff::Timestamp;
-use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind};
+use pmt_gateway::messaging::{Attachment, ChatType, Inbound, MediaKind, Receipt};
 use serde_json::Value;
 
 const PHONE: &str = "@s.whatsapp.net";
@@ -161,6 +161,26 @@ pub(crate) fn event(event: &Value, aliases: &Aliases) -> Option<(Inbound, bool)>
     Some((inbound, from_me))
 }
 
+/// A bridge `delivery_status` event as a receipt (spec: platform-adapters,
+/// Delivery and read receipts). The bridge reports status changes of the
+/// adapter's own sends only, under the ids `/send` returned; a played voice
+/// note was heard, so it counts as read. Server acks and send errors are
+/// not receipts.
+pub(crate) fn receipt(event: &Value) -> Option<Receipt> {
+    if event["event"] != "delivery_status" {
+        return None;
+    }
+    let read = match event["status"].as_str()? {
+        "delivered" => false,
+        "read" | "played" => true,
+        _ => return None,
+    };
+    Some(Receipt {
+        message_id: text(&event["messageId"])?,
+        read,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -202,5 +222,25 @@ mod tests {
         assert_eq!(inbound.attachments[0].kind, MediaKind::Voice);
         let own = json!({"messageId": "M", "chatId": "1@s.whatsapp.net", "senderId": "1@s.whatsapp.net", "fromMe": true});
         assert!(event(&own, &aliases).unwrap().1, "own messages are marked");
+    }
+
+    #[test]
+    fn delivery_statuses_are_receipts_and_acks_are_not() {
+        let status = |s: &str| {
+            receipt(&json!({"event": "delivery_status", "messageId": "WA7",
+                "chatId": "1@s.whatsapp.net", "status": s, "timestamp": 1}))
+        };
+        let delivered = status("delivered").unwrap();
+        assert_eq!(
+            (delivered.message_id.as_str(), delivered.read),
+            ("WA7", false)
+        );
+        assert!(status("read").unwrap().read);
+        assert!(status("played").unwrap().read);
+        assert!(status("server_ack").is_none());
+        assert!(status("error").is_none());
+        let message = json!({"messageId": "A1", "chatId": "1@s.whatsapp.net",
+            "senderId": "1@s.whatsapp.net", "body": "read"});
+        assert!(receipt(&message).is_none(), "a message is not a receipt");
     }
 }

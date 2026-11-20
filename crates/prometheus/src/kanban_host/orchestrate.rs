@@ -37,6 +37,24 @@ with a bulleted, checkable list. Answer with the body only.";
 /// Characters of a reply kept as a body.
 const BODY_CHARS: usize = 8_000;
 
+/// Profile `name`'s description (`profile describe`), when it has one:
+/// what assignment routing tells the model about an assignee.
+#[must_use]
+pub fn profile_description(home: &Path, name: &str) -> Option<String> {
+    pmt_config::profiles::description(&home.join("profiles").join(name))
+}
+
+/// Each assignee with its description, for the decomposition prompt.
+fn described(scope: &ProfileScope, names: &[String]) -> Vec<String> {
+    names
+        .iter()
+        .map(|name| match profile_description(scope.home(), name) {
+            Some(about) => format!("{name} ({about})"),
+            None => name.clone(),
+        })
+        .collect()
+}
+
 fn decompose_system(assignees: &[String]) -> String {
     format!(
         "You are a kanban orchestrator. Decompose the goal below into a small graph of tasks for \
@@ -179,7 +197,7 @@ pub fn decompose(
     id: &str,
 ) -> Result<std::collections::BTreeMap<String, String>, Error> {
     let task = board.task(id)?;
-    let system = decompose_system(&assignee_names(scope));
+    let system = decompose_system(&described(scope, &assignee_names(scope)));
     let reply = ask(scope, launch, id, &system, &task_text(&task))?;
     let graph = Graph::parse(&reply)?;
     let auto_promote = scope.config().kanban.auto_promote_children;

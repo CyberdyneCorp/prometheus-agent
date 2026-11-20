@@ -123,6 +123,11 @@ fn import_job(
     ) {
         Decision::Write if current.is_some() => {
             let row = ops::find(dest.store, &job.name)?.row;
+            dest.journal(crate::journal::Item::CronJob {
+                id: row.id.clone(),
+                before: serde_json::from_str(&row.spec).ok(),
+                written: None,
+            });
             dest.on_undo(move |store| {
                 store
                     .cron_modify_job(&row.id, |r| {
@@ -159,6 +164,11 @@ fn import_job(
                         let _ = std::fs::remove_file(script);
                     }
                 })?;
+            dest.journal(crate::journal::Item::CronJob {
+                id: created.row.id.clone(),
+                before: None,
+                written: None,
+            });
             dest.on_undo(move |store| store.cron_delete_job(&created.row.id).map(drop));
             Decision::Write
         }

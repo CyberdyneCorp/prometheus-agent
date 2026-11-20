@@ -9,21 +9,37 @@ use std::path::Path;
 use pmt_core::error::{Error, codes};
 
 use crate::schema::Config;
+use crate::write::ConfigFile;
 
 fn invalid(message: String) -> Error {
     Error::new(&codes::CONFIG_INVALID, message)
 }
 
 /// The `gateway.accept_routes_from` of the profile in `dir` (empty when
-/// its config does not set it); `None` when there is no such profile.
-fn accepted_by(dir: &Path) -> Option<Vec<String>> {
+/// its config does not set it or does not parse: its own load reports
+/// that); `None` when there is no such profile. The configuration is the
+/// profile's own: its remote plane document when the home uses one.
+///
+/// # Errors
+///
+/// An unreachable plane (never answered from the local file instead).
+fn accepted_by(dir: &Path) -> Result<Option<Vec<String>>, Error> {
     if !dir.is_dir() {
-        return None;
+        return Ok(None);
     }
-    let text = std::fs::read_to_string(dir.join("config.toml")).unwrap_or_default();
+    let text = ConfigFile::of_profile_dir(dir)
+        .raw()
+        .or_else(|e| {
+            if e.code() == &codes::HOME_IO {
+                Ok(None)
+            } else {
+                Err(e)
+            }
+        })?
+        .unwrap_or_default();
     let value: toml::Value =
         toml::from_str(&text).unwrap_or(toml::Value::Table(toml::Table::new()));
-    Some(
+    Ok(Some(
         value
             .get("gateway")
             .and_then(|g| g.get("accept_routes_from"))
@@ -35,7 +51,7 @@ fn accepted_by(dir: &Path) -> Option<Vec<String>> {
                     .collect()
             })
             .unwrap_or_default(),
-    )
+    ))
 }
 
 /// Refuses malformed routes and routes their target did not accept.
@@ -71,7 +87,7 @@ pub(crate) fn check(config: &Config, profile_dir: &Path) -> Result<(), Error> {
         let Some(parent) = profile_dir.parent() else {
             continue;
         };
-        match accepted_by(&parent.join(&route.profile)) {
+        match accepted_by(&parent.join(&route.profile))? {
             None => {
                 return Err(invalid(format!(
                     "{key}.profile: no profile named '{}'",
@@ -138,6 +154,49 @@ mod tests {
                 .unwrap_err()
                 .message()
                 .contains("no profile named 'nobody'")
+        );
+    }
+
+    /// Spec: configuration-and-profiles, Remote configuration backend: a
+    /// remote profile's opt-in is the plane's; its local `config.toml` (a
+    /// seeded template) is never read in its place.
+    #[test]
+    fn a_remote_targets_opt_in_comes_from_the_plane() {
+        let routed =
+            config("name = \"ops\"\nplatform = \"discord\"\nguild_id = \"1\"\nprofile = \"ops\"\n");
+        let home = tempfile::tempdir().unwrap();
+        crate::remote::fake::serve(
+            home.path(),
+            &[
+                ("default", serde_json::json!({})),
+                (
+                    "ops",
+                    serde_json::json!({"gateway": {"accept_routes_from": ["default"]}}),
+                ),
+            ],
+        );
+        let me = home.path().join("profiles/default");
+        check(&routed, &me).unwrap();
+
+        let home = tempfile::tempdir().unwrap();
+        crate::remote::fake::serve(
+            home.path(),
+            &[
+                ("default", serde_json::json!({})),
+                ("ops", serde_json::json!({})),
+            ],
+        );
+        std::fs::write(
+            home.path().join("profiles/ops/config.toml"),
+            "[gateway]\naccept_routes_from = [\"default\"]\n",
+        )
+        .unwrap();
+        let me = home.path().join("profiles/default");
+        let err = check(&routed, &me).unwrap_err();
+        assert!(
+            err.message().contains("does not accept routes"),
+            "{}",
+            err.message()
         );
     }
 }

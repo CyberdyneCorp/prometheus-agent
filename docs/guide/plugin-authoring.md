@@ -208,6 +208,36 @@ only (the current session's cached prompt stays as it was). `/plugins
 reload --now` applies tools and sections to the current session too;
 skills always wait for a new session.
 
+### The development loop
+
+While you work on it, skip installing and signing:
+
+```text
+$ prometheus plugins dev ./weather --watch
+Grant dev:weather: reach api.weather.example? [y/N] y
+dev:weather loaded (build 1)
+serving dev:weather from /home/me/src/weather; watching for changes (Ctrl+C stops)
+dev:weather loaded (build 2)
+```
+
+The directory is served to the profile as `dev:<id>` (hiding an installed
+plugin of the same id) for as long as the command runs. It is granted only
+the capabilities you approve at start (`--grant all` or a comma list
+without a terminal; none otherwise), each build under its own digest, and
+the grants are revoked when the command ends. With `--watch` every change
+under the directory (except `target/`, `.git/`, `node_modules/` and
+`__pycache__/`) runs the manifest's `build` command (`build = "cargo
+component build --release && cp target/... plugin.wasm"`, run by `sh -c`,
+`cmd /C` on Windows) and reloads it: a `prometheus chat` that is open
+picks the new build up at its next hook, under the reload rules above
+(hooks and slash commands at once, tools and prompt sections next
+session). Build failures, load errors and capabilities the build asks for
+but was not granted (`capability denied: ...`) are printed as they happen.
+Dev plugins load in the sessions you work in: `prometheus chat` (line
+mode or the TUI) and the daemon's other client sessions (desktop,
+dashboard, editors). Gateway chats, scheduled jobs, API requests and
+other automated sessions never load them, even in the same daemon.
+
 ## Other worlds
 
 `plugins/samples/` holds a minimal plugin for every world. Beyond tools, the
@@ -281,6 +311,12 @@ name = "tiers"                       # the plugin id when absent
 [delegation_router.params]
 tier = { type = "string", enum = ["fast", "deep"] }
 ```
+
+A `bench` plugin is a benchmark adapter for `prometheus eval run
+bench:<plugin id>` (see [Benchmark adapters](eval.md#benchmark-adapters)):
+`call(method, params)` answers the `bench.*` methods with JSON, `files`
+reaches only the directory of the call in progress, and `requests` is its
+request to the host. `plugins/samples/bench` is a complete one.
 
 A `provider` plugin registers named providers (image generation, web
 search, text-to-speech...) that config selects by name, such as

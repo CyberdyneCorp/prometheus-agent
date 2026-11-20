@@ -167,6 +167,57 @@ from the same directory (kept in `<profile>/tui/recent.json`), for
 example after an SSH link dropped and took the terminal with it; when
 that session is gone it starts a new one, and `--resume` always wins.
 
+## Split panes
+
+`F2` (or `/pane subagents`) shows the subagents pane and `F3` (or
+`/pane tools`) the tool-output pane; the same key hides it again and
+`/pane off` hides either. A pane sits beside the transcript on a
+terminal of 120 columns or more, below it from 80 to 119 columns, and
+as a tab under 80 (a tab row names the transcript and both panes). While
+a pane has the focus `Up` and `Down` move its selection and `Esc` gives
+the keys back to the composer.
+
+The subagents pane lists each delegated child of the session with its
+status, elapsed time, tokens and cost, and below the list the selected
+child's transcript (its text, the tools it calls and their output, and
+how it ended) as it happens: the TUI subscribes to that child with
+`subagent.subscribe` and the daemon streams it. The tool-output pane
+lists the session's tool calls and shows the whole output of the
+selected one; the transcript keeps a one-line summary (`↳ ...`).
+
+## Reviewing a file edit
+
+When a file edit needs approval (a write to a protected instruction file
+such as `AGENTS.md`, or an editor session's edits) the card shows the
+change as a unified diff with numbered hunks. Answer `y` to accept all of
+it, `n` to reject it, the hunk numbers to accept only those (`hunks 1,3`
+or `1 3`), or `e` to edit it first: the proposed content goes to the
+composer, `Enter` accepts your version and `Esc` goes back to the card.
+The tool writes exactly what was accepted, and its result tells the
+model which hunks were applied and which were rejected.
+
+## The timeline
+
+`/timeline` (or `Ctrl+T`) lists the session's turns with their time, the
+first line of their input, their tool calls and cost. Moving the cursor
+shows the highlighted turn read-only in place of the transcript; the live
+session is not touched. `Enter` rewinds there: a new branch session
+holding the turns up to that one becomes the shown session, and the
+original stays live and listed unchanged. When later turns changed files
+the TUI asks whether to restore the workspace to that turn's checkpoint
+(`y` restores, `n` keeps the files).
+
+## Shared sessions
+
+Any number of clients may attach to one session. `prometheus tui --attach
+<id|title>` joins a live session as a driver beside the clients already
+on it, and `prometheus tui --observe <id|title>` joins it read-only: an
+observer sees everything but its input is refused with `-32002 observers
+cannot submit input`. The status line names the other clients (`with
+desktop-7`, `observing`), a notice says when one joins or leaves, and in
+a shared session each input is labelled with the client the gateway
+stamped it with (`[desktop-7] ...`, `[you] ...`).
+
 ## Leaving and crashes
 
 Leaving, a signal (`SIGINT` exits 130, `SIGTERM` and `SIGHUP` 143) and a

@@ -234,6 +234,62 @@ own configuration. A CLI found nowhere fails the session with
 `provider.external_cli_missing` naming the command.
 
 
+## The Codex app-server runtime
+
+With `model.openai_runtime = "codex_app_server"` (default `auto`), turns on
+`openai-codex`, `openai-api` and custom providers that `~/.codex/config.toml`
+also defines under `[model_providers]` run in a long-lived `codex app-server`
+(`model.codex_bin`, else `codex` found as above) with Codex's own sign-in.
+Codex runs in the session's workspace, under the `workspace-write` sandbox
+and the `untrusted` approval policy that Prometheus sets on its thread
+(never the ones in Codex's own config), so every command Codex does not
+itself deem read-only asks first. One app-server process and Codex thread serve each session: the system
+prompt goes once as the thread's developer instructions, and each turn sends
+only what the thread has not seen. Codex runs its own tools; the commands,
+patches and tool calls it ran are recorded in the session's transcript and
+trajectory as finished [`terminal`](../reference/tools.md#terminal),
+[`patch`](../reference/tools.md#patch) and `mcp_<server>_<tool>` calls
+(never run again), so memory and skill nudges still count them. Codex's
+approval requests go to the session's approval gate as
+[`terminal`](../reference/tools.md#terminal) (a command) or
+[`patch`](../reference/tools.md#patch) (file changes) calls, with the same rules, prompts and
+`approval.request` as the session's own tools.
+
+```text
+/codex-runtime                     # this profile's runtime and the codex found
+/codex-runtime on                  # codex_app_server from the next session
+/codex-runtime off                 # back to auto from the next session
+prometheus codex-runtime status
+prometheus codex-runtime set on
+prometheus codex-runtime migrate [--dry-run] [--json]
+```
+
+A change applies from the next session: the running one keeps its runtime.
+Turning the app-server on refuses with an install hint naming
+`model.codex_bin`, leaving the configuration unchanged, when no Codex
+executable is found. Turning it on and `migrate` write a delimited managed
+section into `~/.codex/config.toml` (`CODEX_HOME` when set); every byte
+outside it is yours and stays, and the section is replaced in place on each
+run. It carries:
+
+- the profile's `mcp.servers`: stdio command, arguments and literal `env`;
+  `env_secrets` as `env_vars` (Codex forwards those variables from its own
+  environment, so no secret is written); HTTP `url`, `auth_secret` as
+  `bearer_token_env_var`, literal headers as `http_headers` and `${NAME}`
+  headers as `env_http_headers`; `timeout_secs` and `connect_timeout_secs` as
+  `tool_timeout_sec` and `startup_timeout_sec`; `enabled = false` and the
+  tool include and exclude lists. Keys Codex has no equivalent for are
+  dropped with a warning per server; a server name you already define
+  outside the section keeps your definition;
+- `[plugins.<name>] enabled = true` for each Codex plugin `plugin/list`
+  reports installed and available;
+- `[mcp_servers.prometheus]`: `prometheus --profile <p> mcp serve --stdio
+  --tools web_search,web_extract,vision_analyze,image_generate,skills_list,skill_view,text_to_speech`,
+  so Codex can call those tools back.
+
+`--json` prints `{migrated, preserved_user_servers, skipped_keys_per_server,
+errors, target_path, written}`; `--dry-run` writes nothing.
+
 ## Account usage and subscription commands
 
 `prometheus auth usage [--provider ID] [--json]` shows a subscription's plan

@@ -10,10 +10,12 @@ pub mod blueprints;
 pub mod caller;
 mod fetch;
 mod inbox;
+pub mod managed;
 pub mod notepad;
 pub mod retired;
 mod script;
 pub mod tool;
+pub(crate) mod translate;
 
 pub use inbox::inbox;
 
@@ -265,7 +267,7 @@ impl Runner for HostRunner {
             if let Some(missing) = self.missing_adapter(job) {
                 return Err(missing);
             }
-            if job.spec.no_agent {
+            if job.spec.no_agent || job.spec.kind == pmt_cron::job::JobKind::Evolve {
                 return Ok(());
             }
             agent::credential(&self.scope, &self.launch, job).await
@@ -287,6 +289,12 @@ impl Runner for HostRunner {
 
     fn fetch<'a>(&'a self, url: &'a str) -> BoxFuture<'a, Result<String, String>> {
         Box::pin(fetch::get(&self.scope, url))
+    }
+
+    fn queue_evolve<'a>(&'a self, job: &'a Job) -> BoxFuture<'a, Result<String, String>> {
+        Box::pin(async move {
+            crate::evolve_cmd::cron::queue(&self.scope, job).map_err(|e| e.message().to_owned())
+        })
     }
 
     fn run_agent(&self, request: AgentRequest) -> BoxFuture<'_, AgentOutcome> {
@@ -353,20 +361,51 @@ pub fn dispatch(
     now: jiff::Timestamp,
     permits: &Arc<tokio::sync::Semaphore>,
 ) -> Result<Running, Error> {
+    dispatch_with(runner, now, permits, true)
+}
+
+/// [`dispatch`], claiming the due occurrences only when `scheduled` (the
+/// built-in trigger signals them; under the managed trigger only re-runs
+/// and queued runs start here).
+///
+/// # Errors
+///
+/// As [`dispatch`].
+pub fn dispatch_with(
+    runner: &Arc<HostRunner>,
+    now: jiff::Timestamp,
+    permits: &Arc<tokio::sync::Semaphore>,
+    scheduled: bool,
+) -> Result<Running, Error> {
     let scope = &runner.scope;
     let config = scope.config().cron.clone();
     let zone = profile_zone(scope)?;
-    let claimed = pmt_cron::scheduler::tick(&runner.store, scope.home(), now, &zone, &config)?;
+    let claimed = if scheduled {
+        pmt_cron::scheduler::tick(&runner.store, scope.home(), now, &zone, &config)?
+    } else {
+        pmt_cron::scheduler::tick_unscheduled(&runner.store, scope.home(), now)?
+    };
     let mut tasks = Running::new();
     for (job, run) in claimed {
-        let runner = Arc::clone(runner);
-        let permits = Arc::clone(permits);
-        pmt_core::spawn::spawn_in(&mut tasks, async move {
-            let _permit = permits.acquire_owned().await;
-            runner.execute(&job, &run).await
-        });
+        start(&mut tasks, runner, permits, job, run);
     }
     Ok(tasks)
+}
+
+/// Starts the claimed `run` of `job` among `tasks`, under `permits`.
+pub fn start(
+    tasks: &mut Running,
+    runner: &Arc<HostRunner>,
+    permits: &Arc<tokio::sync::Semaphore>,
+    job: Job,
+    run: RunRow,
+) {
+    let runner = Arc::clone(runner);
+    let permits = Arc::clone(permits);
+    pmt_core::spawn::spawn_in(tasks, async move {
+        let _permit = permits.acquire_owned().await;
+        runner.execute(&job, &run).await
+    });
 }
 
 /// The permits of a profile's concurrent runs.

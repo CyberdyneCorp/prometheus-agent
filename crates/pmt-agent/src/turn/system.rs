@@ -128,6 +128,8 @@ impl Agent {
             context_window: route.context_window,
             tool_names,
             caller_system: p.caller_system.clone(),
+            harness: p.harness.clone(),
+            lessons: p.lessons.clone(),
             skills_index: p.skills_index.clone(),
             pinned_skills: p.pinned_skills.clone(),
             memory: p.memory.clone(),

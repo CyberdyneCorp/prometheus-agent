@@ -23,11 +23,64 @@ use crate::{backups, catalog, edit, parse};
 pub struct ConfigFile {
     path: PathBuf,
     backups: PathBuf,
+    /// The home and profile name, when the home may use the remote
+    /// configuration backend (every profile of a home does).
+    owner: Option<(PathBuf, String)>,
 }
 
 impl ConfigFile {
     pub(crate) fn new(path: PathBuf, backups: PathBuf) -> Self {
-        Self { path, backups }
+        Self {
+            path,
+            backups,
+            owner: None,
+        }
+    }
+
+    /// The file of profile `profile` of the home at `home`, whose text
+    /// comes from the remote plane when the home uses one.
+    pub(crate) fn of_profile(path: PathBuf, backups: PathBuf, home: &Path, profile: &str) -> Self {
+        Self {
+            owner: Some((home.to_owned(), profile.to_owned())),
+            ..Self::new(path, backups)
+        }
+    }
+
+    /// The file of the profile directory `dir` (`<home>/profiles/<name>`,
+    /// the home layout), remote-aware like
+    /// [`crate::ProfileDir::config_file`]: for code that holds only the
+    /// directory of a profile, possibly another one than its own. A
+    /// directory outside that layout (a test fixture, a scratch profile)
+    /// is a plain local file.
+    #[must_use]
+    pub fn of_profile_dir(dir: &Path) -> Self {
+        let path = dir.join("config.toml");
+        let backups = dir.join("backups").join("config");
+        let parent = dir.parent();
+        let in_layout = parent.and_then(Path::file_name) == Some("profiles".as_ref());
+        match (in_layout, parent.and_then(Path::parent), dir.file_name()) {
+            (true, Some(home), Some(name)) => {
+                Self::of_profile(path, backups, home, &name.to_string_lossy())
+            }
+            _ => Self::new(path, backups),
+        }
+    }
+
+    /// The remote plane serving this profile, with its name.
+    fn plane(&self) -> Result<Option<(std::sync::Arc<crate::remote::Plane>, &str)>, Error> {
+        let Some((home, profile)) = &self.owner else {
+            return Ok(None);
+        };
+        Ok(crate::remote::plane(home)?.map(|plane| (plane, profile.as_str())))
+    }
+
+    /// Whether this profile's configuration lives on a remote plane.
+    ///
+    /// # Errors
+    ///
+    /// The backend settings' own errors.
+    pub fn is_remote(&self) -> Result<bool, Error> {
+        Ok(self.plane()?.is_some())
     }
 
     /// The file path.
@@ -50,7 +103,7 @@ impl ConfigFile {
     /// `config.parse`, `config.too_new` or `home.io`.
     pub fn read(&self) -> Result<(String, Option<Migrated>), Error> {
         let text = self.raw()?.unwrap_or_default();
-        migrate::upgrade(&self.path, &text, &self.backups)
+        self.labelled(migrate::upgrade(&self.path, &text, &self.backups))
     }
 
     /// The file's bytes as they are on disk, without migrating.
@@ -59,6 +112,9 @@ impl ConfigFile {
     ///
     /// `home.io` when it exists but cannot be read.
     pub fn raw(&self) -> Result<Option<String>, Error> {
+        if let Some((plane, profile)) = self.plane()? {
+            return plane.text(profile).map(Some);
+        }
         match std::fs::read_to_string(&self.path) {
             Ok(text) => Ok(Some(text)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -95,8 +151,10 @@ impl ConfigFile {
     /// only: nothing on disk changes.
     pub(crate) fn load_unmigrated(&self, overrides: &Overrides) -> Result<Layered, Error> {
         let text = self.raw()?.unwrap_or_default();
-        let (_, migrated) = migrate::in_memory(&self.path, &text)?;
-        Layered::build(&self.path, &migrated, overrides)
+        self.labelled(
+            migrate::in_memory(&self.path, &text)
+                .and_then(|(_, migrated)| Layered::build(&self.path, &migrated, overrides)),
+        )
     }
 
     /// Reads, migrates, validates and layers the file under `overrides`.
@@ -107,7 +165,16 @@ impl ConfigFile {
     /// invalid overrides (exit 2).
     pub(crate) fn load(&self, overrides: &Overrides) -> Result<Layered, Error> {
         let (text, _) = self.read()?;
-        Layered::build(&self.path, &text, overrides)
+        self.labelled(Layered::build(&self.path, &text, overrides))
+    }
+
+    /// `result` with a validation error about a remote profile's served
+    /// values naming the plane instead of this (unread) local path.
+    fn labelled<T>(&self, result: Result<T, Error>) -> Result<T, Error> {
+        result.map_err(|error| match self.plane() {
+            Ok(Some((plane, profile))) => plane.relabel(profile, &self.path, error),
+            _ => error,
+        })
     }
 
     /// Schema defaults plus `overrides`, without reading the file
@@ -389,16 +456,30 @@ impl ConfigFile {
         self.commit(old.as_deref(), text)
     }
 
+    /// Makes a freshly cloned profile's configuration `text` (the
+    /// source's, already adjusted): on the remote plane the keys that
+    /// differ are written at the profile level like every other writer;
+    /// a local file is replaced without a backup (it holds only the new
+    /// profile's template).
+    pub(crate) fn write_clone(&self, text: &str) -> Result<(), Error> {
+        if let Some((plane, profile)) = self.plane()? {
+            let old = plane.text(profile)?;
+            return plane.write(profile, &old, text);
+        }
+        private_fs::write_atomic(&self.path, text.as_bytes())
+            .map_err(|e| Error::io_doing(&codes::HOME_IO, "cannot write", &self.path, &e))
+    }
+
     /// Applies `change` to the parsed current file, validates and commits.
     fn modify(
         &self,
         change: impl FnOnce(&mut DocumentMut) -> Result<(), Error>,
     ) -> Result<(), Error> {
         let (old, _) = self.read()?;
-        let mut doc = parse::document(&self.path, &old)?.into_mut();
+        let mut doc = self.labelled(parse::document(&self.path, &old))?.into_mut();
         change(&mut doc)?;
         let new = doc.to_string();
-        let config = parse::config(&self.path, &new)?;
+        let config = self.labelled(parse::config(&self.path, &new))?;
         crate::essential::semantic(&config, profile_dir(&self.path))?;
         crate::language::check_change(&old, &config, profile_dir(&self.path))?;
         if new == old {
@@ -409,6 +490,9 @@ impl ConfigFile {
 
     fn commit(&self, old: Option<&str>, new: &str) -> Result<(), Error> {
         crate::generated::check_writable(profile_dir(&self.path))?;
+        if let Some((plane, profile)) = self.plane()? {
+            return plane.write(profile, old.unwrap_or_default(), new);
+        }
         if let Some(old) = old.filter(|old| *old != new) {
             backups::save(&self.backups, "config", old)?;
             backups::prune(&self.backups);

@@ -391,3 +391,46 @@ see [Scheduled jobs](cron.md#blueprints)). It never schedules anything by
 itself: the blueprint is offered in `/suggestions` and `prometheus cron
 suggestions` (and as `skill:<name>` in `/blueprint`), and a job exists only
 once you accept it.
+
+## Skill evals
+
+A skill can carry tests in `evals/evals.toml`, one `[[case]]` per test:
+
+```toml
+[[case]]
+name = "sums"                          # optional (default case-<n>)
+prompt = "sum column B of data.csv"
+setup_files = ["data.csv"]             # copied from evals/ into the workspace
+expect_skill_loaded = true             # skill_view(name = "csv-tools") was called
+expect_tools = ["terminal"]            # each tool was called
+expect_output_contains = "42"
+expect_output_regex = "total: \\d+"
+judge = "The answer states the sum."   # checked by auxiliary.eval_judge
+mock_script = "mock/sums.toml"         # what the mock provider plays
+```
+
+`prometheus skills test <name>` (or `--all`) runs every case in a temporary
+profile of its own, holding only that skill (without its `evals/`), in a
+workspace with the case's `setup_files`. It prints whether each case passed,
+with the reason of each failed run, and the pass rate. It writes a JSON
+report to `<profile>/evals/skills/`. It exits 0 only when every case passed.
+
+- `--provider mock` (the default) plays each case's `mock_script` on the mock
+  provider. The run is deterministic and offline.
+- `--provider live` uses the profile's model and secrets.
+- `--repeat N` runs every case N times.
+
+```text
+$ prometheus skills test csv-tools --provider live
+csv-tools
+  FAIL sums (0/1 runs)
+       run 1: skill not loaded
+csv-tools: 0 of 1 cases passed; pass rate 0/1 (0%)
+```
+
+With `skills.eval_gate = true`, a skill that has evals is tested before and
+after each change that a background review or a curator consolidation
+makes to it. Each run uses `skills.eval_gate_repeat` runs per case (default
+3) and the default provider. A change that lowers the pass rate is undone,
+and the review gets `edit rejected: eval pass rate fell from <a> to <b>`.
+Other edits are applied, and the result carries a warning.

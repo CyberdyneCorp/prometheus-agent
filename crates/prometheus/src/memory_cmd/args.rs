@@ -201,6 +201,23 @@ pub enum MemoryCommand {
         /// Show each score's parts.
         #[arg(long)]
         explain: bool,
+        /// Include dormant entries.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Make a dormant entry active again.
+    Wake {
+        /// The entry id.
+        id: String,
+    },
+    /// Ask the auxiliary memory model for merges, contradiction resolutions and tier moves; prints them as a diff and changes nothing without --apply.
+    Consolidate {
+        /// Only this store.
+        #[arg(long)]
+        target: Option<TargetArg>,
+        /// Commit the proposal (journaled with origin consolidation).
+        #[arg(long)]
+        apply: bool,
     },
     /// Set up an external memory provider: its settings go to config.toml, its secrets to the secrets store; takes effect from the next session.
     Setup {

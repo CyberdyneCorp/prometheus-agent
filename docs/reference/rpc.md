@@ -74,20 +74,21 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `cron.blueprints.list` | `scheduled-jobs` | 1.0 | [`BlueprintsListParams`](#blueprintslistparams) | [`BlueprintList`](#blueprintlist) |
 | `daemon.update` | `workspace-architecture` | 1.0 | [`DaemonUpdateParams`](#daemonupdateparams) | [`DaemonUpdated`](#daemonupdated) |
 | `egress.set` | `security-boundaries` | 1.0 | [`EgressSetParams`](#egresssetparams) | [`EgressState`](#egressstate) |
-| `evolve.cancel` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.choose` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.list` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.proposals.adopt` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.proposals.list` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.proposals.reject` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.start` | `harness-evolution` | 1.0 | not served yet | |
-| `evolve.status` | `harness-evolution` | 1.0 | not served yet | |
-| `experience.domains` | `experience-library` | 1.0 | not served yet | |
-| `experience.forget` | `experience-library` | 1.0 | not served yet | |
-| `experience.list` | `experience-library` | 1.0 | not served yet | |
-| `experience.pin` | `experience-library` | 1.0 | not served yet | |
-| `experience.restore` | `experience-library` | 1.0 | not served yet | |
-| `experience.show` | `experience-library` | 1.0 | not served yet | |
+| `evolve.cancel` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.choose` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.list` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveJobs`](#evolvejobs) |
+| `evolve.proposals.adopt` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.proposals.list` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveProposals`](#evolveproposals) |
+| `evolve.proposals.reject` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.start` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `evolve.status` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `experience.disable` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.domains` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceDomains`](#experiencedomains) |
+| `experience.forget` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.list` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceEntries`](#experienceentries) |
+| `experience.pin` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.restore` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
+| `experience.show` | `experience-library` | 1.0 | [`ExperienceParams`](#experienceparams) | [`ExperienceReply`](#experiencereply) |
 | `files.rollback` | `execution-environments` | 1.0 | [`FilesRollbackParams`](#filesrollbackparams) | [`FilesRolledBack`](#filesrolledback) |
 | `files.undo` | `execution-environments` | 1.0 | [`FilesUndoParams`](#filesundoparams) | [`FilesUndone`](#filesundone) |
 | `fs.list` | `desktop-app` | 1.0 | [`FsListParams`](#fslistparams) | [`FsListing`](#fslisting) |
@@ -106,9 +107,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `groups.log` | `bot-mode` | 1.0 | not served yet | |
 | `groups.replica_state` | `bot-mode` | 1.0 | not served yet | |
 | `groups.replicate` | `bot-mode` | 1.0 | not served yet | |
-| `harness.diff` | `harness-evolution` | 1.0 | not served yet | |
-| `harness.log` | `harness-evolution` | 1.0 | not served yet | |
-| `harness.rollback` | `harness-evolution` | 1.0 | not served yet | |
+| `harness.diff` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `harness.log` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`HarnessVersions`](#harnessversions) |
+| `harness.rollback` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
+| `i18n.languages` | `i18n` | 1.0 | [`ProfileParams`](#profileparams) | [`Languages`](#languages) |
 | `journey.list` | `memory` | 1.0 | [`JourneyListParams`](#journeylistparams) | [`JourneyList`](#journeylist) |
 | `local.add` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
 | `local.catalog` | `local-models` | 1.0 | [`LocalParams`](#localparams) | [`LocalReply`](#localreply) |
@@ -152,8 +154,10 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `queue.resume` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`QueueState`](#queuestate) |
 | `rpc.hello` | `workspace-architecture` | 1.0 | [`HelloParams`](#helloparams) | [`HelloResult`](#helloresult) |
 | `rpc.ping` | `workspace-architecture` | 1.0 | [`Empty`](#empty) | [`Ack`](#ack) |
-| `screen.handback` | `execution-environments` | 1.0 | not served yet | |
-| `screen.takeover` | `execution-environments` | 1.0 | not served yet | |
+| `screen.browser` | `execution-environments` | 1.0 | [`ScreenBrowserParams`](#screenbrowserparams) | [`ScreenBrowserOpened`](#screenbrowseropened) |
+| `screen.handback` | `execution-environments` | 1.0 | [`ScreenHandbackParams`](#screenhandbackparams) | [`ScreenLeaseState`](#screenleasestate) |
+| `screen.takeover` | `execution-environments` | 1.0 | [`ScreenTakeoverParams`](#screentakeoverparams) | [`ScreenLeaseState`](#screenleasestate) |
+| `screen.ticket` | `execution-environments` | 1.0 | [`ScreenTicketParams`](#screenticketparams) | [`ScreenTicket`](#screenticket) |
 | `session.attach` | `workspace-architecture` | 1.0 | [`AttachParams`](#attachparams) | [`Attached`](#attached) |
 | `session.banner` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`BannerInfo`](#bannerinfo) |
 | `session.compact` | `workspace-architecture` | 1.0 | [`CompactParams`](#compactparams) | [`Compacted`](#compacted) |
@@ -168,15 +172,17 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `session.list` | `workspace-architecture` | 1.0 | [`SessionListParams`](#sessionlistparams) | [`SessionList`](#sessionlist) |
 | `session.resolve` | `workspace-architecture` | 1.0 | [`ResolveParams`](#resolveparams) | [`SessionRef`](#sessionref) |
 | `session.resume` | `workspace-architecture` | 1.0 | [`ResumeParams`](#resumeparams) | [`Attached`](#attached) |
+| `session.rewind` | `tui` | 1.0 | [`RewindParams`](#rewindparams) | [`SessionRewound`](#sessionrewound) |
 | `session.settings` | `acp-adapter` | 1.0 | [`SessionRef`](#sessionref) | [`SessionSettings`](#sessionsettings) |
 | `session.siblings` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `session.steer` | `agent-turn-loop` | 1.0 | [`SteerParams`](#steerparams) | [`Ack`](#ack) |
+| `session.timeline` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`Timeline`](#timeline) |
 | `session.transcript` | `workspace-architecture` | 1.0 | [`SessionRef`](#sessionref) | [`Transcript`](#transcript) |
 | `session.tree` | `session-storage` | 1.0 | [`SessionRef`](#sessionref) | [`Lineage`](#lineage) |
 | `subagent.list` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`SubagentList`](#subagentlist) |
 | `subagent.steer` | `desktop-app` | 1.0 | [`SubagentSteerParams`](#subagentsteerparams) | [`SubagentControlled`](#subagentcontrolled) |
 | `subagent.stop` | `desktop-app` | 1.0 | [`SubagentRef`](#subagentref) | [`SubagentControlled`](#subagentcontrolled) |
-| `subagent.subscribe` | `tui` | 1.0 | not served yet | |
+| `subagent.subscribe` | `tui` | 1.0 | [`SubagentSubscribeParams`](#subagentsubscribeparams) | [`SubagentSubscribed`](#subagentsubscribed) |
 | `system.health` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`SystemHealth`](#systemhealth) |
 | `system.metrics` | `observability` | 1.0 | [`SystemParams`](#systemparams) | [`MetricsSnapshot`](#metricssnapshot) |
 | `tools.call` | `tool-system` | 1.0 | not served yet | |
@@ -225,8 +231,8 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
-| `local_model.context_grown` | `local-models` | 1.0 | not served yet |
-| `message.delivery` | `messaging-gateway` | 1.0 | not served yet |
+| `local_model.context_grown` | `local-models` | 1.0 | [`LocalModelContextGrown`](#localmodelcontextgrown) |
+| `message.delivery` | `messaging-gateway` | 1.0 | [`MessageDeliveryPayload`](#messagedeliverypayload) |
 | `message.reaction` | `desktop-app` | 1.0 | [`MessageReaction`](#messagereaction) |
 | `pty.detached` | `desktop-app` | 1.0 | [`PtyRef`](#ptyref) |
 | `pty.exited` | `desktop-app` | 1.0 | [`PtyOutput`](#ptyoutput) |
@@ -235,8 +241,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `request.cancel` | `workspace-architecture` | 1.0 | [`RequestCancel`](#requestcancel) |
 | `request.resolved` | `workspace-architecture` | 1.0 | [`RequestResolved`](#requestresolved) |
 | `session.event` | `workspace-architecture` | 1.0 | any |
-| `session.presence` | `messaging-gateway` | 1.0 | not served yet |
+| `session.presence` | `messaging-gateway` | 1.0 | [`SessionPresencePayload`](#sessionpresencepayload) |
 | `session.project` | `projects` | 1.0 | [`SessionProject`](#sessionproject) |
+| `subagent.event` | `tui` | 1.0 | [`SubagentEventPayload`](#subagenteventpayload) |
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
 | `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
@@ -325,9 +332,9 @@ The answer to `approval.request` (also `approval.respond` params, with its `id`)
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks accepted. |
+| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. |
 | `decision` | [`Decision`](#decision) | yes | The decision. |
-| `replacement` | string or null | no | An edited command to run instead. |
+| `replacement` | string or null | no | For a diff approval: the file content to write instead of the proposed one (`edit then accept`). |
 
 ### `ApprovalFinding`
 
@@ -361,10 +368,10 @@ Why a call needs approval.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks accepted. |
+| `accepted_hunks` | array of integer or null | no | For a diff approval: the hunks to apply (numbered from 1, as the request's `diff.hunks`); absent: all of them. |
 | `decision` | [`Decision`](#decision) | yes | The decision. |
 | `id` | string | yes | The `approval.request` id (`srq-<12 hex>`). |
-| `replacement` | string or null | no | An edited command to run instead. |
+| `replacement` | string or null | no | For a diff approval: the file content to write instead of the proposed one (`edit then accept`). |
 
 ### `Artifact`
 
@@ -427,6 +434,7 @@ What an attached connection may do in the session.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `client_id` | string or null | no | This connection's client id, as `session.presence` lists it and its inputs are stamped with. |
 | `epoch` | string | yes | The daemon epoch the sequence numbers belong to. |
 | `latest_seq` | integer | yes | The newest event sequence number kept for it. |
 | `open_requests` | array of [`OpenRequest`](#openrequest) | no | Requests of the session still waiting for an answer (re-sent to this connection when it is a capable driver). |
@@ -842,6 +850,7 @@ One category of `session.context_usage`.
 | `categories` | array of [`ContextCategory`](#contextcategory) | no | `tokens` by category; they sum to `tokens` (empty when the session is not loaded). |
 | `context_window` | integer or null | no | The model's context window, when known. |
 | `cost_usd` | number or null | no | The session's cost so far in the usage ledger's currency (USD), priced calls only. |
+| `local_resources` | [`LocalResources`](#localresources) or null | no | The local runtime's resource use while the session's local model is resident (sampled at most once every 2 seconds). |
 | `subscription` | [`SubscriptionStatus`](#subscriptionstatus) or null | no | The subscription the current route bills, when it is one. |
 | `tokens` | integer | yes | Estimated tokens of the active context. |
 
@@ -910,9 +919,19 @@ A file edit an approval asks about.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `hunks` | array of [`EditHunk`](#edithunk) | no | The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what `accepted_hunks` refers to. |
 | `new_text` | string | yes | The content after the edit. |
 | `old_text` | string or null | no | The current content (`null`: a new file). |
 | `path` | string | yes | The absolute path. |
+
+### `EditHunk`
+
+One hunk of a file edit.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `header` | string | yes | `@@ -<old start>,<old lines> +<new start>,<new lines> @@`. |
+| `lines` | array of string | yes | Its lines, each starting with ` `, `-` or `+`. |
 
 ### `EditMode`
 
@@ -1068,6 +1087,116 @@ One event frame: the notification params and the replay item.
 |---|---|---|---|
 | `last_seen` | integer | yes | The last sequence number the client saw (0 for none). |
 | `session_id` | string | yes | The session. |
+
+### `EvolveJobRow`
+
+One job of `evolve.list`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `budget` | number or null | no | The spend cap in US dollars (`null`: `evolve.budget.max_usd`). |
+| `cost_usd` | number | yes | Spend so far. |
+| `created_at` | string | yes | RFC 3339. |
+| `domain` | string | yes | The experience-library domain. |
+| `id` | string | yes | `evo_<ULID>`. |
+| `k` | integer | yes | The recursion budget. |
+| `mode` | string | yes | `parallel`, `sequential` or `both`. |
+| `rollouts` | integer | yes | Rollouts the job plans. |
+| `sessions` | integer | no | Improver sessions the job plans. |
+| `status` | string | yes | The job status. |
+| `trigger` | string | yes | What queued it. |
+
+### `EvolveJobs`
+
+`evolve.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `jobs` | array of [`EvolveJobRow`](#evolvejobrow) | yes | Oldest first. |
+
+### `EvolveParams`
+
+Params of every `evolve.*` and `harness.*` method; each uses the fields its command takes.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `budget_usd` | number or null | no | `evolve.start`: the spend cap in US dollars. |
+| `candidate` | string or null | no | `evolve.choose`: the anonymous candidate id. |
+| `domain` | string or null | no | `evolve.start`: the experience-library domain. |
+| `job_id` | string or null | no | The job (`evolve.status`, `evolve.cancel`, `evolve.choose`). |
+| `k` | integer or null | no | `evolve.start`: the recursion budget (1-8). |
+| `mode` | string or null | no | `evolve.start`: `parallel`, `sequential` or `both`. |
+| `now` | boolean | no | `evolve.proposals.adopt`, `harness.rollback`: also rebuild the prompt of open sessions at their next turn. |
+| `other` | string or null | no | `harness.diff`: the second version (default: the active one). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `proposal_id` | string or null | no | The proposal (`evolve.proposals.adopt`, `evolve.proposals.reject`). |
+| `rebase` | boolean | no | `evolve.proposals.adopt`: rebase onto a changed active harness. |
+| `session_id` | string or null | no | `evolve.start`: the session whose task to evolve for. |
+| `task_file` | string or null | no | `evolve.start`: a task file on the daemon's machine. |
+| `version` | string or null | no | `harness.rollback`: the version to roll back to; `harness.diff`: the first version. |
+
+### `EvolveProposals`
+
+`evolve.proposals.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `proposals` | array of any | yes | Each proposal's `<id>.toml` as JSON, oldest first. |
+
+### `EvolveReply`
+
+Result of the methods that act on one job, proposal or version.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | any | no | The matching command's `--json` document, or `null`. |
+| `message` | string | yes | What happened, in one line. |
+
+### `ExperienceDomain`
+
+One domain of `experience.domains`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | integer | yes | Its entries (any status). |
+| `name` | string | yes | The domain name. |
+
+### `ExperienceDomains`
+
+`experience.domains` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `domains` | array of [`ExperienceDomain`](#experiencedomain) | yes | Sorted by name. |
+
+### `ExperienceEntries`
+
+`experience.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `entries` | array of any | yes | Each entry's `entry.toml` as JSON: domains sorted, newest first. |
+
+### `ExperienceParams`
+
+Params of every `experience.*` method; each uses the fields its command takes.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `all` | boolean | no | `experience.list`: also rolled-back entries. |
+| `domain` | string or null | no | `experience.list`: only this domain. |
+| `entry_id` | string or null | no | The entry (`experience.show`, `experience.pin`, `experience.forget`, `experience.restore`). |
+| `pinned` | boolean or null | no | `experience.pin`: `false` unpins (default `true`). |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+
+### `ExperienceReply`
+
+Result of the methods that act on one entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | any | no | The entry's `entry.toml` as JSON (`experience.show` adds its `EXPERIENCE.md` as `document`). |
+| `message` | string | yes | What happened, in one line. |
 
 ### `FeatureSupport`
 
@@ -1278,6 +1407,15 @@ What a command run through the session's terminal backend printed.
 | `scope` | string | no | `uncommitted` (default), `branch` or `last-turn`. |
 | `session_id` | string | yes | The session whose workspace is reviewed. |
 
+### `HarnessVersions`
+
+`harness.log` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active` | string | yes | The active version. |
+| `versions` | array of any | yes | Each version's `version.toml` as JSON, newest first. |
+
 ### `HealthChanged`
 
 `health.changed` payload.
@@ -1358,6 +1496,26 @@ One learned skill or memory entry.
 | `updated_at` | string | yes | When it last changed (RFC 3339). |
 | `uses` | integer | no | How often it was used: a skill's loads, an entry's recalls (the memory graph's `used` filter). |
 
+### `LanguageEntry`
+
+One selectable language.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `endonym` | string | yes | The language's own name for itself (`Deutsch`). |
+| `id` | string | yes | The `display.language` id (`de`, `zh-hant`). |
+| `origin` | string | yes | `bundled`, `overlay` or `pack:<plugin>`. |
+| `rtl` | boolean | yes | Written right to left: surfaces mirror their layout. |
+
+### `Languages`
+
+`i18n.languages` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `current` | string | yes | The profile's `display.language`. |
+| `languages` | array of [`LanguageEntry`](#languageentry) | yes | Every selectable language, by id. |
+
 ### `Lineage`
 
 `session.tree` / `session.siblings` result.
@@ -1377,6 +1535,18 @@ One related session in `session.tree` / `session.siblings`.
 | `parent_session_id` | string | yes | Its parent. |
 | `session_id` | string | yes | The session. |
 | `title` | string or null | no | Its title. |
+
+### `LocalModelContextGrown`
+
+`local_model.context_grown` payload: a session's local model was relaunched at a larger window instead of compressing (spec: local-models, Context window and memory placement).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `from` | integer | yes | The window before, tokens. |
+| `model` | string | yes | The library model. |
+| `provider` | string | yes | `llamacpp`. |
+| `session_id` | string | yes | The session. |
+| `to` | integer | yes | The window now, tokens. |
 
 ### `LocalParams`
 
@@ -1398,6 +1568,18 @@ Result of every `local.*` method.
 |---|---|---|---|
 | `data` | any | no | The command's `--json` document (without `schema`), or `null`. |
 | `message` | string | yes | What happened, in one line. |
+
+### `LocalResources`
+
+GPU and RAM use of the local model runtime (spec: local-models, Local resource telemetry).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `gpu_memory_total` | integer | yes | GPU memory, bytes. |
+| `gpu_memory_used` | integer | yes | GPU memory in use, bytes. |
+| `gpu_utilization_percent` | number or null | no | How busy the GPU is, percent, when the driver reports it. |
+| `ram_total` | integer | yes | System RAM, bytes. |
+| `ram_used` | integer | yes | System RAM in use, bytes. |
 
 ### `LspServerStatus`
 
@@ -1467,6 +1649,16 @@ One MCP server of a session.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `line` | string or null | no | `Memory: +<added> ~<patched> -<removed> (review with /memory review)` when the agent changed memory in the session and `memory.review_mode` is not `off`; `null` otherwise. |
+
+### `MessageDeliveryPayload`
+
+`message.delivery` payload: an outbound message of the session moved to `delivered`, `read` or `failed` (spec: messaging-gateway, Delivery receipts surfaced).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `outbox_id` | integer | yes | Its outbox entry. |
+| `session_id` | string | yes | The session the message belongs to. |
+| `state` | string | yes | `delivered`, `read` or `failed`. |
 
 ### `MessageReaction`
 
@@ -1673,6 +1865,17 @@ The daemon's build target and its support tier.
 | `features` | array of [`FeatureSupport`](#featuresupport) | no | The support matrix of this host, from runtime probes (spec: web-dashboard, Honest platform support matrix). |
 | `target` | string | yes | The Rust target triple. |
 | `tier` | string | yes | `tier1`, `tier2` or `unsupported`. |
+
+### `PresenceClient`
+
+One client attached to a session.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `client_id` | string | yes | The client's id within the daemon (`<kind>-<connection>`), the one its inputs are stamped with. |
+| `client_kind` | string | yes | Its kind from `rpc.hello` (`tui`, `desktop`, ...). |
+| `role` | [`AttachRole`](#attachrole) | yes | Driver or observer. |
+| `since` | string | yes | When it attached (RFC 3339). |
 
 ### `ProcessEntry`
 
@@ -2044,6 +2247,15 @@ What `session.resolve` looks up.
 | `session_id` | string | yes | `ses_<ULID>`. |
 | `setup` | [`SessionSetup`](#sessionsetup) or null | no | How the session runs from now on; a loaded, idle session is reloaded with it. Absent: as it is (or the profile's defaults). |
 
+### `RewindParams`
+
+`session.rewind` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The session. |
+| `to_turn` | integer | yes | The last turn the branch keeps (from 1). |
+
 ### `Roster`
 
 `bot.roster.list` result.
@@ -2100,6 +2312,70 @@ One source of the roster.
 | `listed_at` | string or null | no | When it was last listed (RFC 3339). |
 | `ok` | boolean | yes | Whether its last listing succeeded. |
 | `source` | string | yes | `local`, `peer` or `connection`. |
+
+### `ScreenBrowserOpened`
+
+A browser opened on the bot screen.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `user_data_dir` | string | yes | The persistent browser profile it shares with the agent's headed browser. |
+
+### `ScreenBrowserParams`
+
+`screen.browser` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `url` | string or null | no | An `http` or `https` page to open (a blank page when omitted). |
+
+### `ScreenHandbackParams`
+
+`screen.handback` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `force` | boolean | no | Clear the lease whoever holds it. |
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `viewer` | string or null | no | The viewer handing it back (the client kind when omitted). |
+
+### `ScreenLeaseState`
+
+The lease after a takeover or hand-back.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `epoch` | integer | yes | Bumped by every takeover; results of agent calls started under an older epoch are void. |
+| `holder` | string or null | no | The viewer holding the screen; `None`: the agent has it. |
+
+### `ScreenTakeoverParams`
+
+`screen.takeover` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
+| `viewer` | string or null | no | Who takes it over, as shown to the agent and other viewers (the client kind when omitted); the same name hands it back after a reconnect. |
+
+### `ScreenTicket`
+
+A single-use display ticket.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `expires_in_secs` | integer | yes | Seconds until it expires (30). |
+| `lease` | [`ScreenLeaseState`](#screenleasestate) | no | Who controls the screen as the ticket is issued. |
+| `path` | string | yes | The display stream's path on the daemon's listener (`/screen`). |
+| `ticket` | string | yes | The secret: offered as the `prometheus-ticket.<ticket>` WebSocket subprotocol next to `prometheus-display.v1`, on `path`. |
+
+### `ScreenTicketParams`
+
+`screen.ticket` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
 ### `SecretAnswer`
 
@@ -2169,6 +2445,15 @@ What the daemon serves.
 | `source` | [`ClientKind`](#clientkind) or null | no | Only sessions this kind of client created. |
 | `tips_only` | boolean | no | One row per conversation: a session continued after compression is listed as its newest continuation. |
 
+### `SessionPresencePayload`
+
+`session.presence` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clients` | array of [`PresenceClient`](#presenceclient) | yes | Every client attached now, in the order they attached. |
+| `session_id` | string | yes | The session. |
+
 ### `SessionProject`
 
 `session.project` payload: a session moved to another project.
@@ -2187,6 +2472,17 @@ A session named by id.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `session_id` | string | yes | `ses_<ULID>`. |
+
+### `SessionRewound`
+
+`session.rewind` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `checkpoint` | integer or null | no | The workspace checkpoint holding the files as they were after `to_turn` (`files.rollback {checkpoint}`), when later turns changed files; restoring is the client's offer to make. |
+| `parent_session_id` | string | yes | The session it branched from (kept unchanged). |
+| `session_id` | string | yes | The new branch session, ending at `to_turn`. |
+| `turns` | integer | yes | The turns the branch holds. |
 
 ### `SessionSettings`
 
@@ -2213,6 +2509,8 @@ How a daemon session runs: the session-shaping flags of `prometheus chat`, appli
 |---|---|---|---|
 | `api_key` | string or null | no | That endpoint's API key (`--api-key-stdin`), held in memory only. |
 | `base_url` | string or null | no | An endpoint for this session only (`--base-url`). |
+| `domain` | string or null | no | The session's experience-library domain (`--domain`). |
+| `ephemeral` | boolean | no | Keep the session's transcript out of the session store and its trajectory (spec: workspace-architecture, Embeddable client SDKs): hidden from listings, no trajectory, transcript removed when the session unloads; its usage still counts against every budget. |
 | `ignore_rules` | boolean | no | No rule files, identity file, memory snapshot or preloaded skills (`--ignore-rules`). |
 | `ignore_user_config` | boolean | no | Schema defaults instead of the profile's `config.toml` (`--ignore-user-config`). |
 | `mock_script` | string or null | no | A mock provider script on the daemon's machine (`--mock-script`). |
@@ -2222,6 +2520,7 @@ How a daemon session runs: the session-shaping flags of `prometheus chat`, appli
 | `provider` | string or null | no | The provider instead of the profile's (`--provider`). |
 | `set` | array of string | no | `key=value` configuration overrides for this session only (`--set`, `--approvals`, `--max-iterations`, `--toolsets`). |
 | `skills` | array of string | no | Skills preloaded into the session (`--skills`). |
+| `system_prompt_overlay` | string or null | no | Text sent as a last system block with every model call of this session only (an embedding program's instructions): never part of the frozen prompt, the stored history or the trajectory. |
 | `yolo` | boolean | no | Approval-gated calls run without asking (`--yolo`). |
 
 ### `SessionSummary`
@@ -2267,6 +2566,30 @@ What a control call did.
 | `status` | string | yes | `queued` (steer: delivered at the child's next checkpoint) or `interrupt_requested` (stop). |
 | `subagent_id` | string | yes | The child. |
 
+### `SubagentEventKind`
+
+What one `subagent.event` carries.
+
+| Value | Meaning |
+|---|---|
+| `assistant` | The child's assistant text. |
+| `tool_call` | A tool call it made (`tool`, `text` = what it works on). |
+| `tool_result` | That call's result (`tool`, `text` = its output or error). |
+| `finished` | It ended (`status`). |
+
+### `SubagentEventPayload`
+
+`subagent.event` payload: one item of a subscribed child's transcript, sent to the subscribing connection only.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | [`SubagentEventKind`](#subagenteventkind) | yes | What it is. |
+| `session_id` | string | yes | The parent session. |
+| `status` | string or null | no | How the child ended, for `finished`. |
+| `subagent_id` | string | yes | The child. |
+| `text` | string or null | no | Its text. |
+| `tool` | string or null | no | The tool, for a call or result. |
+
 ### `SubagentList`
 
 `subagent.list` result.
@@ -2293,6 +2616,24 @@ What a control call did.
 | `session_id` | string | yes | The parent session. |
 | `subagent_id` | string | yes | The child. |
 | `text` | string | yes | The guidance. |
+
+### `SubagentSubscribeParams`
+
+`subagent.subscribe` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | string | yes | The parent session the connection is attached to. |
+| `subagent_id` | string | yes | The child (`sa-<ULID>`). |
+
+### `SubagentSubscribed`
+
+`subagent.subscribe` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `status` | string | yes | `running`, or how it ended (`completed`, `failed`, ...). |
+| `subagent_id` | string | yes | The child. |
 
 ### `SubagentSummary`
 
@@ -2383,6 +2724,27 @@ A subscription's status in `session.context_usage`.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `Timeline`
+
+`session.timeline` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `turns` | array of [`TimelineTurn`](#timelineturn) | yes | The active transcript's turns, oldest first. |
+
+### `TimelineTurn`
+
+One turn of a session's timeline.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `at` | string | yes | When it started (RFC 3339). |
+| `cost_usd` | number or null | no | What its model calls cost, when known. |
+| `first_line` | string | yes | The first line of its input. |
+| `message_id` | string | yes | The user message that started it (`msg_<ULID>`). |
+| `tools` | integer | yes | Tool calls it made. |
+| `turn` | integer | yes | Its number, from 1. |
+
 ### `Transcript`
 
 `session.transcript` result.
@@ -2397,6 +2759,7 @@ One message of a transcript.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `author` | string or null | no | Who sent a user message: the client id the gateway stamped it with (spec: tui, Shared live sessions). |
 | `id` | string | yes | `msg_<ULID>`. |
 | `reactions` | array of [`Reaction`](#reaction) | no | Its reactions (spec: desktop-app, Agent reactions). |
 | `role` | string | yes | `user`, `assistant`, `tool` or `system`. |
@@ -2582,7 +2945,7 @@ One password-manager source.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `available` | boolean | yes | Whether this build can read it. |
+| `available` | boolean | yes | Whether its CLI (`op`, `bw`) is installed: the managed runtime or the daemon's launch `PATH`. |
 | `enabled` | boolean | yes | `vault.<name>.enabled`. |
 | `name` | string | yes | `onepassword` or `bitwarden`. |
 

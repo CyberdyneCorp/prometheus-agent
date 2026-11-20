@@ -89,7 +89,9 @@ impl MediaHost for BlobHost {
         self.store
             .reference_blob(&blob, "tool_media", &self.session)
             .map_err(|e| e.message().to_owned())?;
-        Ok(self.store.blob_path(&blob))
+        self.store
+            .blob_file(&blob)
+            .map_err(|e| e.message().to_owned())
     }
 }
 

@@ -133,6 +133,12 @@ pub fn preset(models: &[Model], backend: LocalBackend) -> String {
         if let Some(projector) = model.projector() {
             let _ = writeln!(out, "mmproj = {}", projector.display());
         }
+        if let Some(placement) = &model.placement {
+            let blocks = crate::gguf::read(weights).ok().and_then(|info| info.blocks);
+            for line in placement.preset_lines(blocks) {
+                let _ = writeln!(out, "{line}");
+            }
+        }
     }
     out
 }
@@ -196,6 +202,7 @@ mod tests {
             quant: None,
             context: 65_536,
             context_max: None,
+            placement: None,
             added_at: String::new(),
         };
         let text = preset(&[model], LocalBackend::Cpu);
@@ -204,6 +211,37 @@ mod tests {
             text.contains(
                 "[qwen-x]\nmodel = /m/qwen-x/w.gguf\nc = 65536\nmmproj = /m/qwen-x/mmproj.gguf\n"
             ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_placed_model_carries_its_batch_and_ram_placement() {
+        let placement = crate::placement::Placement {
+            window: 65_536,
+            batch: 256,
+            ram_bytes: 1 << 30,
+            experts_only: true,
+            dense_ram_bytes: 0,
+            dense_bytes: 0,
+        };
+        let model = Model {
+            id: "moe-x".to_owned(),
+            source: Source::Catalog,
+            files: vec![ModelFile {
+                path: "/m/moe-x/w.gguf".into(),
+                role: Role::Weights,
+                size: 1,
+            }],
+            quant: None,
+            context: 65_536,
+            context_max: None,
+            placement: Some(placement),
+            added_at: String::new(),
+        };
+        let text = preset(&[model], LocalBackend::Cuda);
+        assert!(
+            text.contains("c = 65536\nbatch-size = 256\nubatch-size = 256\ncpu-moe = true\n"),
             "{text}"
         );
     }

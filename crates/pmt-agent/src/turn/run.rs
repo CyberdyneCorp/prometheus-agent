@@ -325,6 +325,7 @@ impl<'a> Turn<'a> {
             &input.additions,
             &input.images,
         );
+        let author = input.author.clone();
         for (key, value) in [
             ("author", input.author),
             ("origin", input.origin.map(serde_json::Value::String)),
@@ -349,6 +350,7 @@ impl<'a> Turn<'a> {
         self.emit(Event::UserMessage(MessageText {
             message_id: Some(message_id.to_string()),
             text: wire.clone(),
+            author,
         }))
         .await;
         self.recall(&text, &wire).await;
@@ -476,6 +478,7 @@ impl<'a> Turn<'a> {
             )));
         }
         self.empty_streak = 0;
+        self.keep_performed(&reply).await?;
         let mut reply = reply;
         if reply.tool_calls.is_empty() {
             if let Some((message, kind)) = self.before_final(&reply, route).await {
@@ -586,6 +589,12 @@ impl<'a> Turn<'a> {
         if let Some(prefill) = self.agent.prefill_messages() {
             request.messages.splice(0..0, prefill.iter().cloned());
         }
+        if let Some(text) = self.agent.ephemeral_system() {
+            request.system.push(pmt_providers::request::SystemBlock {
+                text,
+                cache_breakpoint: false,
+            });
+        }
         breakpoints::plan(&mut request, route.wire_format);
         Ok(request)
     }
@@ -665,6 +674,7 @@ impl<'a> Turn<'a> {
             self.emit(Event::AssistantMessage(MessageText {
                 message_id: Some(id),
                 text: reply.text.clone(),
+                author: None,
             }))
             .await;
         }

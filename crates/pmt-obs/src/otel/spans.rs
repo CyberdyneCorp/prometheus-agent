@@ -106,6 +106,8 @@ pub struct SessionTrace {
     session_span: [u8; 8],
     parent: Option<[u8; 8]>,
     exporter: Option<Exporter>,
+    /// The `NeMo` Relay host, fed the session's lifecycle.
+    relay: Option<Arc<dyn crate::relay::feed::Feed>>,
     state: Mutex<State>,
     redaction: Redaction,
 }
@@ -139,6 +141,7 @@ impl SessionTrace {
             session_span: new_span_id(),
             parent: parent.map(|p| p.span_id),
             exporter: super::exporter(),
+            relay: crate::relay::feed::installed(),
             state: Mutex::default(),
             identity,
             redaction: Redaction {
@@ -194,6 +197,7 @@ impl SessionTrace {
     pub fn observe(&self, emit: &Emit) {
         let at = nanos(emit.ts);
         let mut state = self.lock();
+        self.feed_relay(state.started.is_none(), emit);
         state.started.get_or_insert(at);
         match &emit.event {
             Event::SessionEnd(end) => self.end_session(&mut state, at, &end.reason),
@@ -226,6 +230,19 @@ impl SessionTrace {
             | Event::EvolveStageFinished(_)
             | Event::EvolveRolloutFinished(_) => self.evolve(&mut state, emit, at),
             _ => {}
+        }
+    }
+
+    /// Sends the Relay host what `emit` means for the session's scopes.
+    fn feed_relay(&self, first: bool, emit: &Emit) {
+        let Some(feed) = &self.relay else {
+            return;
+        };
+        let clean = |text: &str| self.redaction.clean(text);
+        let clean: Option<crate::relay::feed::Clean<'_>> =
+            feed.captures_content().then_some(&clean);
+        for op in crate::relay::feed::ops(&self.identity, first, emit, clean) {
+            feed.send(op);
         }
     }
 
@@ -590,6 +607,16 @@ impl Drop for SessionTrace {
         let at = metrics::unix_nanos();
         let state = std::mem::take(self.state.get_mut().unwrap_or_else(PoisonError::into_inner));
         let mut state = state;
+        if let Some(feed) = &self.relay
+            && state.started.is_some()
+            && !state.ended
+        {
+            feed.send(serde_json::json!({
+                "op": "session_end",
+                "session": self.identity.session_id,
+                "metadata": {"reason": "closed"},
+            }));
+        }
         self.end_session(&mut state, at, "closed");
     }
 }

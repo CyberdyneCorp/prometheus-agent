@@ -72,8 +72,13 @@ pub enum ToolAnswer {
 
 /// Answers a replayed session's tool calls from the recording.
 pub trait ToolReplay: Send + Sync {
-    /// The answer to `call`.
-    fn answer(&self, call: &RequestedCall) -> ToolAnswer;
+    /// The answer to `call` (`declared`: what the session's registry
+    /// says the tool is).
+    fn answer(
+        &self,
+        call: &RequestedCall,
+        declared: Option<&pmt_agent::turn::Declared>,
+    ) -> ToolAnswer;
 
     /// The tool schemas the recording's first model request offered, in
     /// order.

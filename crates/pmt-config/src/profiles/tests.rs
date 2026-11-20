@@ -211,3 +211,24 @@ fn clone_all_copies_everything_but_sessions_and_channels() {
     assert!(work3.path().join("pairing/telegram.json").is_file());
     assert!(work3.path().join("migrations/import-sync.toml").is_file());
 }
+
+#[test]
+fn a_description_is_trimmed_capped_and_empty_means_none() {
+    let (_t, home) = home();
+    let dir = home.create_profile("coder", None).unwrap();
+    assert_eq!(super::description(dir.path()), None);
+    super::set_description(dir.path(), "  writes Rust  \n").unwrap();
+    assert_eq!(
+        super::description(dir.path()).as_deref(),
+        Some("writes Rust")
+    );
+    let long = "x".repeat(super::DESCRIPTION_MAX_CHARS + 1);
+    let err = super::set_description(dir.path(), &long).unwrap_err();
+    assert_eq!(err.exit_code(), 2);
+    assert_eq!(
+        super::description(dir.path()).as_deref(),
+        Some("writes Rust")
+    );
+    super::set_description(dir.path(), "   ").unwrap();
+    assert_eq!(super::description(dir.path()), None);
+}

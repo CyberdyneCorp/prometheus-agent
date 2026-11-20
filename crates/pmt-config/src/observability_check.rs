@@ -32,6 +32,14 @@ pub fn check(config: &Config) -> Result<(), Error> {
             Some(_) => {}
         }
     }
+    if otel.preset.is_some() {
+        let host = config.observability.langfuse.host.trim();
+        if !host.starts_with("https://") && !host.starts_with("http://") {
+            return Err(invalid(format!(
+                "observability.langfuse.host {host:?} is not an http:// or https:// URL"
+            )));
+        }
+    }
     let bind = &config.observability.health.bind;
     match bind.parse::<SocketAddr>() {
         Ok(addr) if addr.ip().is_loopback() => Ok(()),

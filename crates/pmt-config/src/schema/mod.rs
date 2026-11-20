@@ -20,12 +20,14 @@ mod a2a;
 mod agent;
 mod api_server;
 mod automation;
+mod bot_desktop;
 mod bot_mode;
 mod connectors;
 mod cron;
 mod curator;
 mod delegation;
 mod desktop;
+mod evolve;
 mod gateway;
 mod gateway_display;
 mod gateway_groups;
@@ -46,6 +48,7 @@ mod projects;
 mod provider_routing;
 mod python_bridge;
 mod replay;
+mod secret_sources;
 mod state;
 mod tool_gateway;
 mod tools;
@@ -67,9 +70,12 @@ pub use agent::{
 };
 pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
+pub use bot_desktop::{BotDesktopConfig, ScreenPlacement};
 pub use bot_mode::BotModeConfig;
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
-pub use cron::{ContinuableSurface, CronConfig, CronDeliveryConfig, CronProvider};
+pub use cron::{
+    ContinuableSurface, CronConfig, CronDeliveryConfig, CronManagedConfig, CronProvider,
+};
 pub use curator::{
     CuratorConfig, DEFAULT_LEDGER_MAX_BYTES, DEFAULT_TRUSTED_SOURCES, SkillSignaturePolicy,
 };
@@ -78,16 +84,22 @@ pub use delegation::{
     DelegationConfig, GatewayDelegationMode, ReviewConfig,
 };
 pub use desktop::{DesktopConfig, HudConfig, QuickAskConfig};
+pub use evolve::{
+    AdoptionPolicy, DEFAULT_LEAK_GLOBS, EvolveAdoptionConfig, EvolveAutoConfig, EvolveBudgetConfig,
+    EvolveConcurrencyConfig, EvolveConfig, EvolveEvidenceConfig, EvolveImproverConfig, EvolveMode,
+    EvolveRolloutConfig, EvolveSelection, EvolveTaskConfig, ExperienceConfig, HarnessConfig,
+    RolloutNetwork,
+};
 pub use gateway::{
     AgentCacheConfig, AllowBots, BackgroundNotifications, Batching, ChatPolicy, ChatToolProgress,
-    DedupConfig, DeliveryConfig, EffectiveBots, EffectiveBusy, EffectiveDisplay, EffectiveGroups,
-    GatewayBackground, GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay, GatewayGroups,
-    GatewayQuickCommands, GatewaySessions, HomeChannel, McpEvents, MediaConfig, MessageTimestamps,
-    NotificationsConfig, OutboxConfig, PhraseMode, PlatformBots, PlatformBusy, PlatformConfig,
-    PlatformDisplay, PlatformGroups, PlatformSessions, PlatformStreaming, PolicyChatType,
-    PolicyFacts, RateLimitConfig, RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases,
-    StreamTransport, StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute,
-    resolve_policy,
+    DedupConfig, DeliveryConfig, DmMode, EffectiveBots, EffectiveBusy, EffectiveDisplay,
+    EffectiveGroups, GatewayBackground, GatewayBots, GatewayBusy, GatewayConfig, GatewayDisplay,
+    GatewayGroups, GatewayIdentity, GatewayProxy, GatewayQuickCommands, GatewaySessions,
+    HomeChannel, McpEvents, MediaConfig, MessageTimestamps, NotificationsConfig, OutboxConfig,
+    PhraseMode, PlatformBots, PlatformBusy, PlatformConfig, PlatformDisplay, PlatformGroups,
+    PlatformSessions, PlatformStreaming, PolicyChatType, PolicyFacts, RateLimitConfig,
+    RateLimitOverride, ReplyToMode, ShutdownConfig, StatusPhrases, StreamTransport,
+    StreamingConfig, UnauthorizedDm, VoiceConfig, VoiceReplyMode, WebhookRoute, resolve_policy,
 };
 pub use gateway_routes::{ProfileRoute, RouteFacts, resolve_route};
 pub use hooks::{HooksConfig, OutboundHook, ShellHook};
@@ -109,7 +121,7 @@ pub use media::{
     CommandSttConfig, CommandTtsConfig, EdgeTtsConfig, ElevenLabsSttConfig, ElevenLabsTtsConfig,
     GeminiTtsConfig, ImageGenConfig, ImageOpenAiConfig, LocalSttConfig, OpenAiTtsConfig,
     SpeechProviderType, SttConfig, SttVendorConfig, TranscriptFormat, TtsConfig, TtsOutputFormat,
-    VoiceModelConfig, WhisperCppConfig, WhisperModel, XSearchConfig, XaiTtsConfig,
+    VideoGenConfig, VoiceModelConfig, WhisperCppConfig, WhisperModel, XSearchConfig, XaiTtsConfig,
 };
 pub use moa::{
     DEFAULT_PRESET, MoaConfig, MoaFanout, MoaPreset, MoaPrivacyFilter, MoaSlot, TRACE_DIR,
@@ -117,15 +129,16 @@ pub use moa::{
 pub use models::{
     AliasRoute, AuthConfig, AuxiliaryConfig, AuxiliaryTask, FallbackConfig, FallbackEntry,
     LoginFlow, ModelAlias, ModelConfig, ModelEntry, ModelPrice, ModelRoute, OAuthEndpoints,
-    PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig, WireFormat,
+    OpenaiRuntime, PoolStrategy, PreferCredential, ProviderAuth, ProviderConfig, RoutingConfig,
+    RoutingPolicy, WireFormat,
 };
 pub use operations::{
-    BudgetsConfig, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig, EgressMode,
-    GatewayHealthConfig, HealthListenerConfig, LogLevel, LoggingConfig, MetricsEndpointConfig,
-    NetworkConfig, ObservabilityConfig, OtelConfig, OtelProtocol, PrivacyConfig, SandboxConfig,
-    SandboxMode, SecretCommandConfig, SecretsBackend, SecretsConfig, SecurityConfig,
-    TelemetryConfig, TrajectoriesConfig, VaultConfig, VaultKeyStorage, VaultSourceConfig,
-    WorktreesConfig,
+    BudgetsConfig, CredentialSource, DebugConfig, DebugShareConfig, DegradedFeature, EgressConfig,
+    EgressMode, GatewayHealthConfig, HealthListenerConfig, LangfuseConfig, LogLevel, LoggingConfig,
+    MetricsEndpointConfig, NemoRelayConfig, NetworkConfig, ObservabilityConfig, OtelConfig,
+    OtelPreset, OtelProtocol, PrivacyConfig, SandboxConfig, SandboxMode, SecretCommandConfig,
+    SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
+    VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -138,19 +151,21 @@ pub use provider_routing::{
 };
 pub use python_bridge::{PYTHON_VERSIONS, PythonBridgeConfig, PythonVersion};
 pub use replay::{CacheMode, DEFAULT_NAMESPACE, ModelCallCacheConfig, ReplayConfig};
+pub use secret_sources::{BitwardenSourceConfig, OnePasswordSourceConfig, SOURCE_CACHE_TTL_SECS};
 pub use state::{
-    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryNotifications,
-    MemoryReviewConfig, MemoryReviewMode, RecallConfig, ReviewDefer, SessionsConfig, SkillsConfig,
-    SnapshotsConfig, StorageConfig,
+    AttachmentStorage, AttachmentsConfig, JournalMode, MemoryConfig, MemoryConsolidationConfig,
+    MemoryDecayConfig, MemoryNotifications, MemoryReviewConfig, MemoryReviewMode, RecallConfig,
+    ReviewDefer, SessionSearchConfig, SessionsConfig, SkillsConfig, SnapshotsConfig, StorageConfig,
+    StorageEncryption,
 };
-pub use tool_gateway::{ToolGatewayConfig, ToolProviderConfig};
+pub use tool_gateway::ToolGatewayConfig;
 pub use tools::{
-    ApprovalMode, ApprovalsConfig, BrowserConfig, ContainerConfig, DegradedMode, DialogPolicy,
-    FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode, ProviderTier,
-    ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal, SshConfig,
-    SurfaceToolsets, TerminalConfig, ToolListing, ToolOutputConfig, ToolSearchConfig,
-    ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig, WebXaiConfig,
-    WindowsShell,
+    ApprovalMode, ApprovalsConfig, BrowserConfig, BrowserEngine, ContainerConfig, DegradedMode,
+    DialogPolicy, FilesConfig, FirecrawlConfig, KeylessConfig, ModalConfig, ModalMode,
+    ProviderTier, ResultBudget, SearxngConfig, SingularityConfig, SnapshotConfig, SnapshotTerminal,
+    SshConfig, SurfaceToolsets, TaintPolicy, TerminalConfig, ToolListing, ToolOutputConfig,
+    ToolSearchConfig, ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
+    WebXaiConfig, WindowsShell,
 };
 pub use voice::VoiceModeConfig;
 pub use webhook::{
@@ -185,6 +200,9 @@ pub struct Config {
     pub attachments: AttachmentsConfig,
     /// Sign-in behaviour.
     pub auth: AuthConfig,
+    /// The bot screen: the virtual display the agent's headed browsers
+    /// and `computer_use` act on.
+    pub bot_desktop: BotDesktopConfig,
     /// How bot messages travel between bots (the desktop relay's bounds).
     pub bot_mode: BotModeConfig,
     /// Side-model (auxiliary) task routing.
@@ -217,6 +235,10 @@ pub struct Config {
     pub debug: DebugConfig,
     /// Display preferences of interactive surfaces.
     pub display: DisplayConfig,
+    /// Harness evolution (opt-in).
+    pub evolve: EvolveConfig,
+    /// The experience library of harness evolution.
+    pub experience: ExperienceConfig,
     /// Provider fallback.
     pub fallback: FallbackConfig,
     /// `read_file` limits.
@@ -227,6 +249,8 @@ pub struct Config {
     pub goals: GoalsConfig,
     /// `/heartbeat` bounds.
     pub heartbeat: HeartbeatConfig,
+    /// Harness size caps.
+    pub harness: HarnessConfig,
     /// Image generation (`image_generate`).
     pub image_gen: ImageGenConfig,
     /// Shell hooks and outbound webhooks.
@@ -323,7 +347,7 @@ pub struct Config {
     /// Voice conversations on the CLI, TUI and desktop.
     pub voice: VoiceModeConfig,
     /// Video generation's provider selection.
-    pub video_gen: ToolProviderConfig,
+    pub video_gen: VideoGenConfig,
     /// Image input routing.
     pub vision: VisionConfig,
     /// Web tools.
@@ -345,6 +369,7 @@ impl Default for Config {
             approvals: ApprovalsConfig::default(),
             attachments: AttachmentsConfig::default(),
             auth: AuthConfig::default(),
+            bot_desktop: BotDesktopConfig::default(),
             bot_mode: BotModeConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
@@ -362,11 +387,14 @@ impl Default for Config {
             projects: ProjectsConfig::default(),
             debug: DebugConfig::default(),
             display: DisplayConfig::default(),
+            evolve: EvolveConfig::default(),
+            experience: ExperienceConfig::default(),
             fallback: FallbackConfig::default(),
             files: FilesConfig::default(),
             gateway: GatewayConfig::default(),
             goals: GoalsConfig::default(),
             heartbeat: HeartbeatConfig::default(),
+            harness: HarnessConfig::default(),
             image_gen: ImageGenConfig::default(),
             hooks: HooksConfig::default(),
             kanban: KanbanConfig::default(),
@@ -411,7 +439,7 @@ impl Default for Config {
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
             voice: VoiceModeConfig::default(),
-            video_gen: ToolProviderConfig::default(),
+            video_gen: VideoGenConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),
             x_search: XSearchConfig::default(),

@@ -52,6 +52,15 @@ error_codes! {
     /// A writer tried to change a key the administrator locked.
     CONFIG_MANAGED_KEY = ("config.managed_key", PermissionDenied,
         "The key is listed in `locked` of the administrator-managed `managed.toml`; no writer (`config set|unset|edit`, `--set`, setup) may change it.");
+    /// The remote configuration plane could not be reached or answered badly.
+    CONFIG_REMOTE_UNREACHABLE = ("config.remote_unreachable", Config,
+        "`config_backend.kind = \"remote\"` and the configuration plane could not be reached within 30 s, refused the token or answered something that is not a configuration document. Prometheus never falls back to `config.toml` or defaults; fix the plane, the URL or the token secret.");
+    /// A key is locked by a level of the remote configuration plane.
+    CONFIG_REMOTE_LOCKED = ("config.remote_locked", PermissionDenied,
+        "A level of the remote configuration plane (global, tenant, group, owner or agent) locks the key; writes land on the profile level and may not change it.");
+    /// The remote configuration changed between read and write.
+    CONFIG_REMOTE_CONFLICT = ("config.remote_conflict", Conflict,
+        "The profile's configuration changed on the remote plane after it was read, so the write was refused (optimistic concurrency); run the command again.");
     /// The administrator-managed configuration layer is invalid.
     CONFIG_MANAGED_INVALID = ("config.managed_invalid", Config,
         "`managed.toml` (or `managed-secrets.toml`) beside it does not validate, or its permissions are not 0600/0640 owned by root; every command fails closed until the administrator fixes it.");
@@ -92,9 +101,42 @@ error_codes! {
     /// A secret owned by a surface was requested by a tool, child, skill or plugin.
     SECRET_SURFACE_ONLY = ("secret.surface_only", PermissionDenied,
         "The secret belongs to a surface (a messaging bot token, a relay or webhook credential) and is never delegated to tools, child processes, skills or plugins; give them a secret of their own.");
+    /// An enabled external secret source could not be read.
+    SECRET_SOURCE_FAILED = ("secret.source_failed", Config,
+        "An enabled external secret source (`secrets.bitwarden`, `secrets.onepassword`) failed: its CLI is missing, its access token is not set or was refused, or it answered something unreadable. Cached values are not used instead; fix the source or disable it.");
     /// A profile name is reserved.
     PROFILE_RESERVED = ("profile.reserved", Usage,
         "A new profile may not use a reserved name (`prometheus`, `pmt`, `test`, `tmp`, `root`, `all`, `none`, `run`, `logs`, `tools`).");
+    /// The OSV database could not be queried.
+    SECURITY_OSV_UNREACHABLE = ("security.osv_unreachable", Unavailable,
+        "`prometheus security scan` could not reach the OSV database (`security.scan.osv_url`); nothing was checked.");
+    /// The profile's egress proxy is not running.
+    EGRESS_PROXY_DOWN = ("egress.proxy_down", Unavailable,
+        "Credential injection is on and `security.egress.enforce_on_container` is set, but the profile's egress proxy is not running: start it with `prometheus egress start` (or the daemon) before a container or remote session.");
+    /// A sandbox cannot reach the profile's egress proxy.
+    EGRESS_PROXY_UNREACHABLE = ("egress.proxy_unreachable", Unavailable,
+        "Credential injection is on, but the terminal backend cannot be kept to the profile's egress proxy (a plugin remote sandbox runs outside this host; a singularity instance shares its network): use the container or ssh backend, or turn `security.egress.credential_injection` off.");
+    /// The egress proxy could not start.
+    EGRESS_PROXY_START = ("egress.proxy_start", Unavailable,
+        "The egress proxy did not start: its listener did not bind within 5 seconds (or the proxy exited before serving), the credential source is missing mapped secrets, or a proxy of the profile is already running.");
+    /// A person holds the bot screen.
+    SCREEN_HUMAN_HAS_CONTROL = ("screen.human_has_control", Conflict,
+        "A person took the profile's bot screen over (`screen.takeover`): the browser and `computer_use` tools wait until it is handed back (`screen.handback`), the lease expires unused, or `prometheus computer-use screen stop --force` clears it. A call that started before the takeover has its result voided.");
+    /// The bot screen cannot run here.
+    SCREEN_UNAVAILABLE = ("screen.unavailable", Unavailable,
+        "The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`).");
+    /// A profile distribution's manifest or content is invalid.
+    PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
+        "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");
+    /// A distribution needs another Prometheus version.
+    PROFILE_DISTRIBUTION_INCOMPATIBLE = ("profile.distribution_incompatible", Config,
+        "The distribution's `prometheus_requires` range does not include this Prometheus version; install a compatible version of the distribution or of Prometheus.");
+    /// A distribution could not be fetched.
+    PROFILE_DISTRIBUTION_FETCH = ("profile.distribution_fetch", Unavailable,
+        "The distribution's git repository could not be cloned (network, URL or credentials).");
+    /// The profile was not installed from a distribution.
+    PROFILE_NOT_DISTRIBUTION = ("profile.not_distribution", NotFound,
+        "`profile update` and `profile info` need a profile installed with `profile install`.");
     /// The profile to create already exists.
     PROFILE_EXISTS = ("profile.exists", Usage,
         "`prometheus profile create` or `rename` names a profile that already exists.");
@@ -188,6 +230,12 @@ error_codes! {
     /// `state.db` was replaced underneath an open store.
     STORE_REPLACED = ("store.replaced", Conflict,
         "`state.db` was replaced (restored or copied over) while it was open; the write was refused and the file left untouched. Restart the process to open the new file.");
+    /// An encrypted store whose key cannot be had.
+    STORE_KEY_UNAVAILABLE = ("store.key_unavailable", Config,
+        "`state.db` is encrypted (`storage.encryption`) and its key is unavailable: the OS keychain has no `STATE_DB_KEY` for the profile, or the `STATE_DB_PASSPHRASE` secret is missing or wrong. Nothing was opened or created.");
+    /// The store's file does not match `storage.encryption`.
+    STORE_ENCRYPTION_MISMATCH = ("store.encryption_mismatch", Config,
+        "`state.db` is plaintext while `storage.encryption` asks for an encrypted store (or the reverse); convert it offline with `prometheus sessions encrypt` or `prometheus sessions decrypt`.");
     /// The store hit structural corruption and stopped writing.
     STORE_CORRUPT = ("store.corrupt", Io,
         "`state.db` reported structural corruption; writes stopped. The next start quarantines the file and salvages every readable row (see `prometheus doctor`).");
@@ -227,6 +275,12 @@ error_codes! {
     /// A Hermes component could not be read or imported.
     MIGRATE_COMPONENT = ("migrate.component", InvalidInput,
         "A component of the Hermes profile could not be imported (an unsupported config or state.db version, an unreadable file); the other components proceed and the report names the cause.");
+    /// `migrate rollback --run` named a run with no journal in the home.
+    MIGRATE_RUN_NOT_FOUND = ("migrate.run_not_found", NotFound,
+        "No profile of the home holds a rollback journal for that run id (see the `run_id` of the migration report; a rolled-back run has none left).");
+    /// `migrate rollback` of a run a later run of the same source followed.
+    MIGRATE_ROLLBACK_ORDER = ("migrate.rollback_order", Conflict,
+        "A later migration run of the same source wrote into the profile after this one; roll that run back first. Nothing was changed.");
     /// The fork point is not an active message of the session.
     STORE_FORK_TARGET_INVALID = ("store.fork_target_invalid", InvalidInput,
         "`session.fork` names an `at_message_id` that is not an active message of the forked session.");
@@ -1261,6 +1315,12 @@ error_codes! {
     /// No peer gateway (or agent on it) has the name.
     PEER_NOT_FOUND = ("peer.not_found", NotFound,
         "No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers.");
+    /// The subscription proxy's provider has no usable sign-in.
+    PROXY_NOT_LOGGED_IN = ("proxy.not_logged_in", Auth,
+        "The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`.");
+    /// The subscription proxy was asked to listen beyond loopback.
+    PROXY_LAN_REFUSED = ("proxy.lan_refused", PermissionDenied,
+        "`prometheus gateway proxy start --host` names a non-loopback address without `--allow-lan`; with it, LAN clients must present the `PMT_PROXY_CLIENT_KEY` bearer.");
     /// The peer gateway could not be reached.
     PEER_UNREACHABLE = ("peer.unreachable", Unavailable,
         "The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right.");
@@ -1270,6 +1330,75 @@ error_codes! {
     /// The peer refused the request.
     PEER_REJECTED = ("peer.rejected", Tool,
         "The peer's API server refused the request; the message carries its answer (an unknown run, a run that cannot be stopped, a paused home, a busy profile).");
+    /// Harness evolution is turned off for the profile.
+    EVOLVE_DISABLED = ("evolve.disabled", Config,
+        "Harness evolution is opt-in per profile: set `evolve.enabled = true` in the profile's `config.toml` (`prometheus config set evolve.enabled true`). The `prometheus harness` commands work without it.");
+    /// An evolution task could not be captured or is malformed.
+    EVOLVE_INVALID_TASK = ("evolve.invalid_task", InvalidInput,
+        "The evolution task could not be frozen: its task file is malformed, its session has no user message, or its workspace snapshot exceeds `evolve.task.max_source_bytes`; nothing was queued.");
+    /// No evolution job has the id.
+    EVOLVE_JOB_NOT_FOUND = ("evolve.job_not_found", NotFound,
+        "No evolution job of this profile has this id; `prometheus evolve list` shows the jobs.");
+    /// The evolution job is already running in another process.
+    EVOLVE_JOB_RUNNING = ("evolve.job_running", Conflict,
+        "Another process (the daemon or a foreground `prometheus evolve run`) is running this job; wait for it, or `prometheus evolve cancel <job>` it.");
+    /// The evolution job is not in a state that allows the operation.
+    EVOLVE_JOB_STATE = ("evolve.job_state", InvalidInput,
+        "The job is not in a state that allows this (only a job in `awaiting-selection` takes `evolve choose`; only an unfinished job can be cancelled or resumed); `prometheus evolve status <job>` shows its state.");
+    /// No proposal has the id.
+    EVOLVE_PROPOSAL_NOT_FOUND = ("evolve.proposal_not_found", NotFound,
+        "No harness proposal of this profile has this id; `prometheus evolve proposals` lists them.");
+    /// The proposal cannot be adopted as it stands.
+    EVOLVE_PROPOSAL_REFUSED = ("evolve.proposal_refused", InvalidInput,
+        "The proposal cannot be adopted: it is not pending, the active harness changed since it was produced (re-run the job, or adopt with `--rebase` when its diff applies cleanly), or its tree no longer validates.");
+    /// A harness tree failed validation.
+    HARNESS_INVALID = ("harness.invalid", InvalidInput,
+        "The harness tree failed validation; every error is listed (paths outside the editable surface, size caps, skill and subagent front matter, script syntax and references, `hooks.toml` keys and events, templates, secrets). No version was written.");
+    /// No harness version matches the reference.
+    HARNESS_VERSION_NOT_FOUND = ("harness.version_not_found", NotFound,
+        "No harness version has this id (`h<n>` or `h<n>-<fingerprint>`), or the version is not in the tree; `prometheus harness log` lists the versions.");
+    /// A harness version could not be read or written.
+    HARNESS_IO = ("harness.io", Io,
+        "A file under `<profile>/harness/` could not be read or written.");
+    /// No experience-library entry has the id.
+    EXPERIENCE_ENTRY_NOT_FOUND = ("experience.entry_not_found", Tool,
+        "No entry of this profile's experience library has this id; `prometheus experience list --all` lists every entry with its status.");
+    /// A domain name is not valid after normalisation.
+    EXPERIENCE_INVALID_DOMAIN = ("experience.invalid_domain", Usage,
+        "Experience-library domains are lower-case letters, digits and `-` (`[a-z0-9][a-z0-9-]{0,47}`); input is lower-cased and runs of other characters become `-`, so only an over-long name is refused.");
+    /// An experience archive was refused as a whole.
+    EXPERIENCE_IMPORT_REJECTED = ("experience.import_rejected", InvalidInput,
+        "The experience archive was refused and nothing was written: an entry's harness does not validate, or an entry carries a leak-glob file, an eval verdict marker or a secret; the message names the entry.");
+    /// The experience library could not be read or written.
+    EXPERIENCE_IO = ("experience.io", Io,
+        "A file under `<profile>/experience/` (or an experience archive) could not be read or written.");
+    /// An eval suite does not validate.
+    EVAL_INVALID_SUITE = ("eval.invalid_suite", InvalidInput,
+        "An eval suite (`suite.toml`, a task's `task.toml`, its `grader/grader.toml` or `run.toml`) does not validate; the message names the first invalid file and the problem (`prometheus eval validate`).");
+    /// No eval suite has that name or path.
+    EVAL_SUITE_NOT_FOUND = ("eval.suite_not_found", NotFound,
+        "No eval suite has that name: suites are directories with a `suite.toml`, given by path or found under `<profile>/evals/` (the bundled `smoke` suite is always there).");
+    /// No eval run has that id.
+    EVAL_RUN_NOT_FOUND = ("eval.run_not_found", NotFound,
+        "No eval run has that id under `<profile>/evals/runs/` (`prometheus eval report`, `eval judge`).");
+    /// A resumed eval run does not match what it resumes.
+    EVAL_RUN_MISMATCH = ("eval.run_mismatch", Usage,
+        "`--run-id` names an existing run whose suite version, model or harness hash differ from this invocation (`run.json`); resume it with the same settings or start another run id.");
+    /// The judge of an eval run changed.
+    EVAL_JUDGE_CHANGED = ("eval.judge_changed", Tool,
+        "`prometheus eval judge` was asked to merge rows scored by another judge model or grader version than the one recorded in `judged.json`; pass `--judge-namespace NAME` to score separately.");
+    /// A batch dataset or toolset distribution does not validate.
+    EVAL_INVALID_DATASET = ("eval.invalid_dataset", InvalidInput,
+        "A batch dataset line (`prometheus eval batch`), a prefill file or a toolset distribution does not validate; the message names the line or the toolset. Nothing ran.");
+    /// A session cannot become an eval task.
+    EVAL_CAPTURE_REFUSED = ("eval.capture_refused", InvalidInput,
+        "`prometheus eval capture` refused: the session's recording has no workspace contents for files the task declares, the task id exists already, or no grader was given.");
+    /// A benchmark adapter failed or broke the protocol.
+    EVAL_BENCH_FAILED = ("eval.bench_failed", Unavailable,
+        "A benchmark adapter (`bench:<name>`) could not be started, answered with an error or broke the adapter protocol; the message names the method.");
+    /// Eval files could not be read or written.
+    EVAL_IO = ("eval.io", Io,
+        "A file of an eval suite or run (`<profile>/evals/`) or a trajectory dataset could not be read or written.");
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");

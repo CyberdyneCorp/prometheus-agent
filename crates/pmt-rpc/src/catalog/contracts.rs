@@ -81,9 +81,13 @@ mod automation;
 mod chat;
 mod cron;
 mod desktop;
+mod evolve;
+mod experience;
 mod files;
+mod i18n;
 mod interop;
 mod journey;
+mod live;
 mod local;
 mod lsp;
 mod manage;
@@ -91,6 +95,7 @@ mod messaging;
 mod moa;
 mod observability;
 mod review;
+mod screen;
 mod security;
 mod terminal;
 mod tui;
@@ -104,9 +109,13 @@ pub use automation::*;
 pub use chat::*;
 pub use cron::*;
 pub use desktop::*;
+pub use evolve::*;
+pub use experience::*;
 pub use files::*;
+pub use i18n::*;
 pub use interop::*;
 pub use journey::*;
+pub use live::*;
 pub use local::*;
 pub use lsp::*;
 pub use manage::*;
@@ -114,6 +123,7 @@ pub use messaging::*;
 pub use moa::*;
 pub use observability::*;
 pub use review::*;
+pub use screen::*;
 pub use security::*;
 pub use terminal::*;
 pub use tui::*;
@@ -403,6 +413,20 @@ pub struct SessionSetup {
     /// That endpoint's API key (`--api-key-stdin`), held in memory only.
     #[serde(default)]
     pub api_key: Option<String>,
+    /// The session's experience-library domain (`--domain`).
+    #[serde(default)]
+    pub domain: Option<String>,
+    /// Text sent as a last system block with every model call of this
+    /// session only (an embedding program's instructions): never part of
+    /// the frozen prompt, the stored history or the trajectory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt_overlay: Option<String>,
+    /// Keep the session's transcript out of the session store and its
+    /// trajectory (spec: workspace-architecture, Embeddable client SDKs):
+    /// hidden from listings, no trajectory, transcript removed when the
+    /// session unloads; its usage still counts against every budget.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ephemeral: bool,
 }
 
 impl std::fmt::Debug for SessionSetup {
@@ -420,6 +444,12 @@ impl std::fmt::Debug for SessionSetup {
             .field("mock_script", &self.mock_script)
             .field("base_url", &self.base_url)
             .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .field("domain", &self.domain)
+            .field(
+                "system_prompt_overlay",
+                &self.system_prompt_overlay.as_ref().map(|_| "[OVERLAY]"),
+            )
+            .field("ephemeral", &self.ephemeral)
             .finish()
     }
 }
@@ -518,6 +548,10 @@ pub struct Attached {
     /// this connection when it is a capable driver).
     #[serde(default)]
     pub open_requests: Vec<OpenRequest>,
+    /// This connection's client id, as `session.presence` lists it and
+    /// its inputs are stamped with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
 }
 
 /// `session.list` params.
@@ -670,6 +704,10 @@ pub struct TranscriptMessage {
     /// Its reactions (spec: desktop-app, Agent reactions).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reactions: Vec<Reaction>,
+    /// Who sent a user message: the client id the gateway stamped it with
+    /// (spec: tui, Shared live sessions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 /// `session.transcript` result.
@@ -727,6 +765,28 @@ pub struct ContextUsage {
     /// is not loaded).
     #[serde(default)]
     pub categories: Vec<ContextCategory>,
+    /// The local runtime's resource use while the session's local model
+    /// is resident (sampled at most once every 2 seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_resources: Option<LocalResources>,
+}
+
+/// GPU and RAM use of the local model runtime (spec: local-models, Local
+/// resource telemetry).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LocalResources {
+    /// How busy the GPU is, percent, when the driver reports it.
+    #[serde(default)]
+    pub gpu_utilization_percent: Option<f64>,
+    /// GPU memory in use, bytes.
+    pub gpu_memory_used: u64,
+    /// GPU memory, bytes.
+    pub gpu_memory_total: u64,
+    /// System RAM in use, bytes.
+    pub ram_used: u64,
+    /// System RAM, bytes.
+    pub ram_total: u64,
 }
 
 /// A subscription's status in `session.context_usage`.
@@ -931,10 +991,12 @@ pub enum Decision {
 pub struct ApprovalAnswer {
     /// The decision.
     pub decision: Decision,
-    /// For a diff approval: the hunks accepted.
+    /// For a diff approval: the hunks to apply (numbered from 1, as the
+    /// request's `diff.hunks`); absent: all of them.
     #[serde(default)]
     pub accepted_hunks: Option<Vec<u32>>,
-    /// An edited command to run instead.
+    /// For a diff approval: the file content to write instead of the
+    /// proposed one (`edit then accept`).
     #[serde(default)]
     pub replacement: Option<String>,
 }
@@ -947,10 +1009,12 @@ pub struct ApprovalRespondParams {
     pub id: String,
     /// The decision.
     pub decision: Decision,
-    /// For a diff approval: the hunks accepted.
+    /// For a diff approval: the hunks to apply (numbered from 1, as the
+    /// request's `diff.hunks`); absent: all of them.
     #[serde(default)]
     pub accepted_hunks: Option<Vec<u32>>,
-    /// An edited command to run instead.
+    /// For a diff approval: the file content to write instead of the
+    /// proposed one (`edit then accept`).
     #[serde(default)]
     pub replacement: Option<String>,
 }
@@ -1007,6 +1071,20 @@ pub struct EditDiff {
     pub old_text: Option<String>,
     /// The content after the edit.
     pub new_text: String,
+    /// The change's numbered hunks (hunk `n` is `hunks[n - 1]`): what
+    /// `accepted_hunks` refers to.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hunks: Vec<EditHunk>,
+}
+
+/// One hunk of a file edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct EditHunk {
+    /// `@@ -<old start>,<old lines> +<new start>,<new lines> @@`.
+    pub header: String,
+    /// Its lines, each starting with ` `, `-` or `+`.
+    pub lines: Vec<String>,
 }
 
 /// `clarify.request` params.

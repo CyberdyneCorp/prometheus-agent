@@ -1,0 +1,215 @@
+//! What makes a session a harness-evolution rollout (spec:
+//! harness-evolution, Isolated rollouts; Side-effect dry-run in rollouts):
+//! the candidate harness instead of the profile's active version, the
+//! task's toolsets without interactive tools or the memory tool, and a
+//! [`Recorder`] in front of every `effect = external` tool, which stores
+//! the call and answers without running it. The terminal and process
+//! tools stay live: they run inside the rollout's own sandbox and
+//! workspace, under its egress limit, so their effects never leave it.
+
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use pmt_agent::turn::Declared;
+use pmt_agent::turn::model::RequestedCall;
+use pmt_core::error::Error;
+use pmt_tools::{Selection, ToolRegistry, ToolResult};
+use serde_json::Value;
+
+use crate::replay::{ToolAnswer, ToolReplay};
+
+/// What a recorded call returns.
+pub const RECORDED: &str = "recorded, not executed during harness evolution";
+
+/// External tools whose effects the rollout sandbox contains.
+const CONFINED: &[&str] = &["terminal", "process"];
+
+/// The memory write tool.
+const MEMORY: &str = "memory";
+
+/// A rollout session's settings.
+#[derive(Debug, Clone)]
+pub struct RolloutRun {
+    /// The candidate harness tree.
+    pub harness: PathBuf,
+    /// The task's toolsets (`None` or empty: the CLI surface's).
+    pub toolsets: Option<Vec<String>>,
+    /// Records the external calls.
+    pub recorder: Arc<Recorder>,
+}
+
+impl RolloutRun {
+    /// The rollout's tools: the task's toolsets (or `base`), without
+    /// interactive tools and without the memory tool (rollouts never
+    /// write memory).
+    ///
+    /// # Errors
+    ///
+    /// An unknown toolset.
+    pub fn selection(
+        &self,
+        registry: &ToolRegistry,
+        disabled: &[String],
+        base: Selection,
+    ) -> Result<Selection, Error> {
+        let selection = match self.toolsets.as_deref() {
+            Some(toolsets) if !toolsets.is_empty() => {
+                Selection::resolve(registry, toolsets, disabled)?
+            }
+            _ => base,
+        };
+        let mut selection = selection.without_interactive(registry);
+        if selection.tools.iter().any(|t| t == MEMORY) {
+            selection.tools.retain(|t| t != MEMORY);
+            selection.disabled.insert(MEMORY.to_owned());
+        }
+        Ok(selection)
+    }
+}
+
+/// Answers `effect = external` calls with [`RECORDED`] and keeps them.
+#[derive(Debug, Default)]
+pub struct Recorder {
+    calls: Mutex<Vec<(String, Value)>>,
+}
+
+impl Recorder {
+    /// The recorded calls, in order: tool and arguments.
+    #[must_use]
+    pub fn calls(&self) -> Vec<(String, Value)> {
+        self.calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+}
+
+impl ToolReplay for Recorder {
+    fn answer(&self, call: &RequestedCall, declared: Option<&Declared>) -> ToolAnswer {
+        let external = declared.is_some_and(|d| d.effect == "external");
+        if !external || CONFINED.contains(&call.name.as_str()) {
+            return ToolAnswer::Live;
+        }
+        let arguments =
+            serde_json::from_str(&call.arguments).unwrap_or(Value::String(call.arguments.clone()));
+        self.calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((call.name.clone(), arguments));
+        ToolAnswer::Serve(ToolResult::ok(RECORDED))
+    }
+
+    fn recorded_tools(&self) -> Vec<pmt_providers::request::Tool> {
+        Vec::new()
+    }
+}
+
+/// The plugin view of a session on harness `tree`: a rollout, a session
+/// on a temporary tree, or one on its recorded version reads its harness
+/// hooks from that tree instead of the active version (spec:
+/// harness-evolution, Isolated rollouts; Harness loaded once per session).
+pub(super) fn plugins(
+    scope: &pmt_config::ProfileScope,
+    plugins: crate::plugins_host::ProfilePlugins,
+    harness: Option<&std::path::Path>,
+) -> crate::plugins_host::ProfilePlugins {
+    match harness {
+        Some(tree) => plugins.with_hooks(Arc::new(crate::harness_host::hooks::Rollout::new(
+            scope,
+            plugins.hook_source(),
+            tree,
+        ))),
+        None => plugins,
+    }
+}
+
+impl super::Factory {
+    /// The plugin view of session `id`, whose harness hooks are those of
+    /// the tree it runs on: a rollout's candidate or a temporary tree
+    /// (already in the factory's view), else the version recorded on its
+    /// row, never whatever is ACTIVE now (spec: harness-evolution, Harness
+    /// loaded once per session). The profile's live set swaps ACTIVE's
+    /// hooks in after an adoption, so an open session started on an older
+    /// version, a resumed one, or an eval of a named version would
+    /// otherwise run another version's hooks. One view per tree, shared
+    /// by the factory's sessions on it.
+    pub(super) fn plugins_for(
+        &self,
+        id: pmt_core::id::SessionId,
+    ) -> crate::plugins_host::ProfilePlugins {
+        if self.options.rollout.is_some() || self.options.harness_tree.is_some() {
+            return self.plugins.clone();
+        }
+        let Some(tree) = self.harness_dir(id) else {
+            return self.plugins.clone();
+        };
+        self.harness_plugins
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .entry(tree)
+            .or_insert_with_key(|tree| plugins(&self.scope, self.plugins.clone(), Some(tree)))
+            .clone()
+    }
+
+    /// The harness tree session `id` runs with: a rollout's candidate,
+    /// else the tree of the version recorded on its row.
+    pub(super) fn harness_dir(&self, id: pmt_core::id::SessionId) -> Option<PathBuf> {
+        if let Some(run) = &self.options.rollout {
+            return Some(run.harness.clone());
+        }
+        if let Some(tree) = &self.options.harness_tree {
+            return Some(tree.clone());
+        }
+        crate::harness_host::session_version(&self.scope, &self.store, id)
+            .map(|version| pmt_config::harness::HarnessDir::of(self.scope.dir()).tree_dir(&version))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn declared(effect: &str) -> Declared {
+        Declared {
+            effect: effect.to_owned(),
+            idempotent: false,
+        }
+    }
+
+    fn call(name: &str, arguments: &str) -> RequestedCall {
+        RequestedCall {
+            id: "c1".into(),
+            name: name.into(),
+            arguments: arguments.into(),
+        }
+    }
+
+    /// Scenario: Message not sent (the recorder's half).
+    #[test]
+    fn external_calls_are_recorded_and_confined_ones_run() {
+        let recorder = Recorder::default();
+        let sent = recorder.answer(
+            &call("send_message", r#"{"target":"telegram:42","message":"hi"}"#),
+            Some(&declared("external")),
+        );
+        match sent {
+            ToolAnswer::Serve(result) => assert_eq!(result.text_content(), RECORDED),
+            ToolAnswer::Live => panic!("send_message ran"),
+        }
+        assert!(matches!(
+            recorder.answer(&call("terminal", "{}"), Some(&declared("external"))),
+            ToolAnswer::Live
+        ));
+        assert!(matches!(
+            recorder.answer(&call("read_file", "{}"), Some(&declared("none"))),
+            ToolAnswer::Live
+        ));
+        assert_eq!(
+            recorder.calls(),
+            [(
+                "send_message".to_owned(),
+                serde_json::json!({"target": "telegram:42", "message": "hi"})
+            )]
+        );
+    }
+}

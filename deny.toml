@@ -14,6 +14,10 @@ ignore = [
     # nix 0.26 of expectrl, the test-only PTY driver of the line-interface
     # tests; nothing shipped links it.
     { id = "RUSTSEC-2026-0441", reason = "test-only dependency via expectrl; no maintained release exists" },
+    # chrono (unmaintained, no patched release) is a non-optional dependency
+    # of rmcp 3.9 (and of schemars only through rmcp's `chrono04` feature);
+    # Prometheus code never uses chrono itself. Drop when rmcp moves off it.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained notice only; required unconditionally by rmcp, no alternative release" },
 ]
 
 [licenses]

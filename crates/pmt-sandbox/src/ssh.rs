@@ -112,6 +112,159 @@ impl SshTarget {
     }
 }
 
+/// How long a reverse forward may take to be granted.
+const FORWARD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+
+/// A port on the remote host's loopback forwarded back to a local
+/// address, on an SSH connection of its own (never the multiplexed
+/// master: every client asking it again for the same forward would fail).
+/// Dropping it closes the connection and the remote port.
+#[derive(Debug)]
+pub struct ReverseForward {
+    child: std::process::Child,
+    port: u16,
+}
+
+impl ReverseForward {
+    /// The remote loopback port.
+    #[must_use]
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+}
+
+impl Drop for ReverseForward {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl SshTarget {
+    /// Forwards a port the server allocates on its loopback to `local`.
+    ///
+    /// # Errors
+    ///
+    /// `terminal.backend_unavailable` naming why: the client did not
+    /// start, the server refused the forward (`AllowTcpForwarding`), or no
+    /// port was granted within 20 s.
+    pub fn reverse_forward(&self, local: std::net::SocketAddr) -> Result<ReverseForward, Error> {
+        let mut command = self.forward_client();
+        command.stderr(Stdio::piped());
+        command
+            .arg("-R")
+            .arg(format!("127.0.0.1:0:{local}"))
+            .arg(&self.destination);
+        let refused = |why: String| {
+            Error::new(
+                &codes::TERMINAL_BACKEND_UNAVAILABLE,
+                format!(
+                    "cannot forward a port of {} back to {local}: {why}",
+                    self.destination
+                ),
+            )
+        };
+        let mut child = command.spawn().map_err(|e| refused(e.to_string()))?;
+        let Some(stderr) = child.stderr.take() else {
+            let _ = child.kill();
+            return Err(refused("no client output".to_owned()));
+        };
+        let (lines, received) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            use std::io::BufRead as _;
+            // Read to the end: the client must never block on a full pipe.
+            for line in std::io::BufReader::new(stderr)
+                .lines()
+                .map_while(Result::ok)
+            {
+                let _ = lines.send(line);
+            }
+        });
+        let deadline = std::time::Instant::now() + FORWARD_TIMEOUT;
+        let mut said = Vec::new();
+        while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+            match received.recv_timeout(left) {
+                Ok(line) => {
+                    if let Some(port) = allocated_port(&line) {
+                        return Ok(ReverseForward { child, port });
+                    }
+                    said.push(line);
+                }
+                // The client exited: its stderr is closed.
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        let why = said.join("; ");
+        Err(refused(if why.is_empty() {
+            "no port was granted".to_owned()
+        } else {
+            why
+        }))
+    }
+
+    /// A client that only forwards (`-N`), on a connection of its own (see
+    /// [`ReverseForward`]), failing when a forward cannot be set up.
+    fn forward_client(&self) -> Command {
+        let mut command = Command::new(&self.program);
+        command
+            .env_clear()
+            .envs(self.env.iter().map(|(n, v)| (n, v)))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null());
+        if let Some(file) = &self.config_file {
+            command.arg("-F").arg(file);
+        }
+        // INFO: the client reports the allocated port at that level.
+        for option in [
+            "BatchMode=yes",
+            "ConnectTimeout=15",
+            "ServerAliveInterval=15",
+            "ExitOnForwardFailure=yes",
+            "ControlMaster=no",
+            "ControlPath=none",
+            "LogLevel=INFO",
+        ] {
+            command.arg("-o").arg(option);
+        }
+        command.args(["-N", "-T", "-p", &self.port.to_string()]);
+        command
+    }
+
+    /// The client relaying each local Unix socket of `forwards` to its
+    /// remote Unix socket (`-L <local>:<remote>`), replacing a stale local
+    /// socket; it runs until killed.
+    #[must_use]
+    pub fn socket_forwards(&self, forwards: &[(PathBuf, String)]) -> Command {
+        let mut command = self.forward_client();
+        command.args([
+            "-o",
+            "StreamLocalBindUnlink=yes",
+            "-o",
+            "StreamLocalBindMask=0177",
+        ]);
+        for (local, remote) in forwards {
+            command
+                .arg("-L")
+                .arg(format!("{}:{remote}", local.display()));
+        }
+        command.arg(&self.destination);
+        command
+    }
+}
+
+/// The port of the client's "Allocated port N for remote forward" line.
+fn allocated_port(line: &str) -> Option<u16> {
+    line.trim()
+        .strip_prefix("Allocated port ")?
+        .split_whitespace()
+        .next()?
+        .parse()
+        .ok()
+}
+
 /// `argv` as one POSIX shell command line.
 #[must_use]
 pub fn quote_all<S: AsRef<str>>(argv: &[S]) -> String {

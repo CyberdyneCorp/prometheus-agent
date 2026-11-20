@@ -1,0 +1,20 @@
+turn 7 (read-only preview)
+› step 7
+
+mock: step 7
+
+
+
+timeline: ↑↓ preview  Enter rewinds here  Esc closes
+  1  10:01:00  step 1  1 tools  -
+  2  10:02:00  step 2  2 tools  $0.0010
+  3  10:03:00  step 3  0 tools  -
+  4  10:04:00  step 4  1 tools  $0.0010
+  5  10:05:00  step 5  2 tools  -
+  6  10:06:00  step 6  0 tools  $0.0010
+  7  10:07:00  step 7  1 tools  -
+  8  10:08:00  step 8  2 tools  $0.0010
+  9  10:09:00  step 9  0 tools  -
+──────────────────────────────────────────────────────────────────────────────────────────
+›
+  default │ mock/m1

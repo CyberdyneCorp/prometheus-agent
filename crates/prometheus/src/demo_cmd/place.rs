@@ -55,6 +55,28 @@ impl Place {
         })
     }
 
+    /// Like [`Place::prepare`], but a directory holding `marker` (left by
+    /// an earlier run of the same demo) is reused as it is, so the demo
+    /// resumes there.
+    ///
+    /// # Errors
+    ///
+    /// As [`Place::prepare`].
+    pub fn prepare_resumable(output: Option<&Path>, marker: &str) -> Result<Self, Error> {
+        if let Some(dir) = output {
+            let dir = std::path::absolute(dir)
+                .map_err(|e| io_error(&format!("cannot resolve {}", dir.display()), &e))?;
+            if dir.join(marker).is_file() {
+                return Ok(Self {
+                    root: dir,
+                    temp: None,
+                    created: false,
+                });
+            }
+        }
+        Self::prepare(output)
+    }
+
     /// The directory itself.
     #[must_use]
     pub fn root(&self) -> &Path {

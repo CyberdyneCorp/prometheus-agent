@@ -1,0 +1,82 @@
+# The model side of `prometheus demo --evolve` / `prometheus evolve demo`
+# (spec: replay-and-evaluation, Offline self-improvement demo;
+# harness-evolution, Offline demo pipeline): one deterministic mock script
+# plays the rollout agent, the proposer, the selector and the reflector.
+#
+# A rollout reads the harness script its candidate harness ships
+# (`scripts/total.py`, copied into the rollout workspace) and reports the
+# total that script computes for its ledger: the base script adds only the
+# positive amounts, the fixed one every amount. The proposer reads the
+# script and rewrites it with the fix (the demo fills in the fixed script).
+
+[[rule]]
+user = "# Mission: experience."
+repeat = true
+text = "<edits>\ncomponent: scripts/total.py\ncandidates: inv1, agg1\nchange: subtract the debits instead of skipping them\nobserved: base1 reported the positive amounts only\nverdict: helped\n</edits>\n<experience>\ncue: totalling a ledger of signed amounts\nlesson: debits are negative amounts; sum every line, never only the positive ones\nevidence: rollouts/base1.md step 2 reported the credits only\nconfidence: high because both ledgers show the same mistake\n</experience>"
+
+[[rule]]
+user = "# Mission: classify"
+repeat = true
+text = "accounting"
+
+[[rule]]
+user = "# Mission: select"
+repeat = true
+text = "```choice\nA\n```\n<why>it totals the debits too</why>"
+
+[[rule]]
+user = "# Mission:"
+step = 0
+repeat = true
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "context/harness/scripts/total.py" }
+
+[[rule]]
+user = "# Mission:"
+step = 1
+repeat = true
+[[rule.tool_calls]]
+name = "write_file"
+arguments = { path = "context/harness/scripts/total.py", content = '''@FIXED@''' }
+
+[[rule]]
+user = "# Mission:"
+repeat = true
+text = "Fixed scripts/total.py: it now subtracts the debits (rollouts/base1.md: the total left them out)."
+
+[[rule]]
+user = "LEDGER-"
+step = 0
+repeat = true
+[[rule.tool_calls]]
+name = "read_file"
+arguments = { path = "scripts/total.py" }
+
+[[rule]]
+user = "LEDGER-A"
+tool_result = "if amount > 0"
+repeat = true
+text = "Total: 160.25"
+
+[[rule]]
+user = "LEDGER-A"
+tool_result = "debits included"
+repeat = true
+text = "Total: 85.15"
+
+[[rule]]
+user = "LEDGER-B"
+tool_result = "if amount > 0"
+repeat = true
+text = "Total: 30.00"
+
+[[rule]]
+user = "LEDGER-B"
+tool_result = "debits included"
+repeat = true
+text = "Total: 20.25"
+
+[[rule]]
+repeat = true
+text = "I could not total the ledger."

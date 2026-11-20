@@ -39,16 +39,24 @@ pub struct ServeHost {
 
 impl Factory {
     /// The host of `mcp serve` for session `id` (a stored session of this
-    /// factory).
+    /// factory): `mcp_server.expose_toolsets`, or exactly the tools of
+    /// `only` (the Codex runtime's callback server).
     ///
     /// # Errors
     ///
     /// An unknown toolset in `mcp_server.expose_toolsets` (exit 78);
     /// registry, environment and store errors.
-    pub async fn serve_host(&self, id: SessionId) -> Result<ServeHost, Error> {
+    pub async fn serve_host(
+        &self,
+        id: SessionId,
+        only: Option<&[String]>,
+    ) -> Result<ServeHost, Error> {
         self.discover_mcp().await;
         let (registry, _) = self.session_registry()?;
-        let selection = exposed(&registry, &self.scope.config().mcp_server.expose_toolsets)?;
+        let selection = match only {
+            Some(tools) => only_tools(&registry, tools)?,
+            None => exposed(&registry, &self.scope.config().mcp_server.expose_toolsets)?,
+        };
         let inline_shell = Arc::new(skills::DeferredShell::default());
         // `mcp serve` shows no memory notices: its caller is another agent.
         let quiet = pmt_memory::notices::Notices::new(pmt_config::schema::MemoryNotifications::Off);
@@ -106,6 +114,21 @@ impl Factory {
             _environment: environment.attachment,
         })
     }
+}
+
+/// The selection of exactly `tools` (those the registry knows), without
+/// tools that need a person.
+fn only_tools(registry: &ToolRegistry, tools: &[String]) -> Result<Selection, Error> {
+    let mut toolsets: Vec<String> = tools
+        .iter()
+        .filter_map(|name| registry.get(name).ok())
+        .map(|tool| tool.descriptor.toolset.clone())
+        .collect();
+    toolsets.sort();
+    toolsets.dedup();
+    let mut selection = Selection::resolve(registry, &toolsets, &[])?.without_interactive(registry);
+    selection.tools.retain(|name| tools.contains(name));
+    Ok(selection)
 }
 
 /// The selection of `toolsets` without tools that need a person, with the

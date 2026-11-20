@@ -84,6 +84,10 @@ pub struct ContainerSpec {
     pub user: Option<(u32, u32)>,
     /// `terminal.idle_lifetime_secs`.
     pub idle_lifetime: Duration,
+    /// The network joined instead of the runtime's default (the profile's
+    /// egress-only network); `terminal.container.network = false` still
+    /// means no network at all.
+    pub network: Option<String>,
 }
 
 impl ContainerSpec {
@@ -132,6 +136,8 @@ impl ContainerSpec {
         }
         if !self.config.network {
             args.push("--network=none".to_owned());
+        } else if let Some(network) = &self.network {
+            args.push(format!("--network={network}"));
         }
         if let Some((uid, gid)) = self.user {
             args.push(format!("--user={uid}:{gid}"));

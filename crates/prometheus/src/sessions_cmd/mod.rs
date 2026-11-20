@@ -5,6 +5,7 @@
 pub mod args;
 mod lineage;
 mod maintain;
+pub(crate) mod semantic;
 
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -25,6 +26,30 @@ use crate::output::{document, json as print_json, print, print_error, print_raw}
 use crate::prompt;
 use crate::session_export::{self, ExportOptions, session_json};
 
+/// The offline commands (store closed); `None` for every other one.
+fn offline(
+    command: &SessionsCommand,
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+) -> Option<Result<u8, Error>> {
+    use pmt_config::schema::StorageEncryption;
+    Some(match command {
+        SessionsCommand::Recover { output, yes } => {
+            maintain::recover(ctx, scope, output.as_deref(), *yes)
+        }
+        SessionsCommand::JournalMode { mode } => maintain::journal_mode(ctx, scope, *mode),
+        SessionsCommand::Encrypt { mode } => {
+            let wanted = match mode {
+                args::EncryptModeArg::Keychain => StorageEncryption::Keychain,
+                args::EncryptModeArg::Passphrase => StorageEncryption::Passphrase,
+            };
+            maintain::convert(ctx, scope, wanted)
+        }
+        SessionsCommand::Decrypt => maintain::convert(ctx, scope, StorageEncryption::None),
+        _ => return None,
+    })
+}
+
 /// Runs one `sessions` subcommand on the selected profile's store.
 ///
 /// # Errors
@@ -33,14 +58,10 @@ use crate::session_export::{self, ExportOptions, session_json};
 pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     // Offline commands run with the store closed.
-    match command {
-        SessionsCommand::Recover { output, yes } => {
-            return maintain::recover(ctx, &scope, output.as_deref(), *yes);
-        }
-        SessionsCommand::JournalMode { mode } => return maintain::journal_mode(ctx, &scope, *mode),
-        _ => {}
+    if let Some(done) = offline(command, ctx, &scope) {
+        return done;
     }
-    let store = Store::open(&scope)?;
+    let store = std::sync::Arc::new(Store::open(&scope)?);
     let session = |reference: &str| store.resolve_session(reference);
     match command {
         SessionsCommand::List {
@@ -74,7 +95,7 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
             crate::chat::run(&args, ctx, ui)
         }
         SessionsCommand::Show { session: r } => show(ctx, &store, session(r)?),
-        SessionsCommand::Search(args) => search(ctx, &store, args),
+        SessionsCommand::Search(args) => search(ctx, &scope, &store, args),
         SessionsCommand::Rename { session: r, title } => {
             let id = session(r)?;
             store.set_title(id, Some(title), pmt_store::TitleSource::User)?;
@@ -107,7 +128,9 @@ pub fn run(command: &SessionsCommand, ctx: &Context<'_>, ui: crate::chat::Ui) ->
         | SessionsCommand::RefreshPrompts { .. }
         | SessionsCommand::Retitle { .. }
         | SessionsCommand::Recover { .. }
-        | SessionsCommand::JournalMode { .. } => lineage_or_upkeep(command, ctx, &scope, &store),
+        | SessionsCommand::JournalMode { .. }
+        | SessionsCommand::Encrypt { .. }
+        | SessionsCommand::Decrypt => lineage_or_upkeep(command, ctx, &scope, &store),
         SessionsCommand::Export(args) => export(ctx, &scope, &store, args),
         SessionsCommand::Delete {
             session: r,
@@ -159,7 +182,10 @@ fn lineage_or_upkeep(
             all,
             auto_only,
         } => maintain::retitle(ctx, scope, store, sessions, (*all, *auto_only)),
-        SessionsCommand::Recover { .. } | SessionsCommand::JournalMode { .. } => {
+        SessionsCommand::Recover { .. }
+        | SessionsCommand::JournalMode { .. }
+        | SessionsCommand::Encrypt { .. }
+        | SessionsCommand::Decrypt => {
             unreachable!("handled before the store opens")
         }
         _ => unreachable!("only lineage and upkeep commands reach here"),
@@ -255,7 +281,12 @@ fn changed(ctx: &Context<'_>, session: &Session, what: &str) -> Result<u8, Error
     Ok(0)
 }
 
-fn search(ctx: &Context<'_>, store: &Store, args: &SearchArgs) -> Result<u8, Error> {
+fn search(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    store: &std::sync::Arc<Store>,
+    args: &SearchArgs,
+) -> Result<u8, Error> {
     let options = SearchOptions {
         limit: args.limit,
         offset: args.offset,
@@ -279,7 +310,31 @@ fn search(ctx: &Context<'_>, store: &Store, args: &SearchArgs) -> Result<u8, Err
         include_archived: !args.no_archived,
         include_inactive: args.include_inactive,
     };
-    let results = store.search(&args.query, &options)?;
+    let hybrid = match args.mode {
+        args::SearchModeArg::Auto => scope.config().sessions.search.semantic,
+        args::SearchModeArg::Fts => false,
+        args::SearchModeArg::Hybrid => true,
+    };
+    let results = if hybrid {
+        let user_home = ctx.launch.user_home().map(std::path::PathBuf::as_path);
+        let embedder = semantic::embedder(scope, store, user_home);
+        if let Some(embedder) = &embedder {
+            semantic::fill_now(scope, store, embedder.as_ref());
+        }
+        let redactor = scope.secrets().redactor().unwrap_or_default();
+        crate::model_cmd::block_on(semantic::hybrid(
+            store,
+            embedder.as_deref(),
+            &redactor,
+            &args.query,
+            &options,
+        ))??
+    } else {
+        store.search(&args.query, &options)?
+    };
+    if let Some(degraded) = results.degraded {
+        eprintln!("semantic search unavailable ({degraded}): full-text results only");
+    }
     if ctx.json {
         return document("sessions search", &search_json(&results));
     }
@@ -323,7 +378,11 @@ fn search_json(results: &SearchResults) -> Value {
         pmt_store::SearchMode::Trigram => "trigram",
         pmt_store::SearchMode::Scan => "scan",
     };
-    json!({ "mode": mode, "hits": hits })
+    let mut out = json!({ "mode": mode, "hits": hits });
+    if let Some(degraded) = results.degraded {
+        out["degraded"] = json!(degraded);
+    }
+    out
 }
 
 fn tree(ctx: &Context<'_>, store: &Store, id: SessionId) -> Result<u8, Error> {

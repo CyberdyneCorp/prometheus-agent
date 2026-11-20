@@ -1,0 +1,10 @@
+{
+  "name": "@prometheus-agent/sdk",
+  "version": "0.1.0",
+  "description": "Embed the Prometheus agent: sessions, prompts and their events over the daemon's RPC protocol",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "engines": { "node": ">=22.18" },
+  "private": true,
+  "prometheus": { "rpc_protocol": [1] }
+}

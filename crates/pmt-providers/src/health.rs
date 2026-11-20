@@ -246,22 +246,31 @@ impl RouteHealth for StoreHealth {
     }
 
     fn score(&self, provider: &str, model: &str) -> f64 {
+        self.current(provider, model).map_or(1.0, |r| r.score)
+    }
+
+    fn ttft_p50_ms(&self, provider: &str, model: &str) -> Option<u64> {
+        self.current(provider, model)?.ttft_p50_ms
+    }
+}
+
+impl StoreHealth {
+    /// The record of `provider`/`model` over every credential now; `None`
+    /// (perfect health, nothing measured) when the store cannot be read.
+    fn current(&self, provider: &str, model: &str) -> Option<Record> {
         match self
             .store
             .provider_calls(provider, model, None, self.settings.window)
         {
-            Ok(samples) => {
-                record(
-                    (provider, model, ""),
-                    &samples,
-                    self.settings,
-                    Timestamp::now(),
-                )
-                .score
-            }
+            Ok(samples) => Some(record(
+                (provider, model, ""),
+                &samples,
+                self.settings,
+                Timestamp::now(),
+            )),
             Err(err) => {
                 tracing::warn!(error = %err, "cannot read provider health");
-                1.0
+                None
             }
         }
     }

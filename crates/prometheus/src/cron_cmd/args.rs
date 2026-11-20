@@ -224,6 +224,15 @@ pub struct JobFlags {
     /// The script is the whole job: its output is delivered as is.
     #[arg(long)]
     pub no_agent: bool,
+    /// Make the job queue a harness-evolution job for this task file
+    /// (relative to the profile directory) instead of running an agent;
+    /// `""` makes it an agent job again.
+    #[arg(long, value_name = "FILE")]
+    pub evolve_task: Option<String>,
+    /// The experience-library domain of the job's runs (its sessions'
+    /// domain tag, its evolution jobs' domain); `""` removes it.
+    #[arg(long, value_name = "NAME")]
+    pub domain: Option<String>,
     /// Where output goes (repeatable): `local`, `origin`, `none`,
     /// `<platform>`, `<platform>:<chat_id>[:<thread_id>]`,
     /// `bot_chat[:<profile>]`.
@@ -333,10 +342,17 @@ impl JobFlags {
         Ok(pmt_cron::fields::Fields {
             schedule: schedule.map(str::to_owned),
             schedule_text: self.schedule_text.clone(),
+            translated: None,
             prompt: self.prompt.clone(),
             skills: some(&self.skills),
             script: self.script.clone(),
             no_agent: self.no_agent.then_some(true),
+            evolve_task: self.evolve_task.clone(),
+            domain: match self.domain.as_deref() {
+                Some("") => Some(String::new()),
+                Some(name) => Some(pmt_evolve::experience::domain::parse(name)?),
+                None => None,
+            },
             deliver: some(&self.deliver),
             failure_deliver: some(&self.failure_deliver),
             attach_to_session: self.attach_to_session,

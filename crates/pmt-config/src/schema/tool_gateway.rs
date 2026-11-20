@@ -53,18 +53,6 @@ impl ToolGatewayConfig {
     }
 }
 
-/// A media tool category's provider selection (`[image_gen]`,
-/// `[video_gen]`, `[tts]`, `[stt]`).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
-#[schemars(extend("x-apply" = "next_session"))]
-pub struct ToolProviderConfig {
-    /// The provider serving the category (`nous` routes it through the
-    /// subscription tool gateway); unset picks one automatically.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

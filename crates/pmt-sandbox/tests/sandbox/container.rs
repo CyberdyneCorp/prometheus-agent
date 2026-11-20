@@ -110,6 +110,7 @@ impl Fake {
             volumes: Vec::new(),
             user: None,
             idle_lifetime: Duration::from_mins(5),
+            network: None,
         }
     }
 }

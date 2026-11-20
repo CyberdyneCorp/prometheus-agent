@@ -29,6 +29,9 @@ pub struct Settings {
     pub max_total_bytes: u64,
     /// Archives older than this are deleted (0: kept forever).
     pub archive_retention_secs: u64,
+    /// Install state of a deleted checkout unused this long is deleted
+    /// (0: kept forever).
+    pub install_state_retention_secs: u64,
 }
 
 impl Default for Settings {
@@ -38,6 +41,7 @@ impl Default for Settings {
             archive_max_file_bytes: 52_428_800,
             max_total_bytes: 0,
             archive_retention_secs: 2_592_000,
+            install_state_retention_secs: 1_209_600,
         }
     }
 }

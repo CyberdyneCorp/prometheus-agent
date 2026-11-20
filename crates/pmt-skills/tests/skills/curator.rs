@@ -53,6 +53,7 @@ fn pass(
         catalog: &catalog,
         cron_skills: cron,
         now,
+        eval_gate: None,
     };
     let options = Options {
         dry_run,
@@ -276,6 +277,7 @@ fn one_pass_at_a_time_and_the_first_observation_only_seeds() {
         catalog: &catalog,
         cron_skills: &cron,
         now: Timestamp::now(),
+        eval_gate: None,
     };
     let _held = run::lock(&scope).unwrap();
     let err = run::run(&scope, Options::default(), None, &PatternScanner).unwrap_err();
@@ -357,6 +359,7 @@ fn consolidation_merges_and_reports_the_rename_map() {
         catalog: &catalog,
         cron_skills: &cron,
         now: Timestamp::now(),
+        eval_gate: None,
     };
     let options = Options {
         consolidate: true,

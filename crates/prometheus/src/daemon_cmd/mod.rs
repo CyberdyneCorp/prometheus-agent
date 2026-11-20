@@ -22,6 +22,7 @@ pub(crate) mod serve;
 pub mod service;
 mod slack_manifest_cmd;
 pub(crate) mod standalone;
+pub mod sub_proxy;
 mod support_matrix;
 mod systemd;
 #[cfg(debug_assertions)]
@@ -265,24 +266,45 @@ pub(crate) fn running_or_start(
     if let Some(record) = wait_running(home, START_TIMEOUT)? {
         return Ok((record, false));
     }
-    let mut child = spawn_detached(home, profile)?;
     let deadline = std::time::Instant::now() + START_TIMEOUT;
     loop {
+        if let Some(running) = spawn_and_wait(home, profile, deadline)? {
+            return Ok(running);
+        }
+        // The holder let the home go without publishing: a daemon on its
+        // way out (an update or a restart stopping it) drops its record
+        // before its process, and with it the lock, is gone.
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// Spawns one daemon and waits for a running one: ours (`true`) or the
+/// one that won the home; `None` when ours lost the home lock and its
+/// holder left without publishing.
+fn spawn_and_wait(
+    home: &Path,
+    profile: Option<&str>,
+    deadline: std::time::Instant,
+) -> Result<Option<(DaemonRecord, bool)>, Error> {
+    let child = spawn_detached(home, profile)?;
+    wait_for_spawned(home, child, deadline)
+}
+
+/// [`spawn_and_wait`] once `child` runs. A published daemon is ours only
+/// when it is our child: on a slow machine the daemon that won the home
+/// can publish before ours has even reached the lock and exited.
+fn wait_for_spawned(
+    home: &Path,
+    mut child: std::process::Child,
+    deadline: std::time::Instant,
+) -> Result<Option<(DaemonRecord, bool)>, Error> {
+    loop {
         if let Discovery::Running(record) = discover(home)? {
-            return Ok((record, true));
+            let ours = record.process.pid == child.id();
+            return Ok(Some((record, ours)));
         }
         if let Ok(Some(status)) = child.try_wait() {
-            // Another start won the race: its daemon is the one to use. It
-            // may hold the home lock before it has written its record.
-            let lost_the_lock = status.code() == Some(i32::from(pmt_core::exit::TEMPORARY_FAILURE));
-            if let Some(record) = wait_for_holder(home, lost_the_lock, deadline)? {
-                return Ok((record, false));
-            }
-            let why = match last_stderr_line(home) {
-                Some(line) => format!("the daemon exited with {status}: {line}"),
-                None => format!("the daemon exited with {status}"),
-            };
-            return Err(start_failed(&why));
+            return exited(home, status, deadline);
         }
         if std::time::Instant::now() > deadline {
             return Err(start_failed(
@@ -293,16 +315,41 @@ pub(crate) fn running_or_start(
     }
 }
 
+/// What a spawned daemon that exited leaves: the daemon that won the
+/// race for the home (it may hold the home lock before it has written its
+/// record), `None` when ours lost the lock and its holder left without
+/// publishing, else the failure.
+fn exited(
+    home: &Path,
+    status: std::process::ExitStatus,
+    deadline: std::time::Instant,
+) -> Result<Option<(DaemonRecord, bool)>, Error> {
+    let lost_the_lock = status.code() == Some(i32::from(pmt_core::exit::TEMPORARY_FAILURE));
+    if let Some(record) = wait_for_holder(home, lost_the_lock, deadline)? {
+        return Ok(Some((record, false)));
+    }
+    if lost_the_lock && std::time::Instant::now() < deadline {
+        return Ok(None);
+    }
+    let why = match last_stderr_line(home) {
+        Some(line) => format!("the daemon exited with {status}: {line}"),
+        None => format!("the daemon exited with {status}"),
+    };
+    Err(start_failed(&why))
+}
+
 /// The daemon that won a start race: when ours lost the home lock, the
 /// holder can still be between taking the lock and writing its record, so
-/// "not running" is waited out until `deadline` too.
+/// "not running" is waited out for [`HOLDER_PATIENCE`] at a time (the
+/// caller spawns again, which fails on the lock again while it is held).
 fn wait_for_holder(
     home: &Path,
     lost_the_lock: bool,
     deadline: std::time::Instant,
 ) -> Result<Option<DaemonRecord>, Error> {
+    let until = deadline.min(std::time::Instant::now() + HOLDER_PATIENCE);
     loop {
-        let left = deadline.saturating_duration_since(std::time::Instant::now());
+        let left = until.saturating_duration_since(std::time::Instant::now());
         if let Some(record) = wait_running(home, left)? {
             return Ok(Some(record));
         }
@@ -312,6 +359,10 @@ fn wait_for_holder(
         std::thread::sleep(Duration::from_millis(25));
     }
 }
+
+/// How long a start that lost the home lock waits for the holder to
+/// publish before trying to take the home again.
+const HOLDER_PATIENCE: Duration = Duration::from_secs(1);
 
 fn start_failed(why: &str) -> Error {
     Error::new(
@@ -558,4 +609,50 @@ fn status(home: &Path, json: bool) -> Result<u8, Error> {
         }
     }
     crate::output::print(&text)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use pmt_core::runtime::{Role, WriterLock};
+    use pmt_rpc::discovery::Endpoint;
+
+    use super::wait_for_spawned;
+
+    #[test]
+    fn a_daemon_published_by_another_process_is_not_reported_as_started() {
+        let target = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target");
+        let home = tempfile::tempdir_in(target).unwrap();
+        // The daemon that won the home (this test process) published while
+        // our spawned one is still on its way to the lock.
+        let lock = WriterLock::acquire(home.path(), Role::Daemon, vec!["default".into()]).unwrap();
+        lock.publish(&Endpoint {
+            instance_id: "winner".into(),
+            build_id: "b".into(),
+            rpc_url: "ws://127.0.0.1:9/rpc".into(),
+            control: "unused".into(),
+            rpc_protocol: "1.0".into(),
+            started_at: "2026-11-18T00:00:00Z".into(),
+            health_url: None,
+            features: Vec::new(),
+        })
+        .unwrap();
+        let ours = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--list")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let ours_pid = ours.id();
+        let (record, started) =
+            wait_for_spawned(home.path(), ours, Instant::now() + Duration::from_secs(5))
+                .unwrap()
+                .unwrap();
+        assert_eq!(record.process.pid, lock.record().pid);
+        assert_ne!(record.process.pid, ours_pid);
+        assert!(
+            !started,
+            "another daemon's record is not ours to report as started"
+        );
+    }
 }

@@ -123,6 +123,8 @@ pub const INDEX: &[IndexEntry] = &[
     long("model.options", "tui"),
     method("subagent.list", "tui"),
     method("subagent.subscribe", "tui"),
+    method("session.timeline", "tui"),
+    long("session.rewind", "tui"),
     method("config.get", "tui"),
     long("session.banner", "tui"),
     // tool-system
@@ -137,6 +139,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("ui.prefs.patch", "desktop-app"),
     method("config.patch", "desktop-app"),
     method("config.reload", "desktop-app"),
+    method("i18n.languages", "i18n"),
     method("queue.list", "desktop-app"),
     method("queue.edit", "desktop-app"),
     method("queue.delete", "desktop-app"),
@@ -190,6 +193,8 @@ pub const INDEX: &[IndexEntry] = &[
     method("files.rollback", "execution-environments"),
     method("screen.takeover", "execution-environments"),
     method("screen.handback", "execution-environments"),
+    method("screen.ticket", "execution-environments"),
+    method("screen.browser", "execution-environments"),
     // git-worktrees
     method("worktree.new", "git-worktrees"),
     method("worktree.status", "git-worktrees"),
@@ -253,6 +258,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("experience.show", "experience-library"),
     method("experience.pin", "experience-library"),
     method("experience.forget", "experience-library"),
+    method("experience.disable", "experience-library"),
     method("experience.restore", "experience-library"),
     method("experience.domains", "experience-library"),
     // server-to-client requests (workspace-architecture)
@@ -282,6 +288,7 @@ pub const INDEX: &[IndexEntry] = &[
     event("message.delivery", "messaging-gateway"),
     event("adapter.state", "messaging-gateway"),
     event("session.presence", "messaging-gateway"),
+    event("subagent.event", "tui"),
     event("request.cancel", WA),
     event("request.resolved", WA),
     event("automation.state", "session-automation"),

@@ -20,6 +20,7 @@ pub mod events;
 mod exit;
 pub mod fast;
 mod finish;
+pub mod growth;
 mod guardrails;
 mod guards;
 mod hints;
@@ -30,6 +31,7 @@ mod journal;
 pub mod lease;
 pub mod model;
 mod observe;
+mod performed;
 mod recall;
 mod recovery;
 pub mod repair;
@@ -100,6 +102,12 @@ pub struct PromptSetup {
     pub pass_session_id: bool,
     /// The caller's system message.
     pub caller_system: Option<String>,
+    /// The harness layer, read once at session start (an explicit
+    /// `--now` activation replaces it at the next rebuild).
+    pub harness: Option<String>,
+    /// The lessons layer of the session's domain, frozen at its start
+    /// (spec: experience-library, Lessons offered to later sessions).
+    pub lessons: Option<String>,
     /// Skills index text (skills subsystem).
     pub skills_index: Option<String>,
     /// Pinned skills text (skills subsystem).
@@ -124,6 +132,8 @@ impl PromptSetup {
             no_context_files: false,
             pass_session_id: false,
             caller_system: None,
+            harness: None,
+            lessons: None,
             skills_index: None,
             pinned_skills: None,
             memory: None,
@@ -180,6 +190,9 @@ pub struct AgentSetup {
     /// The auxiliary `compression` route; `None` compacts with the
     /// deterministic fallback summary.
     pub summarizer: Option<Arc<dyn Summarizer>>,
+    /// Grows a local model's window before compressing; `None` always
+    /// compresses.
+    pub growth: Option<Arc<dyn growth::WindowGrowth>>,
     /// Re-reads the prompt inputs that live on disk (memory snapshot,
     /// skills index, plugin sections) before every prompt rebuild, so a
     /// compaction or `--now` rebuild sees the current state.
@@ -353,6 +366,7 @@ impl AgentSetup {
             redactor: Redactor::default(),
             max_iterations: None,
             summarizer: None,
+            growth: None,
             refresh_prompt: None,
             memory: None,
             turn_hooks: None,
@@ -462,6 +476,8 @@ pub struct Agent {
     /// The running turn's route is a request's own (an API request's
     /// model): the session's frozen prompt is kept as it is.
     keep_prompt: std::sync::atomic::AtomicBool,
+    /// A system block sent with every model call and never stored.
+    ephemeral_system: Mutex<Option<String>>,
 }
 
 impl Agent {
@@ -490,6 +506,7 @@ impl Agent {
             fast: Mutex::new(None),
             fast_noticed: std::sync::atomic::AtomicBool::new(false),
             keep_prompt: std::sync::atomic::AtomicBool::new(false),
+            ephemeral_system: Mutex::new(None),
         })
     }
 
@@ -605,6 +622,24 @@ impl Agent {
     pub fn keep_prompt(&self, keep: bool) {
         self.keep_prompt
             .store(keep, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Sends `text` as a last system block with every model call of the
+    /// session (an eval batch's `--ephemeral-system-prompt`): it rides on
+    /// the wire only and is never part of the frozen prompt, the stored
+    /// history or the trajectory.
+    pub fn set_ephemeral_system(&self, text: Option<String>) {
+        *self
+            .ephemeral_system
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = text;
+    }
+
+    fn ephemeral_system(&self) -> Option<String> {
+        self.ephemeral_system
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn keeps_prompt(&self) -> bool {

@@ -117,6 +117,7 @@ impl Tui<'_> {
     pub(super) fn setup_card(&self) -> Option<Card> {
         let strings = self.strings();
         self.setup.as_ref().map(|targets| Card {
+            diff: Vec::new(),
             title: t!(strings, "tui.setup_question", 0 = targets.len()),
             body: String::new(),
             hint: t!(strings, "tui.yes_no"),

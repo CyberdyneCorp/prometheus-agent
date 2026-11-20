@@ -22,7 +22,7 @@ use crate::slash::{Registry, Source, Surface};
 const MAX_PATHS: usize = 50;
 
 /// The slash surface a client kind runs commands on.
-fn surface(client: ClientKind) -> Surface {
+pub(super) fn surface(client: ClientKind) -> Surface {
     match client {
         ClientKind::Cli | ClientKind::Eval => Surface::Cli,
         ClientKind::Tui => Surface::Tui,

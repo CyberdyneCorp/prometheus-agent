@@ -6,7 +6,7 @@
 
 use std::sync::Arc;
 
-use pmt_plugins::hooks::{HookSource as _, Payload};
+use pmt_plugins::hooks::Payload;
 use pmt_plugins::host::CallInfo;
 use pmt_plugins::host::hook_world::Reply;
 use pmt_tools::dispatch::SeamFuture;
@@ -33,7 +33,7 @@ struct TerminalHook {
 impl TransformOutput for TerminalHook {
     fn transform(&self, output: String) -> SeamFuture<'_, String> {
         Box::pin(async move {
-            let hooks = self.plugins.handle.hooks();
+            let hooks = self.plugins.hooks();
             if !hooks.handles(HOOK) {
                 return output;
             }

@@ -25,6 +25,9 @@ const BUSY_PAUSE: Duration = Duration::from_millis(100);
 ///
 /// `backup.io` when either database cannot be opened or copied.
 pub fn copy(src: &Path, dst: &Path) -> Result<(), Error> {
+    if encrypted(src) {
+        return copy_files(src, dst);
+    }
     let source = Connection::open_with_flags(
         src,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -45,6 +48,9 @@ pub fn copy(src: &Path, dst: &Path) -> Result<(), Error> {
 ///
 /// `backup.io`.
 pub fn restore(src: &Path, dst: &Path) -> Result<(), Error> {
+    if encrypted(src) {
+        return copy_files(src, dst);
+    }
     let source = Connection::open_with_flags(src, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| db_error(src, &e))?;
     let mut target = Connection::open(dst).map_err(|e| db_error(dst, &e))?;
@@ -52,6 +58,37 @@ pub fn restore(src: &Path, dst: &Path) -> Result<(), Error> {
     drop(target);
     crate::fsutil::private_file(dst);
     Ok(())
+}
+
+/// Whether `path` holds an encrypted store (`storage.encryption`): its
+/// pages cannot be read without the profile's key, which a backup does
+/// not have.
+fn encrypted(path: &Path) -> bool {
+    use std::io::Read as _;
+    let mut head = [0u8; 16];
+    std::fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut head))
+        .is_ok_and(|()| &head != b"SQLite format 3\0")
+}
+
+/// An encrypted store copied as sealed bytes: the database and its
+/// write-ahead log (consistent when no session writes meanwhile).
+fn copy_files(src: &Path, dst: &Path) -> Result<(), Error> {
+    for suffix in ["", "-wal"] {
+        let from = with_suffix(src, suffix);
+        let to = with_suffix(dst, suffix);
+        if suffix.is_empty() || from.is_file() {
+            std::fs::copy(&from, &to).map_err(|e| Error::io(&codes::BACKUP_IO, &from, &e))?;
+            crate::fsutil::private_file(&to);
+        }
+    }
+    Ok(())
+}
+
+fn with_suffix(path: &Path, suffix: &str) -> std::path::PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(suffix);
+    std::path::PathBuf::from(name)
 }
 
 fn transfer(source: &Connection, target: &mut Connection) -> rusqlite::Result<()> {

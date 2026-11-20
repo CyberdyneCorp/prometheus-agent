@@ -30,13 +30,28 @@ use crate::resolve::{self, Resolver, Route, Target, Trace};
 ///
 /// `provider.unknown` naming the entry.
 pub fn chain(config: &Config, registry: &ProviderRegistry) -> Result<Vec<Target>, Error> {
+    targets(&config.fallback.chain, "fallback.chain", registry)
+}
+
+/// The targets of route `entries` (`[[fallback.chain]]`,
+/// `[[routing.candidates]]`, named `key` in errors), in order, duplicates
+/// collapsed onto the first.
+///
+/// # Errors
+///
+/// `provider.unknown` naming the entry.
+pub fn targets(
+    entries: &[pmt_config::schema::FallbackEntry],
+    key: &str,
+    registry: &ProviderRegistry,
+) -> Result<Vec<Target>, Error> {
     let mut seen = HashSet::new();
     let mut targets = Vec::new();
-    for (i, entry) in config.fallback.chain.iter().enumerate() {
+    for (i, entry) in entries.iter().enumerate() {
         let provider = registry.lookup(&entry.provider).map_err(|err| {
             Error::new(
                 err.code(),
-                format!("fallback.chain[{i}].provider: {}", err.message()),
+                format!("{key}[{i}].provider: {}", err.message()),
             )
         })?;
         let base_url = entry
@@ -70,6 +85,12 @@ pub trait RouteHealth: Send + Sync {
     /// Health score in [0, 1].
     fn score(&self, _provider: &str, _model: &str) -> f64 {
         1.0
+    }
+
+    /// Median time to first token over the health window (`None`: never
+    /// measured); what latency-aware routing ranks by.
+    fn ttft_p50_ms(&self, _provider: &str, _model: &str) -> Option<u64> {
+        None
     }
 }
 

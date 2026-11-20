@@ -405,7 +405,7 @@ impl Store {
         visibility: Visibility,
         each: impl FnMut(Message) -> Result<(), Error>,
     ) -> Result<(), Error> {
-        let blob_dir = self.location().blobs().to_path_buf();
+        let blob_dir = self.blobs();
         self.read(|conn| messages::for_each(conn, &blob_dir, id, visibility, each))
     }
 }

@@ -89,12 +89,14 @@ pub struct Answer {
     pub reply: Reply,
 }
 
+#[derive(Clone)]
 struct Callback {
     /// The plugin id, or the external callback's label.
     plugin: String,
     target: Target,
 }
 
+#[derive(Clone)]
 enum Target {
     Wasm {
         instance: Arc<Instance>,
@@ -159,6 +161,33 @@ impl Hooks {
                 target: Target::External(callback),
             });
         Ok(())
+    }
+
+    /// A copy of this set without the external callbacks whose label
+    /// `dropped` matches, for one session that replaces some of them
+    /// (a harness-evolution rollout swaps the active harness's hooks for
+    /// its candidate's). Suspensions and warnings start afresh.
+    #[must_use]
+    pub fn without_external(&self, dropped: impl Fn(&str) -> bool) -> Self {
+        let callbacks = self
+            .callbacks
+            .iter()
+            .map(|(hook, callbacks)| {
+                let kept = callbacks
+                    .iter()
+                    .filter(|c| !(matches!(c.target, Target::External(_)) && dropped(&c.plugin)))
+                    .cloned()
+                    .collect();
+                (hook.clone(), kept)
+            })
+            .collect();
+        Self {
+            settings: self.settings.clone(),
+            callbacks,
+            suspended: Mutex::new(HashMap::new()),
+            warned: Mutex::new(HashSet::new()),
+            held: self.held.clone(),
+        }
     }
 
     /// Every `(plugin, hook)` registered for a hook this build never

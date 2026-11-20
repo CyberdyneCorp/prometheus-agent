@@ -85,7 +85,10 @@ impl Wiring {
             root: session.root_session_id,
             depth: child.map_or(0, |c| c.depth),
             registry: Arc::clone(registry),
-            agents: Definitions::load(&[scope.dir().join("agents")]),
+            agents: harness_agents(
+                Definitions::load(&[scope.dir().join("agents")]),
+                factory.harness_dir(session.id),
+            ),
             router: super::routers::select(
                 &config.router,
                 &factory.plugins,
@@ -281,5 +284,16 @@ impl EventSink for LateEvents {
             Some(sink) => sink.emit(emit),
             None => Box::pin(async { Ok(()) }),
         }
+    }
+}
+
+/// `agents` plus the subagent definitions of the session's harness tree.
+fn harness_agents(agents: Definitions, harness: Option<std::path::PathBuf>) -> Definitions {
+    match harness
+        .map(|dir| dir.join("agents"))
+        .filter(|dir| dir.is_dir())
+    {
+        Some(dir) => agents.with_harness(&dir),
+        None => agents,
     }
 }

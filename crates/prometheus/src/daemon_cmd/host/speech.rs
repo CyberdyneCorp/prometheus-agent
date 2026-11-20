@@ -32,7 +32,7 @@ pub(super) fn of_profile(scope: &ProfileScope) -> Option<Arc<dyn Speech>> {
         .map(|store| crate::chat::session::media::profile_usage_sink(Arc::new(store)));
     let cwd = scope.dir().join("workspace");
     setup.plugins = crate::chat::session::media_plugins::PluginMedia::shared(
-        &crate::plugins_host::for_session(scope, &cwd).current(),
+        &crate::plugins_host::for_session(scope, &cwd),
         pmt_plugins::host::CallInfo {
             session_id: None,
             surface: "gateway".to_owned(),

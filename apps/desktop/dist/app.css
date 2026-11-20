@@ -177,6 +177,8 @@ details.model-picker .model-list { position: absolute; bottom: 100%; z-index: 5;
 .model-group ul { list-style: none; margin: 0; padding: 0; }
 .reasoning-pill { margin-left: 6px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); font-size: 0.85em; }
 footer.status-bar { display: flex; gap: 12px; align-items: center; font-size: 0.85em; border-top: 1px solid var(--line); padding: 4px 0; position: relative; }
+footer.status-bar .local-resources { display: inline-flex; gap: 12px; }
+footer.status-bar .local-resources[hidden] { display: none; }
 .context { position: relative; }
 .context-popover { position: absolute; bottom: 100%; left: 0; z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; min-width: 240px; }
 .context-popover ul { list-style: none; margin: 0; padding: 0; }
@@ -248,3 +250,27 @@ body { font-family: var(--ui-font,) system-ui, -apple-system, "Segoe UI", sans-s
 :root[data-ui-mode="simple"] .pane[data-pane="review"],
 :root[data-ui-mode="simple"] .transcript .tool,
 :root[data-ui-mode="simple"] pre.inline-diff { display: none; }
+
+/* The bot screen pane: the remote display scaled to the pane's width. */
+.screen-pane .screen-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.screen-pane .screen-status {
+  flex: 1 1 12rem;
+  margin: 0;
+}
+.screen-pane .screen-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #000;
+  outline-offset: 2px;
+}
+.screen-pane[data-control="agent"] .screen-canvas,
+.screen-pane[data-control="other"] .screen-canvas {
+  cursor: not-allowed;
+}

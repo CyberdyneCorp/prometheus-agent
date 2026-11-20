@@ -1,0 +1,11 @@
+manifest_version = 1
+id = "inject"
+version = "1.0.0"
+kind = "python"
+description = "Credential injection test plugin: calls an HTTPS API with its granted token"
+license = "MIT"
+requires_prometheus = ">=0.1"
+
+[capabilities]
+network = ["localhost", "127.0.0.1"]
+secrets = ["SERVICE_TOKEN"]

@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod browser;
 pub mod code;
+mod codex_gates;
 pub mod credentials;
 pub mod cron;
 pub mod delegation;
@@ -22,6 +23,7 @@ pub mod env;
 mod guardian;
 pub mod judge;
 pub mod kanban;
+mod lessons;
 mod lifecycle;
 mod lsp;
 mod mcp;
@@ -37,6 +39,7 @@ mod plugins;
 pub mod processes;
 pub mod progress;
 pub mod python;
+pub mod rollout;
 pub mod serve;
 pub mod side;
 pub mod skills;
@@ -68,7 +71,7 @@ use pmt_skills::review::Nudge;
 use pmt_skills::secrets::SecretPrompt;
 use pmt_skills::session::{SessionSetup, SkillSessions, SkillsSession};
 use pmt_store::{NewSession, Source, Store};
-use pmt_tools::approval::{ApprovalRequest, CommandGate, Decision};
+use pmt_tools::approval::{ApprovalRequest, CommandGate, Reply};
 use pmt_tools::environments::tool_output_reads;
 use pmt_tools::{Selection, ToolRegistry};
 
@@ -114,6 +117,20 @@ pub struct Options {
     pub kanban: Option<kanban::KanbanRun>,
     /// A replay's recorded tool results and prompts.
     pub replay: Option<Arc<crate::replay::Hooks>>,
+    /// A harness-evolution rollout (spec: harness-evolution).
+    pub rollout: Option<Arc<rollout::RolloutRun>>,
+    /// A harness tree that is not a version, run in place of the
+    /// session's version (an eval task of `evolve review --eval` on the
+    /// proposed harness).
+    pub harness_tree: Option<PathBuf>,
+    /// A store the session's built-in memory uses instead of the
+    /// profile's (an eval task's scratch memory).
+    pub memory_store: Option<Arc<Store>>,
+    /// `--domain`, or the scheduled job's or kanban task's `domain`: the
+    /// session's experience-library domain (spec: experience-library).
+    pub domain: Option<String>,
+    /// A daemon session a person attends: it loads `plugins dev` plugins.
+    pub dev_plugins: bool,
 }
 
 /// The clients of one daemon session: they see its events and answer its
@@ -175,6 +192,8 @@ pub struct Factory {
     current: SharedScope,
     /// The profile's live plugin set.
     plugins: crate::plugins_host::ProfilePlugins,
+    /// That set per harness tree a session runs on ([`Factory::plugins_for`]).
+    harness_plugins: Mutex<std::collections::HashMap<PathBuf, crate::plugins_host::ProfilePlugins>>,
     /// The configuration the plugin set is loaded from: `scope` until a
     /// one-process `/plugins reload` re-reads `config.toml`.
     plugin_scope: SharedScope,
@@ -210,7 +229,7 @@ pub struct Live {
     /// The approval gate.
     pub gate: Arc<CommandGate>,
     /// Approval prompts to show (interactive only).
-    pub approvals: Option<Surface<ApprovalRequest, Decision>>,
+    pub approvals: Option<Surface<ApprovalRequest, Reply>>,
     /// Clarify questions to show (interactive only).
     pub clarify: Option<ClarifyPrompts>,
     /// The session's skills.
@@ -299,7 +318,15 @@ impl Factory {
         // (spec: execution-environments, Typed backend registry and
         // selection; memory, Context engine selection).
         let user_home = launch.user_home().map(PathBuf::as_path);
-        let plugins = crate::plugins_host::for_session(&scope, &options.cwd);
+        let plugins = rollout::plugins(
+            &scope,
+            crate::plugins_host::for_attended(&scope, &options.cwd, options.dev_plugins),
+            options
+                .rollout
+                .as_ref()
+                .map(|r| r.harness.as_path())
+                .or(options.harness_tree.as_deref()),
+        );
         crate::context_engine::select(&config.context, &plugins)?;
         backend::registry(&plugins, &pmt_plugins::host::CallInfo::default())
             .select(&config.terminal.backend)?;
@@ -315,6 +342,7 @@ impl Factory {
             plugin_scope.clone(),
             Arc::clone(&store),
             options.cwd.clone(),
+            options.dev_plugins,
             plugins::PluginTools::build(
                 &scope,
                 &plugins,
@@ -349,6 +377,7 @@ impl Factory {
             desktop: None,
             daemon: None,
             plugins,
+            harness_plugins: Mutex::default(),
             reread: None,
             route_flags: delegation::OwnedFlags::of(flags),
             delegation_inbox: None,
@@ -587,9 +616,9 @@ impl Factory {
         clients: Option<Clients>,
         child: Option<&delegation::ChildSpec>,
     ) -> Result<Live, Error> {
-        let model = self.model_for(target, child).await?;
+        let (target, routed, model) = Box::pin(self.routed_model(id, target, child)).await?;
         self.maintain();
-        let session = self.session_row(id, target)?;
+        let session = self.session_row(id, &target)?;
         let conversation = self.models.bind_conversation(&session);
         let discovery = self.discover_mcp_for(id, child.is_some()).await;
         let (registry, selection, session_surface) = self.selection_for(&session, child)?;
@@ -600,11 +629,11 @@ impl Factory {
         let attached = SkillSessions::process().attach(&id.to_string(), Arc::clone(&skills));
         let capabilities = self.capabilities_for(id, &skills, child)?;
         let current = SharedScope::new(self.scope_for(child));
-        let vision = self.vision_plan(id, target, child.is_some()).await;
+        let vision = self.vision_plan(id, &target, child.is_some()).await;
         let at = place::At::open(&self.options.cwd, clients.as_ref());
         let at = place::At { vision, ..at };
         let environment =
-            self.environment(&session, target, &capabilities, &current, &skills, &at)?;
+            self.environment(&session, &target, &capabilities, &current, &skills, &at)?;
         media::prime(&id.to_string()).await;
         let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
@@ -618,7 +647,7 @@ impl Factory {
         let (reach, aux) = ((&selection, &capabilities), (&summarizer, &model));
         let (agent_tools, clarify) =
             self.agent_tools(id, &memory, aux, reach, cards, &delegation)?;
-        let gate = self.gate_for(id, child, &model, &environment)?;
+        let gate = self.gate_for(id, child, (&model, &registry), &environment)?;
         skills::bind_shell(&inline_shell, environment.commands.as_ref(), &gate.gate);
         let ports = (&gate.gate, &agent_tools, &model);
         let built = (registry, selection, &capabilities);
@@ -627,12 +656,12 @@ impl Factory {
         delegation.parent_is(&tool_port, &capabilities, &gate.gate);
         let recording = self.recording(&session, child, clients.is_none())?;
         let mut notices = Vec::new();
-        let (prompt, plugin_sections) = self
+        let (prompt, plugin_sections, lessons) = self
             .prompt_for(id, (&skills, &memory), &mut notices, child)
             .await;
         let (agent, progress, mcp) = self.agent_of(opening::AgentInputs {
             id,
-            target,
+            target: &target,
             session: &session,
             child,
             clients: clients.as_ref().map(|c| Arc::clone(&c.events)),
@@ -668,7 +697,7 @@ impl Factory {
             skill_nudge: Mutex::new(Nudge::new(&self.scope.config().skills, session.source)),
             tool_state,
             session_surface,
-            plugins: self.plugins.clone(),
+            plugins: self.plugins_for(id),
             surface: session.source.as_str(),
             plugin_sections,
             notices,
@@ -683,7 +712,7 @@ impl Factory {
             _skills: attached,
             _conversation: conversation,
         };
-        live.emit_start(&session, target).await;
+        Box::pin(live.emit_start(&session, &target, &lessons, routed)).await;
         Ok(live)
     }
 
@@ -699,7 +728,7 @@ impl Factory {
     fn observe_model(&self, model: &SwitchableModel, id: SessionId, notices: progress::Notices) {
         model.watch_credentials(borrowed_watch(notices));
         model.observe_api(api_hooks::ApiHooks::new(
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
         ));
     }
@@ -717,7 +746,7 @@ impl Factory {
         }
         Arc::new(lifecycle::LifecycleHooks::new(
             events,
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
         ))
     }
@@ -745,9 +774,14 @@ impl Factory {
                 &self.scope.config().tools.disabled_toolsets,
                 selection,
             )?,
-            None => match &self.options.kanban {
-                Some(run) => run.selection(&registry, selection),
-                None => self.with_browser_opt_ins(session.id, selection),
+            None => match (&self.options.kanban, &self.options.rollout) {
+                (Some(run), _) => run.selection(&registry, selection),
+                (None, Some(run)) => run.selection(
+                    &registry,
+                    &self.scope.config().tools.disabled_toolsets,
+                    selection,
+                )?,
+                (None, None) => self.with_browser_opt_ins(session.id, selection),
             },
         };
         Ok((registry, selection, surface))
@@ -759,7 +793,7 @@ impl Factory {
         setup.redactor = self.redactor.clone();
         setup.interactive = self.options.interactive;
         setup.unattended = !self.options.interactive;
-        setup.turn_hooks = Some(self.plugins.turn_hooks(self.plugin_call(id)));
+        setup.turn_hooks = Some(self.plugins_for(id).turn_hooks(self.plugin_call(id)));
     }
 
     /// What plugin host calls of session `id` report as their session:
@@ -785,7 +819,7 @@ impl Factory {
         let terminal = environment.and_then(|e| e.terminal.as_ref());
         let guardian = model.map(|model| self.models.guardian(model, id));
         let hooks = crate::plugins_host::approvals::PluginApprovals::new(
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
             self.redactor.clone(),
             &self.scope.config().plugins,
@@ -862,12 +896,7 @@ impl Factory {
         child: Option<&delegation::ChildSpec>,
         no_clients: bool,
     ) -> Result<trace::Recording, Error> {
-        let trajectory = pmt_obs::trajectory::writer::open_for_session(
-            &self.scope,
-            &session.id.to_string(),
-            &session.root_session_id.to_string(),
-        )?
-        .map(Arc::new);
+        let trajectory = trace::trajectory(&self.scope, session)?;
         let parent = self.options.cron.as_ref().and_then(|run| run.trace);
         let trace = trace::open(&self.scope_for(child), session, parent);
         let stream = self.stream_for(session, no_clients && child.is_none());
@@ -927,7 +956,7 @@ impl Factory {
                 .or_else(|| self.notices.clone()),
             providers: self.plugins.current().providers.clone(),
             plugin_call: self.plugin_call(id),
-            plugins: &self.plugins,
+            plugins: &self.plugins_for(id),
             egress: &self.egress(id, &denials, at.hosts.clone()),
             denials: &denials,
             vault_prompt: self.vault_prompt(clients),
@@ -988,15 +1017,19 @@ impl Factory {
             (Clarifier::unattended(), None)
         };
         let clarifier = clarifier.with_observer(crate::plugins_host::approvals::input_observer(
-            self.plugins.clone(),
+            self.plugins_for(id),
             self.plugin_call(id),
         ));
         let tools = AgentTools::new(
             Arc::clone(&self.store),
             id,
             clarifier,
-            SessionSearch::new(Arc::clone(&self.store), id)
-                .with_summarizer(Arc::clone(summarizer) as _),
+            crate::sessions_cmd::semantic::tool(
+                SessionSearch::new(Arc::clone(&self.store), id)
+                    .with_summarizer(Arc::clone(summarizer) as _),
+                (&self.scope, &self.store),
+                self.launch.user_home().map(std::path::PathBuf::as_path),
+            ),
         )?
         .with_memory(Arc::clone(memory) as _)
         .with_connections(crate::connectors_host::manager(&self.scope, cards))
@@ -1124,7 +1157,11 @@ impl Factory {
         setup.user_home = self.launch.user_home().cloned();
         setup.view = skills::view(selection);
         setup.plugins = self.plugins.current().skill_dirs();
-        let (plugins, call) = (self.plugins.clone(), self.plugin_call(id));
+        setup.harness = self
+            .harness_dir(id)
+            .map(|dir| dir.join("skills"))
+            .filter(|dir| dir.is_dir());
+        let (plugins, call) = (self.plugins_for(id), self.plugin_call(id));
         let announce = announce.clone();
         setup.lifecycle = Some(Arc::new(move |skill: &str, action: &str| {
             announce.skill(skill, action);
@@ -1135,6 +1172,11 @@ impl Factory {
             );
         }));
         setup.inline_shell = Some(Arc::clone(inline_shell) as _);
+        setup.eval_gate = Some(crate::skills_cmd::evals::ProfileGate::shared(
+            &self.scope,
+            &self.store,
+            &self.launch,
+        ));
         setup.secret_prompt = clients
             .map(|c| Arc::clone(&c.secrets))
             .or_else(|| self.secret_prompt.clone());
@@ -1163,7 +1205,7 @@ impl Factory {
             agent: Arc::clone(agent),
             redactor: self.redactor.clone(),
             hooks: self
-                .plugins
+                .plugins_for(id)
                 .tool_hooks_with_guidance(self.plugin_call(id), &self.scope.config().plugins),
             model: Arc::clone(model),
         };
@@ -1203,11 +1245,12 @@ impl Factory {
     ) {
         setup.summarizer = Some(summarizer as _);
         setup.memory = Some(Arc::clone(memory) as _);
-        setup.refresh_prompt = Some(refresher(
-            skills,
-            memory,
-            sections,
-            self.options.ignore_rules,
+        let base = refresher(skills, memory, sections, self.options.ignore_rules);
+        setup.refresh_prompt = Some(crate::harness_host::now::refresher(
+            base,
+            self.scope.clone(),
+            Arc::clone(&self.store),
+            setup.session,
         ));
     }
 
@@ -1301,7 +1344,7 @@ impl Factory {
             redactor: &self.redactor,
             context_window: None,
             hooks: self
-                .plugins
+                .plugins_for(child)
                 .tool_hooks_with_guidance(self.plugin_call(child), &self.scope.config().plugins),
             route: &route,
         })

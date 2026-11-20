@@ -15,6 +15,7 @@ mod fix;
 mod groups;
 mod isolation;
 mod media;
+mod observability;
 mod system;
 mod wsl;
 
@@ -228,7 +229,7 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
             checks.extend(groups::mcp(inputs));
             checks
         }
-        "observability" => groups::observability(inputs),
+        "observability" => observability::observability(inputs),
         "network" => system::network(inputs).await,
         "providers" => groups::providers(inputs).await?,
         "security" => system::security(inputs),

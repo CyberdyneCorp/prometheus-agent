@@ -14,7 +14,7 @@ use std::fmt;
 
 use pmt_config::schema::{ToolsConfig, ToolsetsConfig};
 
-use crate::agent_level_desktop::{DESKTOP_UI, ONBOARDING, PROJECT};
+use crate::agent_level_desktop::{CATALOG, DESKTOP_UI, ONBOARDING, PROJECT};
 use crate::registry::ToolRegistry;
 use crate::toolset;
 
@@ -33,6 +33,8 @@ pub enum SessionSurface {
     /// The desktop's first-run onboarding chat: a desktop session that
     /// also gets the `onboarding` toolset (configured as `desktop`).
     Onboarding,
+    /// The web dashboard's chat.
+    Dashboard,
     /// A scheduled job.
     Cron,
     /// The OpenAI-compatible API server.
@@ -60,6 +62,7 @@ impl SessionSurface {
             "cli" => Self::Cli,
             "tui" => Self::Tui,
             "desktop" => Self::Desktop,
+            "dashboard" => Self::Dashboard,
             "cron" => Self::Cron,
             "api" => Self::Api,
             "a2a" => Self::A2a,
@@ -76,6 +79,7 @@ impl SessionSurface {
             Self::Cli => "cli".to_owned(),
             Self::Tui => "tui".to_owned(),
             Self::Desktop | Self::Onboarding => "desktop".to_owned(),
+            Self::Dashboard => "dashboard".to_owned(),
             Self::Cron => "cron".to_owned(),
             Self::Api => "api".to_owned(),
             Self::A2a => "a2a".to_owned(),
@@ -96,9 +100,12 @@ impl SessionSurface {
     #[must_use]
     pub fn default_toolset(&self, registry: &ToolRegistry) -> String {
         match self {
-            Self::Cli | Self::Tui | Self::Desktop | Self::Onboarding | Self::Cron => {
-                "core".to_owned()
-            }
+            Self::Cli
+            | Self::Tui
+            | Self::Desktop
+            | Self::Onboarding
+            | Self::Dashboard
+            | Self::Cron => "core".to_owned(),
             Self::Api | Self::A2a => "api_server".to_owned(),
             Self::Acp => "acp".to_owned(),
             Self::AcpUnattended => "acp_unattended".to_owned(),
@@ -137,27 +144,24 @@ impl SessionSurface {
                 out.push(name.clone());
             }
         }
-        // GUI surfaces switch projects by default (spec: projects, Project
-        // tool for GUI sessions).
-        let gui = matches!(self, Self::Tui | Self::Desktop | Self::Onboarding);
-        if gui
-            && tools.enabled_toolsets.iter().any(|n| n == "core")
-            && !out.iter().any(|n| n == PROJECT)
-        {
-            out.push(PROJECT.to_owned());
-        }
         out
     }
 
     /// The surface-gated toolsets this surface folds in (spec:
-    /// desktop-app, Desktop UI toolset contract; First-run onboarding
-    /// chat): `desktop_ui` for desktop sessions, plus `onboarding` for the
-    /// onboarding chat. No other surface ever gets them.
+    /// tool-system, Surface toolsets come from the session; desktop-app,
+    /// Desktop UI toolset contract; First-run onboarding chat; projects,
+    /// Project tool for GUI sessions): `desktop_ui`, `project` and
+    /// `catalog` for desktop sessions (plus `onboarding` for the
+    /// onboarding chat), `project` and `catalog` for the TUI, `project`
+    /// for the dashboard. Only the session's own surface decides: no
+    /// other surface, environment variable or process ever gets them.
     #[must_use]
     pub fn folded_toolsets(&self) -> &'static [&'static str] {
         match self {
-            Self::Desktop => &[DESKTOP_UI],
-            Self::Onboarding => &[DESKTOP_UI, ONBOARDING],
+            Self::Desktop => &[DESKTOP_UI, PROJECT, CATALOG],
+            Self::Onboarding => &[DESKTOP_UI, ONBOARDING, PROJECT, CATALOG],
+            Self::Tui => &[PROJECT, CATALOG],
+            Self::Dashboard => &[PROJECT],
             _ => &[],
         }
     }

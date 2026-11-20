@@ -22,6 +22,7 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     router
         .register::<c::ConfigPatch, _, _>(catalog, config_patch)?
         .register::<c::ConfigReload, _, _>(catalog, config_reload)?
+        .register::<c::I18nLanguages, _, _>(catalog, languages)?
         .register::<c::BotChatEnsure, _, _>(catalog, bot_chat_ensure)?
         .register::<c::BotRosterList, _, _>(catalog, bot_roster)?
         .register::<c::BotRelayDrain, _, _>(catalog, relay_drain)?
@@ -51,6 +52,16 @@ async fn config_reload(
     call.server
         .host()
         .config_reload(&profile)
+        .await
+        .map_err(|e| rpc(&e))
+}
+
+/// `i18n.languages` (spec: i18n, Language switchers show endonyms).
+async fn languages(call: Call, params: c::ProfileParams) -> Result<c::Languages, RpcError> {
+    let profile = profile_for(&call, Some(&params.profile))?;
+    call.server
+        .host()
+        .languages(&profile)
         .await
         .map_err(|e| rpc(&e))
 }

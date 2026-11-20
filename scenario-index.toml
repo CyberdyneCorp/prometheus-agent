@@ -85,10 +85,34 @@ capabilities = [
     "desktop-app",
     "kanban",
     "distribution-and-update",
+    "memory",
+    "experience-library",
+    "harness-evolution",
     "messaging-gateway",
     "plugin-system",
     "projects",
+    "replay-and-evaluation",
+    "session-storage",
+    "skills",
+    "tui",
     "web-dashboard",
+    "model-providers",
+    "tool-system",
+    "execution-environments",
+    "security-boundaries",
+    "subagent-delegation",
+    "scheduled-jobs",
+    "hermes-migration",
+    "platform-adapters",
+    "configuration-and-profiles",
+    "api-server",
+    "local-models",
+    "web-and-media-tools",
+    "git-worktrees",
+    "connectors",
+    "i18n",
+    "observability",
+    "workspace-architecture",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -131,7 +155,7 @@ capabilities = [
 "Slow prompt fails the gate" = ["xtask/src/perf/budget.rs::a_slow_or_heavy_chat_breaches_its_budgets"]
 
 [workspace-architecture."Memory and size budgets"]
-"Binary too large" = ["xtask/src/perf/budget.rs::an_82_mib_binary_fails_the_size_budget"]
+"Binary too large" = ["xtask/src/perf/budget.rs::a_92_mib_binary_fails_the_size_budget"]
 "Small binary growth from a near-empty baseline" = ["xtask/src/perf/budget.rs::binary_growth_under_the_size_floor_is_not_a_regression"]
 
 [workspace-architecture."Repository health gates"]
@@ -2615,6 +2639,16 @@ capabilities = [
 [execution-environments."First-party cloud browser providers"]
 "Key present, not configured" = ["crates/pmt-tools/tests/browser/cloud.rs::a_provider_key_alone_never_selects_the_provider"]
 
+[execution-environments."Lightpanda engine"]
+"Shadowed by a cloud provider" = ["crates/prometheus/tests/browser_engine.rs::doctor_and_status_report_the_engine_shadowed_by_a_cloud_provider", "crates/pmt-tools/tests/browser/lightpanda.rs::the_model_is_told_what_lightpanda_cannot_do_unless_it_is_shadowed"]
+
+[execution-environments."Bot screen"]
+"Low memory" = ["crates/prometheus/src/screen/memory.rs::nine_hundred_mb_free_is_refused_naming_the_default_threshold", "crates/prometheus/tests/bot_screen.rs::too_little_free_memory_refuses_naming_the_threshold"]
+"Sandbox that cannot host a display" = ["crates/prometheus/src/screen/placement.rs::a_backend_without_a_display_is_refused_and_points_to_gateway", "crates/prometheus/tests/bot_screen.rs::a_backend_that_cannot_host_a_display_points_to_gateway_placement"]
+
+[execution-environments."Bot screen takeover lease"]
+"Agent during takeover" = { tests = ["crates/pmt-tools/tests/browser/takeover.rs::browser_tools_wait_while_a_person_holds_the_screen", "crates/pmt-tools/tests/browser/takeover.rs::a_result_from_before_the_takeover_is_voided", "crates/pmt-config/src/screen_lease.rs::the_agent_waits_while_a_person_holds_the_screen", "crates/prometheus/tests/bot_screen.rs::a_viewer_streams_the_screen_and_takes_it_over", "crates/prometheus/tests/desktop_screen.rs::desktop_screen_pane_streams_and_takes_over"], note = "the browser tools are fenced by the shared lease guard (pmt_config::screen_lease); computer_use (task 76.1) does not exist yet and must call the same guard" }
+
 [execution-environments."Private URLs route to a local browser"]
 "Localhost under Browserbase" = ["crates/pmt-tools/tests/browser/cloud.rs::a_private_url_opens_in_a_local_sidecar_and_never_reaches_the_provider"]
 
@@ -4119,6 +4153,12 @@ capabilities = [
 "Delegation cost rolls up" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
 "Budget warning" = ["crates/prometheus/tests/dashboard_e2e.rs::the_usage_page_rolls_children_up_and_shows_the_budget"]
 
+[web-dashboard."Harness-evolution view (upgrade)"]
+"Adopting a harness" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::a_harness_adopted_from_the_dashboard_applies_to_new_sessions_only"], note = "a chat session is live in the daemon when Adopt is clicked on the finished run's proposal (web/e2e/evolution.spec.ts): the page says it applies from the next session, the live session keeps answering, its frozen prompt lacks the adopted harness text and a session started afterwards has it" }
+
+[web-dashboard."Experience library view (upgrade)"]
+"Removing a bad lesson" = { tests = ["crates/prometheus/tests/dashboard_e2e.rs::a_lesson_deleted_from_the_dashboard_is_not_offered_to_later_sessions"], note = "a session in the domain gets the lessons layer before; web/e2e/experience.spec.ts disables the lesson (a session started then does not raise its times-shown count) and deletes it; a session started afterwards in the domain has no lessons layer" }
+
 [web-dashboard."Logs page is redacted and bounded"]
 "Path traversal" = ["crates/prometheus/tests/dashboard_api.rs::logs_are_named_from_the_registry_bounded_and_redacted", "crates/prometheus/tests/dashboard_e2e.rs::the_logs_page_tails_registry_logs"]
 
@@ -4574,8 +4614,8 @@ capabilities = [
 "Budget exhausted" = { tests = ["crates/prometheus/tests/kanban_cli.rs::an_exhausted_budget_blocks_the_task"], note = "the mock provider prices nothing, so the test exhausts a budget_tokens limit; budget_usd takes the same path (budgets.root_usd of the worker's lineage, delegated children included)" }
 
 [kanban."Eval and harness-evolution tasks (upgrade)"]
-"Eval task on replayed provider" = { deferred = "71.1 prometheus eval run (provider_mode live|replay for the assignee profile): today an eval task runs the bundled smoke suite on the mock provider and ignores provider_mode (kanban_cli.rs::an_eval_task_runs_the_smoke_suite_offline_and_attaches_its_report covers only that)" }
-"Evolve task requires approval" = { deferred = "69 harness evolution engine (prometheus evolve, harness adoption from the next session): today an evolve task is validated and its completion always lands in review, but the worker blocks it with kind capability because no evolution engine exists in this build" }
+"Eval task on replayed provider" = { tests = ["crates/prometheus/tests/kanban_tasks.rs::a_replayed_eval_task_makes_no_live_request_and_attaches_the_report"], note = "the assignee's model route is a live fake chat-completions server that counts requests: the replayed eval task (eval run + judge through the eval engine on the mock provider, cache read-only) completes with the smoke summary and eval-report.txt attached while the server saw zero requests; a_live_eval_task_runs_its_suite_on_the_profile_route shows live mode reaching the route" }
+"Evolve task requires approval" = { tests = ["crates/prometheus/tests/kanban_tasks.rs::an_evolve_task_waits_in_review_until_a_person_approves_it", "crates/pmt-kanban/tests/flow.rs::only_a_person_approves_an_evolve_task"], note = "budget_k = 2 job on the mock provider under adoption policy auto: the task lands in review with harness.diff attached, the proposal stays pending and the active version is unchanged until kanban approve adopts it; a reviewer profile's approval is refused" }
 
 [kanban."Event log and run history"]
 "Audit a refusal" = ["crates/prometheus/tests/kanban_cli.rs::a_refused_completion_is_in_the_log"]
@@ -4637,3 +4677,416 @@ capabilities = [
 
 [projects."Kanban board binding"]
 "Branch convention" = ["crates/prometheus/tests/kanban_upgrades.rs::a_bound_projects_board_is_selected_and_names_the_branch"]
+
+# M3 group 69 (harness evolution 69.1-69.3): crates/pmt-config/src/harness
+# holds the tree and its on-disk versions, crates/pmt-evolve the surface,
+# validation, budget, task capture and triggers; crates/prometheus/tests
+# harness_cli.rs and evolve_cli.rs run the CLI, sessions and `/evolve` on
+# the mock provider.
+[harness-evolution."Opt-in per profile"]
+"Disabled profile" = ["crates/prometheus/tests/evolve_cli.rs::a_disabled_profile_exits_78_and_writes_nothing", "crates/pmt-evolve/tests/jobs.rs::a_disabled_profile_refuses_with_78_and_creates_nothing", "crates/pmt-evolve/src/gate.rs::a_profile_without_the_section_is_refused_with_exit_78"]
+"Harness inspection without evolution" = ["crates/prometheus/tests/harness_cli.rs::the_log_works_on_a_profile_without_evolution"]
+
+[harness-evolution."Harness tree and on-disk layout"]
+"Fresh profile" = ["crates/prometheus/tests/harness_cli.rs::a_fresh_profile_activates_the_builtin_version_with_empty_always_on_files", "crates/pmt-config/src/harness/versions.rs::a_fresh_profile_gets_the_builtin_version_once"]
+"Traversal rejected" = ["crates/pmt-evolve/tests/validate.rs::a_traversal_key_fails_naming_the_path", "crates/prometheus/tests/harness_cli.rs::an_invalid_apply_writes_no_version"]
+
+[harness-evolution."Editable surface and component numbering"]
+"Off-surface write" = ["crates/pmt-evolve/tests/validate.rs::off_surface_paths_are_listed_and_reject_the_tree", "crates/pmt-evolve/src/harness/surface.rs::each_component_number_names_exactly_one_component"]
+
+[harness-evolution."Harness size caps"]
+"Always-on cap exceeded" = ["crates/pmt-evolve/tests/validate.rs::always_on_text_one_char_over_the_cap_fails"]
+
+[harness-evolution."Harness validation"]
+"Missing referenced script" = ["crates/prometheus/tests/harness_cli.rs::validate_accepts_the_valid_fixture_and_lists_every_error_of_the_others", "crates/pmt-evolve/tests/validate.rs::a_referenced_script_must_exist"]
+"Skill without trigger line is repaired" = ["crates/pmt-evolve/tests/validate.rs::an_unnamed_skill_gets_its_trigger_line", "crates/prometheus/tests/harness_cli.rs::a_harness_subagent_and_skill_are_registered_for_the_session"]
+"Unknown hook event" = ["crates/pmt-evolve/tests/validate.rs::an_unknown_hook_event_is_refused"]
+
+[harness-evolution."Harness loaded once per session"]
+"Adoption mid-session" = { tests = ["crates/prometheus/tests/harness_cli.rs::an_open_session_keeps_its_harness_until_an_explicit_now", "crates/prometheus/tests/harness_hooks.rs::a_session_runs_the_hooks_of_its_recorded_version", "crates/prometheus/tests/harness_cli.rs::a_now_activation_rebuilds_an_open_session_at_its_next_turn"], note = "the new version is activated with `harness apply`; `evolve adopt [--now]` writes and activates the adopted version through the same activation and `--now` path (crates/prometheus/src/evolve_cmd/proposals.rs)" }
+"Harness layer placement" = ["crates/pmt-agent/tests/turn/prompt.rs::the_harness_opens_the_profile_tier_after_the_identity"]
+
+[harness-evolution."Harness execution confinement"]
+"Hook asking for network" = ["crates/pmt-evolve/tests/validate.rs::a_hooks_file_cannot_ask_for_network"]
+
+[harness-evolution."Harness history and diff"]
+"Diff summary" = ["crates/pmt-evolve/src/harness/diff.rs::a_new_skill_and_a_grown_guardrails_file_summarize_as_the_spec_shows", "crates/prometheus/tests/harness_cli.rs::diff_prints_the_unified_diff_and_the_summary"]
+
+[harness-evolution."Rollback and manual edits"]
+"Rollback creates a new version" = ["crates/prometheus/tests/harness_cli.rs::a_rollback_writes_a_new_version_with_the_old_tree"]
+
+[harness-evolution."On-demand and scheduled triggers"]
+"Slash command does not block" = { tests = ["crates/prometheus/tests/evolve_cli.rs::slash_evolve_answers_with_the_job_id_without_a_model_call"], note = "unix: driven through a pseudo-terminal" }
+"Cron-triggered evolution" = ["crates/prometheus/tests/evolve_cli.rs::a_scheduled_evolve_job_queues_an_evolution_job_with_its_id", "crates/pmt-evolve/tests/jobs.rs::a_cron_trigger_records_its_trigger_and_job_id"]
+
+[harness-evolution."Automatic triggers after failed or long tasks"]
+"Daily cap" = ["crates/pmt-evolve/tests/jobs.rs::the_fourth_automatic_job_of_a_day_is_not_queued", "crates/pmt-evolve/src/job/auto.rs::a_fourth_qualifying_session_is_stopped_by_the_daily_cap", "crates/prometheus/tests/evolve_auto.rs::the_daily_cap_stops_a_second_job_and_its_notice"]
+"Queued job is announced" = ["crates/prometheus/tests/evolve_auto.rs::a_session_that_fails_after_a_tool_call_queues_a_job_and_says_so", "crates/prometheus/tests/evolve_auto.rs::the_line_interface_says_so_as_the_user_leaves", "crates/prometheus/tests/evolve_auto.rs::a_chat_is_told_when_new_ends_a_session_that_queues_a_job"]
+"Evaluation tasks never evolve the harness" = ["crates/prometheus/tests/evolve_auto.rs::a_failing_eval_task_queues_no_job", "crates/pmt-evolve/src/job/auto.rs::failed_and_long_sessions_qualify_and_others_do_not"]
+
+[harness-evolution."Evolution task capture"]
+"Git workspace" = ["crates/pmt-evolve/tests/jobs.rs::a_git_session_freezes_head_and_a_patch_that_reproduces_it"]
+
+[harness-evolution."Modes, budget and labels"]
+"Parallel k=2 labels" = ["crates/pmt-evolve/src/job/budget.rs::parallel_k2_has_the_spec_stage_and_composition_labels"]
+"Invalid k" = ["crates/prometheus/tests/evolve_cli.rs::k_nine_is_a_usage_error", "crates/pmt-evolve/src/job/budget.rs::k_outside_one_to_eight_is_a_usage_error"]
+
+[harness-evolution."Leak globs and verdict tripwire"]
+"Eval verdict in source" = ["crates/pmt-evolve/tests/jobs.rs::an_eval_verdict_file_is_left_out_of_the_task", "crates/pmt-evolve/tests/engine/stages.rs::a_verdict_in_a_rollout_deliverable_trips_every_stage_that_would_see_it", "crates/pmt-evolve/tests/engine/stages.rs::a_planted_rubric_file_aborts_the_job", "crates/pmt-evolve/src/engine/tripwire.rs::verdict_markers_and_leak_globs_are_caught_with_context"]
+"Dot-file glob honoured" = ["crates/pmt-evolve/tests/jobs.rs::a_dot_file_leak_glob_is_excluded_from_the_snapshot"]
+"Leak file tracked at HEAD" = ["crates/pmt-evolve/tests/jobs.rs::a_tracked_leak_file_is_excluded_from_a_git_snapshot"]
+
+[harness-evolution."Parallel mode"]
+"Parallel ledger" = ["crates/pmt-evolve/tests/engine/modes.rs::parallel_k3_ledgers_twelve_rollouts_and_nine_sessions", "crates/pmt-evolve/src/job/budget.rs::every_mode_spends_four_k_rollouts_and_three_k_sessions"]
+
+[harness-evolution."Sequential mode"]
+"Second round sees history" = ["crates/pmt-evolve/tests/engine/modes.rs::sequential_round_two_sees_the_first_checkpoint", "crates/pmt-evolve/src/engine/prompts.rs::sequential_prompts_never_call_candidates_independent"]
+
+[harness-evolution."Isolated rollouts"]
+"Approval inside a rollout" = { tests = ["crates/prometheus/tests/evolve_engine.rs::rollouts_deny_approvals_and_work_on_a_copy_without_leak_files"], note = "the rollout's `rm -rf ~/important` is denied (BLOCKED in its trajectory) with stdin closed, so no prompt can reach a surface; the rollout still ends ok" }
+"Workspace untouched" = ["crates/prometheus/tests/evolve_engine.rs::rollouts_deny_approvals_and_work_on_a_copy_without_leak_files", "crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness", "crates/pmt-evolve/src/job/workspace.rs::a_copied_task_diffs_its_changes_and_finds_new_images"]
+"Candidate hooks in a rollout" = ["crates/prometheus/tests/evolve_engine.rs::a_rollout_runs_its_candidates_hooks_instead_of_the_active_ones"]
+"Rollout egress limited to the configured providers" = ["crates/prometheus/src/evolve_host/rollout.rs::rollout_egress_lists_configured_providers_at_their_effective_endpoints"]
+
+[harness-evolution."Side-effect dry-run in rollouts (upgrade)"]
+"Message not sent" = ["crates/prometheus/tests/evolve_engine.rs::a_rollout_records_send_message_instead_of_sending_it", "crates/prometheus/src/chat/session/rollout.rs::external_calls_are_recorded_and_confined_ones_run"]
+
+[harness-evolution."Improver sessions"]
+"Improver cannot run candidate scripts" = { tests = ["crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness"], note = "every improver session's first call runs python3 on context/pool/inv1/harness/scripts/fix.py through `terminal`, which its toolset does not have: the call fails as an unknown tool" }
+
+[harness-evolution."Stage acceptance, retry and fallback"]
+"Invalid then valid" = ["crates/pmt-evolve/tests/engine/stages.rs::a_rejected_script_is_retried_from_the_models_own_edit", "crates/pmt-evolve/tests/engine/stages.rs::two_rejections_fall_back_to_the_active_harness_and_are_still_rolled_out", "crates/pmt-evolve/tests/engine/stages.rs::transport_failures_are_retried_once_then_fall_back_without_a_stage_retry"]
+
+[harness-evolution."Evidence context"]
+"Pool diff baseline" = ["crates/pmt-evolve/tests/engine/modes.rs::a_composition_sees_each_candidate_diffed_against_the_active_harness", "crates/pmt-evolve/src/engine/evidence.rs::long_observations_are_truncated_and_others_kept"]
+
+[harness-evolution."Answer-free prompts"]
+"Propose prompt blocks" = ["crates/pmt-evolve/src/engine/prompts.rs::a_domain_mission_carries_both_blocks_and_the_layout", "crates/pmt-evolve/tests/engine/stages.rs::every_mission_carries_the_blocks_and_the_cache_records_the_prompt_version"]
+
+[harness-evolution."Budget ledger and spend cap"]
+"Cap reached mid-job" = ["crates/pmt-evolve/tests/engine/budget.rs::reaching_the_cap_during_agg1_stops_the_job_without_a_proposal", "crates/pmt-evolve/src/engine/gate.rs::reaching_the_cap_stops_new_work_and_cancels_the_token", "crates/pmt-evolve/src/engine/ledger.rs::the_identity_holds_only_for_four_k_rollouts_and_three_k_sessions"]
+
+[harness-evolution."Concurrency limits"]
+"Out-of-order completion" = ["crates/pmt-evolve/tests/engine/modes.rs::ledger_order_is_serial_even_when_dom1_finishes_first", "crates/pmt-evolve/tests/engine/budget.rs::sessions_stay_within_the_process_bound_and_one_domain_runs_one_job"]
+
+[harness-evolution."Blind anonymised selection"]
+"Stable ids" = ["crates/pmt-evolve/src/engine/select.rs::the_same_job_k_and_mode_give_every_label_the_same_id", "crates/pmt-evolve/src/engine/select.rs::ids_are_bijective_base_26", "crates/pmt-evolve/tests/engine/selection.rs::the_selector_sees_only_anonymous_candidates_and_its_choice_maps_back"]
+"Unknown id" = ["crates/pmt-evolve/tests/engine/selection.rs::an_unknown_choice_fails_the_selection_and_makes_no_proposal"]
+
+[harness-evolution."User-driven selection (upgrade)"]
+"User picks a candidate" = ["crates/pmt-evolve/tests/engine/selection.rs::a_user_selection_pauses_then_continues_with_the_chosen_id", "crates/prometheus/tests/evolve_engine.rs::a_user_selection_pauses_the_job_until_choose"]
+
+[harness-evolution."Proposals and adoption policy"]
+"Auto policy with a new script" = ["crates/pmt-evolve/tests/engine/proposals.rs::auto_policy_waits_for_approval_when_a_script_is_added", "crates/pmt-evolve/src/proposal.rs::scripts_hooks_and_subagents_need_approval_and_prose_does_not"]
+"Review before adoption" = ["crates/prometheus/tests/evolve_engine.rs::a_foreground_job_proposes_a_reviewable_adoptable_harness"]
+"Both modes under the auto policy" = ["crates/pmt-evolve/tests/engine/proposals.rs::auto_policy_with_both_modes_adopts_one_and_supersedes_the_other", "crates/pmt-evolve/tests/engine/proposals.rs::a_refused_automatic_adoption_leaves_the_proposal_pending_and_the_job_ok"]
+
+[harness-evolution."Stale proposal protection"]
+"Manual edit after job" = ["crates/pmt-evolve/tests/engine/proposals.rs::a_stale_proposal_is_refused_unless_it_rebases_cleanly", "crates/prometheus/tests/evolve_engine.rs::adopting_a_stale_proposal_exits_65_and_keeps_the_active_version"]
+
+[harness-evolution."Job lifecycle, events and RPC"]
+"Cancel" = ["crates/pmt-evolve/tests/engine/budget.rs::cancel_during_inv2_stops_new_model_calls_and_records_spend", "crates/pmt-evolve/tests/engine/resume.rs::expired_jobs_are_pruned_but_an_adopted_jobs_summary_stays", "crates/prometheus/tests/evolve_engine.rs::a_queued_job_can_be_cancelled", "crates/prometheus/tests/evolve_rpc.rs::a_job_started_over_rpc_runs_in_the_daemon_and_its_proposal_is_adopted"]
+
+[harness-evolution."Resume and content-addressed session cache"]
+"Resume after crash" = ["crates/pmt-evolve/tests/engine/resume.rs::a_job_stopped_after_agg1_resumes_with_only_agg2_and_the_selection", "crates/prometheus/tests/evolve_rpc.rs::the_daemon_resumes_an_interrupted_job_at_start"]
+"Edited cached harness" = ["crates/pmt-evolve/tests/engine/resume.rs::an_edited_cached_workspace_reruns_the_stage_and_its_dependents"]
+
+[harness-evolution."Offline demo pipeline (upgrade)"]
+"Demo resume" = ["crates/prometheus/tests/evolve_demo.rs::evolve_demo_reports_no_model_calls_when_run_again"]
+
+[harness-evolution."Human-only evaluation of proposals (upgrade)"]
+"Review runs confined" = ["crates/prometheus/tests/evolve_engine.rs::a_review_eval_runs_only_under_the_rollout_confinement"]
+"Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only", "crates/prometheus/tests/evolve_engine.rs::a_user_suite_compares_the_base_and_the_proposed_harness"], note = "a_user_suite_compares_the_base_and_the_proposed_harness runs a user suite through the eval engine on the base version and on the proposal materialised as a temporary harness (scores 0 vs 100, no version written); the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
+
+[experience-library."Library layout"]
+"Entry created" = ["crates/pmt-evolve/tests/engine/library.rs::an_adopted_proposal_with_a_lesson_becomes_an_entry", "crates/prometheus/tests/experience_cli.rs::a_mock_job_distils_a_lesson_that_adoption_files_in_its_domain"]
+
+[experience-library."Domain names"]
+"Slash in domain" = ["crates/pmt-evolve/src/experience/domain.rs::slashes_spaces_and_case_are_normalised"]
+
+[experience-library."Domain resolution for a job"]
+"Classifier limited to known domains" = ["crates/pmt-evolve/src/experience/domain.rs::the_classifier_never_invents_a_domain", "crates/pmt-evolve/tests/engine/library.rs::a_job_without_a_domain_is_filed_under_a_known_domain_or_general", "crates/prometheus/tests/experience_cli.rs::a_task_without_a_domain_is_classified_among_existing_domains"]
+
+[experience-library."Reflection workspace"]
+"Failed selection skips reflection" = ["crates/pmt-evolve/tests/engine/library.rs::a_failed_selection_runs_no_reflection"]
+
+[experience-library."Experience distillation"]
+"All edits confounded" = ["crates/pmt-evolve/tests/engine/library.rs::a_no_entry_reflection_adopts_without_an_entry", "crates/pmt-evolve/src/experience/lesson.rs::no_entry_and_incomplete_lessons_yield_none"]
+
+[experience-library."Entries are written on adoption only"]
+"Rejected proposal" = ["crates/pmt-evolve/tests/engine/library.rs::a_rejected_proposal_writes_no_entry", "crates/prometheus/tests/experience_cli.rs::a_rejected_proposal_writes_no_entry"]
+
+[experience-library."Entry contents"]
+"Inventory wording" = ["crates/pmt-evolve/src/experience/entry.rs::a_guardrails_only_change_reads_always_on_edits_only"]
+
+[experience-library."Answer-free and secret-free entries"]
+"Verdict in lesson" = ["crates/pmt-evolve/tests/engine/library.rs::a_verdict_in_the_lesson_rejects_the_entry_but_not_the_adoption"]
+
+[experience-library."Index"]
+"Empty domain" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry"]
+
+[experience-library."Exposure to proposers"]
+"Index without entries" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry", "crates/pmt-evolve/tests/engine/library.rs::a_job_started_before_an_adoption_never_sees_it_even_on_resume"]
+
+[experience-library."Stream order within a domain"]
+"Second job sees the first" = ["crates/pmt-evolve/tests/engine/library.rs::the_second_job_of_a_domain_sees_exactly_the_first_jobs_entry", "crates/pmt-evolve/tests/engine/budget.rs::sessions_stay_within_the_process_bound_and_one_domain_runs_one_job", "crates/prometheus/src/evolve_host/mod.rs::one_job_per_domain_starts_in_queue_order"]
+
+[experience-library."Lessons offered to later sessions (upgrade)"]
+"Low-confidence lesson excluded" = ["crates/pmt-evolve/tests/experience.rs::only_high_and_medium_lessons_reach_sessions_and_each_showing_counts", "crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+"Lesson adopted mid-session" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+
+[experience-library."Rollback demotes entries (upgrade)"]
+"Rolling back an adopted harness" = ["crates/pmt-evolve/tests/experience.rs::a_rollback_demotes_entries_of_versions_the_harness_left", "crates/prometheus/tests/experience_cli.rs::entries_are_pinned_forgotten_demoted_and_restored_from_the_cli"]
+
+[experience-library."Library CLI"]
+"Forget an entry" = ["crates/prometheus/tests/experience_cli.rs::entries_are_pinned_forgotten_demoted_and_restored_from_the_cli", "crates/prometheus/tests/evolve_rpc.rs::a_job_started_over_rpc_runs_in_the_daemon_and_its_proposal_is_adopted"]
+
+[experience-library."Retention cap"]
+"Eviction" = ["crates/pmt-evolve/tests/experience.rs::the_oldest_unpinned_entry_is_evicted_and_a_pinned_one_kept"]
+
+[experience-library."Export and import between profiles (upgrade)"]
+"Archive with a secret" = ["crates/pmt-evolve/tests/experience.rs::an_archive_with_a_secret_is_refused_whole", "crates/prometheus/tests/experience_cli.rs::archives_move_between_profiles_and_a_secret_refuses_the_whole_archive"]
+
+[experience-library."Restore on resume and repair"]
+"Deleted library directory" = ["crates/pmt-evolve/tests/experience.rs::a_deleted_domain_is_rebuilt_from_adopted_proposals", "crates/prometheus/tests/experience_cli.rs::a_deleted_domain_is_rebuilt_without_a_model"]
+
+[experience-library."Library events"]
+"Injection observable" = ["crates/prometheus/tests/experience_cli.rs::sessions_of_a_domain_start_with_its_good_lessons_frozen"]
+
+# M3 replay-and-evaluation (task group 71).
+
+[replay-and-evaluation."Offline self-improvement demo"]
+"Resume makes no new work" = ["crates/prometheus/tests/evolve_demo.rs::the_evolve_demo_selects_the_fixed_totals_and_resumes_without_work"]
+
+[replay-and-evaluation."Eval suite format"]
+"Missing prompt" = ["crates/prometheus/tests/eval_cli.rs::a_task_without_a_prompt_fails_validation_naming_its_file"]
+"Override that loosens isolation" = ["crates/prometheus/tests/eval_cli.rs::a_run_toml_that_loosens_isolation_is_refused", "crates/pmt-eval/src/overrides.rs::isolation_settings_are_refused", "crates/prometheus/src/eval_cmd/exec.rs::isolation_is_applied_again_after_a_tasks_overrides"]
+"Task capability beyond the profile" = ["crates/prometheus/tests/eval_cli.rs::a_task_asking_for_more_than_the_profile_grants_does_not_run"]
+
+[replay-and-evaluation."Eval run"]
+"Budget stops a run" = { tests = ["crates/prometheus/tests/eval_cli.rs::the_budget_refuses_the_third_task_and_skips_the_rest"], note = "a fake chat-completions provider reports usage and a probe run fixes the price so each task costs 0.20 USD; the run budget is the eval root's budgets.root_usd, refused on the call's worst case" }
+
+[replay-and-evaluation."Eval runs are resumable"]
+"Tampered deliverable" = ["crates/prometheus/tests/eval_cli.rs::a_resumed_run_reruns_only_tasks_whose_deliverables_changed"]
+
+[replay-and-evaluation."Answer-free boundary"]
+"Agent searches for the answer" = ["crates/prometheus/tests/eval_cli.rs::a_task_reaching_for_grader_material_is_contaminated", "crates/pmt-eval/src/boundary.rs::grader_paths_and_leak_globs_are_attempts"]
+
+[replay-and-evaluation."Post-hoc judging"]
+"Judge failure is not a zero" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/prometheus/tests/eval_judge.rs::script_graders_score_deliverables_and_unexecuted_tasks_stay_ungraded"]
+
+[replay-and-evaluation."Re-judging and judge identity"]
+"Flaky re-judge keeps the grade" = ["crates/prometheus/tests/eval_judge.rs::judge_failures_are_ungraded_and_a_changed_judge_is_refused", "crates/pmt-eval/src/judge.rs::a_failed_re_judge_keeps_the_graded_row"]
+
+[replay-and-evaluation."Eval reports and comparison (upgrade)"]
+"Harness comparison" = ["crates/prometheus/tests/eval_judge.rs::a_report_of_two_runs_shows_the_score_delta_with_its_interval", "crates/pmt-eval/src/report.rs::a_comparison_within_noise_says_so", "crates/pmt-eval/src/report.rs::repeats_give_pass_at_k_and_task_spread"]
+
+[replay-and-evaluation."Benchmark adapter protocol"]
+"Score not callable during execution" = ["crates/prometheus/tests/eval_bench.rs::an_adapter_is_never_asked_to_score_during_execution", "crates/prometheus/tests/eval_bench_plugins.rs::a_wasm_plugin_adapter_is_never_asked_to_score_during_execution", "crates/prometheus/tests/eval_bench_plugins.rs::a_python_plugin_adapter_is_never_asked_to_score_during_execution"]
+
+[replay-and-evaluation."Session-to-task capture (upgrade)"]
+"Bug report becomes a regression task" = ["crates/prometheus/tests/eval_bench.rs::a_mis_summed_session_becomes_a_regression_task"]
+
+[replay-and-evaluation."Batch prompt datasets"]
+"Resume after interruption" = { tests = ["crates/prometheus/tests/eval_batch.rs::a_resumed_batch_runs_only_the_remaining_prompts"], note = "the first invocation stops after part of the dataset (--max-samples), leaving the run as an interrupted one does: completed tasks with their markers" }
+"Ephemeral prompt not recorded" = ["crates/prometheus/tests/eval_batch.rs::the_ephemeral_system_prompt_reaches_the_model_and_no_file"]
+
+[replay-and-evaluation."Batch statistics and quality filtering"]
+"Zero-filled tool stats" = ["crates/prometheus/tests/eval_batch.rs::statistics_zero_fill_tools_and_filtered_tasks_leave_exports", "crates/pmt-eval/src/batch.rs::unused_tools_of_the_enabled_toolsets_are_zero_filled"]
+
+[replay-and-evaluation."Toolset distributions"]
+"Reproducible sampling" = ["crates/pmt-eval/src/distribution.rs::the_same_seed_samples_the_same_toolsets", "crates/prometheus/tests/eval_batch.rs::a_seeded_distribution_samples_the_same_toolsets_in_every_run"]
+"Compound key rolls once" = ["crates/pmt-eval/src/distribution.rs::a_compound_key_enables_all_or_none_of_its_members"]
+
+[replay-and-evaluation."Trajectory compressor"]
+"Head and tail preserved" = ["crates/pmt-eval/src/compress.rs::head_and_tail_survive_and_one_summary_replaces_the_middle", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
+"Short trajectory untouched" = ["crates/pmt-eval/src/compress.rs::a_short_record_is_copied_without_a_model_call", "crates/prometheus/tests/eval_batch.rs::trajectory_compress_summarises_only_long_records"]
+
+# Group 72.1: memory decay, expiry, dormancy and consolidation proposals.
+[memory."Decay, expiry and dormancy (upgrade)"]
+"Expired event leaves the prompt" = ["crates/pmt-memory/tests/memory/decay.rs::an_expired_event_leaves_the_prompt_and_stays_listed_as_dormant", "crates/prometheus/tests/memory_consolidate.rs::an_expired_entry_is_listed_as_dormant_and_wakes_on_request"]
+
+[memory."Consolidation proposals (upgrade)"]
+"Contradiction is proposed, not silently applied" = ["crates/prometheus/tests/memory_consolidate.rs::a_contradiction_is_proposed_as_a_diff_and_applied_only_on_request", "crates/pmt-memory/tests/memory/decay.rs::a_contradiction_is_previewed_then_committed_as_consolidation_and_pins_survive"]
+
+# Group 72.4: skill evals and eval-gated skill edits.
+[skills."Skill evals (upgrade)"]
+"Skill eval detects a non-triggering description" = ["crates/prometheus/tests/skills_evals.rs::a_non_triggering_description_fails_with_skill_not_loaded_on_the_live_model"]
+
+[skills."Eval-gated skill edits (upgrade)"]
+"Regressing agent edit is rolled back" = ["crates/prometheus/tests/skills_evals.rs::a_regressing_background_review_patch_is_rolled_back", "crates/pmt-skills/tests/skills/eval_gate.rs::a_regressing_background_review_edit_is_rejected_and_the_skill_kept"]
+
+# Group 72.2: hybrid semantic + full-text search and encryption at rest.
+[session-storage."Hybrid semantic and full-text search (upgrade)"]
+"Paraphrase found" = ["crates/prometheus/tests/sessions_hybrid.rs::a_paraphrase_is_found_in_hybrid_mode", "crates/pmt-store/tests/store/search_hybrid.rs::fusion_ranks_agreement_first_and_finds_paraphrases"]
+"Embedding model offline" = ["crates/prometheus/tests/sessions_hybrid.rs::an_offline_embedding_model_degrades_to_full_text", "crates/pmt-store/tests/store/search_hybrid.rs::without_vectors_a_hybrid_search_is_full_text_marked_degraded"]
+
+[session-storage."Encryption at rest option (upgrade)"]
+"Store unreadable without key" = ["crates/pmt-store/tests/store/encryption.rs::an_encrypted_store_is_unreadable_as_sqlite_and_keeps_its_rows", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
+"Missing key fails closed" = ["crates/pmt-store/tests/store/encryption.rs::a_missing_key_fails_closed_without_creating_a_store", "crates/prometheus/tests/sessions_encryption.rs::an_encrypted_store_is_unreadable_and_a_missing_key_fails_closed"]
+
+# Group 72.3: TUI split panes, inline diff review, timeline scrubber and
+# shared live sessions.
+[tui."Split panes for subagents and tool output (upgrade)"]
+"Watching a delegated child" = ["crates/prometheus/tests/tui_live.rs::f2_lists_both_children_and_streams_the_selected_ones_transcript_to_its_end", "crates/pmt-tui/tests/upgrades.rs::the_subagents_pane_sits_beside_the_transcript_from_120_columns", "crates/pmt-tui/tests/upgrades.rs::the_subagents_pane_sits_below_the_transcript_from_80_to_119_columns", "crates/pmt-tui/tests/upgrades.rs::under_80_columns_the_tool_pane_is_a_tab_with_the_full_output", "crates/pmt-delegation/src/live.rs::a_late_subscriber_gets_the_backlog_then_live_items_until_the_end"]
+"Foreign subagent subscription" = ["crates/pmt-gateway/tests/live_sessions.rs::subscribing_to_a_child_of_an_unattached_session_is_session_not_attached"]
+
+[tui."Inline diff review for file edits (upgrade)"]
+"Partial acceptance" = ["crates/prometheus/tests/tui_live.rs::accepting_hunks_1_and_3_writes_only_those_and_the_model_hears_hunk_2_was_rejected", "crates/pmt-tui/tests/upgrades.rs::an_edit_approval_shows_numbered_hunks_and_the_review_choices", "crates/pmt-tools/src/approval/review.rs::only_the_accepted_hunks_are_applied", "crates/pmt-tools/src/approval/review.rs::a_reviewed_patch_writes_the_merged_file_and_names_the_rejected_hunk"]
+
+[tui."Session timeline scrubber (upgrade)"]
+"Rewind keeps the original" = ["crates/prometheus/tests/tui_live.rs::rewinding_a_12_turn_session_to_turn_7_shows_a_7_turn_branch_and_keeps_the_original", "crates/prometheus/tests/tui_live.rs::a_rewind_offers_the_turns_checkpoint_and_yes_restores_its_files", "crates/pmt-tui/tests/upgrades.rs::the_timeline_lists_turns_over_a_read_only_preview_of_the_highlighted_one"]
+
+[tui."Shared live sessions (upgrade)"]
+"Observer cannot submit" = ["crates/prometheus/tests/tui_live.rs::a_tui_observing_a_session_shows_it_read_only_and_cannot_submit", "crates/pmt-gateway/tests/live_sessions.rs::an_observer_is_listed_as_one_and_cannot_submit"]
+"Desktop joins a TUI session" = ["crates/prometheus/tests/tui_live.rs::a_desktop_joining_the_tuis_session_is_shown_and_its_input_labelled", "crates/pmt-gateway/tests/live_sessions.rs::a_desktop_joining_a_tui_session_is_listed_to_both_and_gets_the_same_turn_seqs", "crates/pmt-tui/tests/upgrades.rs::a_shared_session_names_the_other_clients_in_the_status_line"]
+
+# Group 72.5: cost- and latency-aware routing policy.
+[model-providers."Cost and latency aware routing policy (upgrade)"]
+"Cheapest healthy capable candidate wins" = ["crates/pmt-providers/tests/providers/route_policy.rs::cheapest_healthy_capable_candidate_wins", "crates/pmt-providers/src/routing.rs::each_policy_picks_its_candidate"]
+"Route is stable within a session" = ["crates/prometheus/tests/routing_policy.rs::a_route_chosen_at_start_stays_for_every_turn"]
+
+# Group 72.6: surface toolsets from the session and taint-aware escalation.
+[tool-system."Surface toolsets come from the session"]
+"CLI session cannot obtain desktop tools" = ["crates/pmt-tools/tests/toolsets.rs::a_cli_session_cannot_obtain_desktop_tools"]
+
+[tool-system."Taint-aware escalation (upgrade)"]
+"Exfiltration attempt after browsing" = ["crates/pmt-tools/tests/taint.rs::an_exfiltration_attempt_after_browsing_asks_before_the_request_is_sent", "crates/pmt-tools/tests/taint.rs::a_target_approved_for_the_session_and_untainted_turns_do_not_ask", "crates/pmt-tools/src/approval/taint.rs::outbound_targets_are_hosts_commands_or_query_carrying_reads"]
+
+# Group 72.7: terminal workspace checkpoints.
+[execution-environments."Terminal workspace checkpoints (upgrade)"]
+"Undo a sed edit" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_sed_edit_made_by_a_terminal_command", "crates/pmt-tools/src/snapshots/workspace.rs::a_command_s_edits_creations_and_removals_are_found_with_their_prior_content", "crates/pmt-tools/src/snapshots/workspace.rs::an_oversized_workspace_is_skipped_with_one_notice"]
+"Undo a background command's late write" = ["crates/prometheus/tests/chat_undo.rs::undo_reverts_a_file_a_background_command_wrote_after_it_finished", "crates/pmt-tools/src/snapshots/workspace.rs::a_background_command_s_later_changes_are_found", "crates/pmt-tools/src/snapshots/workspace.rs::a_background_exit_during_a_command_is_recorded_when_that_command_ends"]
+
+# Group 72.8: credential injection at the egress proxy and opt-in external
+# secret sources.
+[security-boundaries."Credential injection at the egress proxy (upgrade)"]
+"Placeholder sent elsewhere" = ["crates/pmt-net/tests/egress_inject.rs::the_placeholder_becomes_the_token_only_for_the_mapped_host", "crates/prometheus/tests/egress_injection.rs::injected_credentials_never_reach_the_child_process", "crates/pmt-net/src/egress/inject.rs::a_placeholder_split_across_reads_is_never_forwarded", "crates/prometheus/tests/python_bridge.rs::a_sidecar_holds_only_the_placeholder_of_an_injected_secret"]
+"MCP server holds the placeholder" = ["crates/prometheus/tests/egress_injection.rs::a_stdio_mcp_server_holds_only_the_placeholder", "crates/pmt-net/src/egress/mod.rs::an_unreachable_address_falls_through_to_the_next"]
+
+[security-boundaries."External secret sources are opt-in"]
+"Default install" = ["crates/prometheus/tests/egress_injection.rs::a_default_install_never_runs_the_external_source_clis", "crates/pmt-config/src/secrets/external_tests.rs::a_default_config_builds_no_source"]
+
+# Group 72.11: fan-in join modes for delegation.
+[subagent-delegation."Fan-in join modes (upgrade)"]
+"First success cancels the rest" = ["crates/pmt-delegation/tests/host.rs::first_success_returns_the_winner_and_stops_the_others", "crates/prometheus/tests/delegation_join.rs::first_success_returns_the_quick_child_and_interrupts_the_slow_ones", "crates/pmt-delegation/tests/host.rs::a_schema_invalid_answer_is_no_success"]
+"Quorum not reachable" = ["crates/pmt-delegation/tests/host.rs::an_unreachable_quorum_returns_every_result_unsatisfied"]
+
+# Group 72.9: natural-language schedule translation and the managed
+# scheduler contract.
+[scheduled-jobs."Natural-language schedule translation (upgrade)"]
+"Biweekly phrase becomes an RRULE" = ["crates/prometheus/tests/cron_translate.rs::a_biweekly_phrase_is_echoed_as_an_rrule_and_saved_only_once_confirmed", "crates/prometheus/tests/cron_translate.rs::the_tool_translates_once_and_saves_what_it_echoed", "crates/pmt-cron/src/schedule/translate.rs::a_biweekly_phrase_becomes_an_rrule_with_three_instants", "crates/pmt-cron/src/schedule/rrule/tests.rs::the_first_business_day_of_each_month"]
+"Translation is never trusted silently" = ["crates/prometheus/tests/cron_translate.rs::an_answer_that_is_neither_grammar_nor_a_valid_rrule_saves_nothing", "crates/pmt-cron/src/schedule/translate.rs::grammar_answers_are_accepted_and_anything_else_refused", "crates/pmt-cron/src/schedule/rrule/tests.rs::unsupported_or_invalid_rules_are_refused_with_a_reason"]
+
+[scheduled-jobs."Managed scheduler contract"]
+"Duplicate external fire" = ["crates/prometheus/tests/cron_managed.rs::managed_fires_are_verified_deduplicated_and_held_by_the_emergency_stop", "crates/pmt-cron/tests/managed.rs::a_fire_delivered_twice_claims_its_occurrence_once"]
+"Symmetric-key token rejected" = ["crates/prometheus/tests/cron_managed.rs::managed_fires_are_verified_deduplicated_and_held_by_the_emergency_stop", "crates/pmt-net/src/jwt.rs::symmetric_and_unsigned_tokens_never_verify", "crates/pmt-cron/src/managed.rs::fire_token_claims_are_checked_within_the_leeway"]
+
+# Group 72.12: migration rollback and the plugin development loop.
+[hermes-migration."Migration rollback (upgrade)"]
+"Rollback keeps a continued session" = ["crates/prometheus/tests/migrate_rollback.rs::rollback_removes_the_imported_sessions_but_keeps_a_continued_one", "crates/prometheus/tests/migrate_rollback.rs::rollback_restores_the_pre_migration_home", "crates/prometheus/tests/migrate_rollback.rs::a_rolled_back_rerun_takes_back_the_messages_it_appended", "crates/prometheus/tests/migrate_rollback.rs::an_earlier_run_waits_for_the_later_one"]
+
+[plugin-system."Plugin development loop (upgrade)"]
+"Edit-reload cycle" = ["crates/prometheus/tests/plugins_dev.rs::a_changed_hook_handles_the_next_event_without_a_restart", "crates/prometheus/tests/plugins_dev.rs::the_tui_session_in_the_daemon_follows_the_rebuild_and_the_gateway_never_loads_it", "crates/pmt-plugins/src/discovery/tests.rs::a_dev_directory_is_enabled_as_dev_id_and_hides_the_installed_copy"]
+
+# Group 72.10: cross-platform identity linking, delivery and read receipts,
+# busy acknowledgement via reactions.
+[messaging-gateway."Cross-platform identity linking (upgrade)"]
+"Continue on another platform" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_linked_person_continues_one_conversation_on_another_platform", "crates/pmt-gateway/tests/messaging/identity.rs::per_platform_mode_keeps_each_accounts_dms_apart"]
+"Linking cannot bypass authorization" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_unauthorized_account_cannot_link"]
+"Expired code" = ["crates/pmt-gateway/tests/messaging/identity.rs::an_expired_code_links_nothing"]
+
+[messaging-gateway."Delivery receipts surfaced (upgrade)"]
+"Read receipt reaches the TUI" = ["crates/prometheus/tests/gateway_whatsapp_receipts.rs::a_read_whatsapp_reply_reaches_the_attached_client_and_the_outbox", "crates/pmt-adapters-whatsapp/tests/whatsapp.rs::delivery_statuses_of_a_send_are_reported_as_receipts"]
+
+[platform-adapters."Delivery and read receipts (upgrade)"]
+"Signal read receipt" = ["crates/pmt-adapters-signal/src/events.rs::a_read_receipt_names_the_ids_send_returned", "crates/pmt-gateway/tests/messaging/identity.rs::a_read_receipt_moves_the_entry_to_read_and_reaches_attached_clients"]
+
+[platform-adapters."Busy acknowledgement via reactions (upgrade)"]
+"Reaction instead of noise" = ["crates/pmt-gateway/tests/messaging/identity.rs::a_follow_up_during_a_turn_gets_a_reaction_instead_of_a_busy_text", "crates/pmt-gateway/tests/messaging/identity.rs::ack_reaction_marks_each_accepted_message"]
+
+[configuration-and-profiles."Remote configuration backend"]
+"Unreachable plane fails closed" = { tests = ["crates/prometheus/tests/config_remote.rs::unreachable_plane_fails_closed", "crates/prometheus/tests/config_remote.rs::the_plane_supplies_the_configuration_and_writes_carry_only_changed_keys", "crates/pmt-config/src/remote/tests.rs::a_locked_key_is_refused_naming_its_level"], note = "config.toml is a file that does not parse: the exit-78 error names the plane URL, never the parse error" }
+"Every reader uses the plane" = { tests = ["crates/pmt-config/src/gateway_check_routes.rs::a_remote_targets_opt_in_comes_from_the_plane", "crates/pmt-config/src/language.rs::a_plane_set_language_reaches_the_strings", "crates/prometheus/tests/config_remote.rs::plane_enabled_adapter_plugins_are_preregistered"], note = "readers that hold only another profile's directory build its file with ConfigFile::of_profile_dir (remote-aware)" }
+
+[configuration-and-profiles."Profile descriptions"]
+"Auto description does not overwrite" = ["crates/prometheus/tests/profile_distribution.rs::auto_description_does_not_overwrite"]
+
+[configuration-and-profiles."Profile distributions"]
+"Update keeps user config" = ["crates/prometheus/tests/profile_distribution.rs::install_previews_never_copies_credentials_and_update_keeps_user_config"]
+"Credentials never installed" = ["crates/prometheus/tests/profile_distribution.rs::install_previews_never_copies_credentials_and_update_keeps_user_config", "crates/prometheus/tests/profile_distribution.rs::an_incompatible_distribution_is_refused_with_78"]
+
+[configuration-and-profiles."Identity migration and purge"]
+"Purge is snapshotted" = ["crates/prometheus/tests/profile_distribution.rs::purge_is_snapshotted", "crates/prometheus/tests/profile_distribution.rs::identity_moves_to_another_profile"]
+
+[configuration-and-profiles."External secret source commands"]
+"Invalid rotated token refused" = ["crates/prometheus/tests/secret_sources_cli.rs::invalid_rotated_token_refused", "crates/prometheus/tests/secret_sources_cli.rs::bitwarden_status_shows_names_and_sync_writes_only_with_apply", "crates/prometheus/tests/secret_sources_cli.rs::onepassword_setup_map_and_sync"]
+
+[security-boundaries."Egress proxy operation and status"]
+"Proxy down with enforcement" = ["crates/prometheus/tests/egress_proxy.rs::proxy_down_with_enforcement", "crates/prometheus/tests/egress_proxy.rs::start_status_rotate_reload_and_stop"]
+"Rootless runtime listener" = { tests = ["crates/prometheus/src/egress/gateway/bridge.rs::a_rootless_reach_serves_only_the_host_and_maps_the_relay_to_it", "crates/prometheus/src/egress/gateway/bridge.rs::the_host_address_is_a_local_one", "crates/prometheus/src/egress/gateway/bridge.rs::a_gateway_binds_before_its_bridge_exists", "crates/pmt-net/src/egress/mod.rs::a_listener_restricted_to_a_peer_serves_only_that_peer", "crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"], note = "the Linux CI runners have rootless Podman (gateway 10.88.0.1 is no host address): every egress_proxy test starts the proxy there" }
+
+[security-boundaries."Egress proxy coverage of containers and remote sandboxes"]
+"CA inside the container" = { tests = ["crates/prometheus/tests/egress_proxy.rs::ca_inside_the_container", "crates/prometheus/tests/egress_proxy.rs::the_proxy_injects_the_real_key_only_toward_the_mapped_host"], note = "a real container session (curl image) through the proxy: curl verifies TLS against the mounted bundle (CURL_CA_BUNDLE, the same contract python requests uses via REQUESTS_CA_BUNDLE); on the egress-only network curl reaches neither the host nor the internet without the proxy; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"SSH sandbox through the tunnelled proxy" = { tests = ["crates/prometheus/tests/egress_ssh.rs::an_ssh_sandbox_goes_through_the_tunnelled_proxy", "crates/prometheus/tests/egress_ssh.rs::an_ssh_host_refusing_the_tunnel_runs_nothing"], note = "an sshd container (fixtures/sshd-egress) with and without AllowTcpForwarding; skips without a container runtime unless PMT_TEST_CONTAINERS=require" }
+"Sandbox the proxy cannot cover" = ["crates/prometheus/tests/egress_proxy.rs::a_backend_the_proxy_cannot_cover_is_refused"]
+
+[security-boundaries."Egress credential source and placeholder rotation"]
+"Bitwarden missing a secret" = ["crates/prometheus/tests/egress_proxy.rs::bitwarden_missing_a_secret"]
+
+[security-boundaries."Password manager login sources"]
+"Headless session" = ["crates/pmt-tools/tests/browser/managers.rs::headless_session", "crates/pmt-tools/tests/browser/managers.rs::an_unlocked_manager_login_fills_only_on_its_saved_website"]
+
+[security-boundaries."Dependency vulnerability scan"]
+"CI gate" = ["crates/prometheus/tests/security_scan.rs::ci_gate", "crates/prometheus/tests/security_scan.rs::unreachable_osv_exits_69"]
+
+# Group 73.4: the Codex app-server runtime and the Codex runtime migration.
+[model-providers."Codex app-server runtime"]
+"Runtime switch deferred" = { tests = ["crates/prometheus/tests/codex_runtime_switch.rs::runtime_switch_is_deferred_to_the_next_session", "crates/pmt-providers/tests/providers/codex.rs::one_server_and_thread_serve_a_session_and_the_persona_goes_once", "crates/pmt-agent/tests/turn/performed.rs::performed_actions_are_recorded_as_a_finished_tool_round"], note = "the line-interface session runs in a pseudo-terminal (unix); the route is resolved once per session from the configuration it started with, on every platform" }
+"Codex binary missing" = ["crates/prometheus/tests/codex_runtime.rs::turning_the_runtime_on_without_codex_is_refused_and_changes_nothing", "crates/pmt-providers/tests/providers/codex.rs::a_missing_codex_binary_fails_the_route_naming_model_codex_bin"]
+
+[model-providers."Codex runtime migration"]
+"User text preserved" = ["crates/prometheus/tests/codex_runtime.rs::migrate_twice_keeps_the_user_block_and_one_managed_section", "crates/prometheus/src/codex_runtime_cmd/migrate.rs::user_text_is_preserved_and_the_section_appears_once"]
+
+# Group 73.5: gateway proxy mode and the subscription proxy.
+[api-server."Gateway proxy mode"]
+"Container relays to host agent" = { tests = ["crates/prometheus/tests/gateway_proxy.rs::a_proxied_chat_is_answered_by_the_host_agent", "crates/prometheus/tests/gateway_proxy.rs::an_unreachable_upstream_answers_unavailable_and_queues_nothing", "crates/prometheus/tests/gateway_proxy.rs::a_refused_key_puts_the_adapters_in_fatal_with_proxy_auth"], note = "two homes stand for the container and the host: the container daemon's test adapter receives the message and its gateway.proxy.url names the host daemon's API server" }
+
+[api-server."Subscription proxy"]
+"Disallowed path" = ["crates/prometheus/tests/subscription_proxy.rs::allowed_paths_go_upstream_with_the_profile_credential_and_others_are_404"]
+"Client bearer replaced" = ["crates/prometheus/tests/subscription_proxy.rs::allowed_paths_go_upstream_with_the_profile_credential_and_others_are_404"]
+"LAN requires a client key" = ["crates/prometheus/tests/subscription_proxy.rs::a_lan_listener_requires_the_client_key"]
+
+# Group 73.6: local-model window placement and growth, resource telemetry.
+[local-models."Context window and memory placement"]
+"Window grows before compression" = { tests = ["crates/pmt-agent/tests/turn/growth.rs::a_grown_window_skips_the_compaction", "crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-local/src/placement.rs::growth_doubles_toward_the_need_or_says_why_not"], note = "the turn loop asks its growth port at the compression threshold (pmt-agent, fake port); the daemon test drives the real port against the stub llama-server: preset, unload and reload at 131072" }
+"Growth impossible triggers compression" = ["crates/pmt-agent/tests/turn/growth.rs::an_impossible_growth_compacts_as_usual", "crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows"]
+
+[local-models."Local resource telemetry"]
+"Gauge shows real window" = ["crates/prometheus/tests/local_window.rs::the_gauge_uses_the_served_window_and_the_managed_model_grows", "crates/pmt-providers/src/metadata/window.rs::each_source_wins_over_every_later_one"]
+
+# Group 73.7: video_generate and provider-contributed media tools.
+[web-and-media-tools."video_generate tool"]
+"Stuck job times out" = { tests = ["crates/pmt-media/tests/video_gen.rs::a_stuck_job_times_out_with_the_provider_job_id"], note = "a fake clock advances only on the 5 s poll sleeps: 180 polls of a job stuck IN_QUEUE end at 900 s with status timeout and the fal request id" }
+
+[web-and-media-tools."Provider-contributed media tools"]
+"Tools absent for another provider" = ["crates/pmt-media/tests/video_gen.rs::provider_tools_are_absent_for_another_provider"]
+
+# Group 73.8: install state retention, /connectors, language switchers.
+[git-worktrees."Shared install state retention"]
+"Deleted checkout" = { tests = ["crates/pmt-worktrees/src/install_state.rs::state_of_a_checkout_deleted_20_days_ago_is_removed", "crates/prometheus/tests/worktree_chat.rs::prune_removes_the_install_state_of_a_checkout_deleted_20_days_ago"], note = "the state is a language-server cache directory under <profile>/cache/lsp whose record names a checkout that no longer exists, last used 20 days ago (retention 14 days)" }
+
+[connectors."Connectors slash command"]
+"TUI list view" = { tests = ["crates/prometheus/tests/connectors_slash.rs::the_tui_lists_accounts_with_states_and_offers_reconnect_for_an_expired_one", "crates/prometheus/tests/connectors_slash.rs::the_line_interface_offers_no_disconnect", "crates/prometheus/src/chat/commands/connectors.rs::a_broken_account_offers_reconnect_and_only_tui_and_desktop_offer_disconnect"], note = "the TUI runs /connectors through command.dispatch with its tui client kind (the daemon test connects as a tui client against the fake Nous connector gateway)" }
+
+[i18n."Language switchers show endonyms"]
+"RTL layout" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_language_switcher_mirrors_the_window_for_arabic", "crates/prometheus/tests/dashboard_browser.rs::the_dashboard_language_switcher_writes_the_profile_language", "crates/prometheus/tests/tui_language.rs::the_picker_lists_endonyms_and_writes_the_choice", "crates/pmt-tui/src/languages.rs::rows_show_endonyms_with_ids_and_the_current_language_is_highlighted"], note = "desktop-language.spec.ts selects ar in the desktop settings: the document turns dir=rtl and the sessions column moves to the other side in the same window, after one config.patch of display.language; the dashboard and the TUI picker list the same i18n.languages" }
+
+# Group 73.9: Langfuse preset, NeMo Relay (files, host fed from the trajectory stream) and the client SDKs.
+[observability."NeMo Relay and Langfuse integrations"]
+"Langfuse without keys" = ["crates/prometheus/tests/obs_langfuse.rs::a_langfuse_preset_without_its_secret_key_stops_the_daemon_naming_it", "crates/prometheus/tests/obs_langfuse.rs::langfuse_receives_the_spans_with_basic_authentication"]
+"Relay files reported" = { tests = ["crates/prometheus/tests/obs_langfuse.rs::doctor_lists_the_relay_files_with_the_system_one_last", "crates/pmt-obs/src/relay/mod.rs::the_configured_file_replaces_the_users_and_the_system_file_comes_last"], note = "debug builds point the system file at a test directory (PMT_TEST_RELAY_SYSTEM_DIR); /etc is not writable in tests" }
+
+[workspace-architecture."Embeddable client SDKs"]
+"Python embedding" = { tests = ["crates/prometheus/tests/sdk_clients.rs::a_python_script_runs_a_turn_and_gets_its_events_and_usage", "crates/prometheus/tests/sdk_clients.rs::a_node_program_runs_a_turn_and_gets_its_events_and_usage", "crates/prometheus/tests/sdk_clients.rs::an_ephemeral_session_with_an_overlay_leaves_no_transcript"], note = "the mock provider's scripted read_file call; the Node and Rust tests run the same turn through the other two SDKs" }
+"Old SDK against a new protocol" = ["crates/prometheus/tests/sdk_clients.rs::every_sdk_refuses_a_newer_protocol_before_any_request", "crates/pmt-sdk/src/lib.rs::only_supported_majors_pass"]

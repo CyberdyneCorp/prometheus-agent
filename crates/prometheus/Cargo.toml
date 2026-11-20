@@ -103,6 +103,10 @@ pmt-plugins.workspace = true
 pmt-pybridge.workspace = true
 pmt-obs.workspace = true
 pmt-eval.workspace = true
+# Harness trees, validation and evolution jobs (the `harness` command and
+# every session's harness layer need it; the `evolve` feature gates only
+# the evolution surfaces).
+pmt-evolve.workspace = true
 pmt-providers.workspace = true
 pmt-rpc.workspace = true
 pmt-sandbox.workspace = true
@@ -140,6 +144,7 @@ serde_json.workspace = true
 # `demo` runs in a fresh temporary directory.
 tempfile.workspace = true
 toml.workspace = true
+toml_edit.workspace = true
 # Input ids of the TUI's prompts and idempotency keys of its creates.
 ulid.workspace = true
 # `logs --follow` polls and stops on Ctrl-C.
@@ -156,11 +161,17 @@ zstd.workspace = true
 # `daemon install-service --system` and the launchd GUI domain.
 nix = { workspace = true, features = ["term", "process", "signal", "user", "fs"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# The egress proxy's container listener bound ahead of its bridge
+# (IP_FREEBIND).
+socket2.workspace = true
+
 [build-dependencies]
 jiff.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+pmt-sdk.workspace = true
 # The OpenAI SDK client of the API server tests (and its streams).
 async-openai.workspace = true
 futures-util.workspace = true

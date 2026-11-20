@@ -60,7 +60,8 @@ impl Factory {
             .api_session(id)
             .ok()
             .flatten()
-            .and_then(|api| api.session_key);
+            .and_then(|api| api.session_key)
+            .or_else(|| self.linked_person(id));
         let started = crate::memory_provider::start(
             &self.scope,
             &self.plugins,
@@ -71,6 +72,22 @@ impl Factory {
         .await;
         setup.provider = started;
         Ok(Arc::new(MemorySession::new(setup)))
+    }
+
+    /// A messaging session's sender linked to a person: that person scopes
+    /// its long-term memory, whichever platform they write from (spec:
+    /// messaging-gateway, Cross-platform identity linking).
+    fn linked_person(&self, id: SessionId) -> Option<String> {
+        let pmt_store::Origin::Gateway {
+            platform,
+            user: Some(user),
+            ..
+        } = self.store.session(id).ok()?.origin
+        else {
+            return None;
+        };
+        let person = self.store.person_of(&platform, &user).ok()??;
+        Some(format!("person:{person}"))
     }
 
     /// The model of a background memory review (spec: memory, Background
@@ -109,7 +126,10 @@ impl Factory {
     ) -> Result<MemorySetup, Error> {
         let mut setup = MemorySetup::new(
             self.scope.clone(),
-            Arc::clone(&self.store),
+            self.options
+                .memory_store
+                .clone()
+                .unwrap_or_else(|| Arc::clone(&self.store)),
             Some(id),
             Source::Cli,
         );

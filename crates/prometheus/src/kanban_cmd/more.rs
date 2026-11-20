@@ -214,9 +214,16 @@ fn assignees(env: &Env<'_>) -> Result<u8, Error> {
             .iter()
             .map(|l| json!({"name": l.lane.name, "plugin": l.plugin, "description": l.lane.description}))
             .collect();
+        let descriptions: serde_json::Map<String, serde_json::Value> = profiles
+            .iter()
+            .filter_map(|p| {
+                crate::kanban_host::orchestrate::profile_description(&env.home, p)
+                    .map(|d| (p.clone(), json!(d)))
+            })
+            .collect();
         return env.document(
             "kanban assignees",
-            &json!({"profiles": profiles, "lanes": lanes}),
+            &json!({"profiles": profiles, "descriptions": descriptions, "lanes": lanes}),
         );
     }
     let mut out = String::new();
@@ -226,7 +233,10 @@ fn assignees(env: &Env<'_>) -> Result<u8, Error> {
         } else {
             ""
         };
-        let _ = writeln!(out, "profile  {p}{role}");
+        let about = crate::kanban_host::orchestrate::profile_description(&env.home, p)
+            .map(|d| format!("  {d}"))
+            .unwrap_or_default();
+        let _ = writeln!(out, "profile  {p}{role}{about}");
     }
     for l in &lanes {
         let _ = writeln!(

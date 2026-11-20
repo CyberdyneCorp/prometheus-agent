@@ -10,6 +10,7 @@ pub mod fetch;
 pub mod github;
 pub mod goal;
 pub mod hooks;
+mod improve;
 pub mod lanes;
 pub mod mailbox;
 pub mod notice;

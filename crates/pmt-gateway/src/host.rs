@@ -224,6 +224,48 @@ pub trait Host: Send + Sync + 'static {
         })
     }
 
+    /// One `evolve.*` or `harness.*` method for `profile` (spec:
+    /// harness-evolution, Job lifecycle, events and RPC): the JSON of the
+    /// method's result. Hosts without profiles on disk do not serve them.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the matching command's errors.
+    fn evolve<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::evolve::EvolveRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        let _ = (profile, request);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no harness evolution",
+            ))
+        })
+    }
+
+    /// One `experience.*` method for `profile` (spec: experience-library,
+    /// Library CLI): the JSON of the method's result. Hosts without
+    /// profiles on disk do not serve them.
+    ///
+    /// # Errors
+    ///
+    /// `rpc.not_served`; the matching command's errors.
+    fn experience<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::experience::ExperienceRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        let _ = (profile, request);
+        Box::pin(async {
+            Err(Error::new(
+                &pmt_core::error::codes::RPC_NOT_SERVED,
+                "this host has no experience library",
+            ))
+        })
+    }
+
     /// The Mixture of Agents presets of `profile` after `change` (`None`
     /// only reads): `moa.presets.*`. Hosts without profiles on disk
     /// refuse.
@@ -517,6 +559,12 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no configuration files")) })
     }
 
+    /// The languages `profile` can select, with its current one
+    /// (`i18n.languages`).
+    fn languages<'a>(&'a self, _profile: &'a str) -> HostFuture<'a, pmt_rpc::contracts::Languages> {
+        Box::pin(async { Err(not_served("this host has no language catalogs")) })
+    }
+
     /// One `queue.*` call on a session of `profile` (spec: desktop-app,
     /// Composer history and queue editing); the session's clients learn
     /// of a change through `link` (`queue.changed`).
@@ -580,6 +628,13 @@ pub trait Host: Send + Sync + 'static {
         _steer: Option<&'a str>,
     ) -> HostFuture<'a, String> {
         Box::pin(async { Err(not_served("this host delegates to no subagents")) })
+    }
+
+    /// Child transcripts, the session timeline and rewinds
+    /// (`subagent.subscribe`, `session.timeline`, `session.rewind`);
+    /// `None` answers them `rpc.not_served`.
+    fn live(&self) -> Option<&dyn crate::live::LiveHost> {
+        None
     }
 
     /// The desktop's panes (`git.*`, `projects.*`, `manage.*`, pairing,
@@ -710,6 +765,8 @@ pub struct Link {
     approval_timeout: Duration,
     /// Streamed answer text (a messaging conversation that streams).
     deltas: Option<Deltas>,
+    /// The kind of client that made the call (`None`: the daemon itself).
+    client: Option<pmt_rpc::contracts::ClientKind>,
 }
 
 impl std::fmt::Debug for Link {
@@ -734,7 +791,21 @@ impl Link {
             request_timeout,
             approval_timeout,
             deltas: None,
+            client: None,
         }
+    }
+
+    /// This link answering a call of a `client` kind of client.
+    #[must_use]
+    pub fn with_client(mut self, client: Option<pmt_rpc::contracts::ClientKind>) -> Self {
+        self.client = client;
+        self
+    }
+
+    /// The kind of client that made the call.
+    #[must_use]
+    pub fn client(&self) -> Option<pmt_rpc::contracts::ClientKind> {
+        self.client
     }
 
     /// This link with `deltas` receiving the answer text a turn streams.

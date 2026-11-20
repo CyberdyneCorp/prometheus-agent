@@ -210,3 +210,143 @@ fn the_plugin_mcp_cron_and_memory_pages_show_the_profiles_data() {
     let _daemon = daemon::start(home.path(), &[]);
     playwright(home.path(), "catalogs.spec.ts", &[("PMT_CRON_JOB", &job)]);
 }
+
+/// A home with evolution on (session lessons too), the evolution mock
+/// (plus a chat answer to "hello") and one finished k = 1 job on a ledger
+/// task in domain `accounting`; the pending proposal's id.
+#[cfg(feature = "evolve")]
+fn evolved_home() -> (tempfile::TempDir, String) {
+    let home = mock_home();
+    for (key, value) in [
+        ("evolve.enabled", "true"),
+        ("experience.session_lessons", "true"),
+    ] {
+        ok(&run(home.path(), &["config", "set", key, value]));
+    }
+    let mut script = include_str!("fixtures/evolve/mock.toml").to_owned();
+    script.push_str("\n[[rule]]\nuser = \"hello\"\ntext = \"hi there\"\nrepeat = true\n");
+    std::fs::write(home.path().join("profiles/default/mock.toml"), script).unwrap();
+    append_config(home.path(), "\n[providers.mock]\nscript = \"mock.toml\"\n");
+    let ws = home.path().join("ws");
+    std::fs::create_dir_all(&ws).unwrap();
+    std::fs::write(ws.join("ledger.csv"), "amount\n10.00\n").unwrap();
+    for args in [
+        &["init", "-q"][..],
+        &["add", "-A"],
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "init",
+        ],
+    ] {
+        let out = std::process::Command::new("git")
+            .args(["-c", "maintenance.auto=false", "-c", "gc.auto=0"])
+            .arg("-C")
+            .arg(&ws)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}");
+    }
+    let task = home.path().join("ledger-task.toml");
+    std::fs::write(
+        &task,
+        "statement = \"TASK-SUM the ledger\"\ndomain = \"accounting\"\nworkspace = \"ws\"\n",
+    )
+    .unwrap();
+    ok(&run(
+        home.path(),
+        &[
+            "evolve",
+            "run",
+            "--task",
+            task.to_str().unwrap(),
+            "--k",
+            "1",
+        ],
+    ));
+    let proposals: serde_json::Value =
+        serde_json::from_str(&ok(&run(home.path(), &["--json", "evolve", "proposals"]))).unwrap();
+    let id = proposals[0]["id"].as_str().unwrap().to_owned();
+    (home, id)
+}
+
+/// The text of session `id`'s frozen system prompt.
+#[cfg(feature = "evolve")]
+fn prompt_text(home: &Path, id: &str) -> String {
+    let session = pmt_core::id::SessionId::parse(id.trim()).unwrap();
+    store(home)
+        .session_prompt(session)
+        .unwrap()
+        .map(|p| {
+            p.tiers
+                .iter()
+                .map(|t| t.text.clone())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_default()
+}
+
+/// Scenario: Adopting a harness.
+#[cfg(feature = "evolve")]
+#[test]
+fn a_harness_adopted_from_the_dashboard_applies_to_new_sessions_only() {
+    let (home, _) = evolved_home();
+    let _daemon = daemon::start(home.path(), &[]);
+    let live_file = home.path().join("live-session");
+    playwright(
+        home.path(),
+        "evolution.spec.ts",
+        &[("PMT_LIVE_SESSION_FILE", live_file.to_str().unwrap())],
+    );
+    let live = std::fs::read_to_string(&live_file).unwrap();
+    let adopted = "Always state the total with two decimals.";
+    let before = prompt_text(home.path(), &live);
+    assert!(!before.is_empty(), "the live session froze a prompt");
+    assert!(
+        !before.contains(adopted),
+        "the live session's prompt is unchanged"
+    );
+    ok(&run(home.path(), &["-z", "hello"]));
+    let next = common::newest_session(home.path());
+    assert!(
+        prompt_text(home.path(), &next).contains(adopted),
+        "a new session runs the adopted harness"
+    );
+}
+
+/// Scenario: Removing a bad lesson.
+#[cfg(feature = "evolve")]
+#[test]
+fn a_lesson_deleted_from_the_dashboard_is_not_offered_to_later_sessions() {
+    let (home, proposal) = evolved_home();
+    ok(&run(home.path(), &["evolve", "adopt", &proposal]));
+    let layer = "## Lessons from earlier work in accounting";
+    ok(&run(
+        home.path(),
+        &["-z", "hello", "--domain", "accounting"],
+    ));
+    let before = common::newest_session(home.path());
+    assert!(
+        prompt_text(home.path(), &before).contains(layer),
+        "the lesson was offered"
+    );
+    let _daemon = daemon::start(home.path(), &[]);
+    playwright(home.path(), "experience.spec.ts", &[]);
+    ok(&run(
+        home.path(),
+        &["-z", "hello", "--domain", "accounting"],
+    ));
+    let after = common::newest_session(home.path());
+    assert_ne!(before, after);
+    assert!(
+        !prompt_text(home.path(), &after).contains(layer),
+        "a session started after the deletion gets no lesson"
+    );
+}

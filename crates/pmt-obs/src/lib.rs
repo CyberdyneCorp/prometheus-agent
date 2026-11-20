@@ -26,6 +26,7 @@ pub mod metrics;
 pub mod otel;
 pub mod recording;
 pub mod redaction;
+pub mod relay;
 pub mod sharegpt;
 pub mod taskdump;
 pub mod telemetry;

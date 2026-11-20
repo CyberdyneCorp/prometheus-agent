@@ -2,7 +2,8 @@
 //! first-use consent; Gateway hook directories; Outbound webhooks): they
 //! join a profile's hook set after its plugin callbacks, so plugin hooks
 //! always run first, and only once approved (shell hooks and hook
-//! directories) or configured (webhooks). Safe mode registers none of
+//! directories) or configured (webhooks); the active harness's hooks
+//! join last ([`crate::harness_host::hooks`]). Safe mode registers none of
 //! them.
 
 pub mod consent;
@@ -91,6 +92,7 @@ pub fn extend(scope: &ProfileScope, hooks: &mut Hooks) {
     let grants = GrantsFile::of(scope.profile()).load().unwrap_or_default();
     add_shell(scope, &grants, hooks);
     add_dirs(scope, &grants, hooks);
+    crate::harness_host::hooks::add(scope, hooks);
     for (events, target) in outbound::targets(scope) {
         for event in events {
             let _ = hooks.add_external(&event, Arc::clone(&target));
@@ -160,5 +162,10 @@ pub fn fingerprint(scope: &ProfileScope) -> String {
     for dir in dirs::scan(scope) {
         let _ = write!(text, "{}={:?}:{:?};", dir.name, dir.digest, dir.events);
     }
+    let _ = write!(
+        text,
+        "harness={};",
+        crate::harness_host::hooks::fingerprint(scope)
+    );
     text
 }

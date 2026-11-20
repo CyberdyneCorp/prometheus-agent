@@ -5,10 +5,11 @@
 import { api, signIn } from "./lib/api";
 import { onSignedOut } from "./lib/events";
 import { Prefs } from "./lib/prefs";
+import { LanguagePicker } from "./lib/language";
 import { rpc } from "./lib/rpc";
 import { h } from "./lib/dom";
 import { href, notFound, route, start } from "./lib/router";
-import { prefsStarted, state } from "./lib/state";
+import { canDrive, prefsStarted, state } from "./lib/state";
 import { loadPlugins, placeTabs } from "./lib/plugins";
 import type { Contribution } from "./lib/plugin-frames";
 import { chatPage } from "./pages/chat";
@@ -34,7 +35,9 @@ import {
 import { configPage } from "./pages/config";
 import { logsPage } from "./pages/logs";
 import { notFoundPage } from "./pages/notfound";
-import { evolutionPage, experiencePage, pendingPage } from "./pages/rpcview";
+import { evolutionPage } from "./pages/evolution";
+import { experiencePage } from "./pages/experience";
+import { pendingPage } from "./pages/rpcview";
 import { secretsPage } from "./pages/secrets";
 import { sessionsPage } from "./pages/sessions";
 import { statusPage } from "./pages/status";
@@ -105,7 +108,7 @@ function routes(): void {
   notFound(notFoundPage);
 }
 
-function header(): HTMLElement {
+function header(language: LanguagePicker): HTMLElement {
   const select = h("select", { "aria-label": "Profile", name: "profile" }, ...state.profiles.map((p) => h("option", { value: p, selected: p === state.profile }, p)));
   select.addEventListener("change", () => {
     state.profile = select.value;
@@ -125,6 +128,7 @@ function header(): HTMLElement {
     slot("header-left"),
     h("a", { class: "brand", href: href("/sessions") }, "Prometheus"),
     select,
+    language.el,
     h("span", { class: "role", "data-role": state.session?.role ?? "" }, state.session?.role ?? ""),
     signOut,
     slot("header-right"),
@@ -192,8 +196,10 @@ async function boot(): Promise<void> {
   state.profile = asked && state.profiles.includes(asked) ? asked : (state.profiles[0] ?? "");
   const main = h("main", { id: "main" });
   const pages = nav();
+  // Observers see the language but cannot change the profile's.
+  const language = new LanguagePicker(async (method, params) => (await rpc()).call(method, params), () => state.profile, !canDrive());
   app.replaceChildren(
-    header(),
+    header(language),
     slot("header-banner"),
     h("div", { class: "layout" }, pages, h("div", { class: "main-column" }, slot("pre-main"), main, slot("post-main")), slot("sidebar")),
     h("footer", { class: "bottom" }, slot("footer-left"), slot("footer-right")),
@@ -202,6 +208,7 @@ async function boot(): Promise<void> {
   routes();
   start(main);
   void startPrefs();
+  void language.load().catch((err: unknown) => console.warn("languages unavailable:", err));
   // Plugins load after the first render and never hold it up.
   void loadPlugins((plugins) => pages.replaceChildren(navList(plugins)));
 }

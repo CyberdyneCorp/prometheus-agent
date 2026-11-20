@@ -95,7 +95,7 @@ impl DaemonHost {
         session: &str,
         link: &Link,
     ) -> Result<Tree, Error> {
-        let files = self.session_files(profile, session, link).await?;
+        let files = Box::pin(self.session_files(profile, session, link)).await?;
         if !files.on_host() {
             return Err(Error::new(
                 &codes::CAPABILITY_NOT_GRANTED,
@@ -121,7 +121,7 @@ impl DaemonHost {
                 ),
             )
         })?;
-        let tree = self.session_tree(profile, &params.session_id, link).await?;
+        let tree = Box::pin(self.session_tree(profile, &params.session_id, link)).await?;
         let start = starts().get(tree.root()).cloned();
         let review = blocking(move || tree.review(scope, start.as_deref())).await?;
         Ok(GitReview {
@@ -152,7 +152,7 @@ impl DaemonHost {
         change: GitChange,
         link: &Link,
     ) -> Result<GitRan, Error> {
-        let tree = self.session_tree(profile, session, link).await?;
+        let tree = Box::pin(self.session_tree(profile, session, link)).await?;
         let root = tree.root().to_path_buf();
         let done = |commit: Option<String>| GitRan {
             commit,
@@ -199,7 +199,7 @@ impl DaemonHost {
         session: &str,
         link: &Link,
     ) -> Result<GitMessage, Error> {
-        let tree = self.session_tree(profile, session, link).await?;
+        let tree = Box::pin(self.session_tree(profile, session, link)).await?;
         let diff = blocking(move || tree.staged_diff()).await?;
         if diff.trim().is_empty() {
             return Err(Error::new(&codes::WORKTREE_GIT, "nothing is staged"));

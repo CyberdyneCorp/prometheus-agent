@@ -1,0 +1,2 @@
+#!/bin/sh
+echo "apt-get $*" >> "${PMT_FAKE_APT_LOG:-/dev/null}"

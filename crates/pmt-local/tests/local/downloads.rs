@@ -40,6 +40,7 @@ fn job(jobs: &Jobs, library: &Library, url: &str, data: &[u8]) -> pmt_local::dow
         quant: Some("Q4_K_M".to_owned()),
         context: 65_536,
         context_max: Some(131_072),
+        placement: None,
         added_at: String::new(),
     };
     pull::create(jobs, &model, vec![spec]).unwrap()

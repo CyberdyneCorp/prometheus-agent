@@ -112,3 +112,48 @@ fn password_manager_sources_are_shown_and_toggled() {
     let shown = ok(&run(home, &["vault", "sources"]));
     assert!(shown.contains("bitwarden  disabled"), "{shown}");
 }
+
+/// A stand-in password-manager CLI named `name` in `dir` (only its
+/// presence matters to the availability report).
+fn stub_cli(dir: &Path, name: &str) {
+    let path = dir.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
+/// `vault sources` reports a source available exactly when its CLI is
+/// found where sessions look for it (the launch `PATH` here).
+#[test]
+fn sources_report_whether_their_cli_is_installed() {
+    let home = temp_home();
+    let home = home.path();
+    let bin = home.join("stub-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let shown = |path: &Path| {
+        let out = common::command(home)
+            .env("PATH", path)
+            .args(["vault", "sources"])
+            .output()
+            .unwrap();
+        ok(&out)
+    };
+    let none = shown(&bin);
+    for name in ["onepassword", "bitwarden"] {
+        let line = none.lines().find(|l| l.starts_with(name)).unwrap();
+        assert!(line.contains("unavailable"), "{none}");
+    }
+    stub_cli(&bin, "op");
+    let one = shown(&bin);
+    let op = one.lines().find(|l| l.starts_with("onepassword")).unwrap();
+    assert!(
+        op.contains("available: ") && !op.contains("unavailable"),
+        "{one}"
+    );
+    assert!(op.contains("stub-bin"), "{one}");
+    let bw = one.lines().find(|l| l.starts_with("bitwarden")).unwrap();
+    assert!(bw.contains("unavailable"), "{one}");
+}

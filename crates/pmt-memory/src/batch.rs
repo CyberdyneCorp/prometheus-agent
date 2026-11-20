@@ -212,15 +212,22 @@ fn change(
     let at = select(entries, i, op, ctx.target)?;
     let id = entries[at].id.clone();
     match op.action {
+        Action::Remove if entries[at].pinned && ctx.origin == MemoryOrigin::Consolidation => {
+            return Err(format!(
+                "operations[{i}]: {id} is pinned; consolidation never removes pinned entries"
+            ));
+        }
         Action::Remove => {
             entries.remove(at);
         }
         Action::Pin | Action::Unpin => {
             entries[at].pinned = op.action == Action::Pin;
             entries[at].updated_at = ctx.now;
+            wake(&mut entries[at], ctx.now);
         }
         Action::Patch | Action::Add => {
             let entry = &mut entries[at];
+            wake(entry, ctx.now);
             if let Some(content) = &op.content {
                 entry.content.clone_from(content);
             }
@@ -243,6 +250,18 @@ fn change(
 
 /// The index of the entry `op` names: by `id` (any entry of the target),
 /// else by `old_text` matching exactly one active entry.
+/// Editing or pinning a dormant entry makes it active again (spec: memory,
+/// Decay, expiry and dormancy): its `updated_at` becomes the edit's time
+/// and a past expiry is cleared, so it does not fall dormant again at once.
+fn wake(entry: &mut MemoryEntry, now: Timestamp) {
+    if entry.status == MemoryStatus::Dormant {
+        entry.status = MemoryStatus::Active;
+        if crate::decay::expired(entry, now) {
+            entry.expires_at = None;
+        }
+    }
+}
+
 fn select(
     entries: &[MemoryEntry],
     i: usize,

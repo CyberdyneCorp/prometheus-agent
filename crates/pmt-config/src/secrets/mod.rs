@@ -12,6 +12,7 @@
 //! process lifetime. Values are only ever held as [`SecretString`].
 
 pub mod command;
+pub mod external;
 pub(crate) mod file;
 pub mod keychain;
 pub mod surface;
@@ -253,6 +254,7 @@ pub struct SecretsHandle {
     store: SecretStore,
     launch_env: Option<BTreeMap<String, SecretString>>,
     command: Option<Arc<command::CommandSecrets>>,
+    external: Option<Arc<external::ExternalSources>>,
     state: Arc<Mutex<State>>,
 }
 
@@ -288,8 +290,16 @@ impl SecretsHandle {
             store,
             launch_env,
             command: None,
+            external: None,
             state: Arc::default(),
         }
+    }
+
+    /// Adds the enabled external sources (Bitwarden, 1Password).
+    #[must_use]
+    pub fn with_external(mut self, external: Option<Arc<external::ExternalSources>>) -> Self {
+        self.external = external;
+        self
     }
 
     /// Adds the `secrets.command` helper's values.
@@ -456,13 +466,16 @@ impl SecretsHandle {
         for (name, value) in self.command.iter().flat_map(|c| c.iter()) {
             values.push((name.clone(), value.clone()));
         }
+        values.extend(self.external.iter().flat_map(|e| e.cached()));
         Ok(pmt_core::secret::Redactor::named(
             values.iter().map(|(name, value)| (name.as_str(), value)),
         ))
     }
 
     /// The value of `name`: the administrator's managed secret, else the
-    /// store, else the launch environment.
+    /// store, else the launch environment, else the external sources (a
+    /// mapped 1Password entry, then Bitwarden), else the command helper
+    /// (first when it overrides).
     fn lookup(&self, name: &str) -> Result<Option<SecretString>, Error> {
         if let Some(value) = crate::managed::current()?.and_then(|m| m.secret(name)) {
             return Ok(Some(value.clone()));
@@ -471,10 +484,27 @@ impl SecretsHandle {
         if let Some(value) = command.filter(|_| self.command_first()) {
             return Ok(Some(value.clone()));
         }
-        Ok(match self.stored(name)? {
-            Some(value) => Some(value),
-            None => self.launch_env_secret(name).or(command).cloned(),
-        })
+        if let Some(value) = self.stored(name)? {
+            return Ok(Some(value));
+        }
+        if let Some(value) = self.launch_env_secret(name) {
+            return Ok(Some(value.clone()));
+        }
+        let token = |token: &str| self.managed_or_stored(token);
+        let external = match &self.external {
+            Some(sources) => sources.get(name, &token)?,
+            None => None,
+        };
+        Ok(external.or_else(|| command.cloned()))
+    }
+
+    /// The administrator's managed secret `name`, else the store's (what
+    /// an external source's bootstrap token is read from).
+    fn managed_or_stored(&self, name: &str) -> Result<Option<SecretString>, Error> {
+        if let Some(value) = crate::managed::current()?.and_then(|m| m.secret(name)) {
+            return Ok(Some(value.clone()));
+        }
+        self.stored(name)
     }
 
     /// Whether helper values beat the store and the environment.
@@ -527,3 +557,6 @@ fn digest(value: Option<&SecretString>) -> [u8; 32] {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod external_tests;

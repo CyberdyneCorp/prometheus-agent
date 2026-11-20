@@ -19,6 +19,7 @@
 //! needs no async context; dropping the [`Proxy`] stops it.
 
 mod denylist;
+pub mod inject;
 mod policy;
 
 use std::io;
@@ -71,6 +72,8 @@ pub struct Rules {
     pub lookup: Arc<dyn Lookup>,
     /// Told about every refusal.
     pub observer: Option<Observer>,
+    /// The session's credential injection, when it has mapped secrets.
+    pub injection: Option<Arc<inject::Injection>>,
 }
 
 impl Rules {
@@ -85,7 +88,15 @@ impl Rules {
             requester: requester.to_owned(),
             lookup: Arc::new(SystemLookup),
             observer: None,
+            injection: None,
         }
+    }
+
+    /// Injecting the credentials of `injection`.
+    #[must_use]
+    pub fn injecting(mut self, injection: Arc<inject::Injection>) -> Self {
+        self.injection = Some(injection);
+        self
     }
 
     /// Narrowed to the hosts `granted` names as well.
@@ -140,7 +151,20 @@ pub struct Proxy {
     /// For [`Proxy::attacher`] (Unix only).
     #[cfg_attr(not(unix), allow(dead_code))]
     runtime: tokio::runtime::Handle,
-    rules: Arc<Rules>,
+    rules: Shared,
+}
+
+/// The rules a proxy serves: replaced in place by [`Proxy::reload`], read
+/// once per accepted connection (a connection keeps the rules it started
+/// with, so a reload drops nothing).
+type Shared = Arc<std::sync::RwLock<Arc<Rules>>>;
+
+fn current(shared: &Shared) -> Arc<Rules> {
+    Arc::clone(
+        &shared
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    )
 }
 
 impl Proxy {
@@ -150,7 +174,24 @@ impl Proxy {
     ///
     /// When the listener cannot bind or the thread cannot start.
     pub fn start(rules: Rules) -> io::Result<Self> {
-        let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
+        let listener = std::net::TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0)))?;
+        Self::start_on(rules, listener, None)
+    }
+
+    /// Starts a proxy serving `listener` (a container bridge listener the
+    /// caller bound). With `only_from`, connections from any other peer
+    /// address are closed unread: a listener on an address the network
+    /// can reach (rootless container runtimes reach the host at its own
+    /// address) serves this host's processes only.
+    ///
+    /// # Errors
+    ///
+    /// When the listener cannot be served or the thread cannot start.
+    pub fn start_on(
+        rules: Rules,
+        listener: std::net::TcpListener,
+        only_from: Option<IpAddr>,
+    ) -> io::Result<Self> {
         listener.set_nonblocking(true)?;
         let addr = listener.local_addr()?;
         let denied = Arc::new(AtomicU64::new(0));
@@ -160,7 +201,7 @@ impl Proxy {
             .enable_all()
             .build()?;
         let handle = runtime.handle().clone();
-        let rules = Arc::new(rules);
+        let rules: Shared = Arc::new(std::sync::RwLock::new(Arc::new(rules)));
         let served = Arc::clone(&rules);
         std::thread::Builder::new()
             .name("egress-proxy".into())
@@ -170,7 +211,7 @@ impl Proxy {
                         return;
                     };
                     tokio::select! {
-                        () = accept(listener, served, counter) => {}
+                        () = accept(listener, served, counter, only_from) => {}
                         _ = stopped => {}
                     }
                 });
@@ -203,6 +244,16 @@ impl Proxy {
         self.addr
     }
 
+    /// Serves new connections with `rules` from now on (allowlist,
+    /// denylist and credential mapping changes); open connections finish
+    /// under the rules they started with.
+    pub fn reload(&self, rules: Rules) {
+        *self
+            .rules
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Arc::new(rules);
+    }
+
     /// `http://127.0.0.1:<port>`, for `HTTP_PROXY`/`HTTPS_PROXY`.
     #[must_use]
     pub fn url(&self) -> String {
@@ -229,7 +280,7 @@ impl Drop for Proxy {
 #[derive(Debug, Clone)]
 pub struct Attacher {
     runtime: tokio::runtime::Handle,
-    rules: Arc<Rules>,
+    rules: Shared,
     denied: Arc<AtomicU64>,
 }
 
@@ -251,7 +302,7 @@ impl Attacher {
                 return;
             };
             tokio::select! {
-                () = accept(listener, rules, denied) => {}
+                () = accept(listener, rules, denied, None) => {}
                 () = closed(alive) => {}
             }
         }));
@@ -265,12 +316,20 @@ async fn closed(mut alive: tokio::net::UnixStream) {
     while matches!(alive.read(&mut byte).await, Ok(n) if n > 0) {}
 }
 
-async fn accept(listener: TcpListener, rules: Arc<Rules>, denied: Arc<AtomicU64>) {
+async fn accept(
+    listener: TcpListener,
+    shared: Shared,
+    denied: Arc<AtomicU64>,
+    only_from: Option<IpAddr>,
+) {
     loop {
-        let Ok((stream, _)) = listener.accept().await else {
+        let Ok((stream, peer)) = listener.accept().await else {
             continue;
         };
-        let (rules, denied) = (Arc::clone(&rules), Arc::clone(&denied));
+        if only_from.is_some_and(|only| only != peer.ip().to_canonical()) {
+            continue;
+        }
+        let (rules, denied) = (current(&shared), Arc::clone(&denied));
         pmt_core::spawn::spawn(async move {
             if let Err(Some(denial)) = serve(stream, &rules).await {
                 denied.fetch_add(1, Ordering::Relaxed);
@@ -301,6 +360,10 @@ async fn serve(mut client: TcpStream, rules: &Rules) -> Result<(), Option<Denial
             .await;
         return Err(None);
     };
+    if let Some(injection) = &rules.injection {
+        // A plain request bound for the wrong host never connects.
+        inject::screen(&mut client, &target, &rest, rules, injection).await?;
+    }
     let upstream = match open(rules, &target.host, target.port).await {
         Ok(upstream) => upstream,
         Err((reason, why)) => {
@@ -325,6 +388,9 @@ async fn serve(mut client: TcpStream, rules: &Rules) -> Result<(), Option<Denial
             }));
         }
     };
+    if let Some(injection) = &rules.injection {
+        return inject::serve(client, upstream, &target, &rest, rules, injection).await;
+    }
     relay(client, upstream, &target, &rest)
         .await
         .map_err(|_| None)
@@ -350,7 +416,9 @@ async fn relay(
 
 /// Reads up to the end of the request head; returns it and any bytes read
 /// past it.
-async fn read_head(client: &mut TcpStream) -> Result<(Vec<u8>, Vec<u8>), ()> {
+async fn read_head<R: tokio::io::AsyncRead + Unpin>(
+    client: &mut R,
+) -> Result<(Vec<u8>, Vec<u8>), ()> {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 4096];
     loop {
@@ -444,13 +512,15 @@ async fn open(rules: &Rules, host: &str, port: u16) -> Result<TcpStream, (Reason
             last = refused(refusal);
             continue;
         }
-        // Connect to the address that was checked, never re-resolve.
+        // Connect to the address that was checked, never re-resolve; a
+        // name answering both `::1` and `127.0.0.1` may listen on one only,
+        // so an unreachable address falls through to the next.
         let addr = SocketAddr::new(ip, port);
-        return match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
-            Ok(Ok(stream)) => Ok(stream),
-            Ok(Err(e)) => Err((Reason::Unreachable, e.to_string())),
-            Err(_) => Err((Reason::Unreachable, "connection timed out".to_owned())),
-        };
+        match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
+            Ok(Ok(stream)) => return Ok(stream),
+            Ok(Err(e)) => last = (Reason::Unreachable, e.to_string()),
+            Err(_) => last = (Reason::Unreachable, "connection timed out".to_owned()),
+        }
     }
     Err(last)
 }
@@ -536,6 +606,28 @@ mod tests {
         assert_eq!(seen[0].reason, Reason::NotGranted);
     }
 
+    /// A listener restricted to one peer address closes every other
+    /// peer's connection unread (spec: security-boundaries, Egress
+    /// enforcement for child processes: the bridge listener of a rootless
+    /// runtime faces the network).
+    #[test]
+    fn a_listener_restricted_to_a_peer_serves_only_that_peer() {
+        let rules = || {
+            let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()));
+            Rules::new(hosts, DestinationPolicy::default(), "terminal")
+        };
+        let bind = || std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let elsewhere = IpAddr::from([192, 0, 2, 1]);
+        let closed = Proxy::start_on(rules(), bind(), Some(elsewhere)).unwrap();
+        let answer = ask(&closed, "CONNECT example.com:443 HTTP/1.1\r\n\r\n");
+        assert_eq!(answer, "");
+        assert_eq!(closed.denied(), 0);
+        let local = IpAddr::from([127, 0, 0, 1]);
+        let open = Proxy::start_on(rules(), bind(), Some(local)).unwrap();
+        let answer = ask(&open, "CONNECT localhost:443 HTTP/1.1\r\n\r\n");
+        assert!(answer.starts_with("HTTP/1.1 403"), "{answer}");
+    }
+
     #[test]
     fn a_granted_name_resolving_to_a_private_address_is_refused() {
         let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()));
@@ -614,5 +706,35 @@ mod tests {
             &format!("GET http://rebind.example:{port}/path HTTP/1.1\r\nHost: x\r\n\r\n"),
         );
         assert!(again.starts_with("HTTP/1.1 403"), "{again}");
+    }
+
+    /// Answers `::1` before `127.0.0.1`, as `localhost` does on most hosts.
+    struct BothLoopbacks;
+
+    impl Lookup for BothLoopbacks {
+        fn lookup(&self, _host: &str) -> crate::resolve::LookupFuture {
+            let ips: Vec<IpAddr> = vec!["::1".parse().unwrap(), "127.0.0.1".parse().unwrap()];
+            Box::pin(async move { Ok(ips) })
+        }
+    }
+
+    /// A server listening on `127.0.0.1` only is reached under a name that
+    /// resolves to `::1` first: the refused address falls through to the
+    /// next one instead of failing the request with 502.
+    #[test]
+    fn an_unreachable_address_falls_through_to_the_next() {
+        let (listener, port) = server();
+        serve_once(listener);
+        let hosts = Arc::new(HostPolicy::new(Mode::Public, Vec::new()));
+        let policy = DestinationPolicy::new(false, &[])
+            .unwrap()
+            .with_grant(PrivateGrant::parse("localhost").unwrap());
+        let rules = Rules::new(hosts, policy, "terminal").with_lookup(Arc::new(BothLoopbacks));
+        let proxy = Proxy::start(rules).unwrap();
+        let answer = ask(
+            &proxy,
+            &format!("GET http://localhost:{port}/path HTTP/1.1\r\nHost: x\r\n\r\n"),
+        );
+        assert!(answer.contains("hello"), "{answer}");
     }
 }

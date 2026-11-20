@@ -213,6 +213,7 @@ fn grow(
         );
         return Ok(());
     }
+    let appended = added.len() as u64;
     dest.store.append_linked(
         &added,
         &LegacyLink {
@@ -222,6 +223,13 @@ fn grow(
             messages: rows.len() as u64,
         },
     )?;
+    dest.journal(crate::journal::Item::Appended {
+        id: id.to_string(),
+        source: LEGACY_SOURCE.to_owned(),
+        legacy_id: s.id.clone(),
+        carried,
+        counts: (imported, imported + appended),
+    });
     entry.disposition = Disposition::Transformed;
     entry.reason = format!("appended {} new messages", added.len());
     Ok(())
@@ -271,6 +279,12 @@ fn import_batch(
         });
     }
     dest.store.import_linked(&portables, &links)?;
+    for (id, messages) in expected.values() {
+        dest.journal(crate::journal::Item::Session {
+            id: id.to_string(),
+            messages: *messages,
+        });
+    }
     Ok(expected)
 }
 

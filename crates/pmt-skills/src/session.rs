@@ -56,6 +56,9 @@ pub struct SessionSetup {
     pub bundled: Arc<Bundled>,
     /// Plugin skill directories (M2).
     pub plugins: Vec<(String, PathBuf)>,
+    /// The session's harness `skills/` directory (frozen at session
+    /// start with the harness version).
+    pub harness: Option<PathBuf>,
     /// The skills guard.
     pub scanner: Arc<dyn Scanner>,
     /// Runs inline shell snippets in the session sandbox; `None` renders
@@ -71,6 +74,9 @@ pub struct SessionSetup {
     /// Told `(skill, action)` after each successful `skill_manage` create,
     /// edit or delete (plugin `on_skill_lifecycle`).
     pub lifecycle: Option<Lifecycle>,
+    /// Runs the skill's evals around an edit when `skills.eval_gate` is
+    /// on (spec: skills, Eval-gated skill edits); `None` skips the gate.
+    pub eval_gate: Option<Arc<dyn crate::evals::Gate>>,
 }
 
 /// The `on_skill_lifecycle` seam: skill name and action.
@@ -91,12 +97,14 @@ impl SessionSetup {
             posture: Posture::Default,
             bundled: Bundled::builtin(),
             plugins: Vec::new(),
+            harness: None,
             scanner: Arc::new(PatternScanner),
             inline_shell: None,
             secret_prompt: None,
             review: false,
             message_limit: None,
             lifecycle: None,
+            eval_gate: None,
         }
     }
 }
@@ -193,6 +201,7 @@ impl SkillsSession {
             cwd: self.setup.cwd.as_deref(),
             user_home: self.setup.user_home.as_deref(),
             plugins: &self.setup.plugins,
+            harness: self.setup.harness.as_deref(),
             bundled: Arc::clone(&self.setup.bundled),
         })
     }

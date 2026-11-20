@@ -25,6 +25,44 @@ fn parse_instant(text: &str) -> Result<i64, Error> {
         })
 }
 
+/// Approves `id`. An evolve task's approval first adopts its job's
+/// pending proposal in the assignee's profile, from that profile's next
+/// session (spec: kanban, Eval and harness-evolution tasks); a refused
+/// adoption (a stale proposal) leaves the task in review.
+fn approve(
+    env: &Env<'_>,
+    board: &mut Board,
+    actor: &Actor,
+    id: &str,
+    comment: Option<&str>,
+) -> Outcome {
+    let task = board.task(id)?;
+    if matches!(task.kind, pmt_kanban::TaskKind::Evolve { .. })
+        && task.status == Status::Review
+        && actor.kind == pmt_kanban::model::ActorKind::User
+    {
+        let profile = task.assignee.as_deref().ok_or_else(|| {
+            Error::new(
+                &codes::KANBAN_INVALID_TASK,
+                format!("evolve task {id} has no assignee whose harness to adopt"),
+            )
+        })?;
+        let home = env.ctx.home()?;
+        let scope = pmt_config::ProfileScope::open(
+            home.existing_profile(&pmt_config::ProfileName::parse(profile)?)?,
+            &pmt_config::Overrides::default(),
+            pmt_config::Launch::Other,
+        )?;
+        let user_home = env.ctx.launch.user_home().map(std::path::PathBuf::as_path);
+        if let Some(note) = crate::evolve_cmd::kanban::adopt(&scope, user_home, &task)? {
+            env.print(&format!("{id}: {note}"))?;
+        }
+    }
+    board
+        .approve(actor, id, comment, now())
+        .map(|()| Some(Status::Done))
+}
+
 /// Runs a lifecycle verb on each of its ids.
 pub(super) fn run(env: &Env<'_>, command: &KanbanCommand) -> Result<u8, Error> {
     let mut board = env.board()?;
@@ -141,11 +179,7 @@ fn review<'a>(
         ),
         KanbanCommand::Approve { ids, comment } => (
             ids,
-            each(ids, |id| {
-                board
-                    .approve(actor, id, comment.as_deref(), now())
-                    .map(|()| Some(Status::Done))
-            }),
+            each(ids, |id| approve(env, board, actor, id, comment.as_deref())),
         ),
         KanbanCommand::RequestChanges { ids, comment } => (
             ids,

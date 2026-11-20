@@ -96,3 +96,34 @@ fn a_start_that_loses_the_home_lock_waits_for_the_holder_to_publish() {
         format!("gateway already running (pid {})", lock.record().pid)
     );
 }
+
+#[test]
+fn a_start_takes_the_home_once_a_holder_leaves_without_publishing() {
+    let home = common::mock_home();
+    // A daemon on its way out (stopped for an update's restart): its
+    // record is gone, but its process still holds the home lock for a
+    // moment. The start must take the home once it is let go, not fail.
+    let lock = WriterLock::acquire(home.path(), Role::Daemon, vec!["default".into()]).unwrap();
+    let record = run_dir(home.path()).join(Role::Daemon.record_file());
+    std::fs::remove_file(&record).unwrap();
+    let start = common::command(home.path())
+        .args(["daemon", "start"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(Duration::from_secs(3));
+    drop(lock);
+    let out = start.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let _ = common::command(home.path())
+        .args(["daemon", "stop"])
+        .output();
+    assert!(
+        out.status.success(),
+        "{stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(stdout.starts_with("daemon started"), "{stdout}");
+}

@@ -21,6 +21,9 @@ pub struct Info {
     pub context_length: Option<u64>,
     /// KV cache bytes per token (f16), when the attention shape is known.
     pub kv_bytes_per_token: Option<u64>,
+    /// `<arch>.block_count`: the transformer layers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocks: Option<u64>,
 }
 
 /// Raw attention shape read from the header.
@@ -64,6 +67,7 @@ pub fn read(path: &Path) -> Result<Info, String> {
         record(&mut info, &mut shape, &key, value);
     }
     info.kv_bytes_per_token = shape.kv_bytes();
+    info.blocks = shape.blocks;
     Ok(info)
 }
 

@@ -22,6 +22,9 @@ pub const NO_CHANGE: &str = "no_change";
 
 /// Runs the monitor, script and agent stages.
 pub(super) async fn produce(ctx: &Exec<'_>, job: &Job, run: &RunRow) -> Produced {
+    if job.spec.kind == crate::job::JobKind::Evolve {
+        return evolve(ctx, job).await;
+    }
     let mut parts = Parts::default();
     let mut monitored = None;
     if job.spec.monitor_script.is_some() || job.spec.monitor_url.is_some() {
@@ -66,6 +69,23 @@ async fn stages_after_monitor(
     match prompt_parts(ctx, job, run, parts) {
         Ok(parts) => agent(ctx, job, run, &parts).await,
         Err(err) => Produced::failed(Status::Failed, err.message().to_owned(), false),
+    }
+}
+
+/// An `evolve` job queues its evolution job; the queued line is the
+/// run's output.
+async fn evolve(ctx: &Exec<'_>, job: &Job) -> Produced {
+    match ctx.runner.queue_evolve(job).await {
+        Ok(id) => {
+            let text = format!("evolution job {id} queued");
+            Produced {
+                output: Some(text.clone()),
+                deliver: Some(text),
+                inputs: json!({"task": job.spec.task}),
+                ..Produced::ended(Status::Ok, true)
+            }
+        }
+        Err(error) => Produced::failed(Status::Failed, error, false),
     }
 }
 

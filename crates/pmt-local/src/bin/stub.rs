@@ -2,9 +2,11 @@
 //! of the router-mode HTTP API Prometheus uses (`/health`, `/props`,
 //! `/v1/models`, `/models`, `/models/load`, `/models/unload`,
 //! `/v1/chat/completions` with and without streaming), loads a model on
-//! its first request, and with `--sleep-idle-seconds` unloads a model idle
-//! that long. It appends one line per event (`start <args>`, `load
-//! <model>`, `unload <model>`, `request <model>`) to `PMT_LLAMA_STUB_LOG`,
+//! its first request at the window its preset gives it (`c = <n>`, re-read
+//! on `/models?reload=1`; `/props?model=<m>` reports it), and with
+//! `--sleep-idle-seconds` unloads a model idle that long. It appends one
+//! line per event (`start <args>`, `load <model> c=<window>`, `unload
+//! <model>`, `reload`, `request <model>`) to `PMT_LLAMA_STUB_LOG`,
 //! else to `pmt-llama-stub.log` beside its `--models-preset`, so tests can
 //! see what the real server would have done.
 
@@ -22,9 +24,37 @@ struct State {
     /// Known models and when each was last used (None: unloaded).
     models: BTreeMap<String, Option<Instant>>,
     context: u64,
+    /// The preset file, re-read on `/models?reload=1` and at each load.
+    preset: Option<String>,
+    /// Each model's window in the preset (`c = <n>`).
+    windows: BTreeMap<String, u64>,
+    /// The window each resident model was loaded with.
+    loaded: BTreeMap<String, u64>,
+}
+
+/// The models of a preset and their windows.
+fn read_preset(path: &str) -> BTreeMap<String, u64> {
+    let text = std::fs::read_to_string(path).unwrap_or_default();
+    let mut found = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for line in text.lines() {
+        if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            current = (name != "*").then(|| name.to_owned());
+            if let Some(name) = &current {
+                found.insert(name.clone(), 0);
+            }
+        } else if let (Some(name), Some(c)) = (&current, line.strip_prefix("c = ")) {
+            found.insert(name.clone(), c.trim().parse().unwrap_or(0));
+        }
+    }
+    found
 }
 
 type Shared = Arc<Mutex<State>>;
+
+/// The training window `/v1/models` reports for every model (llama.cpp's
+/// `meta.n_ctx_train`): larger than the window a model runs with.
+const TRAINED: u64 = 262_144;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -50,14 +80,11 @@ fn main() {
     };
     match flag("--models-preset") {
         Some(preset) => {
-            let text = std::fs::read_to_string(preset).unwrap_or_default();
-            for line in text.lines() {
-                if let Some(name) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']'))
-                    && name != "*"
-                {
-                    state.models.insert(name.to_owned(), None);
-                }
+            state.windows = read_preset(&preset);
+            for name in state.windows.keys() {
+                state.models.insert(name.clone(), None);
             }
+            state.preset = Some(preset);
         }
         None => {
             state.models.insert(
@@ -85,11 +112,16 @@ fn idle_unloader(shared: &Shared, idle: Duration) {
     loop {
         std::thread::sleep(Duration::from_millis(100));
         let mut state = shared.lock().unwrap();
+        let mut unloaded = Vec::new();
         for (name, used) in &mut state.models {
             if used.is_some_and(|t| t.elapsed() >= idle) {
                 *used = None;
                 log(&format!("unload {name}"));
+                unloaded.push(name.clone());
             }
+        }
+        for name in unloaded {
+            state.loaded.remove(&name);
         }
     }
 }
@@ -164,8 +196,16 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
                 .as_ref()
                 .and_then(|m| state.models.get(m))
                 .is_some_and(Option::is_none);
+            let window = model.as_ref().and_then(|m| {
+                state
+                    .loaded
+                    .get(m)
+                    .or_else(|| state.windows.get(m))
+                    .copied()
+                    .filter(|w| *w > 0)
+            });
             let body = json!({
-                "default_generation_settings": {"n_ctx": state.context},
+                "default_generation_settings": {"n_ctx": window.unwrap_or(state.context)},
                 "is_sleeping": sleeping,
             });
             drop(state);
@@ -176,13 +216,19 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
             let data: Vec<Value> = state
                 .models
                 .keys()
-                .map(|m| json!({"id": m, "object": "model"}))
+                .map(|m| json!({"id": m, "object": "model", "meta": {"n_ctx_train": TRAINED}}))
                 .collect();
             drop(state);
             respond(&mut stream, 200, &json!({"object": "list", "data": data}))
         }
         ("GET", "/models") => {
-            let state = shared.lock().unwrap();
+            let mut state = shared.lock().unwrap();
+            if request.query.contains("reload=1")
+                && let Some(preset) = state.preset.clone()
+            {
+                state.windows = read_preset(&preset);
+                log("reload");
+            }
             let data: Vec<Value> = state
                 .models
                 .iter()
@@ -199,11 +245,13 @@ fn serve(mut stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
             respond(&mut stream, 200, &json!({"success": true}))
         }
         ("POST", "/models/unload") => {
-            if let Some(m) = &model
-                && let Some(used) = shared.lock().unwrap().models.get_mut(m)
-            {
-                *used = None;
-                log(&format!("unload {m}"));
+            if let Some(m) = &model {
+                let mut state = shared.lock().unwrap();
+                state.loaded.remove(m);
+                if let Some(used) = state.models.get_mut(m) {
+                    *used = None;
+                    log(&format!("unload {m}"));
+                }
             }
             respond(&mut stream, 200, &json!({"success": true}))
         }
@@ -220,7 +268,28 @@ fn query_model(query: &str) -> Option<String> {
     query
         .split('&')
         .find_map(|kv| kv.strip_prefix("model="))
-        .map(|m| m.replace("%2F", "/").replace("%3A", ":"))
+        .map(percent_decode)
+}
+
+/// `%XX` escapes decoded (a model id is sent fully escaped).
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let escaped = (bytes[i] == b'%')
+            .then(|| text.get(i + 1..i + 3))
+            .flatten()
+            .and_then(|hex| u8::from_str_radix(hex, 16).ok());
+        if let Some(byte) = escaped {
+            out.push(byte);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Marks `model` used, loading it first when it is not resident.
@@ -229,13 +298,16 @@ fn touch(shared: &Shared, model: Option<&str>) -> bool {
         return false;
     };
     let mut state = shared.lock().unwrap();
+    let window = state.windows.get(model).copied().unwrap_or(0);
     let Some(used) = state.models.get_mut(model) else {
         return false;
     };
-    if used.is_none() {
-        log(&format!("load {model}"));
-    }
+    let loading = used.is_none();
     *used = Some(Instant::now());
+    if loading {
+        log(&format!("load {model} c={window}"));
+        state.loaded.insert(model.to_owned(), window);
+    }
     true
 }
 

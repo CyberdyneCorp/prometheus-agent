@@ -74,9 +74,7 @@ pub(super) fn create(home: &Home, body: &Value) -> Result<Value, Error> {
             .as_str()
             .filter(|s| !s.trim().is_empty())
         {
-            let path = profile.path().join(pmt_config::profiles::DESCRIPTION_FILE);
-            pmt_core::private_fs::write_atomic(&path, text.trim().as_bytes())
-                .map_err(|e| Error::io(&codes::HOME_IO, &path, &e))?;
+            pmt_config::profiles::set_description(profile.path(), text)?;
         }
         if let Some(soul) = body["soul"].as_str().filter(|s| !s.trim().is_empty()) {
             std::fs::write(

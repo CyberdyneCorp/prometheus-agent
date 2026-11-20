@@ -10,6 +10,7 @@ mod agents;
 mod background;
 mod blueprint;
 mod browser;
+pub(crate) mod connectors;
 mod context;
 pub mod cron;
 mod delegation;
@@ -155,7 +156,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "curator" => {
             crate::curator_cmd::slash::run(ctx.scope, ctx.factory.launch(), args, &ctx.post)
         }
-        "background" => background::background(ctx, args).await,
+        "background" => Box::pin(background::background(ctx, args)).await,
         "agents" => agents::agents(ctx, args).await,
         "review" => review::review(ctx, args).await,
         "delegation" => delegation::delegation(ctx, args).await,
@@ -176,6 +177,7 @@ pub async fn run(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<Reply, 
         "tools" => session::tools(ctx, args).await,
         "plugins" => plugins::plugins(ctx, args).await,
         "mcp" => mcp::mcp(ctx, args).await,
+        "connectors" => connectors::connectors(ctx, args).await,
         "browser" => browser::browser(ctx, args).await,
         "worktree" => worktree::worktree(ctx, args).await,
         other => {
@@ -199,6 +201,8 @@ async fn work_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<St
         "subgoal" => crate::automation::commands::subgoal(ctx, args),
         "loop" => crate::automation::commands::looping(ctx, args),
         "heartbeat" => crate::automation::commands::heartbeat(ctx, args),
+        "evolve" => crate::evolve_cmd::slash::evolve(ctx, args),
+        "domain" => crate::experience_cmd::slash::domain(ctx, args),
         _ => return None,
     })
 }
@@ -251,8 +255,14 @@ fn state_command(ctx: &Ctx<'_>, name: &str, args: &str) -> Option<Result<String,
             text
         }),
         "yolo" => Ok(yolo(&ctx.strings(), live, args)),
-        "egress" => egress(&ctx.strings(), live, args),
+        "egress" => egress(&ctx.strings(), live, args).map(|text| {
+            match crate::egress_cmd::proxy_line(ctx.scope) {
+                Some(proxy) => format!("{text}\n{proxy}"),
+                None => text,
+            }
+        }),
         "config" => config(&ctx.strings(), ctx.scope, args),
+        "codex-runtime" => crate::codex_runtime_cmd::slash(ctx.scope, ctx.factory.launch(), args),
         _ => return None,
     })
 }

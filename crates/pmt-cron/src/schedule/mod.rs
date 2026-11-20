@@ -3,12 +3,15 @@
 //! (`every <duration>`), `cron` (five fields or an exact day/time phrase)
 //! or `once` (RFC 3339, `at <time>`, `tomorrow at <time>`, `in
 //! <duration>`). A bare duration is refused instead of guessed, and
-//! nothing shorter than a minute is accepted.
+//! nothing shorter than a minute is accepted. Kind `rrule`, an RFC 5545
+//! rule, comes only from a natural-language translation ([`translate`]).
 
 mod cronexpr;
 mod echo;
 mod next;
 mod phrase;
+mod rrule;
+pub mod translate;
 
 use jiff::civil::{Date, DateTime};
 use jiff::tz::TimeZone;
@@ -42,6 +45,14 @@ pub enum Schedule {
     Once {
         /// Unix milliseconds.
         at_ms: i64,
+    },
+    /// An RFC 5545 recurrence rule evaluated on the zone's wall clock.
+    Rrule {
+        /// The canonical rule (`FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;...`).
+        rule: String,
+        /// Its start (`DTSTART`, Unix milliseconds): intervals count from
+        /// it, and parts the rule leaves out take their value from it.
+        start_ms: i64,
     },
 }
 
@@ -144,24 +155,45 @@ impl Schedule {
         Ok(Some(schedule))
     }
 
-    /// `interval`, `cron` or `once`.
+    /// The recurrence rule `text` (`RRULE:` prefix optional) starting at
+    /// `start`.
+    ///
+    /// # Errors
+    ///
+    /// Why the rule is invalid, unsupported or never fires.
+    pub fn rrule(text: &str, start: Timestamp) -> Result<Self, String> {
+        let rule = rrule::Rule::parse(text)?;
+        // Checked in UTC like a cron expression: whether any date matches.
+        if rrule::next_after(&rule, start, start, &TimeZone::UTC)?.is_none() {
+            return Err("it never fires".to_owned());
+        }
+        Ok(Self::Rrule {
+            rule: rule.canonical(),
+            start_ms: ms(start),
+        })
+    }
+
+    /// `interval`, `cron`, `once` or `rrule`.
     #[must_use]
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::Interval { .. } => "interval",
             Self::Cron { .. } => "cron",
             Self::Once { .. } => "once",
+            Self::Rrule { .. } => "rrule",
         }
     }
 
     /// The canonical text (`every 30m`, `0 9 * * 1-5`, an RFC 3339 UTC
-    /// time), which parses back to the same schedule.
+    /// time, a recurrence rule), which parses back to the same schedule
+    /// (a rule with a start of its own).
     #[must_use]
     pub fn canonical(&self) -> String {
         match self {
             Self::Interval { every_secs } => format!("every {}", duration::format(*every_secs)),
             Self::Cron { expr } => expr.clone(),
             Self::Once { at_ms: at } => at_ms(*at).to_string(),
+            Self::Rrule { rule, .. } => rule.clone(),
         }
     }
 
@@ -169,6 +201,17 @@ impl Schedule {
     #[must_use]
     pub const fn recurring(&self) -> bool {
         !matches!(self, Self::Once { .. })
+    }
+
+    /// Whether running out of instants is its natural end (a one-shot, a
+    /// rule with `COUNT` or `UNTIL`) rather than a broken schedule.
+    #[must_use]
+    pub fn ends(&self) -> bool {
+        match self {
+            Self::Once { .. } => true,
+            Self::Rrule { rule, .. } => rrule::Rule::parse(rule).is_ok_and(|r| r.bounded()),
+            Self::Interval { .. } | Self::Cron { .. } => false,
+        }
     }
 
     /// The first instant strictly after `base`; `anchor` is the previous
@@ -191,6 +234,9 @@ impl Schedule {
             }
             Self::Cron { expr } => next::cron_after(&CronExpr::parse(expr)?, base, zone),
             Self::Once { at_ms: at } => Ok(Some(at_ms(*at)).filter(|t| *t > base)),
+            Self::Rrule { rule, start_ms } => {
+                rrule::next_after(&rrule::Rule::parse(rule)?, at_ms(*start_ms), base, zone)
+            }
         }
     }
 
@@ -200,7 +246,7 @@ impl Schedule {
     pub fn period_secs(&self, base: Timestamp, zone: &TimeZone) -> Option<u64> {
         match self {
             Self::Interval { every_secs } => Some(*every_secs),
-            Self::Cron { .. } => {
+            Self::Cron { .. } | Self::Rrule { .. } => {
                 let first = self.next_after(base, base, zone).ok()??;
                 let second = self.next_after(first, first, zone).ok()??;
                 u64::try_from((second - first).get_seconds()).ok()

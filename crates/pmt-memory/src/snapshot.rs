@@ -17,7 +17,7 @@ use pmt_core::error::Error;
 use pmt_store::{MemoryEntry, MemoryStatus, MemoryTarget, Store};
 
 use crate::budget::{self, SEPARATOR, Usage};
-use crate::scan;
+use crate::{decay, scan};
 
 /// The heading of `target`'s block.
 #[must_use]
@@ -36,12 +36,6 @@ pub fn shown(entry: &MemoryEntry) -> (String, Option<&'static str>) {
         Some(rule) => (scan::blocked(rule), Some(*rule)),
         None => (entry.content.clone(), None),
     }
-}
-
-/// Whether `entry` has expired at `now`.
-#[must_use]
-pub fn expired(entry: &MemoryEntry, now: Timestamp) -> bool {
-    entry.expires_at.is_some_and(|at| at <= now)
 }
 
 /// Entries whose status the scan changed: to block, to unblock.
@@ -90,14 +84,28 @@ impl Verdicts {
 ///
 /// Store errors.
 pub fn render(store: &Store, config: &MemoryConfig) -> Result<Option<String>, Error> {
+    render_at(store, config, Timestamp::now())
+}
+
+/// [`render`] at `now`: entries that fell dormant by then (expired or
+/// decayed) are marked so first and left out.
+///
+/// # Errors
+///
+/// Store errors.
+pub fn render_at(
+    store: &Store,
+    config: &MemoryConfig,
+    now: Timestamp,
+) -> Result<Option<String>, Error> {
+    crate::decay::sweep(store, &config.decay, now)?;
     let entries = store.memory_entries(None)?;
-    let now = Timestamp::now();
     let mut verdicts = Verdicts::default();
     let mut blocks = Vec::new();
     for target in budget::enabled(config) {
         let core: Vec<&MemoryEntry> = entries
             .iter()
-            .filter(|e| budget::in_core(e, target) && !expired(e, now))
+            .filter(|e| budget::in_core(e, target) && !decay::expired(e, now))
             .collect();
         if core.is_empty() {
             continue;

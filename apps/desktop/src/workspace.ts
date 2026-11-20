@@ -1,7 +1,8 @@
 // The window around the chat (spec: desktop-app, Windows, tabs and panes;
 // Interface modes and layouts; File browser pane; Artifacts gallery and
 // suggestions; Preview rail and in-app browser; Embedded terminals are
-// daemon-owned PTYs; Live subagents frame): tabs over the chat, the
+// daemon-owned PTYs; Live subagents frame; execution-environments, Bot
+// screen): tabs over the chat, the
 // terminal under it, the right sidebar's panes, the layout controls and
 // the window's keyboard shortcuts.
 
@@ -14,6 +15,7 @@ import { type Arrangement, Layout, type Mode } from "./layout";
 import { PreviewRail } from "./preview";
 import { PreviewDriver } from "./preview-driver";
 import { ReviewPane } from "./review";
+import { ScreenPane } from "./screen";
 import { shell } from "./shell";
 import { Shortcuts } from "./shortcuts";
 import { SubagentsFrame } from "./subagents";
@@ -75,6 +77,7 @@ export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLE
   const terminal = new TerminalPane(client, (text) => chat.attachComments(text, []));
   const subagents = new SubagentsFrame(client);
   const review = new ReviewPane(client, dialogs);
+  const screen = new ScreenPane(client);
   const panes = new Panes();
   const tabs = new Tabs((sessionId) => (sessionId ? void chat.open(sessionId) : chat.draft()));
   let side: HTMLElement | null = null;
@@ -124,6 +127,7 @@ export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLE
     panes.add("artifacts", "Artifacts", artifacts.el, () => void artifacts.load()),
     panes.add("preview", "Preview", preview.el, () => preview.show()),
     panes.add("review", "Review", review.el, () => void review.load()),
+    panes.add("screen", "Screen", screen.el, () => screen.show()),
     ...extra.map((p) => panes.add(p.name, p.label, p.el, p.shown)),
   );
   const center = h("div", { class: "center" }, h("div", { class: "center-bar" }, tabs.el, popOut), chat.el, terminal.el);
@@ -135,7 +139,7 @@ export function workspace(client: DesktopClient, chat: ChatView, settings: HTMLE
     layout,
     shortcuts: keys,
     showPane: (name) => layout.change({ pane: name, right: true }),
-    paneNames: ["settings", "files", "artifacts", "preview", "review", ...extra.map((p) => p.name)],
+    paneNames: ["settings", "files", "artifacts", "preview", "review", "screen", ...extra.map((p) => p.name)],
     start: (sideEl) => {
       side = sideEl;
       layout.start();

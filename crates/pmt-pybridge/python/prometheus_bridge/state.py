@@ -31,6 +31,7 @@ REGISTRY = {
     "redaction_patterns": [],
     "locales": [],
     "blueprints": [],
+    "bench_adapters": {},
     "unload": [],
     "degraded": [],
 }

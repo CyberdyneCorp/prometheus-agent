@@ -16,6 +16,7 @@ use serde_json::Value;
 use sha2::{Digest as _, Sha256};
 use tokio::sync::watch;
 
+use crate::live::{ChildItem, Feeds};
 use crate::progress::{self, Identity, Snapshot};
 use crate::result::Artifact;
 use crate::stall::Activity;
@@ -53,6 +54,7 @@ impl Tracker {
         transcript: Option<Arc<crate::transcript::Transcript>>,
     ) -> Self {
         let (updates, rx) = watch::channel(Snapshot::default());
+        Feeds::process().open(&entry.subagent_id);
         if let Some(events) = root_events {
             let identity = Identity {
                 subagent_id: entry.subagent_id.clone(),
@@ -94,6 +96,9 @@ impl Tracker {
 
     fn observe(&self, event: &Event) {
         let inner = &self.inner;
+        if let Some(item) = feed_item(event) {
+            Feeds::process().push(&inner.entry.subagent_id, item);
+        }
         match event {
             Event::ModelCall(call) => {
                 inner.activity.progressed();
@@ -202,6 +207,28 @@ fn hex(bytes: &[u8]) -> String {
         let _ = write!(out, "{b:02x}");
         out
     })
+}
+
+/// What a client watching the child sees of `event`.
+fn feed_item(event: &Event) -> Option<ChildItem> {
+    match event {
+        Event::AssistantMessage(message) if !message.text.is_empty() => {
+            Some(ChildItem::Assistant(message.text.clone()))
+        }
+        Event::ToolCall(call) => Some(ChildItem::ToolCall {
+            tool: call.tool.clone(),
+            hint: argument_hint(&call.arguments),
+        }),
+        Event::ToolResult(result) => Some(ChildItem::ToolResult {
+            tool: result.tool.clone(),
+            output: result
+                .output
+                .clone()
+                .or_else(|| result.error.as_ref().map(|e| e.message.clone()))
+                .unwrap_or_default(),
+        }),
+        _ => None,
+    }
 }
 
 /// A short hint of what a call works on (its path, command or query).

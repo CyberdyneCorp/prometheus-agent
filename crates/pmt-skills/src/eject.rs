@@ -55,6 +55,7 @@ pub fn profile_catalog_at(
         cwd,
         user_home,
         plugins: &[],
+        harness: None,
         bundled,
     });
     let lock = LockFile::in_dir(&profile_skills(profile_dir)).read();

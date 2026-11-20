@@ -143,6 +143,15 @@ pub(super) fn tick(env: &Env<'_>) -> Result<u8, Error> {
     if let Some(pass) = crate::curator_cmd::auto::check(&env.scope, &env.store, env.ctx.launch) {
         let _ = pass.join();
     }
+    if let Some(pass) =
+        crate::memory_cmd::consolidate::check(&env.scope, &env.store, env.ctx.launch)
+    {
+        let _ = pass.join();
+    }
+    if let Some(pass) = crate::sessions_cmd::semantic::check(&env.scope, &env.store, env.ctx.launch)
+    {
+        let _ = pass.join();
+    }
     let runs: Vec<_> = outcome
         .iter()
         .map(|r| json!({"run_id": r.id, "job_id": r.job_id, "status": r.status, "error": r.error}))

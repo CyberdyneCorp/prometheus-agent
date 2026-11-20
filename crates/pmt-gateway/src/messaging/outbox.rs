@@ -130,6 +130,7 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
             OutboundState::Failed,
             "expired before it could be sent",
         );
+        super::receipts::failed(shared, profile, entry.id);
         return;
     }
     if entry.kind == OutboundKind::Warning && suppressed(shared, profile, &entry.platform) {
@@ -208,6 +209,7 @@ async fn deliver(shared: &Shared, profile: &str, store: &Store, entry: Outbound)
                 &[("platform", &entry.platform)],
             );
             failed(store, &entry, &err, config.max_attempts, now);
+            super::receipts::failed(shared, profile, entry.id);
         }
     }
 }

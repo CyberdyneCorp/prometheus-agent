@@ -142,6 +142,15 @@ fn adopt(p: &Pairing, dest: &Dest<'_>, entry: &mut Entry) -> Result<(), Error> {
         .store
         .adopt_pairing(&p.platform, &p.user, p.name.as_deref(), at)?
     {
+        let row = |r: Option<pmt_store::gateway::pairing::PairingRow>| {
+            r.and_then(|r| serde_json::to_value(r).ok())
+        };
+        dest.journal(crate::journal::Item::Pairing {
+            platform: p.platform.clone(),
+            user: p.user.clone(),
+            before: row(before.clone()),
+            after: row(dest.store.pairing_row(&p.platform, &p.user)?),
+        });
         let (platform, user) = (p.platform.clone(), p.user.clone());
         dest.on_undo(move |store| store.restore_pairing(&platform, &user, before.as_ref()));
     } else {

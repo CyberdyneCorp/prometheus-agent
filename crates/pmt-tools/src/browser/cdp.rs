@@ -86,6 +86,18 @@ impl Cdp {
         let (socket, _) = tokio_tungstenite::connect_async(endpoint)
             .await
             .map_err(|err| format!("cannot connect to {endpoint}: {err}"))?;
+        Ok(Self::over_websocket(endpoint, socket))
+    }
+
+    /// A connection over an established DevTools WebSocket; `label` stands
+    /// in for the endpoint (reconnects dial it).
+    pub fn over_websocket<S>(
+        label: &str,
+        socket: tokio_tungstenite::WebSocketStream<S>,
+    ) -> Arc<Self>
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
         let (mut sink, stream) = socket.split();
         let incoming = stream
             .take_while(|message| std::future::ready(message.is_ok()))
@@ -103,7 +115,7 @@ impl Cdp {
             }
             let _ = sink.close().await;
         };
-        Ok(Self::assemble(endpoint, writer, incoming))
+        Self::assemble(label, writer, incoming)
     }
 
     /// A connection over Chromium's `--remote-debugging-pipe`: messages

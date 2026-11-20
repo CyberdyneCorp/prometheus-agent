@@ -170,7 +170,7 @@ pub fn missing(provider: &str, command: &str) -> Error {
 }
 
 /// The user's home directory, for the user-local bin directories.
-fn user_home() -> Option<PathBuf> {
+pub(crate) fn user_home() -> Option<PathBuf> {
     let var = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
     std::env::var_os(var)
         .filter(|v| !v.is_empty())

@@ -2,8 +2,9 @@
 //! there while the adapter is away, as the bridge keeps them), sends of at
 //! most 4,096 characters, edits, media both ways (inbound files land in the
 //! bridge's cache, outbound ones are read from their path; audio goes out
-//! as a voice note, as bridge.js sends it), typing, chat info, a health
-//! state that can be logged out, and scripted failures.
+//! as a voice note, as bridge.js sends it), typing, chat info, delivery
+//! statuses of sent messages, a health state that can be logged out, and
+//! scripted failures.
 
 // A fixture: a mock that cannot serve should fail loudly.
 #![allow(clippy::missing_panics_doc)]
@@ -135,6 +136,15 @@ impl BridgeMock {
         state.queue.push(event.clone());
         state.last = Some(event);
         id
+    }
+
+    /// The recipient's phone reports `status` (`delivered`, `read`,
+    /// `played`, `server_ack`, `error`) of the sent message `message_id`,
+    /// as bridge.js queues it.
+    pub fn status(&self, message_id: &str, status: &str) {
+        self.lock().queue.push(json!({"event": "delivery_status",
+            "messageId": message_id, "chatId": USER, "status": status,
+            "timestamp": 1_700_000_100}));
     }
 
     fn serve(&self, request: &HttpRequest) -> HttpResponse {

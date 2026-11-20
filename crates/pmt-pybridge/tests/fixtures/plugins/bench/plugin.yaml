@@ -1,0 +1,3 @@
+name: bench
+version: 1.0.0
+description: A sample benchmark adapter registered through the bridge

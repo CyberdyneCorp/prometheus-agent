@@ -74,6 +74,7 @@ fn local_session(home: &Path) -> String {
         .blocking_record(Emit::now(Event::UserMessage(MessageText {
             message_id: None,
             text: "hello".to_owned(),
+            author: None,
         })))
         .unwrap();
 

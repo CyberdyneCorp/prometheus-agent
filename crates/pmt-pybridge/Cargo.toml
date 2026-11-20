@@ -23,12 +23,12 @@ toml.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 tracing.workspace = true
 
-base64 = { workspace = true, optional = true }
+base64.workspace = true
 zip = { workspace = true, optional = true }
 
 [features]
 # Test support: the uv and interpreter a test home uses, wheel fixtures.
-testkit = ["dep:base64", "dep:zip"]
+testkit = ["dep:zip"]
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["signal", "process"] }

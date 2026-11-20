@@ -28,6 +28,8 @@ use pmt_tools::terminal::remote::ssh::SshTransport;
 use pmt_tools::terminal::remote::{RemoteExec, RemoteTarget, Transport};
 use pmt_tools::terminal::target::{PluginTarget, Target, Unavailable};
 
+use crate::egress::gateway::cover::Uncovered;
+
 /// The release's sandbox image (`terminal.container.image` unset). The
 /// release pipeline publishes it per version (spec: distribution-and-update,
 /// Container image).
@@ -145,6 +147,19 @@ fn try_select(
     let backend = registry.select(&terminal.backend)?;
     let descriptor = backend.descriptor(terminal);
     let mut held = None;
+    if !matches!(backend.kind, Kind::Local | Kind::Reserved(_)) {
+        // Container and remote sandboxes never start with real credentials
+        // while the egress proxy is down.
+        crate::egress::gateway::require_running(scope)?;
+    }
+    let uncovered = match backend.kind {
+        Kind::Singularity => Some(Uncovered::Singularity),
+        Kind::Plugin => Some(Uncovered::Plugin),
+        _ => None,
+    };
+    if let Some(kind) = uncovered {
+        crate::egress::gateway::cover::refuse_uncovered(scope, &backend.name, kind)?;
+    }
     let (place, transport): (Place, Option<Arc<dyn Transport>>) = match &backend.kind {
         Kind::Local | Kind::Reserved(_) => return Ok(None),
         Kind::Container => {
@@ -156,12 +171,7 @@ fn try_select(
             };
             (place, Some(transport as Arc<dyn Transport>))
         }
-        Kind::Ssh => {
-            let control = scope.path("run/ssh");
-            pmt_core::private_fs::create_dir(&control).ok();
-            let target = SshTarget::from_config(&terminal.ssh, Some(&control))?;
-            (Place::Ssh, Some(Arc::new(SshTransport::new(target))))
-        }
+        Kind::Ssh => (Place::Ssh, Some(ssh(scope)?)),
         Kind::Singularity => {
             let place = Place::Container {
                 workspace_mounted: false,
@@ -256,6 +266,21 @@ fn over_transport(
     }
 }
 
+/// The SSH host, through the egress proxy's tunnel when it covers the
+/// profile.
+fn ssh(scope: &ProfileScope) -> Result<Arc<dyn Transport>, Error> {
+    let control = scope.path("run/ssh");
+    pmt_core::private_fs::create_dir(&control).ok();
+    let target = SshTarget::from_config(&scope.config().terminal.ssh, Some(&control))?;
+    let transport = SshTransport::new(target);
+    Ok(Arc::new(
+        match crate::egress::gateway::cover::ssh_egress(scope)? {
+            Some(egress) => transport.with_egress(egress),
+            None => transport,
+        },
+    ))
+}
+
 /// The session's container: one per session, or per `shared_key`.
 fn container(
     scope: &ProfileScope,
@@ -287,14 +312,83 @@ fn container(
         volumes,
         user: options.run_as_host_user.then(host_user).flatten(),
         idle_lifetime: Duration::from_secs(config.terminal.idle_lifetime_secs),
+        network: None,
     };
     // Skill credential files appear read-only under the container's
     // Prometheus home (spec: skills, Skill credential file passthrough).
     spec.volumes
         .push(super::credentials::volume(scope, &spec.name()));
-    Ok(Arc::new(ContainerTransport::new(
-        Pool::process().container(spec),
-    )))
+    let cover = crate::egress::gateway::cover::container_cover(scope, &spec.runtime, &spec.image)?;
+    if let Some(cover) = &cover {
+        egress_mounts(&mut spec, cover);
+    }
+    let display = screen_display(scope, &mut spec)?;
+    let transport = ContainerTransport::new(Pool::process().container(spec));
+    let egress = cover.map(egress_env);
+    Ok(Arc::new(match (egress, display) {
+        (None, None) => transport,
+        (Some(egress), None) => transport.with_overrides(egress),
+        (egress, Some(display)) => transport.with_overrides(Arc::new(move || {
+            let mut vars = egress.as_ref().map(|egress| egress()).unwrap_or_default();
+            vars.extend(display.iter().cloned());
+            vars
+        })),
+    }))
+}
+
+/// The bot screen's X sockets, cookie, `DISPLAY` and `XAUTHORITY` when
+/// the screen is placed in the container backend (spec:
+/// execution-environments, Bot screen): the agent's commands act on it.
+#[cfg(unix)]
+fn screen_display(
+    scope: &ProfileScope,
+    spec: &mut ContainerSpec,
+) -> Result<Option<Vec<(String, String)>>, Error> {
+    let shared = crate::screen::container::for_sessions(scope)?;
+    Ok(shared.map(|display| {
+        spec.volumes.extend(display.volumes);
+        display.env
+    }))
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps, reason = "matches the Unix signature")]
+fn screen_display(
+    _scope: &ProfileScope,
+    _spec: &mut ContainerSpec,
+) -> Result<Option<Vec<(String, String)>>, Error> {
+    Ok(None)
+}
+
+/// The egress CA and bundle, read-only, and the egress-only network
+/// (spec: security-boundaries, Egress proxy coverage of containers and
+/// remote sandboxes).
+fn egress_mounts(spec: &mut ContainerSpec, cover: &crate::egress::gateway::cover::Cover) {
+    use crate::egress::gateway::{CONTAINER_BUNDLE, CONTAINER_CA};
+    for (host, container) in [
+        (&cover.bundle, CONTAINER_BUNDLE),
+        (&cover.ca_cert, CONTAINER_CA),
+    ] {
+        spec.volumes.push(options::Volume {
+            host: host.clone(),
+            container: container.to_owned(),
+            read_only: true,
+        });
+    }
+    spec.network.clone_from(&cover.network);
+}
+
+/// The variables of every command: the proxy, the CA and the current
+/// placeholders (re-read so a rotation reaches the next command).
+fn egress_env(
+    cover: crate::egress::gateway::cover::Cover,
+) -> pmt_tools::terminal::remote::container::EnvOverrides {
+    use crate::egress::gateway::{CONTAINER_BUNDLE, CONTAINER_CA};
+    Arc::new(move || {
+        let mut vars = cover.env(CONTAINER_BUNDLE, CONTAINER_CA);
+        vars.extend(crate::egress::mappings::read(&cover.mappings));
+        vars
+    })
 }
 
 /// The profile's singularity instance (shared by its sessions).

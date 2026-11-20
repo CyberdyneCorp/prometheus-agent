@@ -26,6 +26,7 @@ use wasmtime::{Store, StoreLimitsBuilder, Trap};
 
 mod adapter;
 mod backend;
+mod benchmark;
 mod engine;
 mod memory;
 mod meter;
@@ -39,7 +40,7 @@ pub(crate) use meter::Meter;
 
 use super::bindings::PluginHost;
 use super::bindings::exports::prometheus::{
-    context_engine, delegation_router, hook, memory_provider, platform_adapter, provider,
+    bench, context_engine, delegation_router, hook, memory_provider, platform_adapter, provider,
     terminal_backend, tool, ui_panel,
 };
 use super::imports::{CallInfo, Context, HostState};
@@ -73,6 +74,7 @@ pub struct Instance {
     engine: Option<context_engine::plugin::GuestIndices>,
     adapter: Option<platform_adapter::plugin::GuestIndices>,
     panel: Option<ui_panel::plugin::GuestIndices>,
+    bench: Option<bench::plugin::GuestIndices>,
     /// `tool.tools()`, read once: a session starting while the instance
     /// is busy (a plugin call waiting on a subagent it launched) must not
     /// wait for it.
@@ -140,6 +142,7 @@ impl Instance {
             engine: context_engine::plugin::GuestIndices::new(&pre).ok(),
             adapter: platform_adapter::plugin::GuestIndices::new(&pre).ok(),
             panel: ui_panel::plugin::GuestIndices::new(&pre).ok(),
+            bench: bench::plugin::GuestIndices::new(&pre).ok(),
             tool_specs: Mutex::new(None),
             id,
             pre,
@@ -533,6 +536,7 @@ impl Instance {
                 call: call.clone(),
                 limits,
                 console: None,
+                bench: None,
                 meter: Meter::wall(),
             },
         );

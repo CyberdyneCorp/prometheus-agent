@@ -198,10 +198,16 @@ async fn an_older_minor_client_attaches_and_gets_nothing_newer() {
         .server
         .hub()
         .publish(&session, "session.event", json!({"type": "x"}));
-    let first = tokio::time::timeout(Duration::from_secs(5), inbox.events.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    // (`session.presence` from the attach comes first.)
+    let first = loop {
+        let event = tokio::time::timeout(Duration::from_secs(5), inbox.events.recv())
+            .await
+            .unwrap()
+            .unwrap();
+        if event.event != "session.presence" {
+            break event;
+        }
+    };
     assert_eq!(
         first.event, "session.event",
         "the 1.3 event was not sent to a 1.2 client"
@@ -218,7 +224,7 @@ async fn undeclared_and_unserved_methods_have_their_codes() {
         .unwrap_err();
     assert_eq!(err.code, -32_601);
     assert_eq!(err.message, "unknown method: session.frobnicate");
-    let err = client.call("evolve.list", json!({})).await.unwrap_err();
+    let err = client.call("wake.feed", json!({})).await.unwrap_err();
     assert_eq!(err.code, -32_006);
     assert_eq!(err.data.unwrap().code, "rpc.not_served");
 }

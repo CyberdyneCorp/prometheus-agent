@@ -238,6 +238,26 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "AdoptionPolicy": {
+      "description": "What happens to a proposal once a job produced it.",
+      "oneOf": [
+        {
+          "const": "ask",
+          "description": "The user adopts or rejects it.",
+          "type": "string"
+        },
+        {
+          "const": "auto",
+          "description": "Adopted at once unless it touches scripts, hooks or subagents.",
+          "type": "string"
+        },
+        {
+          "const": "never",
+          "description": "Kept for review only.",
+          "type": "string"
+        }
+      ]
+    },
     "AgentCacheConfig": {
       "additionalProperties": false,
       "description": "`[gateway.agent_cache]`.",
@@ -661,6 +681,11 @@
           "default": "deny",
           "description": "Decision for approvals in single-query (`-q`) runs."
         },
+        "taint_policy": {
+          "$ref": "#/$defs/TaintPolicy",
+          "default": "warn",
+          "description": "After untrusted content entered a turn: `ask` requires a human\napproval for each later call of that turn that sends data to a\ntarget not yet approved in the session, `warn` only annotates such\ncalls, `off` does not track."
+        },
         "timeout_secs": {
           "default": 300,
           "description": "Unanswered approvals are denied after this long.",
@@ -791,6 +816,17 @@
           ],
           "description": "Skill curator."
         },
+        "eval_judge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`llm` graders of `prometheus eval judge` (defaults to the main\nmodel; a grader's own `model` wins)."
+        },
         "evolution": {
           "anyOf": [
             {
@@ -842,6 +878,28 @@
           ],
           "description": "Memory review."
         },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Profile descriptions of `profile describe --auto` (defaults to the\nmain model)."
+        },
+        "schedule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Natural-language schedules of `cron add --nl` and the `cronjob`\ntool's `schedule_text` (defaults to the main model)."
+        },
         "side_question": {
           "anyOf": [
             {
@@ -874,6 +932,17 @@
             }
           ],
           "description": "Session titles."
+        },
+        "trajectory_compress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuxiliaryTask"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Summaries of `prometheus trajectory compress` (defaults to the main\nmodel; `--model` wins)."
         },
         "transient_retries": {
           "default": 2,
@@ -1042,6 +1111,95 @@
       },
       "type": "object"
     },
+    "BitwardenSourceConfig": {
+      "additionalProperties": false,
+      "description": "`[secrets.bitwarden]`: every secret of a Bitwarden Secrets Manager\nproject, by its key (a bulk source), read with the `bws` CLI.",
+      "properties": {
+        "access_token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "BWS_ACCESS_TOKEN",
+          "description": "The stored secret holding the machine account's access token (the\nonly place the token is read from)."
+        },
+        "cache_ttl_secs": {
+          "default": 300,
+          "description": "Resolved values stay in memory at most this long (never on disk).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Read secrets from Bitwarden (off by default: `bws` is then never\nrun).",
+          "type": "boolean"
+        },
+        "names": {
+          "description": "The keys `prometheus secrets bitwarden sync --apply` accepted; the\nsource supplies only these (empty: every key of the project).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "project_id": {
+          "description": "The project whose secrets are read (unset: every project the token\nsees).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "server_url": {
+          "description": "A self-hosted server's URL.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "BotDesktopConfig": {
+      "additionalProperties": false,
+      "description": "The `[bot_desktop]` section.",
+      "properties": {
+        "auto_start": {
+          "default": false,
+          "description": "Start the screen on the first `computer_use` call or headed browser\nlaunch instead of only on `prometheus computer-use screen start`.",
+          "type": "boolean"
+        },
+        "geometry": {
+          "default": "1440x900",
+          "description": "The screen's size, `<width>x<height>` in pixels.",
+          "pattern": "^[1-9][0-9]{2,4}x[1-9][0-9]{2,4}$",
+          "type": "string"
+        },
+        "idle_stop_secs": {
+          "default": 1800,
+          "description": "The screen stops after this long without use (`0`: never).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "image": {
+          "default": "",
+          "description": "The image of a screen placed in the container backend (empty: the\nrelease's desktop sandbox image, `prometheus-sandbox:<version>-desktop`).",
+          "type": "string"
+        },
+        "min_free_memory_bytes": {
+          "default": 1610612736,
+          "description": "The screen refuses to start with less free memory than this on the\nhost or its cgroup (`0`: no check).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "placement": {
+          "$ref": "#/$defs/ScreenPlacement",
+          "default": "auto",
+          "description": "Where the screen runs."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "BotModeConfig": {
       "additionalProperties": false,
       "description": "The `[bot_mode]` section.",
@@ -1100,6 +1258,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "engine": {
+          "$ref": "#/$defs/BrowserEngine",
+          "default": "auto",
+          "description": "The local browser engine: `auto` (Chromium) or `lightpanda`\n(lighter; no screenshots, one page). Lowest precedence: an explicit\nCDP endpoint, a cloud provider or real-profile browsing shadow it."
+        },
         "executable_path": {
           "default": "",
           "description": "The local browser executable; empty uses the managed `chromium`\nruntime, then a Chromium-family browser of the host.",
@@ -1154,6 +1317,21 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "BrowserEngine": {
+      "description": "Local browser engines.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Chromium (the managed runtime or a host browser).",
+          "type": "string"
+        },
+        {
+          "const": "lightpanda",
+          "description": "Lightpanda (`lightpanda serve`).",
+          "type": "string"
+        }
+      ]
     },
     "BudgetsConfig": {
       "additionalProperties": false,
@@ -2056,6 +2234,21 @@
         }
       ]
     },
+    "CredentialSource": {
+      "description": "Where the egress proxy reads injected credentials.",
+      "oneOf": [
+        {
+          "const": "store",
+          "description": "The profile's secrets store.",
+          "type": "string"
+        },
+        {
+          "const": "bitwarden",
+          "description": "Bitwarden Secrets Manager (`secrets.bitwarden`), fetched on every\nproxy start.",
+          "type": "string"
+        }
+      ]
+    },
     "CronConfig": {
       "additionalProperties": false,
       "description": "The `[cron]` section: the profile time zone (also the zone of daily\nbudgets and `usage --by day`) and the scheduled-job settings.",
@@ -2128,6 +2321,11 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "managed": {
+          "$ref": "#/$defs/CronManagedConfig",
+          "default": {},
+          "description": "The managed scheduler (`cron.provider = \"managed\"`)."
         },
         "max_parallel_jobs": {
           "default": 4,
@@ -2228,6 +2426,52 @@
           "default": {},
           "description": "Per platform: the thread or topic id home-chat deliveries go to\n(explicit `<adapter>:<chat>:<thread>` targets win).",
           "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "CronManagedConfig": {
+      "additionalProperties": false,
+      "description": "The `[cron.managed]` table (spec: scheduled-jobs, Managed scheduler\ncontract): where jobs are armed and how fires are verified. The\nmanaged trigger is in effect only when `endpoint`, `jwks_url` and\n`audience` are all set.",
+      "properties": {
+        "audience": {
+          "description": "The `aud` a fire token must carry.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "callback_url": {
+          "description": "The public URL of this daemon's `POST /api/cron/fire`, sent with\nevery arm request.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "endpoint": {
+          "description": "Where one-shots are armed (`POST` of `job_id`, `profile`,\n`fire_at`, `dedup_key` and `callback_url`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "jwks_url": {
+          "description": "The JWKS fire tokens are verified against (asymmetric keys only).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret sent as a bearer token with arm requests (none when\nunset)."
         }
       },
       "type": "object"
@@ -2891,6 +3135,21 @@
       "type": "object",
       "x-apply": "live"
     },
+    "DmMode": {
+      "description": "How a linked person's DMs map to conversations.",
+      "oneOf": [
+        {
+          "const": "per_platform",
+          "description": "One conversation per account.",
+          "type": "string"
+        },
+        {
+          "const": "shared",
+          "description": "One conversation per person.",
+          "type": "string"
+        }
+      ]
+    },
     "EdgeTtsConfig": {
       "additionalProperties": false,
       "description": "`[tts.edge]`.",
@@ -2929,6 +3188,21 @@
           "description": "Allow private destinations without a session grant.",
           "type": "boolean"
         },
+        "allow_store_fallback": {
+          "default": false,
+          "description": "With `credential_source = \"bitwarden\"`, take a secret missing from\nthe project from the store instead of refusing to start.",
+          "type": "boolean"
+        },
+        "credential_injection": {
+          "default": false,
+          "description": "Sandboxed children (a session's processes, stdio MCP servers,\nplugin sidecars) hold a placeholder, fresh per session or start,\ninstead of each secret mapped in `inject`; their egress proxy puts the\nreal value in only on TLS requests to the mapped hosts and refuses\nthe placeholder anywhere else (`credential_misdirected`).",
+          "type": "boolean"
+        },
+        "credential_source": {
+          "$ref": "#/$defs/CredentialSource",
+          "default": "store",
+          "description": "Where the egress proxy reads the mapped secrets: the profile's\nsecrets store, or Bitwarden Secrets Manager (refetched every start)."
+        },
         "deny": {
           "default": [],
           "description": "Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g.\n`*.casino.example`); a session can add to them, never remove.",
@@ -2945,9 +3219,33 @@
           },
           "type": "array"
         },
+        "enforce_on_container": {
+          "default": true,
+          "description": "Container and remote sandboxes refuse to start while credential\ninjection is on but the egress proxy is down.",
+          "type": "boolean"
+        },
         "fake_ip_ranges": {
           "default": [],
           "description": "CIDR ranges a local TUN proxy answers with (treated as public).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inject": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "description": "Secret name to the host patterns (`host`, `host:port`,\n`*.suffix`) its value may be sent to, under `credential_injection`.\nFor the egress proxy of container and remote sandboxes, an empty\nlist means the built-in provider hosts plus `inject_extra_hosts`.",
+          "type": "object"
+        },
+        "inject_extra_hosts": {
+          "default": [],
+          "description": "Hosts added to the built-in provider hosts injected credentials of\ncontainer and remote sandboxes may go to.",
           "items": {
             "type": "string"
           },
@@ -2957,6 +3255,14 @@
           "$ref": "#/$defs/EgressMode",
           "default": "public",
           "description": "Which hosts tools, sandboxed children, plugins and browsers may\nreach: any public address (`public`), only the `allow` patterns\n(`allowlist`) or nothing (`none`). A session can narrow or extend\nit (`chat --egress`, `/egress`, `egress.set`)."
+        },
+        "proxy_port": {
+          "default": 9090,
+          "description": "The egress proxy's container bridge listener port (`prometheus\negress status` shows it).",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -3051,6 +3357,370 @@
         }
       },
       "type": "object"
+    },
+    "EvolveAdoptionConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.adoption]`.",
+      "properties": {
+        "policy": {
+          "$ref": "#/$defs/AdoptionPolicy",
+          "default": "ask",
+          "description": "`ask` (default), `auto` (adopt at once, except proposals touching\nscripts, hooks or subagents, which always wait for approval) or\n`never` (proposals are kept for review)."
+        }
+      },
+      "type": "object"
+    },
+    "EvolveAutoConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.auto]`: jobs queued when a session ends badly or long.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Queue jobs automatically at all.",
+          "type": "boolean"
+        },
+        "max_jobs_per_day": {
+          "default": 3,
+          "description": "Automatic jobs per profile per day.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "min_iterations": {
+          "default": 40,
+          "description": "What counts as a long session.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "on_failure": {
+          "default": true,
+          "description": "After a session that ended in error or interruption after at\nleast one tool call.",
+          "type": "boolean"
+        },
+        "on_long_task": {
+          "default": true,
+          "description": "After a session of at least `min_iterations` iterations.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveBudgetConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.budget]`.",
+      "properties": {
+        "max_usd": {
+          "default": 5.0,
+          "description": "A job stops (`budget-exceeded`) once its spend reaches this many\nUS dollars, unless `--budget-usd` names another cap.",
+          "format": "double",
+          "minimum": 0.0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveConcurrencyConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.concurrency]`.",
+      "properties": {
+        "rollouts": {
+          "default": 2,
+          "description": "Rollouts running at once.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "sessions": {
+          "default": 2,
+          "description": "Improver sessions running at once.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveConfig": {
+      "additionalProperties": false,
+      "description": "The `[evolve]` section.",
+      "properties": {
+        "adoption": {
+          "$ref": "#/$defs/EvolveAdoptionConfig",
+          "default": {
+            "policy": "ask"
+          },
+          "description": "What happens to a proposal."
+        },
+        "auto": {
+          "$ref": "#/$defs/EvolveAutoConfig",
+          "default": {
+            "enabled": false,
+            "max_jobs_per_day": 3,
+            "min_iterations": 40,
+            "on_failure": true,
+            "on_long_task": true
+          },
+          "description": "Automatic jobs after failed or long sessions."
+        },
+        "budget": {
+          "$ref": "#/$defs/EvolveBudgetConfig",
+          "default": {
+            "max_usd": 5.0
+          },
+          "description": "The spend cap of one job."
+        },
+        "concurrency": {
+          "$ref": "#/$defs/EvolveConcurrencyConfig",
+          "default": {
+            "rollouts": 2,
+            "sessions": 2
+          },
+          "description": "Concurrent work across every job of one process."
+        },
+        "enabled": {
+          "default": false,
+          "description": "Allow harness evolution in this profile (`prometheus evolve`,\n`/evolve`, the `evolve.*` RPC methods, scheduled and automatic\njobs).",
+          "type": "boolean"
+        },
+        "evidence": {
+          "$ref": "#/$defs/EvolveEvidenceConfig",
+          "default": {
+            "obs_trunc_chars": 50000
+          },
+          "description": "What improvers see of the rollouts."
+        },
+        "improver": {
+          "$ref": "#/$defs/EvolveImproverConfig",
+          "default": {
+            "max_iterations": 120,
+            "timeout_secs": 1800
+          },
+          "description": "How improver sessions run."
+        },
+        "k": {
+          "default": 2,
+          "description": "Recursion budget k: each mode spends 4k rollouts and 3k improver\nsessions.",
+          "format": "uint8",
+          "maximum": 8,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "leak_globs": {
+          "default": [
+            "**/*reference_answer*",
+            "**/*rubric*",
+            "**/expected/**",
+            "**/*.expected.*",
+            "**/.pmt-eval/**"
+          ],
+          "description": "Files never captured into a task, evidence or library entry,\nmatched against the full relative path (leading dots included).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/EvolveMode",
+          "default": "parallel",
+          "description": "`parallel` (width), `sequential` (depth) or `both` (one proposal\nper mode on shared base rollouts)."
+        },
+        "resume_on_start": {
+          "default": true,
+          "description": "Interrupted jobs are queued again when the daemon starts.",
+          "type": "boolean"
+        },
+        "retention_secs": {
+          "default": 2592000,
+          "description": "Job directories older than this are pruned (the summary of a job\nwhose proposal was adopted is kept).",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rollout": {
+          "$ref": "#/$defs/EvolveRolloutConfig",
+          "default": {
+            "backend": "local-sandbox",
+            "max_iterations": 60,
+            "network": "providers",
+            "timeout_secs": 900
+          },
+          "description": "How rollouts run."
+        },
+        "selection": {
+          "$ref": "#/$defs/EvolveSelection",
+          "default": "model",
+          "description": "Who picks the final of each mode: `model` (a blind selector\nsession) or `user` (`prometheus evolve choose`)."
+        },
+        "task": {
+          "$ref": "#/$defs/EvolveTaskConfig",
+          "default": {
+            "max_source_bytes": 52428800
+          },
+          "description": "Task capture."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "EvolveEvidenceConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.evidence]`.",
+      "properties": {
+        "obs_trunc_chars": {
+          "default": 50000,
+          "description": "A tool observation longer than this is truncated in the rollout\ntrajectories improvers read.",
+          "format": "uint",
+          "minimum": 10000,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveImproverConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.improver]`: the propose, compose, select and reflect\nsessions.",
+      "properties": {
+        "max_iterations": {
+          "default": 120,
+          "description": "Model calls one session may make.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "model": {
+          "description": "`provider/model` of every improver session; unset uses the\n`evolution` auxiliary route, else the profile's main model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 1800,
+          "description": "Wall-clock limit of one session.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveMode": {
+      "description": "How an evolution job searches.",
+      "oneOf": [
+        {
+          "const": "parallel",
+          "description": "k independent compositions of 2k candidates.",
+          "type": "string"
+        },
+        {
+          "const": "sequential",
+          "description": "k rounds, each composing a checkpoint from the history.",
+          "type": "string"
+        },
+        {
+          "const": "both",
+          "description": "Both modes on the same base rollouts; at most one is adopted.",
+          "type": "string"
+        }
+      ]
+    },
+    "EvolveRolloutConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.rollout]`: the headless sessions that try a harness on the\ntask.",
+      "properties": {
+        "backend": {
+          "default": "local-sandbox",
+          "description": "Execution backend: `local-sandbox` (the `local` backend with full\nsandbox enforcement) or another sandboxed backend (`container`,\n`ssh`, `singularity`, a plugin backend). The unsandboxed host is\nrefused.",
+          "type": "string"
+        },
+        "max_iterations": {
+          "default": 60,
+          "description": "Model calls one rollout may make.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "network": {
+          "$ref": "#/$defs/RolloutNetwork",
+          "default": "providers",
+          "description": "`providers`: egress only to the configured model providers;\n`session`: the source session's egress rules."
+        },
+        "timeout_secs": {
+          "default": 900,
+          "description": "Wall-clock limit of one rollout.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "EvolveSelection": {
+      "description": "Who selects a mode's final.",
+      "oneOf": [
+        {
+          "const": "model",
+          "description": "A blind, anonymised selector session.",
+          "type": "string"
+        },
+        {
+          "const": "user",
+          "description": "The user, after comparing the anonymised candidates.",
+          "type": "string"
+        }
+      ]
+    },
+    "EvolveTaskConfig": {
+      "additionalProperties": false,
+      "description": "`[evolve.task]`: freezing a job's task.",
+      "properties": {
+        "max_source_bytes": {
+          "default": 52428800,
+          "description": "Largest workspace snapshot of a task, in bytes.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ExperienceConfig": {
+      "additionalProperties": false,
+      "description": "The `[experience]` section (spec: experience-library): what the\nlibrary of adopted harnesses and lessons keeps and shows. The library\nexists only where `evolve.enabled` is on.",
+      "properties": {
+        "max_entries_in_evidence": {
+          "default": 20,
+          "description": "Newest visible entries of the job's domain copied into its\nevidence (pinned entries first).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_entries_per_domain": {
+          "default": 50,
+          "description": "Entries kept per domain; the oldest unpinned one is evicted.",
+          "format": "uint32",
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "session_lessons": {
+          "default": false,
+          "description": "Offer a domain's lessons to new sessions that start with a known\ndomain, as a frozen prompt layer.",
+          "type": "boolean"
+        },
+        "session_lessons_max": {
+          "default": 5,
+          "description": "Lessons in that layer (high or medium confidence only).",
+          "format": "uint32",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "FallbackConfig": {
       "additionalProperties": false,
@@ -3161,6 +3831,7 @@
             "max_bytes": 1073741824,
             "max_checkpoints": 20,
             "max_file_bytes": 10485760,
+            "max_workspace_bytes": 536870912,
             "prune_interval_secs": 86400,
             "retention_secs": 604800,
             "terminal": "off"
@@ -3391,6 +4062,14 @@
           "type": "array",
           "x-apply": "live"
         },
+        "ack_reaction": {
+          "description": "A reaction added to every accepted inbound message (an emoji or a\nname such as `eyes` or `thumbsup`; unset: none) on adapters that\nsupport reactions.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "x-apply": "live"
+        },
         "agent_cache": {
           "$ref": "#/$defs/AgentCacheConfig",
           "default": {
@@ -3464,6 +4143,14 @@
           "description": "When group, channel and thread messages start a turn, overridable\nper platform.",
           "x-apply": "live"
         },
+        "identity": {
+          "$ref": "#/$defs/GatewayIdentity",
+          "default": {
+            "dm_mode": "per_platform"
+          },
+          "description": "Sender accounts linked across platforms (`/link`).",
+          "x-apply": "live"
+        },
         "mcp_events": {
           "$ref": "#/$defs/McpEvents",
           "default": {
@@ -3526,6 +4213,12 @@
             "$ref": "#/$defs/ProfileRoute"
           },
           "type": "array",
+          "x-apply": "live"
+        },
+        "proxy": {
+          "$ref": "#/$defs/GatewayProxy",
+          "default": {},
+          "description": "Proxy mode: forward every admitted turn to another daemon's API\nserver instead of running an agent here.",
           "x-apply": "live"
         },
         "proxy_url": {
@@ -3865,6 +4558,43 @@
       },
       "type": "object"
     },
+    "GatewayIdentity": {
+      "additionalProperties": false,
+      "description": "`[gateway.identity]` (spec: messaging-gateway, Cross-platform identity\nlinking).",
+      "properties": {
+        "dm_mode": {
+          "$ref": "#/$defs/DmMode",
+          "default": "per_platform",
+          "description": "`per_platform` (default): each account's DMs are its own\nconversation; `shared`: DMs from all of a person's linked accounts\ncontinue one conversation, answered on the platform of the latest\nmessage (group conversations never merge)."
+        }
+      },
+      "type": "object"
+    },
+    "GatewayProxy": {
+      "additionalProperties": false,
+      "description": "`[gateway.proxy]` (spec: api-server, Gateway proxy mode): the adapters\nkeep authorization, pairing, routing keys and delivery here, and every\nadmitted turn runs on the API server at `url` as a session-chat request\nkeyed by the local conversation key.",
+      "properties": {
+        "key_secret": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SecretName"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The secret holding the remote profile's API key."
+        },
+        "url": {
+          "description": "The remote API server's base URL including its profile prefix\n(`http://host.docker.internal:8642/p/default`); unset: turns run\nhere.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "GatewayQuickCommands": {
       "additionalProperties": false,
       "description": "`[gateway.quick_commands]`.",
@@ -4046,6 +4776,22 @@
           "type": "string"
         }
       ]
+    },
+    "HarnessConfig": {
+      "additionalProperties": false,
+      "description": "The `[harness]` section.",
+      "properties": {
+        "always_on_cap_chars": {
+          "default": 24000,
+          "description": "Combined characters of `SYSTEM.md`, `GUARDRAILS.md`,\n`MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` a harness may hold.",
+          "format": "uint32",
+          "maximum": 64000,
+          "minimum": 4000,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "HealthListenerConfig": {
       "additionalProperties": false,
@@ -4468,6 +5214,18 @@
           "default": false,
           "description": "Retry one failed call of a keyed backend once on the keyless ring\n(only with `enabled`); the next call still tries the keyed backend.",
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "LangfuseConfig": {
+      "additionalProperties": false,
+      "description": "`[observability.langfuse]`.",
+      "properties": {
+        "host": {
+          "default": "https://cloud.langfuse.com",
+          "description": "The Langfuse host; spans go to `<host>/api/public/otel`, with Basic\nauthentication from the secrets `LANGFUSE_PUBLIC_KEY` and\n`LANGFUSE_SECRET_KEY`.",
+          "type": "string"
         }
       },
       "type": "object"
@@ -5463,6 +6221,23 @@
           "minimum": 0,
           "type": "integer"
         },
+        "consolidation": {
+          "$ref": "#/$defs/MemoryConsolidationConfig",
+          "default": {
+            "auto_apply": false,
+            "enabled": false,
+            "interval_secs": 604800
+          },
+          "description": "Consolidation proposals."
+        },
+        "decay": {
+          "$ref": "#/$defs/MemoryDecayConfig",
+          "default": {
+            "dormant_below": 0.1,
+            "half_life_secs": 7776000
+          },
+          "description": "Salience decay and dormancy."
+        },
         "memory_char_limit": {
           "default": 2200,
           "description": "Character budget of core memory entries.",
@@ -5569,6 +6344,52 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "MemoryConsolidationConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.consolidation]` section.",
+      "properties": {
+        "auto_apply": {
+          "default": false,
+          "description": "Commit a pass's proposal without approval (otherwise it is staged\nfor `memory approve`).",
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Run an idle-time consolidation pass.",
+          "type": "boolean"
+        },
+        "interval_secs": {
+          "default": 604800,
+          "description": "Seconds between idle-time passes.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "MemoryDecayConfig": {
+      "additionalProperties": false,
+      "description": "The `[memory.decay]` section: an unpinned entry's salience halves\nevery `half_life_secs` since its last use.",
+      "properties": {
+        "dormant_below": {
+          "default": 0.1,
+          "description": "An archival entry whose salience falls below this becomes dormant.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "half_life_secs": {
+          "default": 7776000,
+          "description": "Seconds for an unused entry's salience to halve.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "MemoryNotifications": {
       "description": "`memory.notifications`.",
@@ -5964,6 +6785,11 @@
           "minimum": 16000,
           "type": "integer"
         },
+        "openai_runtime": {
+          "$ref": "#/$defs/OpenaiRuntime",
+          "default": "auto",
+          "description": "Who runs turns on `openai-codex`, `openai-api` and custom providers\nthe Codex config also defines: `auto` (Prometheus itself) or\n`codex_app_server` (a long-lived `codex app-server`). A change\napplies from the next session."
+        },
         "provider": {
           "description": "Provider id or alias; unset means `auto`.",
           "type": [
@@ -6153,6 +6979,25 @@
       },
       "type": "object"
     },
+    "NemoRelayConfig": {
+      "additionalProperties": false,
+      "description": "`[observability.nemo_relay]`: `NeMo` Relay hosted by the python bridge,\nfed every session's lifecycle. Relay reads its user `plugins.toml`\n(`~/.config/nemo-relay/plugins.toml`) then its system file\n(`/etc/nemo-relay/plugins.toml`), which has the highest precedence.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Feed `NeMo` Relay: a host in a managed python environment (pinned\n`nemo-relay`, built on first use) receives the session, turn,\nmodel-call and tool lifecycle of every session. Payloads only with\n`observability.otel.capture_content`. Off by default.",
+          "type": "boolean"
+        },
+        "plugins_toml": {
+          "description": "A `plugins.toml` that replaces Relay's user file (the system file\nstill applies above it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "NetworkConfig": {
       "additionalProperties": false,
       "description": "The `[network]` section.",
@@ -6318,12 +7163,28 @@
           "description": "The daemon's loopback health listener (`/healthz`, `/readyz`).",
           "x-apply": "restart"
         },
+        "langfuse": {
+          "$ref": "#/$defs/LangfuseConfig",
+          "default": {
+            "host": "https://cloud.langfuse.com"
+          },
+          "description": "Langfuse, the target of `observability.otel.preset = \"langfuse\"`.",
+          "x-apply": "restart"
+        },
         "metrics_endpoint": {
           "$ref": "#/$defs/MetricsEndpointConfig",
           "default": {
             "enabled": false
           },
           "description": "The daemon's local Prometheus-format scrape endpoint.",
+          "x-apply": "restart"
+        },
+        "nemo_relay": {
+          "$ref": "#/$defs/NemoRelayConfig",
+          "default": {
+            "enabled": false
+          },
+          "description": "The `NeMo` Relay integration (daemon-wide).",
           "x-apply": "restart"
         },
         "otel": {
@@ -6350,6 +7211,46 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "OnePasswordSourceConfig": {
+      "additionalProperties": false,
+      "description": "`[secrets.onepassword]`: secrets mapped by name to 1Password\nreferences (a mapped source), read with the `op` CLI.",
+      "properties": {
+        "access_token_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "OP_SERVICE_ACCOUNT_TOKEN",
+          "description": "The stored secret holding the service-account token (the only\nplace the token is read from)."
+        },
+        "cache_ttl_secs": {
+          "default": 300,
+          "description": "Resolved values stay in memory at most this long (never on disk).",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Read secrets from 1Password (off by default: `op` is then never\nrun).",
+          "type": "boolean"
+        },
+        "map": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Secret name to its `op://vault/item/field` reference.",
+          "type": "object"
+        },
+        "vault": {
+          "description": "The vault `setup --vault` selected (what `sync` reads).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "OpenAiTtsConfig": {
       "additionalProperties": false,
@@ -6412,6 +7313,21 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OpenaiRuntime": {
+      "description": "`model.openai_runtime`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Prometheus runs every turn.",
+          "type": "string"
+        },
+        {
+          "const": "codex_app_server",
+          "description": "Eligible turns run in the Codex app-server.",
+          "type": "string"
+        }
+      ]
+    },
     "OtelConfig": {
       "additionalProperties": false,
       "description": "The `[observability.otel]` section (spec: observability, Opt-in\nOpenTelemetry export; Span model; Trace context propagation). Nothing\nis exported unless `enabled`; `OTEL_*` environment variables never\nconfigure export.",
@@ -6441,6 +7357,17 @@
           },
           "type": "array"
         },
+        "preset": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OtelPreset"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A collector preset, which turns export on: `langfuse` sends traces\nto `observability.langfuse.host` with its keys (ignores\n`endpoint`, `protocol` and `enabled`)."
+        },
         "propagate_external": {
           "default": false,
           "description": "Send `traceparent` to model providers, MCP servers and other\nexternal hosts.",
@@ -6453,6 +7380,16 @@
         }
       },
       "type": "object"
+    },
+    "OtelPreset": {
+      "description": "`observability.otel.preset`.",
+      "oneOf": [
+        {
+          "const": "langfuse",
+          "description": "Langfuse's OTLP endpoint.",
+          "type": "string"
+        }
+      ]
     },
     "OtelProtocol": {
       "description": "`observability.otel.protocol`.",
@@ -6738,6 +7675,13 @@
           "$ref": "#/$defs/PlatformBusy",
           "default": {},
           "description": "Busy handling on this platform (overrides `busy.input_mode` and\n`gateway.busy`)."
+        },
+        "busy_reaction": {
+          "description": "The reaction that acknowledges a message arriving during a turn\n(with `gateway.busy.ack`, on adapters that support reactions)\ninstead of a busy text: an emoji or a name such as `eyes`\n(default) or `hourglass`.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "enabled": {
           "default": false,
@@ -8378,10 +9322,41 @@
         }
       ]
     },
+    "RolloutNetwork": {
+      "description": "A rollout's network egress.",
+      "oneOf": [
+        {
+          "const": "providers",
+          "description": "Only the configured model providers.",
+          "type": "string"
+        },
+        {
+          "const": "session",
+          "description": "The source session's rules.",
+          "type": "string"
+        }
+      ]
+    },
     "RoutingConfig": {
       "additionalProperties": false,
-      "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring).",
+      "description": "The `[routing]` section (spec: model-providers, Provider health\nscoring; Cost and latency aware routing policy).",
       "properties": {
+        "candidates": {
+          "default": [],
+          "description": "The routes a policy chooses among (`[[routing.candidates]]`, as\nfallback entries); empty: the requested route plus the fallback\nchain.",
+          "items": {
+            "$ref": "#/$defs/FallbackEntry"
+          },
+          "type": "array"
+        },
+        "cost_weight": {
+          "default": 0.5,
+          "description": "The weight of cost against latency under `balanced`.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
         "health_half_life_secs": {
           "default": 1800,
           "description": "Half-life (seconds) of the decay of an idle route's health score\ntoward 1.0.",
@@ -8396,10 +9371,40 @@
           "maximum": 500,
           "minimum": 1,
           "type": "integer"
+        },
+        "policy": {
+          "$ref": "#/$defs/RoutingPolicy",
+          "default": "pinned",
+          "description": "How a session's route is chosen at its start: `pinned` (the\nrequested route), `cheapest`, `fastest` or `balanced`."
         }
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "RoutingPolicy": {
+      "description": "`routing.policy` (spec: model-providers, Cost and latency aware\nrouting policy).",
+      "oneOf": [
+        {
+          "const": "pinned",
+          "description": "The requested provider and model.",
+          "type": "string"
+        },
+        {
+          "const": "cheapest",
+          "description": "The lowest estimated cost per turn.",
+          "type": "string"
+        },
+        {
+          "const": "fastest",
+          "description": "The lowest median time to first token.",
+          "type": "string"
+        },
+        {
+          "const": "balanced",
+          "description": "The lowest weighted sum of normalised cost and latency.",
+          "type": "string"
+        }
+      ]
     },
     "RoutingPrefs": {
       "additionalProperties": false,
@@ -8516,6 +9521,18 @@
         }
       ]
     },
+    "ScanConfig": {
+      "additionalProperties": false,
+      "description": "The `[security.scan]` section (spec: security-boundaries, Dependency\nvulnerability scan).",
+      "properties": {
+        "osv_url": {
+          "default": "https://api.osv.dev",
+          "description": "The OSV API `security scan` queries (a mirror may stand in); it is\ncontacted only when the command runs.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "ScoreSchema": {
       "anyOf": [
         {
@@ -8532,6 +9549,26 @@
         }
       ],
       "description": "A score or the empty string (no score)."
+    },
+    "ScreenPlacement": {
+      "description": "Where the bot screen runs.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Inside a container or SSH terminal backend, on the gateway host for\n`local`; refused for backends that cannot host a display.",
+          "type": "string"
+        },
+        {
+          "const": "terminal",
+          "description": "Always where the terminal runs (refused when it cannot host one).",
+          "type": "string"
+        },
+        {
+          "const": "gateway",
+          "description": "On the gateway host whatever the terminal backend: the agent's\nscreen then acts outside the terminal sandbox (explicit opt-in).",
+          "type": "string"
+        }
+      ]
     },
     "SearxngConfig": {
       "additionalProperties": false,
@@ -8622,6 +9659,15 @@
           "default": "file",
           "description": "Where this profile's secrets are stored."
         },
+        "bitwarden": {
+          "$ref": "#/$defs/BitwardenSourceConfig",
+          "default": {
+            "access_token_secret": "BWS_ACCESS_TOKEN",
+            "cache_ttl_secs": 300,
+            "enabled": false
+          },
+          "description": "Bitwarden Secrets Manager (off by default)."
+        },
         "command": {
           "$ref": "#/$defs/SecretCommandConfig",
           "default": {
@@ -8631,6 +9677,16 @@
             "timeout_secs": 3
           },
           "description": "A helper command printing `NAME=VALUE` lines (POSIX only)."
+        },
+        "onepassword": {
+          "$ref": "#/$defs/OnePasswordSourceConfig",
+          "default": {
+            "access_token_secret": "OP_SERVICE_ACCOUNT_TOKEN",
+            "cache_ttl_secs": 300,
+            "enabled": false,
+            "map": {}
+          },
+          "description": "1Password (off by default)."
         }
       },
       "type": "object",
@@ -8663,10 +9719,17 @@
           "default": {
             "allow": [],
             "allow_private": false,
+            "allow_store_fallback": false,
+            "credential_injection": false,
+            "credential_source": "store",
             "deny": [],
             "deny_files": [],
+            "enforce_on_container": true,
             "fake_ip_ranges": [],
-            "mode": "public"
+            "inject": {},
+            "inject_extra_hosts": [],
+            "mode": "public",
+            "proxy_port": 9090
           },
           "description": "Outbound network policy."
         },
@@ -8695,6 +9758,13 @@
             "mode": "enforce"
           },
           "description": "OS sandbox."
+        },
+        "scan": {
+          "$ref": "#/$defs/ScanConfig",
+          "default": {
+            "osv_url": "https://api.osv.dev"
+          },
+          "description": "`prometheus security scan`."
         }
       },
       "type": "object",
@@ -8708,6 +9778,25 @@
           "$ref": "#/$defs/GuidanceMode",
           "default": "warn",
           "description": "`warn` (write, then report the matched rules), `block` (refuse the\nwrite with the guidance) or `off`."
+        }
+      },
+      "type": "object"
+    },
+    "SessionSearchConfig": {
+      "additionalProperties": false,
+      "description": "The `[sessions.search]` section.",
+      "properties": {
+        "embedding_model": {
+          "description": "The embedding model (`provider/model` or a model on the main\nroute's provider); unset uses `memory.recall.embedding_model`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "semantic": {
+          "default": false,
+          "description": "Embed messages in the background and answer hybrid searches with\nthe full-text and vector rankings fused.",
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -8750,6 +9839,13 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "search": {
+          "$ref": "#/$defs/SessionSearchConfig",
+          "default": {
+            "semantic": false
+          },
+          "description": "Hybrid semantic search."
         },
         "terminal_continue": {
           "default": true,
@@ -8897,6 +9993,18 @@
           },
           "type": "array"
         },
+        "eval_gate": {
+          "default": false,
+          "description": "Run a skill's evals before a background review or curator\nconsolidation commits a change to it, and reject a change that\nlowers the pass rate (other edits are only warned).",
+          "type": "boolean"
+        },
+        "eval_gate_repeat": {
+          "default": 3,
+          "description": "Runs per case of a gated edit's evals.",
+          "format": "uint32",
+          "minimum": 1,
+          "type": "integer"
+        },
         "external_dirs": {
           "default": [],
           "description": "Extra skill directories (`~` expanded; missing ones skipped).",
@@ -9033,6 +10141,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "max_workspace_bytes": {
+          "default": 536870912,
+          "description": "Under `terminal = \"workspace\"`, larger workspaces are not\ncheckpointed (a one-time notice says so).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "prune_interval_secs": {
           "default": 86400,
           "description": "Least time between automatic prunes.",
@@ -9050,7 +10165,7 @@
         "terminal": {
           "$ref": "#/$defs/SnapshotTerminal",
           "default": "off",
-          "description": "Also checkpoint before destructive terminal commands (`rm`, `mv`,\n`sed -i`, `>`, `git reset`...)."
+          "description": "Terminal commands: `off`, `destructive` (checkpoint before `rm`,\n`mv`, `sed -i`, `>`, `git reset`...) or `workspace` (also journal\nevery command's workspace changes, so `/undo` reverts them)."
         }
       },
       "type": "object"
@@ -9066,6 +10181,11 @@
         {
           "const": "destructive",
           "description": "Checkpoint the command's project before a destructive command.",
+          "type": "string"
+        },
+        {
+          "const": "workspace",
+          "description": "As `destructive`, and record the workspace before every command and\njournal what it changed (spec: execution-environments, Terminal\nworkspace checkpoints).",
           "type": "string"
         }
       ]
@@ -9159,6 +10279,11 @@
       "additionalProperties": false,
       "description": "The `[storage]` section.",
       "properties": {
+        "encryption": {
+          "$ref": "#/$defs/StorageEncryption",
+          "default": "none",
+          "description": "Encryption of `state.db` pages and blob files. An existing store\nis converted only offline: `prometheus sessions encrypt|decrypt`."
+        },
         "journal_mode": {
           "$ref": "#/$defs/JournalMode",
           "default": "wal",
@@ -9167,6 +10292,26 @@
       },
       "type": "object",
       "x-apply": "restart"
+    },
+    "StorageEncryption": {
+      "description": "`storage.encryption`.",
+      "oneOf": [
+        {
+          "const": "none",
+          "description": "Plaintext.",
+          "type": "string"
+        },
+        {
+          "const": "keychain",
+          "description": "A random per-profile key held in the OS keychain.",
+          "type": "string"
+        },
+        {
+          "const": "passphrase",
+          "description": "A key derived (Argon2id) from the `STATE_DB_PASSPHRASE` secret.",
+          "type": "string"
+        }
+      ]
     },
     "StreamTransport": {
       "description": "How a streamed draft reaches a platform.",
@@ -9421,6 +10566,16 @@
             "null"
           ]
         },
+        "dashboard": {
+          "description": "The web dashboard's chat (default `core`).",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "desktop": {
           "description": "The desktop app (default `core`).",
           "items": {
@@ -9465,6 +10620,26 @@
         {
           "const": "ratio",
           "description": "Keep a tail sized by `target_ratio`.",
+          "type": "string"
+        }
+      ]
+    },
+    "TaintPolicy": {
+      "description": "`approvals.taint_policy` (spec: tool-system, Taint-aware escalation).",
+      "oneOf": [
+        {
+          "const": "off",
+          "description": "No tracking.",
+          "type": "string"
+        },
+        {
+          "const": "warn",
+          "description": "Annotate outbound calls of a tainted turn.",
+          "type": "string"
+        },
+        {
+          "const": "ask",
+          "description": "Ask a human before each such call.",
           "type": "string"
         }
       ]
@@ -9802,21 +10977,6 @@
           "type": "string"
         }
       ]
-    },
-    "ToolProviderConfig": {
-      "additionalProperties": false,
-      "description": "A media tool category's provider selection (`[image_gen]`,\n`[video_gen]`, `[tts]`, `[stt]`).",
-      "properties": {
-        "provider": {
-          "description": "The provider serving the category (`nous` routes it through the\nsubscription tool gateway); unset picks one automatically.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object",
-      "x-apply": "next_session"
     },
     "ToolSearchConfig": {
       "additionalProperties": false,
@@ -10222,12 +11382,15 @@
             "page_down": null,
             "page_up": null,
             "palette": null,
+            "pane_subagents": null,
+            "pane_tools": null,
             "paste_image": null,
             "quit": null,
             "scroll_down": null,
             "scroll_up": null,
             "sessions": null,
-            "submit": null
+            "submit": null,
+            "timeline": null
           },
           "description": "Key bindings: action name to key chord (`Ctrl+P`, `Alt+Enter`,\n`PageUp`, `F2`); `/keys` lists the effective bindings."
         },
@@ -10404,6 +11567,30 @@
           "default": null,
           "description": "Open the command palette (default `Ctrl+P`)."
         },
+        "pane_subagents": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Show or hide the subagents pane (default `F2`)."
+        },
+        "pane_tools": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Show or hide the tool-output pane (default `F3`)."
+        },
         "paste_image": {
           "anyOf": [
             {
@@ -10475,6 +11662,18 @@
           ],
           "default": null,
           "description": "Send the composer (default `Enter`)."
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyChord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Open the session timeline (default `Ctrl+T`)."
         }
       },
       "type": "object"
@@ -10545,12 +11744,15 @@
               "page_down": null,
               "page_up": null,
               "palette": null,
+              "pane_subagents": null,
+              "pane_tools": null,
               "paste_image": null,
               "quit": null,
               "scroll_down": null,
               "scroll_up": null,
               "sessions": null,
-              "submit": null
+              "submit": null,
+              "timeline": null
             },
             "reduced_motion": false,
             "theme": "auto"
@@ -10662,6 +11864,35 @@
         }
       ],
       "description": "`agent.verify_on_stop`: a switch or `\"auto\"`."
+    },
+    "VideoGenConfig": {
+      "additionalProperties": false,
+      "description": "The `[video_gen]` section (the `video_generate` tool, toolset\n`video_gen`).",
+      "properties": {
+        "model": {
+          "description": "The model (unset: the provider's default). The agent never picks\nit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "provider": {
+          "description": "The provider generating videos: `fal`, `xai`, `openrouter`,\n`deepinfra`, `nous` (the subscription tool gateway) or a plugin's;\nunset picks one by the keys present (`fal` when none).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_secs": {
+          "default": 900,
+          "description": "How long a generation job is polled (every 5 seconds) before the\ncall returns `status = \"timeout\"` with the provider's job id.",
+          "format": "uint64",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
     },
     "VisionConfig": {
       "additionalProperties": false,
@@ -11434,6 +12665,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "install_state_retention_secs": {
+          "default": 1209600,
+          "description": "Seconds install state kept per checkout outside the tree (such as\nlanguage-server caches) may go unused, once its checkout no longer\nexists, before the sweep deletes it (`0` = forever).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "max_total_bytes": {
           "default": 0,
           "description": "Total bytes of trees above which the oldest idle ones past their\ntier are archived and removed first (`0` = off).",
@@ -11606,6 +12844,7 @@
         "deny": [],
         "mode": "manual",
         "single_query_mode": "deny",
+        "taint_policy": "warn",
         "timeout_secs": 300,
         "unattended_mode": "deny"
       },
@@ -11633,6 +12872,18 @@
       },
       "description": "Side-model (auxiliary) task routing."
     },
+    "bot_desktop": {
+      "$ref": "#/$defs/BotDesktopConfig",
+      "default": {
+        "auto_start": false,
+        "geometry": "1440x900",
+        "idle_stop_secs": 1800,
+        "image": "",
+        "min_free_memory_bytes": 1610612736,
+        "placement": "auto"
+      },
+      "description": "The bot screen: the virtual display the agent's headed browsers\nand `computer_use` act on."
+    },
     "bot_mode": {
       "$ref": "#/$defs/BotModeConfig",
       "default": {
@@ -11647,6 +12898,7 @@
         "auto_local_for_private_urls": true,
         "dialog_policy": "must_respond",
         "dialog_timeout_secs": 300,
+        "engine": "auto",
         "executable_path": "",
         "headed": false,
         "inactivity_timeout_secs": 120,
@@ -11769,6 +13021,7 @@
         },
         "failure_nudge_threshold": 3,
         "failure_repeat_alert_secs": 21600,
+        "managed": {},
         "max_parallel_jobs": 4,
         "max_run_secs": 3600,
         "preflight": true,
@@ -11882,6 +13135,68 @@
       },
       "description": "Display preferences of interactive surfaces."
     },
+    "evolve": {
+      "$ref": "#/$defs/EvolveConfig",
+      "default": {
+        "adoption": {
+          "policy": "ask"
+        },
+        "auto": {
+          "enabled": false,
+          "max_jobs_per_day": 3,
+          "min_iterations": 40,
+          "on_failure": true,
+          "on_long_task": true
+        },
+        "budget": {
+          "max_usd": 5.0
+        },
+        "concurrency": {
+          "rollouts": 2,
+          "sessions": 2
+        },
+        "enabled": false,
+        "evidence": {
+          "obs_trunc_chars": 50000
+        },
+        "improver": {
+          "max_iterations": 120,
+          "timeout_secs": 1800
+        },
+        "k": 2,
+        "leak_globs": [
+          "**/*reference_answer*",
+          "**/*rubric*",
+          "**/expected/**",
+          "**/*.expected.*",
+          "**/.pmt-eval/**"
+        ],
+        "mode": "parallel",
+        "resume_on_start": true,
+        "retention_secs": 2592000,
+        "rollout": {
+          "backend": "local-sandbox",
+          "max_iterations": 60,
+          "network": "providers",
+          "timeout_secs": 900
+        },
+        "selection": "model",
+        "task": {
+          "max_source_bytes": 52428800
+        }
+      },
+      "description": "Harness evolution (opt-in)."
+    },
+    "experience": {
+      "$ref": "#/$defs/ExperienceConfig",
+      "default": {
+        "max_entries_in_evidence": 20,
+        "max_entries_per_domain": 50,
+        "session_lessons": false,
+        "session_lessons_max": 5
+      },
+      "description": "The experience library of harness evolution."
+    },
     "fallback": {
       "$ref": "#/$defs/FallbackConfig",
       "default": {
@@ -11899,6 +13214,7 @@
           "max_bytes": 1073741824,
           "max_checkpoints": 20,
           "max_file_bytes": 10485760,
+          "max_workspace_bytes": 536870912,
           "prune_interval_secs": 86400,
           "retention_secs": 604800,
           "terminal": "off"
@@ -11936,6 +13252,9 @@
         },
         "display": {},
         "groups": {},
+        "identity": {
+          "dm_mode": "per_platform"
+        },
         "mcp_events": {
           "enabled": false
         },
@@ -11956,6 +13275,7 @@
         },
         "platforms": {},
         "profile_routes": [],
+        "proxy": {},
         "quick_commands": {
           "timeout_secs": 30
         },
@@ -12002,6 +13322,13 @@
         "max_wait_secs": 1800
       },
       "description": "`/goal`: the judge loop's turn budget, quality gates and waits."
+    },
+    "harness": {
+      "$ref": "#/$defs/HarnessConfig",
+      "default": {
+        "always_on_cap_chars": 24000
+      },
+      "description": "Harness size caps."
     },
     "heartbeat": {
       "$ref": "#/$defs/HeartbeatConfig",
@@ -12107,6 +13434,15 @@
       "$ref": "#/$defs/MemoryConfig",
       "default": {
         "archival_max_entries": 10000,
+        "consolidation": {
+          "auto_apply": false,
+          "enabled": false,
+          "interval_secs": 604800
+        },
+        "decay": {
+          "dormant_below": 0.1,
+          "half_life_secs": 7776000
+        },
         "memory_char_limit": 2200,
         "memory_enabled": true,
         "notifications": "on",
@@ -12156,7 +13492,8 @@
           "google",
           "nous"
         ],
-        "min_context_window": 64000
+        "min_context_window": 64000,
+        "openai_runtime": "auto"
       },
       "description": "The main model and provider."
     },
@@ -12187,7 +13524,13 @@
         "health": {
           "bind": "127.0.0.1:0"
         },
+        "langfuse": {
+          "host": "https://cloud.langfuse.com"
+        },
         "metrics_endpoint": {
+          "enabled": false
+        },
+        "nemo_relay": {
           "enabled": false
         },
         "otel": {
@@ -12337,8 +13680,11 @@
     "routing": {
       "$ref": "#/$defs/RoutingConfig",
       "default": {
+        "candidates": [],
+        "cost_weight": 0.5,
         "health_half_life_secs": 1800,
-        "health_window": 50
+        "health_window": 50,
+        "policy": "pinned"
       },
       "description": "Provider health scoring."
     },
@@ -12354,11 +13700,22 @@
       "$ref": "#/$defs/SecretsConfig",
       "default": {
         "backend": "file",
+        "bitwarden": {
+          "access_token_secret": "BWS_ACCESS_TOKEN",
+          "cache_ttl_secs": 300,
+          "enabled": false
+        },
         "command": {
           "argv": [],
           "enabled": false,
           "override_existing": false,
           "timeout_secs": 3
+        },
+        "onepassword": {
+          "access_token_secret": "OP_SERVICE_ACCOUNT_TOKEN",
+          "cache_ttl_secs": 300,
+          "enabled": false,
+          "map": {}
         }
       },
       "description": "Secrets store backend."
@@ -12370,10 +13727,17 @@
         "egress": {
           "allow": [],
           "allow_private": false,
+          "allow_store_fallback": false,
+          "credential_injection": false,
+          "credential_source": "store",
           "deny": [],
           "deny_files": [],
+          "enforce_on_container": true,
           "fake_ip_ranges": [],
-          "mode": "public"
+          "inject": {},
+          "inject_extra_hosts": [],
+          "mode": "public",
+          "proxy_port": 9090
         },
         "protected_instruction_extra_patterns": [],
         "protected_instruction_files": true,
@@ -12381,6 +13745,9 @@
         "sandbox": {
           "allow_degraded": [],
           "mode": "enforce"
+        },
+        "scan": {
+          "osv_url": "https://api.osv.dev"
         }
       },
       "description": "Capabilities, sandbox, egress and redaction."
@@ -12393,6 +13760,9 @@
         "max_export_messages": 20000,
         "max_resume_messages": 20000,
         "retention_secs": 0,
+        "search": {
+          "semantic": false
+        },
         "terminal_continue": true
       },
       "description": "Session storage limits and retention."
@@ -12404,6 +13774,8 @@
         "config": {},
         "creation_nudge_interval": 10,
         "disabled": [],
+        "eval_gate": false,
+        "eval_gate_repeat": 3,
         "external_dirs": [],
         "include_bundled": true,
         "index_description_chars": 60,
@@ -12435,6 +13807,7 @@
     "storage": {
       "$ref": "#/$defs/StorageConfig",
       "default": {
+        "encryption": "none",
         "journal_mode": "wal"
       },
       "description": "Session database."
@@ -12656,12 +14029,15 @@
             "page_down": null,
             "page_up": null,
             "palette": null,
+            "pane_subagents": null,
+            "pane_tools": null,
             "paste_image": null,
             "quit": null,
             "scroll_down": null,
             "scroll_up": null,
             "sessions": null,
-            "submit": null
+            "submit": null,
+            "timeline": null
           },
           "reduced_motion": false,
           "theme": "auto"
@@ -12683,8 +14059,10 @@
       "description": "The credential vault."
     },
     "video_gen": {
-      "$ref": "#/$defs/ToolProviderConfig",
-      "default": {},
+      "$ref": "#/$defs/VideoGenConfig",
+      "default": {
+        "timeout_secs": 900
+      },
       "description": "Video generation's provider selection."
     },
     "vision": {
@@ -12749,6 +14127,7 @@
         "archive_dirty": true,
         "archive_max_file_bytes": 52428800,
         "archive_retention_secs": 2592000,
+        "install_state_retention_secs": 1209600,
         "max_total_bytes": 0,
         "sync_remote": true
       },

@@ -159,7 +159,7 @@ fn revert(action: Action, store: &Store) -> Result<(), Error> {
 
 /// The outermost missing directory on the way to a missing `path` (or
 /// `path` itself): writing `path` creates it, so undoing removes it.
-fn created_from(path: &Path) -> PathBuf {
+pub(crate) fn created_from(path: &Path) -> PathBuf {
     let mut top = path;
     while let Some(parent) = top.parent()
         && !parent.as_os_str().is_empty()
@@ -171,7 +171,7 @@ fn created_from(path: &Path) -> PathBuf {
 }
 
 /// Removes the file or directory at `path` (nothing when absent).
-fn remove_any(path: &Path) -> Result<(), Error> {
+pub(crate) fn remove_any(path: &Path) -> Result<(), Error> {
     let removed = match std::fs::symlink_metadata(path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(e) => Err(e),
@@ -183,7 +183,7 @@ fn remove_any(path: &Path) -> Result<(), Error> {
 
 /// Copies the file, symbolic link or directory tree `from` to `to`
 /// (permissions kept).
-fn copy_any(from: &Path, to: &Path) -> Result<(), Error> {
+pub(crate) fn copy_any(from: &Path, to: &Path) -> Result<(), Error> {
     let io =
         |path: &Path, e: std::io::Error| Error::io_doing(&codes::HOME_IO, "cannot copy", path, &e);
     let meta = std::fs::symlink_metadata(from).map_err(|e| io(from, e))?;

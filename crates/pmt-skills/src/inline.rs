@@ -145,7 +145,8 @@ impl SandboxShell {
             .check_command("skill_view", "inline-shell", command)
             .await
         {
-            GateVerdict::Allow => Ok(()),
+            // Only file edits are revised; a command runs as written.
+            GateVerdict::Allow | GateVerdict::Revised { .. } => Ok(()),
             GateVerdict::Blocked(why) | GateVerdict::Denied(why) => Err(why),
         }
     }

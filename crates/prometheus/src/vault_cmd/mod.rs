@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use pmt_config::ProfileScope;
 use pmt_config::schema::VaultKeyStorage;
+use pmt_config::secrets::external::{self, LOGIN_SOURCES};
 use pmt_core::error::{Error, codes};
 use pmt_core::secret::SecretString;
 use pmt_vault::{Address, Card, Item, Kind, Login, Meta, Secret, Vault};
@@ -44,7 +45,9 @@ pub fn run(command: &VaultCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         VaultCommand::List => list(&vault, ctx.json),
         VaultCommand::Add(args) => add(&vault, &scope, args),
         VaultCommand::Rm { handle, yes } => remove(&vault, handle, *yes),
-        VaultCommand::Sources { enable, disable } => sources(&scope, *enable, *disable),
+        VaultCommand::Sources { enable, disable } => {
+            sources(&scope, ctx.launch.inherited("PATH"), *enable, *disable)
+        }
         VaultCommand::Key { command } => key(&vault, &scope, command.as_ref()),
     }
 }
@@ -280,6 +283,7 @@ fn source_key(source: SourceArg) -> (&'static str, &'static str) {
 
 fn sources(
     scope: &ProfileScope,
+    path: Option<&std::ffi::OsStr>,
     enable: Option<SourceArg>,
     disable: Option<SourceArg>,
 ) -> Result<u8, Error> {
@@ -294,15 +298,17 @@ fn sources(
     }
     let config = &scope.config().vault;
     let mut out = String::new();
-    for (name, enabled) in [
-        ("onepassword", config.onepassword.enabled),
-        ("bitwarden", config.bitwarden.enabled),
-    ] {
+    for (name, cli) in LOGIN_SOURCES {
+        let enabled = match name {
+            "onepassword" => config.onepassword.enabled,
+            _ => config.bitwarden.enabled,
+        };
         let state = if enabled { "enabled" } else { "disabled" };
-        let _ = writeln!(
-            out,
-            "{name}  {state}  unavailable: password-manager sources are not part of this build"
-        );
+        let found = match external::locate(scope.home(), cli, path) {
+            Some(program) => format!("available: {}", program.display()),
+            None => format!("unavailable: `{cli}` is not installed or not on PATH"),
+        };
+        let _ = writeln!(out, "{name}  {state}  {found}");
     }
     print_raw(&out)
 }

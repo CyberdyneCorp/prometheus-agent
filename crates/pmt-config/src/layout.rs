@@ -200,6 +200,9 @@ impl Home {
             // A new profile starts on the default `file` secrets backend.
             ensure_private_file(&dir.join("secrets.toml"))?;
         }
+        // Every profile has an active harness: the built-in `h1` until the
+        // user or an adopted evolution proposal writes another.
+        crate::harness::HarnessDir::of(&dir).seed()?;
         tighten(&config, 0o600);
         tighten(&dir.join("secrets.toml"), 0o600);
         Ok(ProfileDir {
@@ -314,9 +317,11 @@ impl ProfileDir {
     /// The profile's `config.toml` and its writer.
     #[must_use]
     pub fn config_file(&self) -> ConfigFile {
-        ConfigFile::new(
+        ConfigFile::of_profile(
             self.dir.join("config.toml"),
             self.dir.join("backups").join("config"),
+            &self.home,
+            self.name.as_str(),
         )
     }
 }

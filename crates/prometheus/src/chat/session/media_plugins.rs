@@ -1,6 +1,6 @@
 //! The plugin provider registry as the media tools see it (spec:
 //! plugin-system, Provider-object plugins fail closed when unregistered):
-//! `image_gen.provider`, `tts.provider` and `stt.provider` names that are
+//! `image_gen.provider`, `video_gen.provider`, `tts.provider` and `stt.provider` names that are
 //! not built in resolve through [`ProviderRegistry::require`].
 
 use std::sync::Arc;
@@ -9,9 +9,10 @@ use pmt_media::plugin::{Kind, MediaPlugins, PluginFuture, SttFuture, SttRequest}
 use pmt_plugins::hooks::{Hooks, Payload};
 use pmt_plugins::host::CallInfo;
 use pmt_plugins::host::hook_world::Reply;
-use pmt_plugins::load::Loaded;
 use pmt_plugins::providers::{Category, ProviderRegistry};
 use serde_json::{Map, Value};
+
+use crate::plugins_host::ProfilePlugins;
 
 /// The providers and hooks of one plugin load, called for one session
 /// (or surface).
@@ -22,12 +23,13 @@ pub struct PluginMedia {
 }
 
 impl PluginMedia {
-    /// The media providers and hooks of `loaded`, called as `call`.
+    /// The media providers and hooks of `plugins` (its hook view, so a
+    /// rollout's candidate hooks apply), called as `call`.
     #[must_use]
-    pub fn shared(loaded: &Loaded, call: CallInfo) -> Arc<dyn MediaPlugins> {
+    pub fn shared(plugins: &ProfilePlugins, call: CallInfo) -> Arc<dyn MediaPlugins> {
         Arc::new(Self {
-            providers: loaded.providers.clone(),
-            hooks: Arc::clone(&loaded.hooks),
+            providers: plugins.current().providers.clone(),
+            hooks: plugins.hooks(),
             call,
         })
     }
@@ -36,6 +38,7 @@ impl PluginMedia {
 fn category(kind: Kind) -> Category {
     match kind {
         Kind::ImageGen => Category::ImageGen,
+        Kind::VideoGen => Category::VideoGen,
         Kind::Tts => Category::Tts,
         Kind::Stt => Category::Stt,
     }

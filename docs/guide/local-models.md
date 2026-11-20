@@ -115,8 +115,37 @@ and SHA-256 are verified: an interrupted download is listed as `partial`
 and resumes where it stopped. Models live in `<PROMETHEUS_HOME>/models/`,
 the engine in `<PROMETHEUS_HOME>/runtimes/llamacpp/<version>-<backend>/`.
 
-## Not yet
+## Context window and memory placement
 
-Growing a model's window before compression and live GPU telemetry in the
-status bars arrive with milestone M3; until then a model starts at the
-window `local catalog` shows (at least 65536 tokens when it fits).
+A model starts at the largest window that fits entirely in GPU memory,
+counting its weights, the KV cache for that window, the runtime's compute
+buffers, the vision projector and, for a model that predicts several tokens
+at once, its draft buffers. Both buffers grow with the batch, so a smaller
+batch is tried before a smaller window: multi-token prediction is never
+switched off to make room. A recommended model always gets at least 65536
+tokens: when even that does not fit, the overflow goes to system RAM in the
+least harmful order, the mixture-of-experts expert weights first, then the
+dense layers; the KV cache never leaves the GPU. The placement is kept in
+the model's library record and written into the server's preset as
+`batch-size`, `ubatch-size`, `cpu-moe` (expert tensors in RAM) and, when
+dense layers spill too, `n-gpu-layers` (the layers kept on the GPU, from the
+model file's layer count).
+
+When a conversation reaches the compression threshold on the managed
+server, the window grows first: the model is relaunched at the next
+doubling that holds the conversation (up to its native maximum), the
+session's clients get `local_model.context_grown`, the context gauge shows
+the new window, and nothing is compressed. When the window cannot grow (it
+is at the native maximum, no larger window fits, or it fits only with so
+much in RAM that generation falls below 20 tokens per second) compression
+runs as usual. A server you run yourself keeps the window you gave it.
+
+The context gauge always uses the window the server runs the model with
+(probed at session start), not the model's native maximum.
+
+## Resource telemetry
+
+While a session's local model runs on the managed server,
+`session.context_usage` carries `local_resources`: GPU utilisation, GPU
+memory and system RAM in use, sampled at most once every 2 seconds. The
+TUI and desktop status bars show it next to the context gauge.

@@ -180,10 +180,14 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     let user_home = inputs.launch.user_home().cloned();
     let (places, paths) = places(inputs, user_home.as_deref(), &scratch);
     let policy = Arc::new(Policy::from_set(inputs.capabilities, &paths));
+    let injection = crate::egress::injection::for_children(inputs.scope)?;
     let proxy = crate::egress::child_proxy(
         inputs.scope,
         inputs.capabilities,
-        Arc::clone(&inputs.egress.hosts),
+        (
+            Arc::clone(&inputs.egress.hosts),
+            injection.as_ref().map(|i| Arc::clone(&i.injection)),
+        ),
         "terminal",
         Arc::clone(&inputs.egress.observer),
     )?;
@@ -191,7 +195,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         Some(proxy) => crate::egress::through(policy.as_ref().clone(), proxy),
         None => policy.as_ref().clone(),
     };
-    let process = processes(inputs, &scratch, &child_policy, proxy.as_ref())
+    let process = processes(inputs, &scratch, &child_policy, (proxy.as_ref(), injection))
         .inspect_err(|err| tracing::warn!(error = %err, "terminal unavailable this session"))
         .ok();
     let browser = process
@@ -332,7 +336,50 @@ fn vault(
         storage: inputs.scope.config().vault.key_storage,
         browser: Arc::clone(browser),
         prompt: inputs.vault_prompt.clone(),
+        managers: password_managers(inputs),
     })
+}
+
+/// The enabled password-manager login sources whose CLI is installed
+/// (`op` from the runtime store or `PATH`, `bw` from `PATH`); 1Password
+/// with a stored service-account token needs no unlock.
+fn password_managers(inputs: &EnvInputs<'_>) -> Vec<Arc<pmt_tools::browser::managers::Source>> {
+    use pmt_tools::browser::managers::{Manager, Source};
+    let config = inputs.scope.config();
+    let mut found = Vec::new();
+    if config.vault.onepassword.enabled
+        && let Some(program) = cli(inputs, "op")
+    {
+        let token_name = &config.secrets.onepassword.access_token_secret.0;
+        let service = inputs
+            .scope
+            .secrets()
+            .store()
+            .get(token_name)
+            .ok()
+            .flatten();
+        found.push(Arc::new(Source::new(
+            Manager::OnePassword,
+            program,
+            service,
+        )));
+    }
+    if config.vault.bitwarden.enabled
+        && let Some(program) = cli(inputs, "bw")
+    {
+        found.push(Arc::new(Source::new(Manager::Bitwarden, program, None)));
+    }
+    found
+}
+
+/// A password-manager CLI: the managed install, else the first on the
+/// launch `PATH`.
+fn cli(inputs: &EnvInputs<'_>, name: &str) -> Option<PathBuf> {
+    pmt_config::secrets::external::locate(
+        inputs.scope.home(),
+        name,
+        inputs.launch.inherited("PATH"),
+    )
 }
 
 /// The approval previewer: the session's shell (POSIX shells only: the
@@ -485,7 +532,10 @@ fn processes(
     inputs: &EnvInputs<'_>,
     scratch: &Path,
     policy: &Policy,
-    proxy: Option<&Proxy>,
+    (proxy, injection): (
+        Option<&Proxy>,
+        Option<crate::egress::injection::ChildInjection>,
+    ),
 ) -> Result<(Arc<Sandbox>, ChildEnv), Error> {
     let config = inputs.scope.config();
     let sandbox = Arc::new(Sandbox::new(policy.clone(), &config.security.sandbox)?);
@@ -510,9 +560,15 @@ fn processes(
         env.set_proxy(&url);
     }
     let bundle = scratch.join("ca-bundle.pem");
-    let extra_ca = config.network.extra_ca_file.as_deref().map(Path::new);
-    if pmt_net::tls::write_child_bundle(&bundle, extra_ca).is_ok() {
-        env.set_ca_bundle(&bundle);
+    // Credential injection: the children hold placeholders and trust the
+    // proxy's CA, which signs the hosts it injects for.
+    if let Some(injection) = &injection {
+        env.inject(injection.placeholders.clone());
+    }
+    match crate::egress::injection::write_child_bundle(inputs.scope, injection.as_ref(), &bundle) {
+        Ok(()) => env.set_ca_bundle(&bundle),
+        Err(err) if injection.is_some() => return Err(err),
+        Err(_) => {}
     }
     Ok((sandbox, env))
 }
@@ -567,6 +623,12 @@ fn terminal(
             format!("cannot set up the terminal: {e}"),
         )
     })
+    .inspect(|terminal| {
+        // Terminal workspace checkpoints journal each command's changes.
+        if let Some(snapshots) = snapshots.cloned() {
+            terminal.add_after_command(Arc::new(move |end| snapshots.after_command(end)));
+        }
+    })
 }
 
 /// The web tools, `vision_analyze` and the fetcher they share.
@@ -592,7 +654,7 @@ fn media(
         fetcher: fetcher.map(|f| Arc::new(f.for_requester("media"))),
         video: inputs.vision.video(),
         plugins: super::media_plugins::PluginMedia::shared(
-            &inputs.plugins.current(),
+            inputs.plugins,
             inputs.plugin_call.clone(),
         ),
     })

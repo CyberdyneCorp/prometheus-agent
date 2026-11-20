@@ -42,6 +42,7 @@ fn session(end: &str) -> Vec<Line> {
             &Event::UserMessage(MessageText {
                 message_id: None,
                 text: "What does notes.txt say?".to_owned(),
+                author: None,
             }),
         ),
         line(
@@ -69,6 +70,7 @@ fn session(end: &str) -> Vec<Line> {
                 duration_ms: Some(2),
                 output: Some("buy milk".to_owned()),
                 error: None,
+                taint: None,
             }),
         ),
         line(
@@ -76,6 +78,7 @@ fn session(end: &str) -> Vec<Line> {
             &Event::AssistantMessage(MessageText {
                 message_id: None,
                 text: "It says: buy milk.".to_owned(),
+                author: None,
             }),
         ),
         line(

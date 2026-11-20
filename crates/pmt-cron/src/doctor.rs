@@ -16,6 +16,11 @@ use crate::job::{JobState, Status};
 /// The `cron.*` keys the doctor reports.
 pub const SETTINGS: &[&str] = &[
     "cron.provider",
+    "cron.managed.endpoint",
+    "cron.managed.jwks_url",
+    "cron.managed.audience",
+    "cron.managed.callback_url",
+    "cron.managed.token_secret",
     "cron.timezone",
     "cron.tick_interval_secs",
     "cron.catch_up_missed",
@@ -41,19 +46,19 @@ pub const SETTINGS: &[&str] = &[
 ];
 
 /// The trigger in effect for `config` and why it differs from the
-/// configured one: the managed scheduler is not part of this build, so
-/// `managed` falls back to `builtin`.
+/// configured one: a `managed` provider missing its endpoint, JWKS or
+/// audience falls back to `builtin` (so does one whose scheduler cannot
+/// be reached, which the daemon decides at run time).
 #[must_use]
 pub fn effective_provider(config: &CronConfig) -> (CronProvider, Option<String>) {
-    match config.provider {
-        CronProvider::Builtin => (CronProvider::Builtin, None),
-        CronProvider::Managed => (
+    match (config.provider, config.managed.missing()) {
+        (CronProvider::Builtin, _) => (CronProvider::Builtin, None),
+        (CronProvider::Managed, None) => (CronProvider::Managed, None),
+        (CronProvider::Managed, Some(key)) => (
             CronProvider::Builtin,
-            Some(
-                "cron.provider = \"managed\" but no managed scheduler is available in this \
-                 build; using builtin"
-                    .to_owned(),
-            ),
+            Some(format!(
+                "cron.provider = \"managed\" but {key} is not set; using builtin"
+            )),
         ),
     }
 }

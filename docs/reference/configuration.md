@@ -68,6 +68,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `approvals.deny` | array of string | `[]` | any | `live` | Command patterns that are always blocked. |
 | `approvals.mode` | one of "manual", "smart", "off" | `"manual"` | `"manual"`, `"smart"`, `"off"` | `live` | Approval mode of interactive sessions. |
 | `approvals.single_query_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in single-query (`-q`) runs. |
+| `approvals.taint_policy` | one of "off", "warn", "ask" | `"warn"` | `"off"`, `"warn"`, `"ask"` | `live` | After untrusted content entered a turn: `ask` requires a human approval for each later call of that turn that sends data to a target not yet approved in the session, `warn` only annotates such calls, `off` does not track. |
 | `approvals.timeout_secs` | integer | `300` | ≥ 0 | `live` | Unanswered approvals are denied after this long. |
 | `approvals.unattended_mode` | one of "deny", "approve" | `"deny"` | `"deny"`, `"approve"` | `live` | Decision for approvals in other unattended sessions. |
 | `attachments.storage` | one of "blobs", "workspace" | `"blobs"` | `"blobs"`, `"workspace"` | `next_session` | Where received attachments are kept. |
@@ -96,6 +97,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.curator.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.curator.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.curator.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.eval_judge.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.eval_judge.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.eval_judge.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.eval_judge.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.eval_judge.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.eval_judge.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.evolution.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.evolution.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.evolution.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -121,6 +128,18 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.memory.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.memory.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.memory.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.profile.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.profile.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.profile.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.profile.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.profile.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.profile.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.schedule.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.schedule.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.schedule.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.schedule.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.schedule.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.schedule.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.side_question.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.side_question.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
 | `auxiliary.side_question.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
@@ -139,6 +158,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.title.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.title.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.title.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `auxiliary.trajectory_compress.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
+| `auxiliary.trajectory_compress.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
+| `auxiliary.trajectory_compress.max_concurrency` | integer | unset | ≥ 1 | `next_session` | This task's calls in flight at once (within `auxiliary.max_concurrency`); unset is only the profile cap. |
+| `auxiliary.trajectory_compress.model` | string | unset | any | `next_session` | Model id. |
+| `auxiliary.trajectory_compress.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
+| `auxiliary.trajectory_compress.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
 | `auxiliary.transient_retries` | integer | `2` | 0 to 6 | `next_session` | Same-route retries of a retryable auxiliary failure. |
 | `auxiliary.vision.extra_body` | table | unset | any | `next_session` | Fields merged into this task's request body after the wire format mapping (one level deep), e.g. an OpenRouter `provider` block. |
 | `auxiliary.vision.fallback_chain` | array | unset | any | `next_session` | Fallback routes (`"<provider>/<model>"`); `[]` disables fallback. |
@@ -158,6 +183,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `auxiliary.web_extract.model` | string | unset | any | `next_session` | Model id. |
 | `auxiliary.web_extract.provider` | string | unset | any | `next_session` | Provider id; unset means `auto` (the session's main route). |
 | `auxiliary.web_extract.timeout_secs` | integer | unset | ≥ 0 | `next_session` | Timeout; unset uses the task default (120 s for `vision` and `compression`, 30 s for `approval` and `title`, 600 s for `curator` and `evolution`). |
+| `bot_desktop.auto_start` | boolean | `false` | any | `live` | Start the screen on the first `computer_use` call or headed browser launch instead of only on `prometheus computer-use screen start`. |
+| `bot_desktop.geometry` | string | `"1440x900"` | any | `live` | The screen's size, `<width>x<height>` in pixels. |
+| `bot_desktop.idle_stop_secs` | integer | `1800` | ≥ 0 | `live` | The screen stops after this long without use (`0`: never). |
+| `bot_desktop.image` | string | `""` | any | `live` | The image of a screen placed in the container backend (empty: the release's desktop sandbox image, `prometheus-sandbox:<version>-desktop`). |
+| `bot_desktop.min_free_memory_bytes` | integer | `1610612736` | ≥ 0 | `live` | The screen refuses to start with less free memory than this on the host or its cgroup (`0`: no check). |
+| `bot_desktop.placement` | one of "auto", "terminal", "gateway" | `"auto"` | `"auto"`, `"terminal"`, `"gateway"` | `live` | Where the screen runs. |
 | `bot_mode.envelope_ttl_secs` | integer | `900` | ≥ 0 | `live` | Envelopes still queued (never drained by a courier) after this many seconds fail with `queued_expired` (`0`: never). |
 | `bot_mode.relay_turn_timeout_secs` | integer | `600` | 1 to 86400 | `live` | Seconds a relayed bot message's turn may take on the target before it fails. |
 | `browser.auto_local_for_private_urls` | boolean | `true` | any | `next_session` | With a cloud provider, private and LAN URLs open in a local sidecar browser instead of being refused or sent to the provider. |
@@ -165,6 +196,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `browser.chromium_args` | array of string | unset | any | `next_session` | Extra local browser arguments; ones that disable the Chromium sandbox or web security need the matching `security.sandbox.allow_degraded` entry. |
 | `browser.dialog_policy` | one of "must_respond", "auto_dismiss", "auto_accept" | `"must_respond"` | `"must_respond"`, `"auto_dismiss"`, `"auto_accept"` | `next_session` | JavaScript dialog handling. |
 | `browser.dialog_timeout_secs` | integer | `300` | ≥ 0 | `next_session` | Unanswered dialogs are dismissed after this long. |
+| `browser.engine` | one of "auto", "lightpanda" | `"auto"` | `"auto"`, `"lightpanda"` | `next_session` | The local browser engine: `auto` (Chromium) or `lightpanda` (lighter; no screenshots, one page). Lowest precedence: an explicit CDP endpoint, a cloud provider or real-profile browsing shadow it. |
 | `browser.executable_path` | string | `""` | any | `next_session` | The local browser executable; empty uses the managed `chromium` runtime, then a Chromium-family browser of the host. |
 | `browser.headed` | boolean | `false` | any | `next_session` | Open a visible window (headless with a notice without a display); kept between turns, idle reaping still applies. |
 | `browser.inactivity_timeout_secs` | integer | `120` | ≥ 0 | `live` | Idle browser sessions are closed after this long. |
@@ -230,6 +262,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `cron.delivery.threads` | table | `{}` | any | `live` | Per platform: the thread or topic id home-chat deliveries go to (explicit `<adapter>:<chat>:<thread>` targets win). |
 | `cron.failure_nudge_threshold` | integer | `3` | ≥ 0 | `live` | Consecutive failures of a recurring job after which its failure notice suggests fixing, pausing or removing it (`0` = never). |
 | `cron.failure_repeat_alert_secs` | integer | `21600` | ≥ 0 | `live` | Seconds after which a failure incident still alerted sends one reminder (`0` = alert on every failing run). |
+| `cron.managed.audience` | string | unset | any | `live` | The `aud` a fire token must carry. |
+| `cron.managed.callback_url` | string | unset | any | `live` | The public URL of this daemon's `POST /api/cron/fire`, sent with every arm request. |
+| `cron.managed.endpoint` | string | unset | any | `live` | Where one-shots are armed (`POST` of `job_id`, `profile`, `fire_at`, `dedup_key` and `callback_url`). |
+| `cron.managed.jwks_url` | string | unset | any | `live` | The JWKS fire tokens are verified against (asymmetric keys only). |
+| `cron.managed.token_secret` | string | unset | a secret name | `live` | The secret sent as a bearer token with arm requests (none when unset). |
 | `cron.max_parallel_jobs` | integer | `4` | 1 to 64 | `live` | Runs executing at once per profile (1 = serial). |
 | `cron.max_run_secs` | integer | `3600` | ≥ 0 | `live` | Seconds a run may take in all (`0` = unlimited); a job's `timeout.wall` wins. |
 | `cron.model` | string | unset | any | `live` | The model of unpinned jobs (unset: the profile's main model at fire time). |
@@ -316,6 +353,35 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `display.tool_progress_grouping` | one of "accumulate", "separate" | `"accumulate"` | `"accumulate"`, `"separate"` | `live` | How consecutive tool calls are grouped. |
 | `display.turn_summary` | boolean | `true` | any | `live` | One line with duration, tool count and tokens after each turn. |
 | `display.vim_mode` | boolean | `false` | any | `next_session` | Vim key bindings in the composer (the line editor is set up when the session starts). |
+| `evolve.adoption.policy` | one of "ask", "auto", "never" | `"ask"` | `"ask"`, `"auto"`, `"never"` | `live` | `ask` (default), `auto` (adopt at once, except proposals touching scripts, hooks or subagents, which always wait for approval) or `never` (proposals are kept for review). |
+| `evolve.auto.enabled` | boolean | `false` | any | `live` | Queue jobs automatically at all. |
+| `evolve.auto.max_jobs_per_day` | integer | `3` | ≥ 0 | `live` | Automatic jobs per profile per day. |
+| `evolve.auto.min_iterations` | integer | `40` | ≥ 1 | `live` | What counts as a long session. |
+| `evolve.auto.on_failure` | boolean | `true` | any | `live` | After a session that ended in error or interruption after at least one tool call. |
+| `evolve.auto.on_long_task` | boolean | `true` | any | `live` | After a session of at least `min_iterations` iterations. |
+| `evolve.budget.max_usd` | number | `5.0` | ≥ 0.0 | `live` | A job stops (`budget-exceeded`) once its spend reaches this many US dollars, unless `--budget-usd` names another cap. |
+| `evolve.concurrency.rollouts` | integer | `2` | ≥ 1 | `live` | Rollouts running at once. |
+| `evolve.concurrency.sessions` | integer | `2` | ≥ 1 | `live` | Improver sessions running at once. |
+| `evolve.enabled` | boolean | `false` | any | `live` | Allow harness evolution in this profile (`prometheus evolve`, `/evolve`, the `evolve.*` RPC methods, scheduled and automatic jobs). |
+| `evolve.evidence.obs_trunc_chars` | integer | `50000` | ≥ 10000 | `live` | A tool observation longer than this is truncated in the rollout trajectories improvers read. |
+| `evolve.improver.max_iterations` | integer | `120` | ≥ 1 | `live` | Model calls one session may make. |
+| `evolve.improver.model` | string | unset | any | `live` | `provider/model` of every improver session; unset uses the `evolution` auxiliary route, else the profile's main model. |
+| `evolve.improver.timeout_secs` | integer | `1800` | ≥ 1 | `live` | Wall-clock limit of one session. |
+| `evolve.k` | integer | `2` | 1 to 8 | `live` | Recursion budget k: each mode spends 4k rollouts and 3k improver sessions. |
+| `evolve.leak_globs` | array of string | `["**/*reference_answer*","**/*rubric*","**/expected/**","**/*.expected.*","**/.pmt-eval/**"]` | any | `live` | Files never captured into a task, evidence or library entry, matched against the full relative path (leading dots included). |
+| `evolve.mode` | one of "parallel", "sequential", "both" | `"parallel"` | `"parallel"`, `"sequential"`, `"both"` | `live` | `parallel` (width), `sequential` (depth) or `both` (one proposal per mode on shared base rollouts). |
+| `evolve.resume_on_start` | boolean | `true` | any | `live` | Interrupted jobs are queued again when the daemon starts. |
+| `evolve.retention_secs` | integer | `2592000` | ≥ 1 | `live` | Job directories older than this are pruned (the summary of a job whose proposal was adopted is kept). |
+| `evolve.rollout.backend` | string | `"local-sandbox"` | any | `live` | Execution backend: `local-sandbox` (the `local` backend with full sandbox enforcement) or another sandboxed backend (`container`, `ssh`, `singularity`, a plugin backend). The unsandboxed host is refused. |
+| `evolve.rollout.max_iterations` | integer | `60` | ≥ 1 | `live` | Model calls one rollout may make. |
+| `evolve.rollout.network` | one of "providers", "session" | `"providers"` | `"providers"`, `"session"` | `live` | `providers`: egress only to the configured model providers; `session`: the source session's egress rules. |
+| `evolve.rollout.timeout_secs` | integer | `900` | ≥ 1 | `live` | Wall-clock limit of one rollout. |
+| `evolve.selection` | one of "model", "user" | `"model"` | `"model"`, `"user"` | `live` | Who picks the final of each mode: `model` (a blind selector session) or `user` (`prometheus evolve choose`). |
+| `evolve.task.max_source_bytes` | integer | `52428800` | ≥ 1 | `live` | Largest workspace snapshot of a task, in bytes. |
+| `experience.max_entries_in_evidence` | integer | `20` | 1 to 200 | `live` | Newest visible entries of the job's domain copied into its evidence (pinned entries first). |
+| `experience.max_entries_per_domain` | integer | `50` | 1 to 1000 | `live` | Entries kept per domain; the oldest unpinned one is evicted. |
+| `experience.session_lessons` | boolean | `false` | any | `live` | Offer a domain's lessons to new sessions that start with a known domain, as a frozen prompt layer. |
+| `experience.session_lessons_max` | integer | `5` | 1 to 20 | `live` | Lessons in that layer (high or medium confidence only). |
 | `fallback.chain` | array of table | `[]` | any | `next_session` | Ordered fallback routes (`[[fallback.chain]]`); empty disables fallback. |
 | `fallback.min_health` | number | `0.2` | 0.0 to 1.0 | `next_session` | Fallback entries with a health score below this are skipped. |
 | `files.read_max_chars` | integer | `100000` | ≥ 0 | `live` | Formatted characters `read_file` returns per call. |
@@ -323,10 +389,12 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `files.snapshot.max_bytes` | integer | `1073741824` | ≥ 0 | `live` | The profile's snapshot store is pruned, oldest first, above this. |
 | `files.snapshot.max_checkpoints` | integer | `20` | ≥ 0 | `live` | Checkpoints kept per workspace. |
 | `files.snapshot.max_file_bytes` | integer | `10485760` | ≥ 0 | `live` | Larger files are listed as skipped instead of stored. |
+| `files.snapshot.max_workspace_bytes` | integer | `536870912` | ≥ 0 | `live` | Under `terminal = "workspace"`, larger workspaces are not checkpointed (a one-time notice says so). |
 | `files.snapshot.prune_interval_secs` | integer | `86400` | ≥ 0 | `live` | Least time between automatic prunes. |
 | `files.snapshot.retention_secs` | integer | `604800` | ≥ 0 | `live` | Snapshots unused this long are pruned. |
-| `files.snapshot.terminal` | one of "off", "destructive" | `"off"` | `"off"`, `"destructive"` | `live` | Also checkpoint before destructive terminal commands (`rm`, `mv`, `sed -i`, `>`, `git reset`...). |
+| `files.snapshot.terminal` | one of "off", "destructive", "workspace" | `"off"` | `"off"`, `"destructive"`, `"workspace"` | `live` | Terminal commands: `off`, `destructive` (checkpoint before `rm`, `mv`, `sed -i`, `>`, `git reset`...) or `workspace` (also journal every command's workspace changes, so `/undo` reverts them). |
 | `gateway.accept_routes_from` | array of string | `[]` | any | `live` | Profiles whose `profile_routes` may route events to this one. |
+| `gateway.ack_reaction` | string | unset | any | `live` | A reaction added to every accepted inbound message (an emoji or a name such as `eyes` or `thumbsup`; unset: none) on adapters that support reactions. |
 | `gateway.agent_cache.idle_ttl_secs` | integer | `3600` | ≥ 1 | `restart` | An agent unused this long is unloaded (its session stays open). |
 | `gateway.agent_cache.max_size` | integer | `128` | 1 to 100000 | `restart` | Conversations whose agent stays loaded. |
 | `gateway.agent_cache.memory_high_bytes` | integer | `0` | ≥ 0 | `restart` | Above this resident memory the least recently used agents are unloaded; `0` is half the physical memory. |
@@ -388,6 +456,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.groups.platforms.<name>.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
 | `gateway.groups.require_mention` | boolean | unset | any | `live` | Only messages that mention the bot, reply to it, match a `mention_patterns` entry or are in a thread it takes part in start a turn (default true). |
 | `gateway.groups.thread_require_mention` | boolean | unset | any | `live` | A thread the bot takes part in still needs a mention (default false). |
+| `gateway.identity.dm_mode` | one of "per_platform", "shared" | `"per_platform"` | `"per_platform"`, `"shared"` | `live` | `per_platform` (default): each account's DMs are its own conversation; `shared`: DMs from all of a person's linked accounts continue one conversation, answered on the platform of the latest message (group conversations never merge). |
 | `gateway.mcp_events.enabled` | boolean | `false` | any | `live` | Admit notifications of configured MCP servers that declare an `events` webhook route as signed internal events on that route (same delivery and toolset rules as a webhook request). |
 | `gateway.media.cache_max_age_secs` | integer | `86400` | ≥ 60 | `live` | Cached inbound media older than this many seconds is deleted unless a kept session references it. |
 | `gateway.media.max_inbound_bytes` | integer | `134217728` | ≥ 0 | `live` | Largest inbound attachment downloaded, in bytes; `0` disables the cap. |
@@ -408,6 +477,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.busy.debounce_ms` | integer | unset | 0 to 10000 | `next_session` | Overrides `gateway.busy.debounce_ms`. |
 | `gateway.platforms.<name>.busy.input_mode` | one of "queue", "steer", "interrupt" | unset | `"queue"`, `"steer"`, `"interrupt"` | `next_session` | Overrides `busy.input_mode`. |
 | `gateway.platforms.<name>.busy.max_queued` | integer | unset | 1 to 1000 | `next_session` | Overrides `gateway.busy.max_queued`. |
+| `gateway.platforms.<name>.busy_reaction` | string | unset | any | `next_session` | The reaction that acknowledges a message arriving during a turn (with `gateway.busy.ack`, on adapters that support reactions) instead of a busy text: an emoji or a name such as `eyes` (default) or `hourglass`. |
 | `gateway.platforms.<name>.enabled` | boolean | `false` | any | `next_session` | Start this adapter with the daemon. |
 | `gateway.platforms.<name>.group_admins` | array of string | `[]` | any | `next_session` | User ids with every command in groups. |
 | `gateway.platforms.<name>.home_channel.chat_id` | string | `""` | any | `next_session` | The chat id. |
@@ -454,6 +524,8 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `gateway.platforms.<name>.unauthorized_dm` | one of "pair", "ignore", "decline" | unset | `"pair"`, `"ignore"`, `"decline"` | `next_session` | What an unauthorized direct message gets: a pairing code (`pair`), nothing (`ignore`) or a refusal (`decline`). Unset: `ignore` for email or when `allow_users` is set, else `pair`. |
 | `gateway.platforms.<name>.user_commands` | array of string | `[]` | any | `next_session` | Commands other users may run where an admin list is set, besides `/help`, `/whoami`, `/stop`, `/new`, `/queue` and `/link`. |
 | `gateway.profile_routes` | array of table | `[]` | any | `live` | Events this profile's adapters receive that belong to another served profile (one shared bot, several communities); the target must list this profile in its `accept_routes_from`. |
+| `gateway.proxy.key_secret` | string | unset | a secret name | `live` | The secret holding the remote profile's API key. |
+| `gateway.proxy.url` | string | unset | any | `live` | The remote API server's base URL including its profile prefix (`http://host.docker.internal:8642/p/default`); unset: turns run here. |
 | `gateway.proxy_url` | string | unset | any | `restart` | The proxy every adapter without its own `proxy_url` uses (`http://`, `https://` or `socks5://`, without a password; a URL with credentials goes in a secret named by `proxy_url_secret`). |
 | `gateway.proxy_url_secret` | string | unset | a secret name | `restart` | The secret holding the shared proxy URL when it carries credentials. |
 | `gateway.quick_commands.timeout_secs` | integer | `30` | 1 to 3600 | `live` | An `exec` quick command run from a chat is killed, with its whole process tree, after this many seconds. |
@@ -483,6 +555,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `goals.gate_timeout_secs` | integer | `300` | 1 to 86400 | `live` | Seconds one quality gate command may run. |
 | `goals.max_turns` | integer | `20` | 1 to 1000 | `live` | Continuation turns a goal may use before it pauses. |
 | `goals.max_wait_secs` | integer | `1800` | 1 to 86400 | `live` | Longest wait of a goal parked on a process (seconds). |
+| `harness.always_on_cap_chars` | integer | `24000` | 4000 to 64000 | `live` | Combined characters of `SYSTEM.md`, `GUARDRAILS.md`, `MEMORY_POLICY.md` and `TOOL_GUIDANCE.md` a harness may hold. |
 | `heartbeat.min_interval_secs` | integer | `60` | 1 to 86400 | `live` | Shortest `/heartbeat every` interval (seconds). |
 | `hooks.auto_accept` | boolean | `false` | any | `next_session` | Run shell hooks nobody approved yet without asking (as `--accept-hooks` does for one run); every hook still runs in the session's sandbox. |
 | `hooks.outbound` | array of table | `[]` | any | `next_session` | Outbound webhooks: hook events sent as HTTPS `POST` requests. |
@@ -591,6 +664,11 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `mcp_server.allow_remote` | boolean | `false` | any | `restart` | Let `--http` bind an address that is not loopback. |
 | `mcp_server.expose_toolsets` | array of string | `["skills"]` | any | `restart` | Toolsets exposed as MCP tools; `skills` exposes only the read-only skill tools. |
 | `memory.archival_max_entries` | integer | `10000` | ≥ 0 | `next_session` | Archival entries kept per target. |
+| `memory.consolidation.auto_apply` | boolean | `false` | any | `next_session` | Commit a pass's proposal without approval (otherwise it is staged for `memory approve`). |
+| `memory.consolidation.enabled` | boolean | `false` | any | `next_session` | Run an idle-time consolidation pass. |
+| `memory.consolidation.interval_secs` | integer | `604800` | ≥ 1 | `next_session` | Seconds between idle-time passes. |
+| `memory.decay.dormant_below` | number | `0.1` | 0.0 to 1.0 | `next_session` | An archival entry whose salience falls below this becomes dormant. |
+| `memory.decay.half_life_secs` | integer | `7776000` | ≥ 1 | `next_session` | Seconds for an unused entry's salience to halve. |
 | `memory.memory_char_limit` | integer | `2200` | ≥ 0 | `next_session` | Character budget of core memory entries. |
 | `memory.memory_enabled` | boolean | `true` | any | `next_session` | The agent memory store. |
 | `memory.notifications` | one of "off", "on", "verbose" | `"on"` | `"off"`, `"on"`, `"verbose"` | `next_session` | Notices after a memory change commits: `off`, `on` or `verbose`. |
@@ -631,6 +709,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `model.codex_bin` | string | unset | any | `next_session` | Absolute path of the Codex CLI the Codex app-server runtime runs; unset finds `codex` on `PATH`, in the user-local bin directories and the vendor's install prefixes. |
 | `model.default` | string | unset | any | `next_session` | Default model id (or a `[model.aliases]` name). |
 | `model.min_context_window` | integer | `64000` | ≥ 16000 | `next_session` | Smallest context window (tokens) a session may start with. |
+| `model.openai_runtime` | one of "auto", "codex_app_server" | `"auto"` | `"auto"`, `"codex_app_server"` | `next_session` | Who runs turns on `openai-codex`, `openai-api` and custom providers the Codex config also defines: `auto` (Prometheus itself) or `codex_app_server` (a long-lived `codex app-server`). A change applies from the next session. |
 | `model.provider` | string | unset | any | `next_session` | Provider id or alias; unset means `auto`. |
 | `models` | table | `{}` | any | `next_session` | Model aliases and metadata overrides, keyed by name or `"<provider>/<model>"`. |
 | `network.expect_isolated` | boolean | `false` | any | `restart` | The deployment is network-isolated (the egress proxy in `network.proxy` is the only way out, as in the image's `compose.isolated.yaml`): `prometheus doctor network --online` fails when a direct connection succeeds. |
@@ -641,11 +720,15 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `observability.gateway_health.endpoint` | string | unset | any | `restart` | The OTLP/HTTP metrics endpoint (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318/v1/metrics`. |
 | `observability.gateway_health.interval_secs` | integer | `60` | 1 to 3600 | `restart` | Seconds between two exports. |
 | `observability.health.bind` | string | `"127.0.0.1:0"` | any | `restart` | Loopback listen address; port `0` picks a free port, recorded as `health_url` in `run/gateway.json`. |
+| `observability.langfuse.host` | string | `"https://cloud.langfuse.com"` | any | `restart` | The Langfuse host; spans go to `<host>/api/public/otel`, with Basic authentication from the secrets `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. |
 | `observability.metrics_endpoint.enabled` | boolean | `false` | any | `restart` | Serve `GET /metrics` on the health listener (no authentication, no per-session or per-user labels). Off by default: 404. |
+| `observability.nemo_relay.enabled` | boolean | `false` | any | `restart` | Feed `NeMo` Relay: a host in a managed python environment (pinned `nemo-relay`, built on first use) receives the session, turn, model-call and tool lifecycle of every session. Payloads only with `observability.otel.capture_content`. Off by default. |
+| `observability.nemo_relay.plugins_toml` | string | unset | any | `restart` | A `plugins.toml` that replaces Relay's user file (the system file still applies above it). |
 | `observability.otel.capture_content` | boolean | `false` | any | `restart` | Attach message content, tool arguments and tool output to spans. |
 | `observability.otel.enabled` | boolean | `false` | any | `restart` | Export traces and metrics over OTLP. Off by default. |
 | `observability.otel.endpoint` | string | unset | any | `restart` | The collector's OTLP base URL (`https://`, or `http://` to a loopback collector), e.g. `http://127.0.0.1:4318`; required when enabled. `/v1/traces` and `/v1/metrics` are appended for `http/protobuf`. |
 | `observability.otel.header_secrets` | array of string | `[]` | any | `restart` | Names of secrets sent as request headers: the secret `NAME` becomes the header `name` with `_` as `-` (`X_API_KEY` -> `x-api-key`). |
+| `observability.otel.preset` | one of "langfuse" | unset | `"langfuse"` | `restart` | A collector preset, which turns export on: `langfuse` sends traces to `observability.langfuse.host` with its keys (ignores `endpoint`, `protocol` and `enabled`). |
 | `observability.otel.propagate_external` | boolean | `false` | any | `restart` | Send `traceparent` to model providers, MCP servers and other external hosts. |
 | `observability.otel.protocol` | one of "http/protobuf", "grpc" | `"http/protobuf"` | `"http/protobuf"`, `"grpc"` | `restart` | Wire protocol. |
 | `observability.trajectories.enabled` | boolean | `true` | any | `next_session` | Record trajectories for sessions started from now on. |
@@ -754,37 +837,63 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `replay.cache.max_bytes` | integer | `4294967296` | ≥ 1 | `next_session` | Least-recently-used entries are evicted above this size. |
 | `replay.cache.mode` | one of "off", "read", "write", "read_write" | `"off"` | `"off"`, `"read"`, `"write"`, `"read_write"` | `next_session` | `off`, `read` (serve stored responses), `write` (store new ones) or `read_write`. Off for interactive sessions; the offline demo (and eval runs) use `read_write`. |
 | `replay.cache.namespace` | string | `"default"` | any | `next_session` | Entries of different namespaces never serve each other. |
+| `routing.candidates` | array of table | `[]` | any | `next_session` | The routes a policy chooses among (`[[routing.candidates]]`, as fallback entries); empty: the requested route plus the fallback chain. |
+| `routing.cost_weight` | number | `0.5` | 0.0 to 1.0 | `next_session` | The weight of cost against latency under `balanced`. |
 | `routing.health_half_life_secs` | integer | `1800` | ≥ 1 | `next_session` | Half-life (seconds) of the decay of an idle route's health score toward 1.0. |
 | `routing.health_window` | integer | `50` | 1 to 500 | `next_session` | Calls per (provider, model, credential) a health score is computed over. |
+| `routing.policy` | one of "pinned", "cheapest", "fastest", "balanced" | `"pinned"` | `"pinned"`, `"cheapest"`, `"fastest"`, `"balanced"` | `next_session` | How a session's route is chosen at its start: `pinned` (the requested route), `cheapest`, `fastest` or `balanced`. |
 | `schema_version` | integer | `1` | ≥ 0 | `restart` | Version of this file's schema; older files are migrated forward and a newer one is refused. |
 | `secrets.backend` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `restart` | Where this profile's secrets are stored. |
+| `secrets.bitwarden.access_token_secret` | string | `"BWS_ACCESS_TOKEN"` | a secret name | `restart` | The stored secret holding the machine account's access token (the only place the token is read from). |
+| `secrets.bitwarden.cache_ttl_secs` | integer | `300` | 0 to 86400 | `restart` | Resolved values stay in memory at most this long (never on disk). |
+| `secrets.bitwarden.enabled` | boolean | `false` | any | `restart` | Read secrets from Bitwarden (off by default: `bws` is then never run). |
+| `secrets.bitwarden.names` | array of string | unset | any | `restart` | The keys `prometheus secrets bitwarden sync --apply` accepted; the source supplies only these (empty: every key of the project). |
+| `secrets.bitwarden.project_id` | string | unset | any | `restart` | The project whose secrets are read (unset: every project the token sees). |
+| `secrets.bitwarden.server_url` | string | unset | any | `restart` | A self-hosted server's URL. |
 | `secrets.command.argv` | array of string | `[]` | any | `restart` | The helper's program and arguments (no shell). |
 | `secrets.command.enabled` | boolean | `false` | any | `restart` | Run the helper (off by default; unsupported on Windows). |
 | `secrets.command.override_existing` | boolean | `false` | any | `restart` | Let helper values win over the secrets store and the environment. |
 | `secrets.command.timeout_secs` | integer | `3` | 1 to 300 | `restart` | Seconds before the helper's process group is killed. |
+| `secrets.onepassword.access_token_secret` | string | `"OP_SERVICE_ACCOUNT_TOKEN"` | a secret name | `restart` | The stored secret holding the service-account token (the only place the token is read from). |
+| `secrets.onepassword.cache_ttl_secs` | integer | `300` | 0 to 86400 | `restart` | Resolved values stay in memory at most this long (never on disk). |
+| `secrets.onepassword.enabled` | boolean | `false` | any | `restart` | Read secrets from 1Password (off by default: `op` is then never run). |
+| `secrets.onepassword.map` | table | `{}` | any | `restart` | Secret name to its `op://vault/item/field` reference. |
+| `secrets.onepassword.vault` | string | unset | any | `restart` | The vault `setup --vault` selected (what `sync` reads). |
 | `security.acked_advisories` | array of string | `[]` | any | `next_session` | Supply-chain advisory ids whose startup warning is silenced (`prometheus doctor --ack <id>`); `doctor security` still shows them. |
 | `security.capabilities` | array | unset | any | `next_session` | Profile capability baseline; unset uses the built-in baseline (workspace read/write, toolchain read, `process.spawn:*`, egress policy, `llm.call`). |
 | `security.egress.allow` | array of string | `[]` | any | `next_session` | Host patterns `allowlist` admits: `host`, `host:port` or `*.suffix` (subdomains of `suffix`). |
 | `security.egress.allow_private` | boolean | `false` | any | `next_session` | Allow private destinations without a session grant. |
+| `security.egress.allow_store_fallback` | boolean | `false` | any | `next_session` | With `credential_source = "bitwarden"`, take a secret missing from the project from the store instead of refusing to start. |
+| `security.egress.credential_injection` | boolean | `false` | any | `next_session` | Sandboxed children (a session's processes, stdio MCP servers, plugin sidecars) hold a placeholder, fresh per session or start, instead of each secret mapped in `inject`; their egress proxy puts the real value in only on TLS requests to the mapped hosts and refuses the placeholder anywhere else (`credential_misdirected`). |
+| `security.egress.credential_source` | one of "store", "bitwarden" | `"store"` | `"store"`, `"bitwarden"` | `next_session` | Where the egress proxy reads the mapped secrets: the profile's secrets store, or Bitwarden Secrets Manager (refetched every start). |
 | `security.egress.deny` | array of string | `[]` | any | `next_session` | Hosts refused in every mode (`*` globs, `host` or `host:port`, e.g. `*.casino.example`); a session can add to them, never remove. |
 | `security.egress.deny_files` | array of string | `[]` | any | `next_session` | Absolute paths of shared blocklist files: one pattern per line, `#` comments; re-read when a file changes. |
+| `security.egress.enforce_on_container` | boolean | `true` | any | `next_session` | Container and remote sandboxes refuse to start while credential injection is on but the egress proxy is down. |
 | `security.egress.fake_ip_ranges` | array of string | `[]` | any | `next_session` | CIDR ranges a local TUN proxy answers with (treated as public). |
+| `security.egress.inject` | table | `{}` | any | `next_session` | Secret name to the host patterns (`host`, `host:port`, `*.suffix`) its value may be sent to, under `credential_injection`. For the egress proxy of container and remote sandboxes, an empty list means the built-in provider hosts plus `inject_extra_hosts`. |
+| `security.egress.inject_extra_hosts` | array of string | `[]` | any | `next_session` | Hosts added to the built-in provider hosts injected credentials of container and remote sandboxes may go to. |
 | `security.egress.mode` | one of "public", "allowlist", "none" | `"public"` | `"public"`, `"allowlist"`, `"none"` | `next_session` | Which hosts tools, sandboxed children, plugins and browsers may reach: any public address (`public`), only the `allow` patterns (`allowlist`) or nothing (`none`). A session can narrow or extend it (`chat --egress`, `/egress`, `egress.set`). |
+| `security.egress.proxy_port` | integer | `9090` | 0 to 65535 | `next_session` | The egress proxy's container bridge listener port (`prometheus egress status` shows it). |
 | `security.protected_instruction_extra_patterns` | array of string | `[]` | any | `next_session` | Extra instruction-file basename globs (case-insensitive), e.g. `"*.mdc"`; writes to matches need human approval in every mode. |
 | `security.protected_instruction_files` | boolean | `true` | any | `next_session` | Require human approval for agent writes to instruction files. |
 | `security.redact_secrets` | boolean | `true` | any | `next_session` | Redact every loaded secret value everywhere output is written. |
 | `security.sandbox.allow_degraded` | array of one of "landlock", "landlock_net", "seccomp", "seatbelt", "appcontainer", "no_new_privileges", "read_only_rootfs", "cap_drop", "chromium_sandbox", "web_security", "all" | `[]` | any | `next_session` | Hardening features that may be missing; anything else missing refuses to run. |
 | `security.sandbox.mode` | one of "enforce", "off" | `"enforce"` | `"enforce"`, `"off"` | `next_session` | Sandbox mode; `off` needs `allow_degraded` to name `all`. |
+| `security.scan.osv_url` | string | `"https://api.osv.dev"` | any | `next_session` | The OSV API `security scan` queries (a mirror may stand in); it is contacted only when the command runs. |
 | `sessions.auto_archive_secs` | integer | `604800` | ≥ 0 | `live` | Archive lineage tips idle for this long. |
 | `sessions.low_disk_bytes` | integer | `1073741824` | ≥ 0 | `live` | Below this many free bytes on the store's volume an interactive start offers to turn on auto-prune (when `retention_secs = 0`). |
 | `sessions.max_export_messages` | integer | `20000` | ≥ 0 | `live` | Refuse in-memory exports with more messages. |
 | `sessions.max_resume_messages` | integer | `20000` | ≥ 0 | `live` | Refuse to resume a lineage with more messages; `0` disables. |
 | `sessions.retention_secs` | integer | `0` | ≥ 0 | `live` | Prune ended sessions inactive for longer than this; `0` never prunes. |
+| `sessions.search.embedding_model` | string | unset | any | `live` | The embedding model (`provider/model` or a model on the main route's provider); unset uses `memory.recall.embedding_model`. |
+| `sessions.search.semantic` | boolean | `false` | any | `live` | Embed messages in the background and answer hybrid searches with the full-text and vector rankings fused. |
 | `sessions.terminal_continue` | boolean | `true` | any | `live` | `-c` prefers the session last used from the same terminal. |
 | `skills.auto_load` | array of string | `[]` | any | `next_session` | Skills loaded into every new session. |
 | `skills.config` | table | `{}` | any | `next_session` | Non-secret per-skill settings: skill to key to value. |
 | `skills.creation_nudge_interval` | integer | `10` | ≥ 0 | `next_session` | Tool-calling iterations before a skill-creation nudge. |
 | `skills.disabled` | array of string | `[]` | any | `next_session` | Disabled skill names. |
+| `skills.eval_gate` | boolean | `false` | any | `next_session` | Run a skill's evals before a background review or curator consolidation commits a change to it, and reject a change that lowers the pass rate (other edits are only warned). |
+| `skills.eval_gate_repeat` | integer | `3` | ≥ 1 | `next_session` | Runs per case of a gated edit's evals. |
 | `skills.external_dirs` | array of string | `[]` | any | `next_session` | Extra skill directories (`~` expanded; missing ones skipped). |
 | `skills.include_bundled` | boolean | `true` | any | `next_session` | Show the bundled skills tier. |
 | `skills.index_description_chars` | integer | `60` | ≥ 0 | `next_session` | Description length in the skills index. |
@@ -801,6 +910,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `skills.trusted_sources` | array of string | `["anthropics/skills","openai/skills"]` | any | `next_session` | Hub sources (`owner/repo`) whose skills install with trust `trusted` (`safe` and `caution` verdicts allowed). |
 | `skills.write_approval` | boolean | `false` | any | `next_session` | Stage skill writes as pending for review. |
 | `snapshots.keep` | integer | `20` | ≥ 0 | `live` | Manual snapshots kept per profile. |
+| `storage.encryption` | one of "none", "keychain", "passphrase" | `"none"` | `"none"`, `"keychain"`, `"passphrase"` | `restart` | Encryption of `state.db` pages and blob files. An existing store is converted only offline: `prometheus sessions encrypt\|decrypt`. |
 | `storage.journal_mode` | one of "wal", "delete" | `"wal"` | `"wal"`, `"delete"` | `restart` | `state.db` journal mode; `delete` only for filesystems without WAL support. |
 | `stt.cloud_trim_keep_ms` | integer | `300` | ≥ 0 | `next_session` | Silence kept of each trimmed pause. |
 | `stt.cloud_trim_silence` | boolean | `true` | any | `next_session` | Trim long silences before a cloud upload. |
@@ -919,6 +1029,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `toolsets.surfaces.api` | array | unset | any | `next_session` | The OpenAI-compatible API server (default `api_server`). |
 | `toolsets.surfaces.cli` | array | unset | any | `next_session` | Line-mode chat and one-shot runs (default `core`). |
 | `toolsets.surfaces.cron` | array | unset | any | `next_session` | Scheduled jobs without per-job toolsets (default `core`). |
+| `toolsets.surfaces.dashboard` | array | unset | any | `next_session` | The web dashboard's chat (default `core`). |
 | `toolsets.surfaces.desktop` | array | unset | any | `next_session` | The desktop app (default `core`). |
 | `toolsets.surfaces.gateway` | table | unset | any | `next_session` | Messaging sessions per platform (`gateway.<platform>`, default `platform-<platform>`; `gateway.webhook` defaults to `webhook-safe`). |
 | `toolsets.surfaces.tui` | array | unset | any | `next_session` | The terminal UI (default `core`). |
@@ -995,18 +1106,23 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `ui.tui.keys.page_down` | string | unset | any | `next_session` | Scroll the transcript one page down (default `PageDown`). |
 | `ui.tui.keys.page_up` | string | unset | any | `next_session` | Scroll the transcript one page up (default `PageUp`). |
 | `ui.tui.keys.palette` | string | unset | any | `next_session` | Open the command palette (default `Ctrl+P`). |
+| `ui.tui.keys.pane_subagents` | string | unset | any | `next_session` | Show or hide the subagents pane (default `F2`). |
+| `ui.tui.keys.pane_tools` | string | unset | any | `next_session` | Show or hide the tool-output pane (default `F3`). |
 | `ui.tui.keys.paste_image` | string | unset | any | `next_session` | Attach the clipboard's image (default `Ctrl+V`). |
 | `ui.tui.keys.quit` | string | unset | any | `next_session` | Leave the TUI when the composer is empty (default `Ctrl+D`). |
 | `ui.tui.keys.scroll_down` | string | unset | any | `next_session` | Scroll the transcript one line down (default `Ctrl+Down`). |
 | `ui.tui.keys.scroll_up` | string | unset | any | `next_session` | Scroll the transcript one line up (default `Ctrl+Up`). |
 | `ui.tui.keys.sessions` | string | unset | any | `next_session` | Open the live session switcher (default `Ctrl+X`). |
 | `ui.tui.keys.submit` | string | unset | any | `next_session` | Send the composer (default `Enter`). |
+| `ui.tui.keys.timeline` | string | unset | any | `next_session` | Open the session timeline (default `Ctrl+T`). |
 | `ui.tui.reduced_motion` | boolean | `false` | any | `next_session` | No spinners or animation: a static busy glyph. |
 | `ui.tui.theme` | one of "auto", "dark", "light" | `"auto"` | `"auto"`, `"dark"`, `"light"` | `next_session` | Colour theme: `auto` (from `COLORFGBG`, else the terminal's answer to a background-colour query, else dark), `dark` or `light`; `NO_COLOR` turns colours off whatever it says. |
 | `vault.bitwarden.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
 | `vault.key_storage` | one of "file", "keychain" | `"file"` | `"file"`, `"keychain"` | `next_session` | Where a new vault's key is kept: `file` (`<profile>/vault/vault.key`) or `keychain` (the OS keychain; the file when none is reachable). `prometheus vault key migrate --to` moves an existing key. |
 | `vault.onepassword.enabled` | boolean | `true` | any | `next_session` | Offer its logins when its CLI is installed and signed in. |
-| `video_gen.provider` | string | unset | any | `next_session` | The provider serving the category (`nous` routes it through the subscription tool gateway); unset picks one automatically. |
+| `video_gen.model` | string | unset | any | `next_session` | The model (unset: the provider's default). The agent never picks it. |
+| `video_gen.provider` | string | unset | any | `next_session` | The provider generating videos: `fal`, `xai`, `openrouter`, `deepinfra`, `nous` (the subscription tool gateway) or a plugin's; unset picks one by the keys present (`fal` when none). |
+| `video_gen.timeout_secs` | integer | `900` | ≥ 1 | `next_session` | How long a generation job is polled (every 5 seconds) before the call returns `status = "timeout"` with the provider's job id. |
 | `vision.embed_target_bytes` | integer | `262144` | ≥ 0 | `next_session` | Largest natively embedded image in bytes (clamped to 65,536..4,194,304); bigger or wider images are downscaled. |
 | `vision.image_input_mode` | one of "auto", "native", "text" | `"auto"` | `"auto"`, `"native"`, `"text"` | `next_session` | How images reach the model. |
 | `vision.max_calls_per_image` | integer | unset | ≥ 0 | `next_session` | Times one image may be embedded by `vision_analyze` per session; unset is 3 in delegated children and unlimited for the main agent, `0` is unlimited. |
@@ -1041,6 +1157,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `worktrees.archive_dirty` | boolean | `true` | any | `live` | Archive dirty or unpushed trees past their idle tier before removing them; `false` keeps such trees. |
 | `worktrees.archive_max_file_bytes` | integer | `52428800` | ≥ 0 | `live` | Untracked files larger than this keep a tree from the sweep (`keep-large-untracked`) and are left out of archives. |
 | `worktrees.archive_retention_secs` | integer | `2592000` | ≥ 0 | `live` | Seconds an archive is kept before the sweep deletes it (`0` = forever). |
+| `worktrees.install_state_retention_secs` | integer | `1209600` | ≥ 0 | `live` | Seconds install state kept per checkout outside the tree (such as language-server caches) may go unused, once its checkout no longer exists, before the sweep deletes it (`0` = forever). |
 | `worktrees.max_total_bytes` | integer | `0` | ≥ 0 | `live` | Total bytes of trees above which the oldest idle ones past their tier are archived and removed first (`0` = off). |
 | `worktrees.sync_remote` | boolean | `true` | any | `live` | Fetch the default remote before creating a tree (a failed fetch falls back to the local tip). |
 | `x_search.model` | string | `"grok-4.5"` | any | `next_session` | The xAI model answering X searches. |

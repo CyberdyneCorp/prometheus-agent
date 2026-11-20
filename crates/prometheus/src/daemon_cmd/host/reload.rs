@@ -39,7 +39,7 @@ pub(super) struct State {
 impl State {
     pub(super) fn new(scope: &ProfileScope) -> Self {
         Self {
-            last: std::fs::read(config_path(scope)).ok(),
+            last: current_text(scope),
             ..Self::default()
         }
     }
@@ -57,6 +57,18 @@ impl State {
 
 fn config_path(scope: &ProfileScope) -> std::path::PathBuf {
     scope.path("config.toml")
+}
+
+/// The profile's configuration as it is now: the file's bytes, or the
+/// remote plane's document (re-fetched every `config_backend.poll_secs`).
+fn current_text(scope: &ProfileScope) -> Option<Vec<u8>> {
+    scope
+        .profile()
+        .config_file()
+        .raw()
+        .ok()
+        .flatten()
+        .map(String::into_bytes)
 }
 
 /// Polls every served profile's `config.toml` until the daemon stops.
@@ -96,7 +108,11 @@ impl DaemonHost {
         // unchanged and loaded the plugins from the old configuration.
         let _rereading = profile.rereading.lock().await;
         let current = profile.scope();
-        let text = std::fs::read(config_path(&current)).ok();
+        let probe = current.clone();
+        let text = pmt_core::spawn::blocking(move || current_text(&probe))
+            .await
+            .ok()
+            .flatten();
         {
             let mut state = profile.config.lock().expect("config state poisoned");
             if state.last == text {

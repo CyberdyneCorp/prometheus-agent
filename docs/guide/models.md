@@ -131,6 +131,42 @@ Switching routes never edits the system prompt, the tool list or earlier
 messages, so going back to a route replays exactly the prompt prefix it
 had cached.
 
+## Cost and latency aware routing
+
+`routing.policy` picks a new session's route once, when it starts:
+
+```toml
+[routing]
+policy = "balanced"   # pinned (default), cheapest, fastest or balanced
+cost_weight = 0.5     # balanced: weight of cost against latency
+
+# Optional; without it the candidates are the requested route plus the
+# fallback chain.
+[[routing.candidates]]
+provider = "openrouter"
+model = "anthropic/claude-sonnet-4.5"
+```
+
+`pinned` keeps the requested provider and model. The other policies drop
+candidates without a usable credential, with a health score below
+`fallback.min_health` (see `prometheus providers health`) or whose model
+cannot call tools, then rank the rest: `cheapest` by the estimated cost
+of a typical turn (8,000 input and 1,000 output tokens at the model's
+price; a local server costs nothing), `fastest` by the median time to
+first token over the health window, `balanced` by
+`cost_weight * cost + (1 - cost_weight) * latency`, each normalised over
+the candidates. An unpriced or never-measured candidate ranks last on
+that input; ties keep the earlier candidate. When nothing is eligible the
+requested route stands.
+
+The choice is recorded on the session and as a `provider.route_selected`
+event naming the policy, the chosen route, every other candidate with why
+it lost (`credentials`, `health`, `capability`, or `cost`, `latency`,
+`score`) and the inputs weighed. The session keeps that route for every
+turn, even if another candidate becomes cheaper or faster meanwhile: only
+the fallback chain or `/model` changes it. A resumed session, a delegated
+child and a scheduled job that pins its route are never re-routed.
+
 ## Prompt caching
 
 Requests carry prompt-cache breakpoints: Anthropic Messages routes get

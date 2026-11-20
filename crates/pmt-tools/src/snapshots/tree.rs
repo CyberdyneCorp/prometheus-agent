@@ -80,6 +80,19 @@ pub trait Tree: Send + Sync + std::fmt::Debug {
     fn backend(&self) -> Option<&str> {
         None
     }
+
+    /// When the file `path` last changed, in nanoseconds since the Unix
+    /// epoch; `None` when the tree cannot tell (its content then decides).
+    fn modified(&self, _path: &Path) -> Option<i128> {
+        None
+    }
+}
+
+/// The modification time of a host file, in nanoseconds since the epoch.
+fn host_modified(path: &Path) -> Option<i128> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+    let since = modified.duration_since(std::time::UNIX_EPOCH).ok()?;
+    i128::try_from(since.as_nanos()).ok()
 }
 
 /// This host's filesystem.
@@ -128,6 +141,10 @@ impl Tree for HostTree {
 
     fn key(&self, root: &Path) -> PathBuf {
         root.to_path_buf()
+    }
+
+    fn modified(&self, path: &Path) -> Option<i128> {
+        host_modified(path)
     }
 }
 
@@ -232,6 +249,10 @@ impl Tree for MountedTree {
         path.strip_prefix(&self.inside)
             .ok()
             .map(|rel| self.host.join(rel))
+    }
+
+    fn modified(&self, path: &Path) -> Option<i128> {
+        host_modified(path)
     }
 }
 

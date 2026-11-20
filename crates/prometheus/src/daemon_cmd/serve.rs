@@ -107,10 +107,12 @@ pub(crate) fn run_with(
             let automation =
                 pmt_core::spawn::spawn(super::host::schedule_automation(Arc::clone(&host)));
             let kanban = pmt_core::spawn::spawn(super::host::schedule_kanban(Arc::clone(&host)));
+            let evolve = pmt_core::spawn::spawn(super::host::schedule_evolve(Arc::clone(&host)));
             let sampler = pmt_core::spawn::spawn(super::host::sample_health(Arc::clone(&host)));
             let liveness = super::watchdog::background(home, ctx.launch);
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
             super::host::publish_usage(&host, &server);
+            publish_context_grown(&server);
             let mut messaging =
                 super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
             messaging.replace_locks = replace_locks;
@@ -126,6 +128,7 @@ pub(crate) fn run_with(
                     scheduler.abort();
                     automation.abort();
                     kanban.abort();
+                    evolve.abort();
                     sampler.abort();
                     liveness.abort();
                     return Ok(pmt_core::exit::FAILURE);
@@ -148,6 +151,7 @@ pub(crate) fn run_with(
             scheduler.abort();
             automation.abort();
             kanban.abort();
+            evolve.abort();
             crate::kanban_host::release(home, "daemon");
             sampler.abort();
             liveness.abort();
@@ -417,7 +421,11 @@ fn served_profiles(
     if let Some(handle) = pmt_obs::logs::handle() {
         handle.set_level(first.config().logging.level);
     }
+    // A preset missing its keys is a configuration error, not a quiet
+    // loss of telemetry.
+    pmt_obs::otel::preflight(&first)?;
     crate::startup::start_export(&first);
+    crate::relay_host::start(&first, ctx.launch);
     crate::startup::register_profile(&first);
     if !first.config().gateway.multiplex {
         return Ok(vec![first]);
@@ -462,4 +470,16 @@ async fn shutdown_signal() {
     {
         let _ = tokio::signal::ctrl_c().await;
     }
+}
+
+/// Sends `local_model.context_grown` to the session's clients.
+fn publish_context_grown(server: &Arc<pmt_gateway::Server>) {
+    let server = Arc::downgrade(server);
+    crate::local_cmd::growth::on_grown(Box::new(move |session, payload| {
+        if let Some(server) = server.upgrade() {
+            server
+                .hub()
+                .publish(session, "local_model.context_grown", payload);
+        }
+    }));
 }
