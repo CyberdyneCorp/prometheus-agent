@@ -186,6 +186,7 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::HealthChangedEvent>();
     declare_evolution(d);
     declare_desktop(d);
+    declare_voice(d);
     declare_live(d);
 }
 
@@ -224,6 +225,21 @@ fn declare_evolution(d: &mut Declarations) {
         .method::<c::ExperienceRestore>();
 }
 
+/// Voice mode's names (spec: voice-mode).
+fn declare_voice(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::VoiceSpeak>()
+        .method::<c::WakeArm>()
+        .method::<c::WakeFeed>()
+        .method::<c::WakeDisarm>()
+        .method::<c::WakeStatus>()
+        .event::<c::WakeDetectedEvent>()
+        .method::<c::VoiceClientConfigGet>()
+        .method::<c::VoiceTranscribe>()
+        .method::<c::VoiceRealtimeStart>()
+        .method::<c::VoiceRealtimeUsage>();
+}
+
 /// The desktop app's names (spec: desktop-app).
 fn declare_desktop(d: &mut Declarations) {
     use self::contracts as c;
@@ -240,14 +256,6 @@ fn declare_desktop(d: &mut Declarations) {
         .method::<c::BotRoutinesList>()
         .method::<c::BotChatRead>()
         .method::<c::BotSectionsDelete>()
-        .method::<c::VoiceSpeak>()
-        .method::<c::WakeArm>()
-        .method::<c::WakeFeed>()
-        .method::<c::WakeDisarm>()
-        .method::<c::WakeStatus>()
-        .event::<c::WakeDetectedEvent>()
-        .method::<c::VoiceClientConfigGet>()
-        .method::<c::VoiceTranscribe>()
         .method::<c::GroupsCreate>()
         .method::<c::GroupsList>()
         .method::<c::GroupsGet>()

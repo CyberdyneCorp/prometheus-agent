@@ -1,7 +1,8 @@
 //! Voice mode's daemon methods (spec: voice-mode, Wake capture location
 //! for remote clients; Client-direct voice for remote daemons):
 //! `wake.arm`, `wake.feed`, `wake.disarm`, `wake.status`,
-//! `voice.client_config` and `voice.transcribe` for the profile the call
+//! `voice.client_config`, `voice.transcribe`, `voice.realtime.start` and
+//! `voice.realtime.usage` for the profile the call
 //! names (the connection's grant must cover it). The host runs them; a listener armed by a connection
 //! reports `wake.detected` to that connection, and its owner is gone when
 //! the connection is.
@@ -84,6 +85,8 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     add::<c::WakeStatus>(router, catalog)?;
     add::<c::VoiceClientConfigGet>(router, catalog)?;
     add::<c::VoiceTranscribe>(router, catalog)?;
+    add::<c::VoiceRealtimeStart>(router, catalog)?;
+    add::<c::VoiceRealtimeUsage>(router, catalog)?;
     Ok(())
 }
 

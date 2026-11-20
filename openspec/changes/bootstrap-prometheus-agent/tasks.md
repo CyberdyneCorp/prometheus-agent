@@ -693,7 +693,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 - [x] 77.1 Implement live streaming transcription (fallback on failure), barge-in (talk over playback, stop phrase mid-generation), the voice turn model and reasoning settings, and recording retention and privacy; verify with audio fixtures (spec: voice-mode)
 - [ ] 77.2 Implement Discord voice channel sessions with echo suppression, access control and rebinding; verify against a mock Discord voice gateway (spec: voice-mode)
 - [x] 77.3 Implement the wake word listener (refused without TTS), wake engines with false-trigger control, single wake listener ownership across surfaces, wake capture location for remote clients, wake word profile routing and wake and voice diagnostics; verify with audio fixtures (spec: voice-mode)
-- [ ] 77.4 Implement desktop voice controls, client-direct voice for remote daemons (audio never crosses the daemon link unless the provider is host-only) and the realtime full-duplex voice chat mode that delegates work; verify with desktop E2E tests (spec: voice-mode)
+- [x] 77.4 Implement desktop voice controls, client-direct voice for remote daemons (audio never crosses the daemon link unless the provider is host-only) and the realtime full-duplex voice chat mode that delegates work; verify with desktop E2E tests (spec: voice-mode)
 
 ## 78. M3 Catalog platform adapters
 

@@ -88,6 +88,9 @@ pub struct RealtimeVoiceConfig {
     pub model: String,
     /// The voice it speaks with.
     pub voice: String,
+    /// The provider's API base URL (the daemon creates the call there with
+    /// the profile's key).
+    pub base_url: String,
     /// Extra instructions for the voice layer (the agent keeps its own
     /// system prompt).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -100,6 +103,7 @@ impl Default for RealtimeVoiceConfig {
             provider: "openai".to_owned(),
             model: "gpt-realtime".to_owned(),
             voice: "marin".to_owned(),
+            base_url: "https://api.openai.com/v1".to_owned(),
             instructions: None,
         }
     }

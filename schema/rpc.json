@@ -1810,6 +1810,11 @@
           "description": "The API base URL (direct only).",
           "type": "string"
         },
+        "extra": {
+          "additionalProperties": true,
+          "description": "Extra request fields (direct only): form fields of a transcription,\nJSON body fields of a speech request.",
+          "type": "object"
+        },
         "language": {
           "description": "The spoken language (transcription).",
           "type": [
@@ -1836,8 +1841,16 @@
             "null"
           ]
         },
+        "strip_tags": {
+          "description": "Drop `[bracketed]` audio tags from the text before speaking it.",
+          "type": "boolean"
+        },
         "voice": {
           "description": "The voice (speech).",
+          "type": "string"
+        },
+        "wire": {
+          "description": "The request shape the client speaks (direct only): `openai` (the\nOpenAI transcription and speech APIs and their compatible\nendpoints), `elevenlabs`, `gemini` or `minimax`.",
           "type": "string"
         }
       },
@@ -6018,6 +6031,34 @@
       ],
       "type": "object"
     },
+    "RealtimeUsage": {
+      "additionalProperties": false,
+      "description": "Token counts of one realtime response, as the provider reported them.",
+      "properties": {
+        "cached_tokens": {
+          "default": 0,
+          "description": "Input tokens read from the provider's cache.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input_tokens": {
+          "default": 0,
+          "description": "Input tokens (audio and text).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "description": "Output tokens (audio and text).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "RelayConnection": {
       "additionalProperties": false,
       "description": "One connection an attached desktop holds, with its agents.",
@@ -9473,6 +9514,10 @@
           "description": "`voice.client_direct`.",
           "type": "boolean"
         },
+        "listen": {
+          "$ref": "#/$defs/VoiceListening",
+          "description": "How the client listens."
+        },
         "stt": {
           "$ref": "#/$defs/ClientSpeech",
           "description": "Speech-to-text."
@@ -9486,14 +9531,20 @@
         "client_direct",
         "chat_mode",
         "stt",
-        "tts"
+        "tts",
+        "listen"
       ],
       "type": "object"
     },
-    "VoiceProfileParams": {
+    "VoiceClientConfigParams": {
       "additionalProperties": false,
-      "description": "A profile's voice settings.",
+      "description": "`voice.client_config` params.",
       "properties": {
+        "credentials": {
+          "default": false,
+          "description": "Include the credentials of direct providers: asked only right\nbefore the client calls one, so a key is held for that voice\naction alone (and never while a realtime session runs).",
+          "type": "boolean"
+        },
         "profile": {
           "description": "The profile.",
           "type": "string"
@@ -9501,6 +9552,151 @@
       },
       "required": [
         "profile"
+      ],
+      "type": "object"
+    },
+    "VoiceListening": {
+      "additionalProperties": false,
+      "description": "How the client listens in a voice conversation (the `[voice]`\nsettings the CLI and TUI use).",
+      "properties": {
+        "barge_in": {
+          "description": "Speaking over a reply interrupts it.",
+          "type": "boolean"
+        },
+        "barge_in_threshold_multiplier": {
+          "description": "How far above the quiet room's level speech must rise to\ninterrupt.",
+          "format": "double",
+          "type": "number"
+        },
+        "max_recording_secs": {
+          "description": "The longest recording.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "no_speech_timeout_secs": {
+          "description": "A recording without speech by then ends untranscribed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_duration_ms": {
+          "description": "Quiet after confirmed speech that ends the recording.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_threshold": {
+          "description": "Input level (RMS, 0-32767) above which audio counts as speech.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "speech_confirm_ms": {
+          "description": "How long the level must stay above the threshold to confirm speech.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stop_phrases": {
+          "description": "Utterances that end the conversation instead of being sent.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "silence_threshold",
+        "speech_confirm_ms",
+        "silence_duration_ms",
+        "no_speech_timeout_secs",
+        "max_recording_secs",
+        "stop_phrases",
+        "barge_in",
+        "barge_in_threshold_multiplier"
+      ],
+      "type": "object"
+    },
+    "VoiceRealtimeCall": {
+      "additionalProperties": false,
+      "description": "`voice.realtime.start` result: what the client needs to connect, never\nthe key.",
+      "properties": {
+        "call_id": {
+          "description": "The provider's call id.",
+          "type": "string"
+        },
+        "model": {
+          "description": "The realtime model.",
+          "type": "string"
+        },
+        "sdp": {
+          "description": "The provider's SDP answer.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The tool through which the voice hands work to the agent.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "sdp",
+        "model",
+        "tool"
+      ],
+      "type": "object"
+    },
+    "VoiceRealtimeStartParams": {
+      "additionalProperties": false,
+      "description": "`voice.realtime.start` params: the desktop's WebRTC offer.",
+      "properties": {
+        "profile": {
+          "description": "The profile whose `[voice.realtime]` settings and key are used.",
+          "type": "string"
+        },
+        "sdp": {
+          "description": "The client's SDP offer.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session the agent works in (its usage rows go there).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "sdp"
+      ],
+      "type": "object"
+    },
+    "VoiceRealtimeUsageParams": {
+      "additionalProperties": false,
+      "description": "`voice.realtime.usage` params: one response of a realtime call.",
+      "properties": {
+        "call_id": {
+          "description": "The call (`voice.realtime.start`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile that created the call.",
+          "type": "string"
+        },
+        "response_id": {
+          "description": "The provider's response id (a repeated one is recorded once).",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/RealtimeUsage",
+          "description": "Its tokens."
+        }
+      },
+      "required": [
+        "profile",
+        "call_id",
+        "response_id",
+        "usage"
       ],
       "type": "object"
     },
@@ -9626,6 +9822,11 @@
         "phrase": {
           "description": "The phrase it listens for.",
           "type": "string"
+        },
+        "start_new_session": {
+          "default": false,
+          "description": "`wake.start_new_session`: a request after the phrase opens a new\nsession instead of continuing the current one.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -11834,10 +12035,31 @@
     "voice.client_config": {
       "owner": "voice-mode",
       "params": {
-        "$ref": "#/$defs/VoiceProfileParams"
+        "$ref": "#/$defs/VoiceClientConfigParams"
       },
       "result": {
         "$ref": "#/$defs/VoiceClientConfig"
+      },
+      "since": "1.0"
+    },
+    "voice.realtime.start": {
+      "long": true,
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceRealtimeStartParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceRealtimeCall"
+      },
+      "since": "1.0"
+    },
+    "voice.realtime.usage": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceRealtimeUsageParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
       },
       "since": "1.0"
     },

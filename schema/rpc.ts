@@ -636,6 +636,8 @@ export interface ClientSpeech {
   api_key?: string | null;
   /** The API base URL (direct only). */
   base_url?: string;
+  /** Extra request fields (direct only): form fields of a transcription, JSON body fields of a speech request. */
+  extra?: Record<string, unknown>;
   /** The spoken language (transcription). */
   language?: string | null;
   /** Its model. */
@@ -646,8 +648,12 @@ export interface ClientSpeech {
   provider: string;
   /** Why the relay path (or none). */
   reason?: string | null;
+  /** Drop `[bracketed]` audio tags from the text before speaking it. */
+  strip_tags?: boolean;
   /** The voice (speech). */
   voice?: string;
+  /** The request shape the client speaks (direct only): `openai` (the OpenAI transcription and speech APIs and their compatible endpoints), `elevenlabs`, `gemini` or `minimax`. */
+  wire?: string;
 }
 
 /** `commands.catalog` result. */
@@ -2111,6 +2117,16 @@ export interface Reaction {
   emoji: string;
 }
 
+/** Token counts of one realtime response, as the provider reported them. */
+export interface RealtimeUsage {
+  /** Input tokens read from the provider's cache. */
+  cached_tokens?: number;
+  /** Input tokens (audio and text). */
+  input_tokens?: number;
+  /** Output tokens (audio and text). */
+  output_tokens?: number;
+}
+
 /** One connection an attached desktop holds, with its agents. */
 export interface RelayConnection {
   /** Its agents. */
@@ -3303,16 +3319,74 @@ export interface VoiceClientConfig {
   chat_mode: string;
   /** `voice.client_direct`. */
   client_direct: boolean;
+  /** How the client listens. */
+  listen: VoiceListening;
   /** Speech-to-text. */
   stt: ClientSpeech;
   /** Text-to-speech. */
   tts: ClientSpeech;
 }
 
-/** A profile's voice settings. */
-export interface VoiceProfileParams {
+/** `voice.client_config` params. */
+export interface VoiceClientConfigParams {
+  /** Include the credentials of direct providers: asked only right before the client calls one, so a key is held for that voice action alone (and never while a realtime session runs). */
+  credentials?: boolean;
   /** The profile. */
   profile: string;
+}
+
+/** How the client listens in a voice conversation (the `[voice]` settings the CLI and TUI use). */
+export interface VoiceListening {
+  /** Speaking over a reply interrupts it. */
+  barge_in: boolean;
+  /** How far above the quiet room's level speech must rise to interrupt. */
+  barge_in_threshold_multiplier: number;
+  /** The longest recording. */
+  max_recording_secs: number;
+  /** A recording without speech by then ends untranscribed. */
+  no_speech_timeout_secs: number;
+  /** Quiet after confirmed speech that ends the recording. */
+  silence_duration_ms: number;
+  /** Input level (RMS, 0-32767) above which audio counts as speech. */
+  silence_threshold: number;
+  /** How long the level must stay above the threshold to confirm speech. */
+  speech_confirm_ms: number;
+  /** Utterances that end the conversation instead of being sent. */
+  stop_phrases: Array<string>;
+}
+
+/** `voice.realtime.start` result: what the client needs to connect, never the key. */
+export interface VoiceRealtimeCall {
+  /** The provider's call id. */
+  call_id: string;
+  /** The realtime model. */
+  model: string;
+  /** The provider's SDP answer. */
+  sdp: string;
+  /** The tool through which the voice hands work to the agent. */
+  tool: string;
+}
+
+/** `voice.realtime.start` params: the desktop's WebRTC offer. */
+export interface VoiceRealtimeStartParams {
+  /** The profile whose `[voice.realtime]` settings and key are used. */
+  profile: string;
+  /** The client's SDP offer. */
+  sdp: string;
+  /** The session the agent works in (its usage rows go there). */
+  session_id: string;
+}
+
+/** `voice.realtime.usage` params: one response of a realtime call. */
+export interface VoiceRealtimeUsageParams {
+  /** The call (`voice.realtime.start`). */
+  call_id: string;
+  /** The profile that created the call. */
+  profile: string;
+  /** The provider's response id (a repeated one is recorded once). */
+  response_id: string;
+  /** Its tokens. */
+  usage: RealtimeUsage;
 }
 
 /** `voice.speak` params: read a message of a session aloud. */
@@ -3367,6 +3441,8 @@ export interface WakeArmed {
   engine: string;
   /** The phrase it listens for. */
   phrase: string;
+  /** `wake.start_new_session`: a request after the phrase opens a new session instead of continuing the current one. */
+  start_new_session?: boolean;
 }
 
 /** `wake.detected` payload. */
@@ -3667,7 +3743,9 @@ export interface Methods {
   "vault.list": { params: VaultListParams; result: VaultItems };
   "vault.remove": { params: VaultRemoveParams; result: VaultItem };
   "vault.sources": { params: VaultSourcesParams; result: VaultSourceList };
-  "voice.client_config": { params: VoiceProfileParams; result: VoiceClientConfig };
+  "voice.client_config": { params: VoiceClientConfigParams; result: VoiceClientConfig };
+  "voice.realtime.start": { params: VoiceRealtimeStartParams; result: VoiceRealtimeCall };
+  "voice.realtime.usage": { params: VoiceRealtimeUsageParams; result: Ack };
   "voice.speak": { params: VoiceSpeakParams; result: VoiceSpoken };
   "voice.transcribe": { params: VoiceTranscribeParams; result: VoiceTranscript };
   "wake.arm": { params: WakeArmParams; result: WakeArmed };

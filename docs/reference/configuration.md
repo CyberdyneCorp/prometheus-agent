@@ -1173,6 +1173,7 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `voice.keep_recordings` | boolean | `false` | any | `live` | Keep recordings under `cache/voice/` after transcription (they then expire after `gateway.media.cache_max_age_secs`); off deletes each as soon as it is transcribed. |
 | `voice.max_recording_secs` | integer | `120` | 5 to 600 | `live` | The longest recording; it stops there. |
 | `voice.no_speech_timeout_secs` | integer | `15` | ≥ 0 | `live` | A recording with no confirmed speech by then ends without being transcribed. |
+| `voice.realtime.base_url` | string | `"https://api.openai.com/v1"` | any | `live` | The provider's API base URL (the daemon creates the call there with the profile's key). |
 | `voice.realtime.instructions` | string | unset | any | `live` | Extra instructions for the voice layer (the agent keeps its own system prompt). |
 | `voice.realtime.model` | string | `"gpt-realtime"` | any | `live` | The realtime model. |
 | `voice.realtime.provider` | string | `"openai"` | any | `live` | The realtime provider (`openai`; its key stays on the daemon). |

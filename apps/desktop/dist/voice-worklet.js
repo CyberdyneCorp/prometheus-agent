@@ -1,0 +1,1 @@
+(()=>{var s=class extends AudioWorkletProcessor{process(t){let e=t[0]?.[0];if(e&&e.length>0){let o=new Int16Array(e.length);for(let r=0;r<e.length;r++)o[r]=Math.max(-1,Math.min(1,e[r]??0))*32767;this.port.postMessage(o,[o.buffer])}return!0}};registerProcessor("pcm16",s);})();

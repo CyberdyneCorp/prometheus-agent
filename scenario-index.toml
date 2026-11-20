@@ -5231,3 +5231,18 @@ capabilities = [
 
 [voice-mode."Wake and voice diagnostics"]
 "Silent microphone reported" = ["crates/prometheus/tests/wake_line.rs::a_second_terminal_does_not_steal_the_microphone_and_a_silent_one_is_reported", "crates/pmt-voice/tests/wake.rs::a_microphone_of_zeros_is_reported_as_silent", "crates/pmt-voice/src/wake/command.rs::a_silent_microphone_is_reported_with_the_permission_hint", "crates/prometheus/tests/wake_line.rs::doctor_reports_the_wake_phrase_engine_device_and_host_api"]
+
+
+[voice-mode."Wake word profile routing"]
+"Wake a different profile" = { tests = ["crates/prometheus/tests/desktop_voice.rs::a_wake_phrase_of_another_profile_switches_the_desktop_to_it", "crates/prometheus/tests/wake_daemon.rs::another_profiles_phrase_wakes_that_profile"], note = "desktop-wake.spec.ts: the ear streams the page's microphone through wake.feed, the daemon's stand-in engine reports coder's phrase, and the window switches to coder, opens a new session and answers the next utterance there" }
+
+[voice-mode."Desktop voice controls"]
+"Read a message aloud" = { tests = ["crates/prometheus/tests/desktop_voice.rs::desktop_voice_controls_speak_to_cloud_providers_directly"], note = "desktop-voice.spec.ts: the read-aloud button sends the message to the profile's TTS provider, stays pressed while the reply plays and stops it when clicked again" }
+
+[voice-mode."Client-direct voice for remote daemons"]
+"Audio never crosses the daemon link" = { tests = ["crates/prometheus/tests/desktop_voice.rs::desktop_voice_controls_speak_to_cloud_providers_directly", "crates/prometheus/tests/voice_daemon.rs::a_cloud_provider_with_a_key_is_handed_to_the_client", "crates/pmt-media/tests/client_voice.rs::cloud_providers_with_a_key_go_direct"], note = "the desktop treats every daemon connection alike: with a cloud provider holding a key it calls the provider itself; desktop-voice.spec.ts asserts no voice.transcribe or voice.speak call and no audio in any frame sent or received over the daemon link during a conversation" }
+"Host-only provider relays" = ["crates/prometheus/tests/desktop_voice.rs::desktop_voice_relays_host_only_providers_and_hides_what_cannot_work", "crates/prometheus/tests/voice_daemon.rs::a_host_only_provider_relays_and_the_recording_does_not_stay", "crates/pmt-media/tests/client_voice.rs::host_only_providers_relay_through_the_daemon"]
+
+[voice-mode."Realtime full-duplex voice chat mode (upgrade)"]
+"Realtime voice delegates work" = { tests = ["crates/prometheus/tests/desktop_voice.rs::realtime_voice_delegates_to_the_agent_and_keeps_the_key_on_the_daemon"], note = "the provider's model is played by the spec on the WebRTC data channel (the page's peer is a stand-in): its prometheus_agent call runs as a turn of the chat that reads notes.txt with read_file, and the answer goes back as the function output followed by response.create" }
+"Key stays on the daemon" = ["crates/prometheus/tests/voice_realtime.rs::the_daemon_creates_the_realtime_call_and_hands_out_no_key", "crates/prometheus/tests/desktop_voice.rs::realtime_voice_delegates_to_the_agent_and_keeps_the_key_on_the_daemon"]

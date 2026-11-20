@@ -31,6 +31,10 @@ pub struct WakeArmed {
     pub phrase: String,
     /// `local` (the daemon's microphone) or `client` (`wake.feed`).
     pub capture: String,
+    /// `wake.start_new_session`: a request after the phrase opens a new
+    /// session instead of continuing the current one.
+    #[serde(default)]
+    pub start_new_session: bool,
 }
 
 /// `wake.feed` params: audio from the client's microphone.
@@ -95,12 +99,17 @@ event!(/// `wake.detected`: the wake phrase was heard; the desktop records
     /// the request on its own microphone.
     WakeDetectedEvent = "wake.detected" (WakeDetected));
 
-/// A profile's voice settings.
+/// `voice.client_config` params.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct VoiceProfileParams {
+pub struct VoiceClientConfigParams {
     /// The profile.
     pub profile: String,
+    /// Include the credentials of direct providers: asked only right
+    /// before the client calls one, so a key is held for that voice
+    /// action alone (and never while a realtime session runs).
+    #[serde(default)]
+    pub credentials: bool,
 }
 
 /// How a client reaches one speech provider.
@@ -130,10 +139,46 @@ pub struct ClientSpeech {
     /// Why the relay path (or none).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The request shape the client speaks (direct only): `openai` (the
+    /// OpenAI transcription and speech APIs and their compatible
+    /// endpoints), `elevenlabs`, `gemini` or `minimax`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub wire: String,
+    /// Extra request fields (direct only): form fields of a transcription,
+    /// JSON body fields of a speech request.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+    /// Drop `[bracketed]` audio tags from the text before speaking it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub strip_tags: bool,
+}
+
+/// How the client listens in a voice conversation (the `[voice]`
+/// settings the CLI and TUI use).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VoiceListening {
+    /// Input level (RMS, 0-32767) above which audio counts as speech.
+    pub silence_threshold: u32,
+    /// How long the level must stay above the threshold to confirm speech.
+    pub speech_confirm_ms: u64,
+    /// Quiet after confirmed speech that ends the recording.
+    pub silence_duration_ms: u64,
+    /// A recording without speech by then ends untranscribed.
+    pub no_speech_timeout_secs: u64,
+    /// The longest recording.
+    pub max_recording_secs: u64,
+    /// Utterances that end the conversation instead of being sent.
+    pub stop_phrases: Vec<String>,
+    /// Speaking over a reply interrupts it.
+    pub barge_in: bool,
+    /// How far above the quiet room's level speech must rise to
+    /// interrupt.
+    pub barge_in_threshold_multiplier: f64,
 }
 
 /// `voice.client_config` result.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct VoiceClientConfig {
     /// `voice.client_direct`.
@@ -144,6 +189,8 @@ pub struct VoiceClientConfig {
     pub stt: ClientSpeech,
     /// Text-to-speech.
     pub tts: ClientSpeech,
+    /// How the client listens.
+    pub listen: VoiceListening,
 }
 
 /// `voice.transcribe` params: a recording relayed through the daemon.
@@ -169,11 +216,74 @@ pub struct VoiceTranscript {
     pub provider: String,
 }
 
+/// `voice.realtime.start` params: the desktop's WebRTC offer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VoiceRealtimeStartParams {
+    /// The profile whose `[voice.realtime]` settings and key are used.
+    pub profile: String,
+    /// The session the agent works in (its usage rows go there).
+    pub session_id: String,
+    /// The client's SDP offer.
+    pub sdp: String,
+}
+
+/// `voice.realtime.start` result: what the client needs to connect, never
+/// the key.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VoiceRealtimeCall {
+    /// The provider's call id.
+    pub call_id: String,
+    /// The provider's SDP answer.
+    pub sdp: String,
+    /// The realtime model.
+    pub model: String,
+    /// The tool through which the voice hands work to the agent.
+    pub tool: String,
+}
+
+/// Token counts of one realtime response, as the provider reported them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RealtimeUsage {
+    /// Input tokens (audio and text).
+    #[serde(default)]
+    pub input_tokens: u64,
+    /// Output tokens (audio and text).
+    #[serde(default)]
+    pub output_tokens: u64,
+    /// Input tokens read from the provider's cache.
+    #[serde(default)]
+    pub cached_tokens: u64,
+}
+
+/// `voice.realtime.usage` params: one response of a realtime call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct VoiceRealtimeUsageParams {
+    /// The profile that created the call.
+    pub profile: String,
+    /// The call (`voice.realtime.start`).
+    pub call_id: String,
+    /// The provider's response id (a repeated one is recorded once).
+    pub response_id: String,
+    /// Its tokens.
+    pub usage: RealtimeUsage,
+}
+
 method!(/// `voice.client_config`: how the client reaches the profile's
     /// speech providers: directly (with the credential, for cloud
     /// providers) or through the daemon (host-only or signed-in
     /// providers, or `voice.client_direct = false`).
-    VoiceClientConfigGet = "voice.client_config" (VoiceProfileParams) -> VoiceClientConfig);
+    VoiceClientConfigGet = "voice.client_config" (VoiceClientConfigParams) -> VoiceClientConfig);
 method!(/// `voice.transcribe`: transcribes a recording with the profile's
     /// speech-to-text provider on the daemon host (the relay path).
     VoiceTranscribe = "voice.transcribe" (VoiceTranscribeParams) -> VoiceTranscript);
+method!(/// `voice.realtime.start`: creates the realtime voice session of
+    /// `voice.chat_mode = "realtime"` with the profile's key on the daemon
+    /// and answers the client's offer (the key never leaves the daemon).
+    VoiceRealtimeStart = "voice.realtime.start" (VoiceRealtimeStartParams) -> VoiceRealtimeCall);
+method!(/// `voice.realtime.usage`: records one realtime response's tokens in
+    /// the usage ledger, apart from the agent's turns.
+    VoiceRealtimeUsage = "voice.realtime.usage" (VoiceRealtimeUsageParams) -> super::Ack);

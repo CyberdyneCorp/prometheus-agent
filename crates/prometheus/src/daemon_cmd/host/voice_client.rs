@@ -8,7 +8,9 @@ use base64::Engine as _;
 use pmt_config::ProfileScope;
 use pmt_core::error::{Error, codes};
 use pmt_media::speech::client::{ClientRoute, Path};
-use pmt_rpc::contracts::{ClientSpeech, VoiceClientConfig, VoiceTranscribeParams, VoiceTranscript};
+use pmt_rpc::contracts::{
+    ClientSpeech, VoiceClientConfig, VoiceListening, VoiceTranscribeParams, VoiceTranscript,
+};
 use serde_json::Value;
 
 fn speech(route: ClientRoute) -> ClientSpeech {
@@ -26,11 +28,29 @@ fn speech(route: ClientRoute) -> ClientSpeech {
         voice: route.voice,
         language: route.language,
         reason: route.reason,
+        wire: route.wire,
+        extra: route.extra,
+        strip_tags: route.strip_tags,
     }
 }
 
-/// `voice.client_config` of `scope`.
-pub(super) fn config(scope: &ProfileScope) -> VoiceClientConfig {
+/// The `[voice]` settings the client listens with.
+fn listening(voice: &pmt_config::schema::VoiceModeConfig) -> VoiceListening {
+    VoiceListening {
+        silence_threshold: voice.silence_threshold,
+        speech_confirm_ms: voice.speech_confirm_ms,
+        silence_duration_ms: voice.silence_duration_ms,
+        no_speech_timeout_secs: voice.no_speech_timeout_secs,
+        max_recording_secs: voice.max_recording_secs,
+        stop_phrases: voice.stop_phrases.clone(),
+        barge_in: voice.barge_in,
+        barge_in_threshold_multiplier: voice.barge_in_threshold_multiplier,
+    }
+}
+
+/// `voice.client_config` of `scope`; direct providers' keys only when
+/// `credentials` asks for them.
+pub(super) fn config(scope: &ProfileScope, credentials: bool) -> VoiceClientConfig {
     let voice = &scope.config().voice;
     let none = |why: &str| ClientSpeech {
         path: "none".to_owned(),
@@ -41,6 +61,9 @@ pub(super) fn config(scope: &ProfileScope) -> VoiceClientConfig {
         voice: String::new(),
         language: None,
         reason: Some(why.to_owned()),
+        wire: String::new(),
+        extra: serde_json::Map::new(),
+        strip_tags: false,
     };
     let media = crate::chat::voice::media(scope, "gui", scope.dir());
     let (stt, tts) = media.as_ref().map_or_else(
@@ -55,6 +78,12 @@ pub(super) fn config(scope: &ProfileScope) -> VoiceClientConfig {
             )
         },
     );
+    let keep = |mut speech: ClientSpeech| {
+        if !credentials {
+            speech.api_key = None;
+        }
+        speech
+    };
     VoiceClientConfig {
         client_direct: voice.client_direct,
         chat_mode: match voice.chat_mode {
@@ -62,8 +91,9 @@ pub(super) fn config(scope: &ProfileScope) -> VoiceClientConfig {
             pmt_config::schema::VoiceChatMode::Realtime => "realtime",
         }
         .to_owned(),
-        stt,
-        tts,
+        stt: keep(stt),
+        tts: keep(tts),
+        listen: listening(voice),
     }
 }
 

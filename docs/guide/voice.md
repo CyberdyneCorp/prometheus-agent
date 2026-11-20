@@ -206,17 +206,59 @@ a missing OS permission) shows up in `/wake status` as "microphone
 delivers only silence" with what to allow; `prometheus doctor voice`
 reports the same facts as `/wake status`.
 
-## A desktop attached to a remote daemon
+## On the desktop
 
-With `voice.client_direct = true` (the default) a client attached to a
-remote daemon asks it how to reach the profile's speech providers
-(`voice.client_config`): a cloud provider holding an API key is reached
-directly, so recordings never cross the daemon link and the daemon only
-receives the transcript; a provider that runs only on the daemon host (an
-on-device engine, a command or plugin provider) or signs in through the
-daemon goes through the daemon instead (`voice.transcribe` for
-recordings, `voice.speak` for speech). `voice.client_direct = false`
-always uses the daemon.
+The desktop app has the same voice features as buttons:
+
+- **Mic** in the composer records one utterance (with the same silence
+  detection as `/voice`) and types its transcript into the message box;
+  nothing is sent until you press Send.
+- **Read aloud** on each answer speaks it with the profile's TTS provider;
+  click it again to stop.
+- **Talk** runs a voice conversation: listen, answer, speak, listen again,
+  until nobody speaks or you say a stop phrase. Talking over a reply stops
+  it (barge-in, as above); typing in the message box stops it too.
+- **Ear** in the header arms the wake word on the daemon with the
+  desktop's microphone (`wake.arm` with client capture: the audio is
+  streamed only to the daemon's on-device engine through `wake.feed`). It
+  is solid while armed and shows why when it could not arm. After the
+  phrase the desktop records the request on its own microphone, answers it
+  aloud and listens again; another profile's phrase (profile routing)
+  switches the window to that profile and opens a new session there.
+
+Mic and Ear need a speech-to-text provider, Read aloud a text-to-speech
+one, and Talk and Ear both; a control whose provider does not resolve for
+the window's profile is hidden. On macOS the system asks once for
+microphone access.
+
+### Where the audio goes
+
+With `voice.client_direct = true` (the default) the desktop asks the
+daemon how to reach the profile's speech providers
+(`voice.client_config`): a cloud provider holding an API key is called
+directly by the desktop, so recordings never cross the daemon link and the
+daemon only receives the transcript; the key is fetched right before each
+voice action and kept in memory for it only. A provider that runs only on
+the daemon host (an on-device engine, a command or plugin provider, a
+Gemini voice with a persona prompt file) or signs in through the daemon
+goes through the daemon instead (`voice.transcribe` for recordings,
+`voice.speak` for speech). `voice.client_direct = false` always uses the
+daemon.
+
+### Realtime voice
+
+With `voice.chat_mode = "realtime"`, Talk on the desktop opens one
+full-duplex realtime voice session instead of the chained loop
+(`[voice.realtime]`: `provider` (`openai`), `model`, `voice`,
+`instructions`, `base_url`). The daemon creates the call with the
+profile's key (`voice.realtime.start`), so the desktop only ever gets the
+call id and the connection answer; the voice model listens, handles
+interruptions and speaks, and hands every substantive request to the agent
+through its one tool, `prometheus_agent`, which runs as an ordinary turn
+of the chat (your tools, grants and approvals as usual) before the voice
+speaks the result. Each realtime response's tokens are recorded in the
+usage ledger as `voice.realtime` rows, apart from the agent's turns. The
+CLI and TUI keep the chained loop.
 
 ## In chats
 

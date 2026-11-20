@@ -6,7 +6,7 @@ mod support;
 
 use pmt_config::Config;
 use pmt_config::schema::CommandSttConfig;
-use pmt_media::speech::client::{HOST_ONLY, NOT_DIRECT, Path};
+use pmt_media::speech::client::{HOST_ONLY, NOT_DIRECT, PERSONA_FILE, Path};
 use support::Rig;
 
 #[test]
@@ -52,5 +52,34 @@ fn host_only_providers_relay_through_the_daemon() {
     assert!(stt.api_key.is_none());
     let tts = session.client_tts(true);
     assert_ne!(tts.path, Path::Direct, "{tts:?}");
+    assert!(tts.api_key.is_none());
+}
+
+#[test]
+fn each_direct_provider_names_its_request_shape_and_extra_fields() {
+    let mut config = Config::default();
+    config.stt.provider = Some("elevenlabs".into());
+    config.stt.elevenlabs.diarize = true;
+    config.tts.provider = Some("gemini".into());
+    let session = Rig::new(config.clone())
+        .secret("ELEVENLABS_API_KEY")
+        .secret("GEMINI_API_KEY")
+        .session();
+    let stt = session.client_stt(true);
+    assert_eq!(stt.wire, "elevenlabs");
+    assert_eq!(stt.extra["diarize"], "true");
+    let tts = session.client_tts(true);
+    assert_eq!((tts.path, tts.wire.as_str()), (Path::Direct, "gemini"));
+    assert!(
+        tts.strip_tags,
+        "audio tags are dropped unless tts.gemini.audio_tags"
+    );
+
+    // A persona prompt file lives on the daemon host: the daemon speaks.
+    config.tts.gemini.persona_prompt_file = Some("persona.txt".into());
+    let session = Rig::new(config).secret("GEMINI_API_KEY").session();
+    let tts = session.client_tts(true);
+    assert_eq!(tts.path, Path::Relay);
+    assert_eq!(tts.reason.as_deref(), Some(PERSONA_FILE));
     assert!(tts.api_key.is_none());
 }

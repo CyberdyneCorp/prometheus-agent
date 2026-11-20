@@ -86,6 +86,7 @@ mod turn_results;
 mod turns;
 mod usage_events;
 mod voice_client;
+mod voice_realtime;
 mod wake;
 mod workspace_fs;
 mod worktrees;

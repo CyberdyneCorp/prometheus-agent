@@ -229,6 +229,8 @@ pub const INDEX: &[IndexEntry] = &[
     method("voice.client_config", "voice-mode"),
     method("voice.speak", "voice-mode"),
     method("voice.transcribe", "voice-mode"),
+    long("voice.realtime.start", "voice-mode"),
+    method("voice.realtime.usage", "voice-mode"),
     method("wake.arm", "voice-mode"),
     method("wake.feed", "voice-mode"),
     method("wake.disarm", "voice-mode"),

@@ -6,7 +6,7 @@
 // `ui.prefs`), approvals for an unfocused window become notifications,
 // and plugin panels load on their own origins.
 
-import type { ApprovalRequestParams } from "../../../schema/rpc";
+import type { ApprovalRequestParams, TurnFinished, WakeDetected } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import { LanguagePicker } from "../../../web/src/lib/language";
 import { Prefs } from "../../../web/src/lib/prefs";
@@ -36,6 +36,7 @@ import { Onboarding } from "./onboarding";
 import { Guide } from "./tour";
 import { toolPrefsControls, UiTools } from "./ui-tools";
 import { NOT_FOUND } from "./verdict";
+import { VoiceControls } from "./voice/controls";
 import { showProfile, stageFile } from "./web-shell";
 import { type Workspace, workspace } from "./workspace";
 
@@ -165,6 +166,12 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     remember(profile);
     await client.switchProfile(profile);
   };
+  const voice = new VoiceControls({ link: client, chat, switchProfile: async (p) => {
+    await switchTo(p);
+    await client.ready();
+  }, say });
+  chat.composer.el.append(...voice.composerControls);
+  client.on("wake.detected", (envelope) => void voice.ear.detected(envelope.data as WakeDetected));
   // Another connection: a session left open keeps streaming on its own
   // background connection; the switch is remembered only once it connects
   // (the shell records each successful connect).
@@ -207,7 +214,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   for (const event of ["request.resolved", "request.cancel"]) client.on(event, (envelope) => attention.settled((envelope.data as { id: string }).id));
   client.on("turn.finished", (envelope) => {
     attention.turn(envelope.session_id ?? "", false, "");
-    if (envelope.session_id) void chat.turnFinished(envelope.session_id);
+    if (envelope.session_id) void chat.turnFinished(envelope.session_id, envelope.data as TurnFinished);
   });
   chat.onSubmitted = (sessionId) => attention.turn(sessionId, true, chat.title() ?? sessionId);
   client.onTruncated = (sessionId) => {
@@ -233,6 +240,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
       })
       .catch((err: unknown) => console.warn("UI preferences or onboarding unavailable:", err));
     void panels.load(client.profile);
+    void voice.refresh();
     void projects.load();
     void applyFonts(client);
     void language.load().catch((err: unknown) => console.warn("languages unavailable:", err));
@@ -302,7 +310,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   listenToShell(opener);
   onShellEvent("hud-summon", () => void toggleHud(client.profile, chat.sessionId));
   root().replaceChildren(
-    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), switcher.picker, picker, work.layout.el, status),
+    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), switcher.picker, picker, work.layout.el, voice.ear.el, status),
     h(
       "div",
       { class: "layout" },

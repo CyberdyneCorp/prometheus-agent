@@ -9333,6 +9333,11 @@
       "additionalProperties": false,
       "description": "`[voice.realtime]`.",
       "properties": {
+        "base_url": {
+          "default": "https://api.openai.com/v1",
+          "description": "The provider's API base URL (the daemon creates the call there with\nthe profile's key).",
+          "type": "string"
+        },
         "instructions": {
           "description": "Extra instructions for the voice layer (the agent keeps its own\nsystem prompt).",
           "type": [
@@ -12308,6 +12313,7 @@
         "realtime": {
           "$ref": "#/$defs/RealtimeVoiceConfig",
           "default": {
+            "base_url": "https://api.openai.com/v1",
             "model": "gpt-realtime",
             "provider": "openai",
             "voice": "marin"
@@ -14608,6 +14614,7 @@
         "max_recording_secs": 120,
         "no_speech_timeout_secs": 15,
         "realtime": {
+          "base_url": "https://api.openai.com/v1",
           "model": "gpt-realtime",
           "provider": "openai",
           "voice": "marin"

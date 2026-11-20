@@ -22,7 +22,9 @@ use pmt_config::schema::WakeCapture;
 use pmt_core::cancel::CancelToken;
 use pmt_core::error::{Error, codes};
 use pmt_gateway::voice::{Caller, VoiceCall};
-use pmt_rpc::contracts::{WakeArmParams, WakeArmed, WakeDetected, WakeFeedParams, WakeState};
+use pmt_rpc::contracts::{
+    VoiceClientConfigParams, WakeArmParams, WakeArmed, WakeDetected, WakeFeedParams, WakeState,
+};
 use pmt_voice::device::{BoxFuture, Capture};
 use pmt_voice::wake::command::{self, Facts};
 use pmt_voice::wake::engine::{self, WakeEngine};
@@ -104,8 +106,8 @@ impl Capture for LocalFrames {
 }
 
 impl DaemonHost {
-    /// One voice call (`wake.*`, `voice.client_config`, `voice.transcribe`)
-    /// for `profile`.
+    /// One voice call (`wake.*`, `voice.client_config`, `voice.transcribe`,
+    /// `voice.realtime.*`) for `profile`.
     pub(super) async fn voice_call(
         &self,
         profile: &str,
@@ -128,11 +130,25 @@ impl DaemonHost {
                 to_value(&WakeState::default())
             }
             "wake.status" => to_value(&self.wake_status(&scope).await),
-            "voice.client_config" => to_value(&super::voice_client::config(&scope)),
+            "voice.client_config" => {
+                let params: VoiceClientConfigParams =
+                    serde_json::from_value(request.params).map_err(|e| invalid(e.to_string()))?;
+                to_value(&super::voice_client::config(&scope, params.credentials))
+            }
             "voice.transcribe" => {
                 let params =
                     serde_json::from_value(request.params).map_err(|e| invalid(e.to_string()))?;
                 Box::pin(super::voice_client::transcribe(&scope, params)).await
+            }
+            "voice.realtime.start" => {
+                let params =
+                    serde_json::from_value(request.params).map_err(|e| invalid(e.to_string()))?;
+                Box::pin(super::voice_realtime::start(&scope, profile, params)).await
+            }
+            "voice.realtime.usage" => {
+                let params =
+                    serde_json::from_value(request.params).map_err(|e| invalid(e.to_string()))?;
+                super::voice_realtime::usage(&scope, profile, &params)
             }
             other => Err(invalid(format!("unknown voice method {other}"))),
         }
@@ -195,6 +211,7 @@ impl DaemonHost {
             engine: kind.as_str().to_owned(),
             phrase: config.phrase,
             capture: capture.as_str().to_owned(),
+            start_new_session: config.start_new_session,
         })
     }
 

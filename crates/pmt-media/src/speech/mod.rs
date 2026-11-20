@@ -18,6 +18,7 @@ pub mod edge;
 pub mod fit;
 pub mod local;
 pub mod realtime;
+pub mod realtime_voice;
 pub mod stream;
 pub mod stt;
 pub mod tool;

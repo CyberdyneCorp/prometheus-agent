@@ -284,3 +284,45 @@ body { font-family: var(--ui-font,) system-ui, -apple-system, "Segoe UI", sans-s
 .bots .bot-preview { flex: 1 1 100%; color: var(--muted, #868e96); font-size: 0.85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bots form { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
 .routines .schedule-picker { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+
+/* Voice controls (spec: voice-mode, Desktop voice controls). */
+.chat[data-read-aloud="false"] button[name="read-aloud"] {
+  display: none;
+}
+.message .read-aloud {
+  margin-left: 0.5rem;
+  font-size: 0.8em;
+}
+.read-aloud[aria-pressed="true"],
+button[name="voice-chat"][aria-pressed="true"],
+button[name="dictate"][aria-pressed="true"] {
+  outline: 2px solid currentColor;
+}
+.voice-pill {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.85em;
+}
+.wake .wake-ear {
+  border-radius: 999px;
+  background: transparent;
+  border: 1px dashed currentColor;
+}
+/* Solid while the wake listener is armed. */
+.wake[data-state="armed"] .wake-ear,
+.wake[data-state="busy"] .wake-ear {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.wake[data-state="error"] .wake-ear {
+  border-style: solid;
+  border-color: var(--bad);
+}
+.wake-hint {
+  margin-left: 0.4rem;
+  font-size: 0.8em;
+  color: var(--bad);
+}

@@ -262,9 +262,25 @@ async fn serve(
                 Err(e) => respond(stream, &json!({"err": e})),
             };
         }
+        // The voice controls' AudioWorklet module: worklet fetches bypass
+        // Playwright's routing, so the voice specs map the webview origin
+        // here and the page's own assets are served from the dist.
+        "/voice-worklet.js" => {
+            let dist = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/desktop/dist");
+            let script = std::fs::read_to_string(dist.join("voice-worklet.js")).unwrap_or_default();
+            return respond_script(stream, &script);
+        }
         _ => json!({"err": "no such harness route"}),
     };
     respond(stream, &answer);
+}
+
+fn respond_script(mut stream: TcpStream, script: &str) {
+    let _ = write!(
+        stream,
+        "HTTP/1.1 200 OK\r\ncontent-type: text/javascript\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{script}",
+        script.len()
+    );
 }
 
 /// Runs one shell request for the window named in the query; the answer

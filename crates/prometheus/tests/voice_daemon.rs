@@ -9,7 +9,7 @@ mod common;
 use base64::Engine as _;
 use common::{ok, run, run_with_stdin, temp_home};
 use pmt_rpc::contracts::{
-    VoiceClientConfigGet, VoiceProfileParams, VoiceTranscribe, VoiceTranscribeParams,
+    VoiceClientConfigGet, VoiceClientConfigParams, VoiceTranscribe, VoiceTranscribeParams,
 };
 
 fn home_with(config: &str) -> tempfile::TempDir {
@@ -37,8 +37,9 @@ async fn a_host_only_provider_relays_and_the_recording_does_not_stay() {
     let _daemon = common::daemon::start(home.path(), &[]);
     let (client, _inbox) = common::daemon::desktop(home.path(), "default", &[]).await;
     let config = client
-        .call_typed::<VoiceClientConfigGet>(&VoiceProfileParams {
+        .call_typed::<VoiceClientConfigGet>(&VoiceClientConfigParams {
             profile: "default".to_owned(),
+            credentials: true,
         })
         .await
         .unwrap();
@@ -83,8 +84,9 @@ async fn a_cloud_provider_with_a_key_is_handed_to_the_client() {
     let _daemon = common::daemon::start(home.path(), &[]);
     let (client, _inbox) = common::daemon::desktop(home.path(), "default", &[]).await;
     let config = client
-        .call_typed::<VoiceClientConfigGet>(&VoiceProfileParams {
+        .call_typed::<VoiceClientConfigGet>(&VoiceClientConfigParams {
             profile: "default".to_owned(),
+            credentials: true,
         })
         .await
         .unwrap();
@@ -94,4 +96,21 @@ async fn a_cloud_provider_with_a_key_is_handed_to_the_client() {
     assert_eq!(config.tts.path, "direct");
     assert_eq!(config.tts.provider, "openai");
     assert_eq!(config.chat_mode, "chained");
+    // The desktop speaks each provider's request shape and listens with
+    // the profile's `[voice]` settings.
+    assert_eq!(config.stt.wire, "openai");
+    assert_eq!(config.tts.wire, "openai");
+    assert!(config.listen.barge_in);
+    assert_eq!(config.listen.silence_duration_ms, 3_000);
+    // Without asking for credentials (a refresh, a realtime session) no
+    // key leaves the daemon.
+    let keyless = client
+        .call_typed::<VoiceClientConfigGet>(&VoiceClientConfigParams {
+            profile: "default".to_owned(),
+            credentials: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(keyless.stt.path, "direct");
+    assert!(keyless.stt.api_key.is_none() && keyless.tts.api_key.is_none());
 }

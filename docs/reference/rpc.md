@@ -211,7 +211,9 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `vault.list` | `security-boundaries` | 1.0 | [`VaultListParams`](#vaultlistparams) | [`VaultItems`](#vaultitems) |
 | `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
 | `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
-| `voice.client_config` | `voice-mode` | 1.0 | [`VoiceProfileParams`](#voiceprofileparams) | [`VoiceClientConfig`](#voiceclientconfig) |
+| `voice.client_config` | `voice-mode` | 1.0 | [`VoiceClientConfigParams`](#voiceclientconfigparams) | [`VoiceClientConfig`](#voiceclientconfig) |
+| `voice.realtime.start` | `voice-mode` | 1.0 | [`VoiceRealtimeStartParams`](#voicerealtimestartparams) | [`VoiceRealtimeCall`](#voicerealtimecall) |
+| `voice.realtime.usage` | `voice-mode` | 1.0 | [`VoiceRealtimeUsageParams`](#voicerealtimeusageparams) | [`Ack`](#ack) |
 | `voice.speak` | `voice-mode` | 1.0 | [`VoiceSpeakParams`](#voicespeakparams) | [`VoiceSpoken`](#voicespoken) |
 | `voice.transcribe` | `voice-mode` | 1.0 | [`VoiceTranscribeParams`](#voicetranscribeparams) | [`VoiceTranscript`](#voicetranscript) |
 | `wake.arm` | `voice-mode` | 1.0 | [`WakeArmParams`](#wakearmparams) | [`WakeArmed`](#wakearmed) |
@@ -846,12 +848,15 @@ How a client reaches one speech provider.
 |---|---|---|---|
 | `api_key` | string or null | no | The credential (direct only): kept in memory for the voice session only. |
 | `base_url` | string | no | The API base URL (direct only). |
+| `extra` | object | no | Extra request fields (direct only): form fields of a transcription, JSON body fields of a speech request. |
 | `language` | string or null | no | The spoken language (transcription). |
 | `model` | string | yes | Its model. |
 | `path` | string | yes | `direct` (the client calls the provider), `relay` (through the daemon: `voice.transcribe`, `voice.speak`) or `none`. |
 | `provider` | string | yes | The provider id. |
 | `reason` | string or null | no | Why the relay path (or none). |
+| `strip_tags` | boolean | no | Drop `[bracketed]` audio tags from the text before speaking it. |
 | `voice` | string | no | The voice (speech). |
+| `wire` | string | no | The request shape the client speaks (direct only): `openai` (the OpenAI transcription and speech APIs and their compatible endpoints), `elevenlabs`, `gemini` or `minimax`. |
 
 ### `CommandCatalog`
 
@@ -2306,6 +2311,16 @@ One reaction on a message.
 | `by` | string | yes | Who reacted (`agent`). |
 | `emoji` | string | yes | The emoji. |
 
+### `RealtimeUsage`
+
+Token counts of one realtime response, as the provider reported them.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cached_tokens` | integer | no | Input tokens read from the provider's cache. |
+| `input_tokens` | integer | no | Input tokens (audio and text). |
+| `output_tokens` | integer | no | Output tokens (audio and text). |
+
 ### `RelayConnection`
 
 One connection an attached desktop holds, with its agents.
@@ -3457,16 +3472,65 @@ A `<major>.<minor>` protocol version on the wire.
 |---|---|---|---|
 | `chat_mode` | string | yes | `voice.chat_mode` (`chained` or `realtime`). |
 | `client_direct` | boolean | yes | `voice.client_direct`. |
+| `listen` | [`VoiceListening`](#voicelistening) | yes | How the client listens. |
 | `stt` | [`ClientSpeech`](#clientspeech) | yes | Speech-to-text. |
 | `tts` | [`ClientSpeech`](#clientspeech) | yes | Text-to-speech. |
 
-### `VoiceProfileParams`
+### `VoiceClientConfigParams`
 
-A profile's voice settings.
+`voice.client_config` params.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `credentials` | boolean | no | Include the credentials of direct providers: asked only right before the client calls one, so a key is held for that voice action alone (and never while a realtime session runs). |
 | `profile` | string | yes | The profile. |
+
+### `VoiceListening`
+
+How the client listens in a voice conversation (the `[voice]` settings the CLI and TUI use).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `barge_in` | boolean | yes | Speaking over a reply interrupts it. |
+| `barge_in_threshold_multiplier` | number | yes | How far above the quiet room's level speech must rise to interrupt. |
+| `max_recording_secs` | integer | yes | The longest recording. |
+| `no_speech_timeout_secs` | integer | yes | A recording without speech by then ends untranscribed. |
+| `silence_duration_ms` | integer | yes | Quiet after confirmed speech that ends the recording. |
+| `silence_threshold` | integer | yes | Input level (RMS, 0-32767) above which audio counts as speech. |
+| `speech_confirm_ms` | integer | yes | How long the level must stay above the threshold to confirm speech. |
+| `stop_phrases` | array of string | yes | Utterances that end the conversation instead of being sent. |
+
+### `VoiceRealtimeCall`
+
+`voice.realtime.start` result: what the client needs to connect, never the key.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `call_id` | string | yes | The provider's call id. |
+| `model` | string | yes | The realtime model. |
+| `sdp` | string | yes | The provider's SDP answer. |
+| `tool` | string | yes | The tool through which the voice hands work to the agent. |
+
+### `VoiceRealtimeStartParams`
+
+`voice.realtime.start` params: the desktop's WebRTC offer.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile whose `[voice.realtime]` settings and key are used. |
+| `sdp` | string | yes | The client's SDP offer. |
+| `session_id` | string | yes | The session the agent works in (its usage rows go there). |
+
+### `VoiceRealtimeUsageParams`
+
+`voice.realtime.usage` params: one response of a realtime call.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `call_id` | string | yes | The call (`voice.realtime.start`). |
+| `profile` | string | yes | The profile that created the call. |
+| `response_id` | string | yes | The provider's response id (a repeated one is recorded once). |
+| `usage` | [`RealtimeUsage`](#realtimeusage) | yes | Its tokens. |
 
 ### `VoiceSpeakParams`
 
@@ -3524,6 +3588,7 @@ A profile's voice settings.
 | `capture` | string | yes | `local` (the daemon's microphone) or `client` (`wake.feed`). |
 | `engine` | string | yes | The engine listening. |
 | `phrase` | string | yes | The phrase it listens for. |
+| `start_new_session` | boolean | no | `wake.start_new_session`: a request after the phrase opens a new session instead of continuing the current one. |
 
 ### `WakeDetected`
 
