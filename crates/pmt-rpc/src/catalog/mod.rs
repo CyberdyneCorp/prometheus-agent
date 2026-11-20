@@ -188,6 +188,21 @@ pub fn declare_builtin(d: &mut Declarations) {
     declare_desktop(d);
     declare_voice(d);
     declare_live(d);
+    declare_pets(d);
+}
+
+/// Pets and achievements (spec: pets).
+fn declare_pets(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::PetsStateGet>()
+        .method::<c::PetsSpriteGet>()
+        .method::<c::PetsGalleryList>()
+        .method::<c::PetsInstall>()
+        .method::<c::PetsSet>()
+        .method::<c::PetsHatchStart>()
+        .method::<c::PetsHatchAnswer>()
+        .method::<c::AchievementsList>()
+        .event::<c::AchievementUnlockedEvent>();
 }
 
 /// Split panes, the session timeline and shared live sessions (spec: tui,

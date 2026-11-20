@@ -3632,6 +3632,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "pmt-pets"
+version = "0.1.0"
+dependencies = [
+ "base64 0.23.1",
+ "image",
+ "jiff",
+ "pmt-config",
+ "pmt-core",
+ "pmt-store",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "tokio",
+ "toml",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
 name = "pmt-plugins"
 version = "0.1.0"
 dependencies = [
@@ -4193,6 +4214,7 @@ dependencies = [
  "pmt-migrate",
  "pmt-net",
  "pmt-obs",
+ "pmt-pets",
  "pmt-plugins",
  "pmt-providers",
  "pmt-pybridge",

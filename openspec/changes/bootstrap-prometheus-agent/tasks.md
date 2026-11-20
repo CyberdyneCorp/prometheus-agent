@@ -712,9 +712,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 80. M3 Pets and achievements
 
-- [ ] 80.1 Implement pets as cosmetic, cache-neutral state, pet storage with the sprite format, pet gallery commands, pet configuration and scale, and the single activity-to-state mapping; verify that selecting a pet mid-session leaves the prompt unchanged (spec: pets)
-- [ ] 80.2 Implement terminal pet rendering (off when output is redirected), pet preview and doctor, the pet slash command, generating a pet and affection reactions; verify with snapshot tests (spec: pets)
-- [ ] 80.3 Implement the desktop pet with the pop-out overlay, achievements from session history (incremental, non-blocking scans) and achievement unlock celebrations; verify with desktop E2E and store tests (spec: pets)
+- [x] 80.1 Implement pets as cosmetic, cache-neutral state, pet storage with the sprite format, pet gallery commands, pet configuration and scale, and the single activity-to-state mapping; verify that selecting a pet mid-session leaves the prompt unchanged (spec: pets)
+- [x] 80.2 Implement terminal pet rendering (off when output is redirected), pet preview and doctor, the pet slash command, generating a pet and affection reactions; verify with snapshot tests (spec: pets)
+- [x] 80.3 Implement the desktop pet with the pop-out overlay, achievements from session history (incremental, non-blocking scans) and achievement unlock celebrations; verify with desktop E2E and store tests (spec: pets)
 
 ## 81. M3 Exit criteria
 

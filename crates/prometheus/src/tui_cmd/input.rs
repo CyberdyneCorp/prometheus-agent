@@ -70,6 +70,7 @@ impl Tui<'_> {
             KeyCode::Right => composer.right(),
             KeyCode::Home => composer.line_start(),
             KeyCode::End => composer.line_end(),
+            KeyCode::Esc if self.app.toast.is_some() => self.app.toast = None,
             KeyCode::Esc if !self.cancel_edit() => self.app.completions.clear(),
             _ => {}
         }
@@ -204,6 +205,7 @@ impl Tui<'_> {
             || (self.setup.is_some() && self.answer_setup(line))
             || (self.restore.is_some() && self.answer_restore(line))
             || (self.prune && self.answer_prune(line))
+            || (self.hatch.is_some() && self.answer_hatch(line))
     }
 
     /// A typed line: a client-local command, a command for the daemon, or
@@ -282,6 +284,8 @@ impl Tui<'_> {
             Local::Pane => self.pane_command(args),
             Local::Timeline => self.open_timeline(),
             Local::Language => self.open_languages(),
+            Local::Pet => self.pet_command(args),
+            Local::Hatch => self.hatch_command(args),
         }
     }
 

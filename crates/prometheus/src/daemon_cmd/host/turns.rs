@@ -23,14 +23,14 @@ use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_gateway::{Author, Link};
-use pmt_rpc::contracts::{Admission, SubmitParams, Submitted, TurnEnded};
+use pmt_rpc::contracts::{Admission, SubmitParams, Submitted, TurnEnded, TurnError, TurnFinished};
 use pmt_store::EndReason;
 
 use tracing::Instrument as _;
 
 use super::automation::Follow;
 use super::crash::AfterCrash;
-use super::{DaemonHost, Loaded, Profile, finished, session_id, setup};
+use super::{DaemonHost, Loaded, Profile, session_id, setup};
 
 /// An input waiting for its turn.
 pub(super) struct Queued {
@@ -587,7 +587,29 @@ async fn run_one(
     ended.report = serde_json::to_value(record.report(&Ok(0))).ok();
     super::turn_results::record(&ended);
     job.link.emit::<TurnEnded>(&ended);
+    super::pets::rescan_after_turn(&scope, &session.factory.store, &job.link);
     session.current.lock().expect("current poisoned").take();
     session.queue_running(None, &job.link);
     wakeup
+}
+
+fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>) -> TurnFinished {
+    match outcome {
+        Ok(result) => TurnFinished {
+            turn_id,
+            exit_reason: result.exit_reason.as_str().to_owned(),
+            final_response: result.final_response,
+            error: result.error.as_ref().map(TurnError::of),
+            usage: serde_json::to_value(result.usage).ok(),
+            report: None,
+        },
+        Err(err) => TurnFinished {
+            turn_id,
+            exit_reason: "error".to_owned(),
+            final_response: None,
+            error: Some(TurnError::of(&err)),
+            usage: None,
+            report: None,
+        },
+    }
 }

@@ -7,6 +7,7 @@
 
 pub mod a2a_host;
 pub mod accounts;
+pub mod achievements_cmd;
 #[cfg(feature = "acp")]
 pub mod acp_cmd;
 pub mod advisories;
@@ -79,6 +80,8 @@ pub mod model_cmd;
 pub mod model_slash;
 pub mod output;
 pub mod pause_cmd;
+pub mod pets_cmd;
+pub mod pets_host;
 pub mod plugins_cmd;
 pub mod plugins_host;
 pub mod portal_cmd;

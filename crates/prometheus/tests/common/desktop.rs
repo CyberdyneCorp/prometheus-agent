@@ -145,6 +145,21 @@ impl Native for Recorder {
         let _ = self.record(format!("save {name}"));
         self.save_to.clone()
     }
+    fn pet_overlay(&self, open: bool) -> Result<bool, String> {
+        self.record(format!("pet_overlay {open}")).map(|()| open)
+    }
+    // The spec delivers relayed messages to the other page itself
+    // (`desktop.ts`), as the Tauri app emits them.
+    fn emit_to(&self, window: &str, event: &str, _payload: &Value) -> Result<(), String> {
+        self.record(format!("emit {window} {event}"))
+    }
+    fn drag_window(&self, window: &str) -> Result<(), String> {
+        self.record(format!("drag {window}"))
+    }
+    fn main_window(&self, toggle: bool) -> Result<bool, String> {
+        let action = if toggle { "toggle" } else { "show" };
+        self.record(format!("main_window {action}")).map(|()| true)
+    }
 }
 
 /// The running harness; its URL goes to the specs as

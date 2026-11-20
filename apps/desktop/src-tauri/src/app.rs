@@ -50,7 +50,11 @@ pub(crate) fn run(launch: Launch) {
     let app = with_shell(builder)
         .setup(move |app| {
             let version = app.package_info().version.to_string();
-            let native = TauriNative::new(app.handle().clone(), launch.update_target());
+            let native = TauriNative::new(
+                app.handle().clone(),
+                launch.update_target(),
+                launch.home.clone(),
+            );
             let mut shell = Shell::new(shell_config(&launch), Arc::new(native))
                 .with_options(launch.options.clone())
                 .with_updater(launch.updater(&version))

@@ -41,6 +41,10 @@ impl Repl {
             }
         };
         input.additions.append(&mut self.shell_context);
+        // A thank-you plays the heart; the message goes as typed.
+        if let Some(pet) = &self.pet {
+            pet.sent(&input.text);
+        }
         self.run_input(input).await;
     }
 
@@ -86,6 +90,7 @@ impl Repl {
         self.input.set_busy(true);
         self.running = true;
         let started = std::time::Instant::now();
+        self.pet_turn_started(None);
         let result = {
             // Boxed: the turn's state machine is large.
             let turn = Box::pin(async {
@@ -106,11 +111,16 @@ impl Repl {
         };
         self.input.set_busy(false);
         self.running = false;
+        self.pet_turn_ended(match &result {
+            Ok(done) => done.error.is_some(),
+            Err(_) => true,
+        });
         let calls = self.end_progress();
         let outcome = super::automation::Outcome::of(origin.as_deref(), &result);
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
         self.automation_after(&live, outcome).await;
+        self.achievements_after_turn();
         if let Some(plan) = live.tools.end_plan() {
             self.notice(&crate::chat::commands::planning::finished(
                 &self.strings(),
@@ -206,7 +216,10 @@ impl Repl {
                     self.ask(Pending::Clarify { prompt, answers: Vec::new() });
                 }
                 Some(text) = self.to_post.recv() => self.notice(&text),
-                Some(progress) = recv(&mut self.progress) => self.on_progress(progress),
+                Some(progress) = recv(&mut self.progress) => {
+                    self.pet_progress(&progress);
+                    self.on_progress(progress);
+                }
                 Some(ask) = self.memory.recv() => {
                     self.say(Role::Notice, &ask.preview);
                     self.ask(Pending::Memory(ask.reply));
@@ -223,6 +236,7 @@ impl Repl {
                     self.ask(Pending::Secret(ask.reply));
                 }
             }
+            self.pet_sync_waiting();
         }
     }
 

@@ -47,6 +47,8 @@ pub enum Overlay {
     Timeline(Timeline),
     /// The language picker.
     Languages(crate::languages::LanguagePicker),
+    /// The pet picker (`/pet list`).
+    Pets(crate::pet_picker::PetPicker),
 }
 
 /// Overlay rows shown at most.
@@ -106,8 +108,15 @@ pub struct App {
     /// A turn shown read-only in place of the transcript (the timeline's
     /// preview): its heading and entries.
     pub preview: Option<(String, Transcript)>,
+    /// The pet in the transcript's corner (spec: pets).
+    pub pet: Option<crate::pet::PetView>,
+    /// An achievement toast, until dismissed.
+    pub toast: Option<crate::pet::Toast>,
     /// Where the last frame drew clickable parts: `(row, columns, hit)`.
     hits: RefCell<Vec<(u16, std::ops::Range<u16>, Hit)>>,
+    /// Where the last frame put the pet (a graphics pet is drawn there by
+    /// the host).
+    pet_at: std::cell::Cell<Option<Rect>>,
 }
 
 impl App {
@@ -129,7 +138,10 @@ impl App {
             panes: Panes::default(),
             preview: None,
             prompt: PROMPT.to_owned(),
+            pet: None,
+            toast: None,
             hits: RefCell::new(Vec::new()),
+            pet_at: std::cell::Cell::new(None),
         }
     }
 
@@ -141,6 +153,12 @@ impl App {
             .iter()
             .find(|(r, columns, _)| *r == row && columns.contains(&column))
             .map(|(_, _, hit)| *hit)
+    }
+
+    /// Where the last frame put the pet's box.
+    #[must_use]
+    pub fn pet_area(&self) -> Option<Rect> {
+        self.pet_at.get()
     }
 
     /// Scrolls `lines` back (older).
@@ -182,6 +200,19 @@ impl App {
         ])
         .areas(area);
         self.render_middle(frame, transcript);
+        self.pet_at.set(
+            self.pet
+                .as_ref()
+                .and_then(|pet| pet.render(frame, transcript)),
+        );
+        if let Some(toast) = &self.toast {
+            toast.render(
+                frame,
+                transcript,
+                &self.theme,
+                self.strings.get("tui.toast_dismiss"),
+            );
+        }
         if card_rows > 0 {
             let lines = self.card_lines(card.width, card.height);
             frame.render_widget(Paragraph::new(lines), card);
@@ -216,6 +247,9 @@ impl App {
             Some(Overlay::Languages(l)) => l
                 .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
                 .len(),
+            Some(Overlay::Pets(p)) => p
+                .lines(width, OVERLAY_ROWS, &self.theme, &self.strings)
+                .len(),
             None => self.completions.len().min(COMPLETION_ROWS),
         }
     }
@@ -227,6 +261,7 @@ impl App {
             Some(Overlay::Switcher(s)) => s.lines(area.width, rows, &self.theme, &self.strings),
             Some(Overlay::Timeline(t)) => t.lines(area.width, rows, &self.theme, &self.strings),
             Some(Overlay::Languages(l)) => l.lines(area.width, rows, &self.theme, &self.strings),
+            Some(Overlay::Pets(p)) => p.lines(area.width, rows, &self.theme, &self.strings),
             None => return self.render_completions(frame, area),
         };
         frame.render_widget(Paragraph::new(lines), area);

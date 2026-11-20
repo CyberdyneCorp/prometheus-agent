@@ -106,6 +106,12 @@ pub(super) enum Done {
     Languages(Result<pmt_rpc::contracts::Languages, Error>),
     /// `config.patch` wrote the chosen `display.language`.
     LanguageSet(Result<String, Error>),
+    /// The pet gallery was read (`/pet list`).
+    PetGallery(Result<Vec<pmt_tui::pet_picker::PetChoice>, Error>),
+    /// A gallery pet was installed from the picker.
+    PetInstalled(Result<String, Error>),
+    /// A `/hatch` step finished.
+    Hatch(Box<pmt_pets::hatch::Hatch>, pmt_pets::hatch::Step),
 }
 
 /// The TUI's state.
@@ -167,6 +173,12 @@ pub(super) struct Tui<'a> {
     pub(super) previews: Vec<pmt_tui::transcript::Transcript>,
     /// The workspace restore a rewind offers.
     pub(super) restore: Option<super::timeline::Restore>,
+    /// The pet (spec: pets).
+    pub(super) pet: crate::pets_host::runtime::Runtime,
+    /// `/hatch` waiting for an answer.
+    pub(super) hatch: Option<Box<pmt_pets::hatch::Hatch>>,
+    /// The graphics pet's last escape on screen (redrawn only on change).
+    pub(super) pet_drawn: Option<String>,
 }
 
 /// A server request on screen or waiting for it.
@@ -251,6 +263,7 @@ pub(super) async fn run(open: &Open<'_>, record: DaemonRecord) -> Result<Ending,
         .run(&mut screen, &keys, &mut results, &mut signals)
         .await;
     tui.voice.wake.lock().await.disarm();
+    tui.remove_pet();
     // Restore first: stopping the reader is bounded but may give up on it.
     drop(guard);
     keys.stop();
@@ -344,6 +357,9 @@ impl<'a> Tui<'a> {
             subscribed: HashSet::new(),
             previews: Vec::new(),
             restore: None,
+            pet: crate::pets_host::runtime::Runtime::new(open.scope, &open.env),
+            hatch: None,
+            pet_drawn: None,
             voice,
         };
         tui.shown_changed();
@@ -386,6 +402,8 @@ impl<'a> Tui<'a> {
         let mut tick = tokio::time::interval(Duration::from_millis(120));
         // A redraw now and then picks up a fresh battery reading.
         let mut battery = tokio::time::interval(Duration::from_secs(30));
+        // The pet's frames, and its configuration re-read when it changes.
+        let mut pet = tokio::time::interval(Duration::from_millis(250));
         loop {
             self.draw(screen)?;
             if let Some(ending) = self.ending.take() {
@@ -425,6 +443,12 @@ impl<'a> Tui<'a> {
                     self.show_question();
                 }
                 _ = battery.tick(), if self.status_bar.battery => {}
+                // Not while reconnecting: each pass restarts the
+                // reconnect branch's sleep.
+                _ = pet.tick(), if self.lost.is_none() => {
+                    drop(terminal_events);
+                    self.pet_tick();
+                }
             }
         }
     }
@@ -441,6 +465,7 @@ impl<'a> Tui<'a> {
                 .clear_region(ClearType::All)
                 .map_err(|e| terminal_error(&e))?;
             screen.swap_buffers();
+            self.pet_drawn = None;
         }
         self.app.status.battery = self.status_bar.battery_item();
         self.app.strings = self.strings();
@@ -449,8 +474,9 @@ impl<'a> Tui<'a> {
                 assert!(!panic_now, "PMT_TEST_TUI_PANIC: a panic while drawing");
                 self.app.render(frame);
             })
-            .map(drop)
-            .map_err(|e| terminal_error(&e))
+            .map_err(|e| terminal_error(&e))?;
+        self.draw_pet_graphics();
+        Ok(())
     }
 
     /// The card on screen has a deadline to count down.
@@ -492,6 +518,8 @@ impl<'a> Tui<'a> {
     /// Like [`Tui::submit`]; `voice` marks a spoken message (it runs on
     /// the voice route).
     pub(super) fn submit_as(&mut self, text: String, images: Vec<PromptImage>, voice: bool) {
+        // A thank-you plays the heart; the text goes as typed.
+        self.pet.sent(&text);
         let session = self.link.session.clone();
         let params = pmt_rpc::contracts::SubmitParams {
             session_id: session.clone(),

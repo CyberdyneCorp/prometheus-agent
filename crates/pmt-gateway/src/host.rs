@@ -667,6 +667,17 @@ pub trait Host: Send + Sync + 'static {
         Box::pin(async { Err(not_served("this host has no bots")) })
     }
 
+    /// One pets call (`pets.*`, `achievements.list`) for `profile`: the
+    /// method's result.
+    fn pets<'a>(
+        &'a self,
+        profile: &'a str,
+        request: crate::pets::PetsCall,
+    ) -> HostFuture<'a, serde_json::Value> {
+        let _ = (profile, request);
+        Box::pin(async { Err(not_served("this host has no pets")) })
+    }
+
     /// One voice call (`wake.*`, `voice.client_config`,
     /// `voice.transcribe`) for `profile`: the method's result.
     fn voice<'a>(
@@ -860,6 +871,14 @@ impl Link {
     pub fn emit<E: Event>(&self, payload: &E::Payload) {
         let data = serde_json::to_value(payload).unwrap_or_default();
         self.hub.publish(&self.session_id, E::NAME, data);
+    }
+
+    /// Sends daemon-level event `E` (not logged on a session) to every
+    /// connection attached to a session of `profile`.
+    pub fn broadcast<E: Event>(&self, profile: &str, payload: &E::Payload) {
+        let data = serde_json::to_value(payload).unwrap_or_default();
+        self.hub
+            .broadcast(profile, E::NAME, data, crate::hub::NO_CONN);
     }
 
     /// Whether a driver of the session advertised client feature

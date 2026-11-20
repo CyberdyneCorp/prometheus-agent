@@ -20,6 +20,7 @@ mod line;
 mod local;
 mod oneshot;
 mod open;
+mod pet;
 mod render;
 pub(crate) mod turn;
 mod voice;

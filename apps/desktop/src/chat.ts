@@ -67,6 +67,10 @@ export class ChatView {
   decorate: ((text: string) => Promise<string>) | null = null;
   /** `/journey` (`/learning`, `/memory-graph`): the window opens the graph. */
   onJourney: () => void = () => {};
+  /** `/pet …` and `/hatch …`: the window's pet runs them (no turn). */
+  onPet: (name: string, args: string) => void = () => {};
+  /** A message the user sent, as typed (the pet's heart reaction). */
+  onSent: (text: string) => void = () => {};
   private cwd: string | null = null;
   /** The open session's live output reached this window since the last
    *  turn ended. */
@@ -282,6 +286,7 @@ export class ChatView {
       const sessionId = this.sessionId ?? "";
       this.drafts.sending(sessionId, { text, images });
       const sent = this.decorate ? await this.decorate(text) : text;
+      this.onSent(text);
       this.transcript.message("user", sent);
       await this.client.call("prompt.submit", { session_id: sessionId, text: sent, files: [], images: images.map((i) => (i.data ? { data: i.data } : { path: i.path ?? "" })) });
       // The chat is a session once its first prompt was admitted.
@@ -356,6 +361,11 @@ export class ChatView {
     // The memory graph is the window's own view of `/journey`.
     if (["journey", "learning", "memory-graph"].includes(head)) {
       this.onJourney();
+      return true;
+    }
+    // The pet is the window's own: client-side, never a turn.
+    if (["pet", "hatch", "generate-pet"].includes(head)) {
+      this.onPet(head, text.slice(1 + head.length).trim());
       return true;
     }
     if (!catalog.some((e) => e.name === head || (e.aliases ?? []).includes(head))) return false;

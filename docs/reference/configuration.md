@@ -774,6 +774,14 @@ Every key a profile's `config.toml` accepts. Unknown keys are rejected, so a key
 | `peers.<name>.key_secret` | string | unset | a secret name | `next_session` | The secret holding the peer's API server key. |
 | `peers.<name>.note` | string | unset | any | `next_session` | A note shown by `gateway peer list`. |
 | `peers.<name>.url` | string | unset | any | `next_session` | The peer's API server base URL. |
+| `pets.enabled` | boolean | `false` | any | `live` | Show the pet on the line interface, the TUI and the desktop app. |
+| `pets.gallery_url` | string | `"https://petdex.dev/api/manifest"` | any | `live` | The gallery `prometheus pets list` and `install` read. |
+| `pets.image_provider` | string | `""` | any | `live` | The image backend `/hatch` uses (empty: the first configured one that takes reference images). |
+| `pets.render_mode` | one of "auto", "kitty", "iterm", "sixel", "unicode", "off" | `"auto"` | `"auto"`, `"kitty"`, `"iterm"`, `"sixel"`, `"unicode"`, `"off"` | `live` | How terminals draw it (`auto` picks the richest graphics protocol the terminal speaks). |
+| `pets.roam` | boolean | `false` | any | `live` | On the desktop, the pet wanders while the agent is idle. |
+| `pets.scale` | number | `0.33` | 0.1 to 3.0 | `live` | The size, as a fraction of the native 192x208 pixel cell, on every surface. |
+| `pets.slug` | string | `""` | any | `live` | The installed pet shown (empty: the first installed one). |
+| `pets.unicode_cols` | integer | `0` | 0 to 200 | `live` | Terminal columns of a half-block pet (0: derived from `scale`). |
 | `plugins.approval_transport` | string | `""` | any | `next_session` | The plugin approval transport that presents approval requests, `<plugin_id>:<name>`; empty asks on the session's own surface. |
 | `plugins.approval_transport_fallback` | one of "deny", "builtin" | `"deny"` | `"deny"`, `"builtin"` | `next_session` | What a failing, timed-out, unbound or missing approval transport leads to: `deny` the request, or ask on the session's own surface (`builtin`). |
 | `plugins.catalog_url` | string | `"https://raw.githubusercontent.com/CyberdyneCorp/prometheus-agent/main/crates/pmt-plugins/catalog/catalog.json"` | any | `next_session` | Where the signed live plugin catalog is fetched from (cached 6 hours under the profile's `cache/`); empty uses only the catalog embedded in the binary. |

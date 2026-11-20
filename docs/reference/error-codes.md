@@ -532,3 +532,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `eval.bench_failed` | `unavailable` | 69 | A benchmark adapter (`bench:<name>`) could not be started, answered with an error or broke the adapter protocol; the message names the method. |
 | `eval.io` | `io` | 74 | A file of an eval suite or run (`<profile>/evals/`) or a trajectory dataset could not be read or written. |
 | `session.read_only` | `permission_denied` | 77 | The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them. |
+| `pet.not_found` | `not_found` | 66 | No installed pet (`<profile>/pets/<slug>/`) or gallery pet has that slug; `prometheus pets list` shows the gallery and `prometheus pets list --installed` the installed ones. |
+| `pet.invalid_atlas` | `invalid_input` | 65 | A pet atlas is not a PNG or WebP image of at most 8 MiB measuring 1536x1872 pixels (8 columns by 9 rows of 192x208 cells); nothing was installed. |
+| `pet.exists` | `conflict` | 75 | A pet with that slug is installed already; `--force` replaces it. |
+| `pet.gallery` | `unavailable` | 69 | The pet gallery (`pets.gallery_url`) or a pet's atlas could not be downloaded (network failure, an HTTP error, a non-HTTPS URL or an unreadable manifest). |
+| `pet.no_image_backend` | `config` | 78 | Pet generation needs an image backend that takes reference images (`pets.image_provider`, else the configured image generation provider); configure one with `prometheus tools`. Nothing was spent. |
+| `pet.generation_failed` | `provider` | 69 | The image backend failed while generating a pet's drafts or animation rows; the message names the step. Nothing was installed. |

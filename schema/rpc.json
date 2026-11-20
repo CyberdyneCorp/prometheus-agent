@@ -1,5 +1,131 @@
 {
   "$defs": {
+    "AchievementBadge": {
+      "additionalProperties": false,
+      "description": "One badge.",
+      "properties": {
+        "category": {
+          "description": "Its group.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Exactly what it counts.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The achievement id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "next_threshold": {
+          "description": "The count it needs.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "next_tier": {
+          "description": "The next tier.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "description": "The highest tier unlocked (`copper`, `silver`, `gold`, `diamond`,\n`olympian`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unlocked_at": {
+          "description": "When the shown tier unlocked (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "The current count.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "category",
+        "value"
+      ],
+      "type": "object"
+    },
+    "AchievementUnlocked": {
+      "additionalProperties": false,
+      "description": "`achievement.unlocked` payload.",
+      "properties": {
+        "id": {
+          "description": "The achievement.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "The tier reached.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "id",
+        "tier"
+      ],
+      "type": "object"
+    },
+    "Achievements": {
+      "additionalProperties": false,
+      "description": "`achievements.list` result: what is known now; a scan runs in the\nbackground while `scanning`.",
+      "properties": {
+        "badges": {
+          "description": "The badges.",
+          "items": {
+            "$ref": "#/$defs/AchievementBadge"
+          },
+          "type": "array"
+        },
+        "scanned_at": {
+          "description": "When the last scan finished.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scanning": {
+          "description": "A scan runs.",
+          "type": "boolean"
+        },
+        "sessions": {
+          "description": "Sessions analysed so far.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "badges",
+        "sessions",
+        "scanning"
+      ],
+      "type": "object"
+    },
     "Ack": {
       "additionalProperties": false,
       "description": "`{\"ok\": true}`.",
@@ -4082,6 +4208,92 @@
       ],
       "type": "object"
     },
+    "HatchAnswerParams": {
+      "additionalProperties": false,
+      "description": "`pets.hatch.answer` params.",
+      "properties": {
+        "answer": {
+          "description": "The answer (`y`, a draft number, `remix <tweak>`, `retry`,\n`cancel`).",
+          "type": "string"
+        },
+        "flow": {
+          "description": "The flow `pets.hatch.start` opened.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "flow",
+        "answer"
+      ],
+      "type": "object"
+    },
+    "HatchStartParams": {
+      "additionalProperties": false,
+      "description": "`pets.hatch.start` params.",
+      "properties": {
+        "description": {
+          "description": "What the pet looks like.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "description"
+      ],
+      "type": "object"
+    },
+    "HatchStep": {
+      "additionalProperties": false,
+      "description": "One step of a generate flow.",
+      "properties": {
+        "done": {
+          "description": "The flow is over.",
+          "type": "boolean"
+        },
+        "drafts": {
+          "description": "The drafts to pick from, as PNG `data:` URLs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "failed": {
+          "default": false,
+          "description": "It failed.",
+          "type": "boolean"
+        },
+        "flow": {
+          "description": "The flow.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The pet installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "What to show (a question while `done` is false).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow",
+        "text",
+        "done"
+      ],
+      "type": "object"
+    },
     "HealthChanged": {
       "additionalProperties": false,
       "description": "`health.changed` payload.",
@@ -5363,6 +5575,297 @@
       "required": [
         "platform",
         "sender_id"
+      ],
+      "type": "object"
+    },
+    "PetGallery": {
+      "additionalProperties": false,
+      "description": "`pets.gallery` result.",
+      "properties": {
+        "pets": {
+          "description": "The gallery's pets.",
+          "items": {
+            "$ref": "#/$defs/PetInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "pets"
+      ],
+      "type": "object"
+    },
+    "PetGalleryParams": {
+      "additionalProperties": false,
+      "description": "`pets.gallery` params.",
+      "properties": {
+        "limit": {
+          "description": "At most this many (default 100).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "The profile (its `pets.gallery_url`).",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "description": "Only pets whose slug or name contains this.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetInfo": {
+      "additionalProperties": false,
+      "description": "One installed or gallery pet.",
+      "properties": {
+        "author": {
+          "description": "Who made it.",
+          "type": "string"
+        },
+        "installed": {
+          "description": "Installed in the profile.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "Its slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "installed"
+      ],
+      "type": "object"
+    },
+    "PetInstallParams": {
+      "additionalProperties": false,
+      "description": "`pets.install` params.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "select": {
+          "default": false,
+          "description": "Show it from now on.",
+          "type": "boolean"
+        },
+        "slug": {
+          "description": "The gallery slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "slug"
+      ],
+      "type": "object"
+    },
+    "PetRow": {
+      "additionalProperties": false,
+      "description": "One state's row of the atlas.",
+      "properties": {
+        "frames": {
+          "description": "Its frames (0: the state shows the idle row).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "row": {
+          "description": "The row.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "frames"
+      ],
+      "type": "object"
+    },
+    "PetSetParams": {
+      "additionalProperties": false,
+      "description": "`pets.set` params: the `[pets]` keys to change (validated; the scale is\nclamped to 0.1-3.0).",
+      "properties": {
+        "enabled": {
+          "description": "Show or hide the pet (on without a slug: the first installed).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "roam": {
+          "description": "Wander while the agent is idle (desktop).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "scale": {
+          "description": "The size on every surface.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "slug": {
+          "description": "Adopt this installed pet (and show it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetSprite": {
+      "additionalProperties": false,
+      "description": "`pets.sprite` result: the validated atlas and each state's row and\nframe count.",
+      "properties": {
+        "atlas": {
+          "description": "The atlas as a `data:` URL (PNG or WebP).",
+          "type": "string"
+        },
+        "frame_height": {
+          "description": "A cell's height in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_width": {
+          "description": "A cell's width in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The pet.",
+          "type": "string"
+        },
+        "states": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PetRow"
+          },
+          "description": "The atlas row and the frame count of each state (`idle`, `wave`,\n`run`, `failed`, `review`, `jump`, `waiting`).",
+          "type": "object"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "atlas",
+        "frame_width",
+        "frame_height",
+        "states"
+      ],
+      "type": "object"
+    },
+    "PetSpriteParams": {
+      "additionalProperties": false,
+      "description": "`pets.sprite` params.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The pet (default: the active one).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetsProfileParams": {
+      "additionalProperties": false,
+      "description": "A profile.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetsState": {
+      "additionalProperties": false,
+      "description": "`pets.state` result: the `[pets]` keys and the installed pets.",
+      "properties": {
+        "active": {
+          "description": "The pet shown (the configured one if installed, else the first).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "description": "`pets.enabled`.",
+          "type": "boolean"
+        },
+        "installed": {
+          "description": "The installed pets.",
+          "items": {
+            "$ref": "#/$defs/PetInfo"
+          },
+          "type": "array"
+        },
+        "notice": {
+          "description": "The line to show for the change just made, when there was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roam": {
+          "description": "`pets.roam`.",
+          "type": "boolean"
+        },
+        "scale": {
+          "description": "`pets.scale`.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "enabled",
+        "scale",
+        "roam",
+        "installed"
       ],
       "type": "object"
     },
@@ -10232,8 +10735,10 @@
   },
   "events": {
     "achievement.unlocked": {
-      "declared": false,
       "owner": "pets",
+      "payload": {
+        "$ref": "#/$defs/AchievementUnlocked"
+      },
       "since": "1.0"
     },
     "adapter.state": {
@@ -10376,6 +10881,16 @@
     }
   },
   "methods": {
+    "achievements.list": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetsProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Achievements"
+      },
+      "since": "1.0"
+    },
     "adapters.list": {
       "long": true,
       "owner": "desktop-app",
@@ -11457,6 +11972,80 @@
       },
       "result": {
         "$ref": "#/$defs/PairingApproved"
+      },
+      "since": "1.0"
+    },
+    "pets.gallery": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetGalleryParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetGallery"
+      },
+      "since": "1.0"
+    },
+    "pets.hatch.answer": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/HatchAnswerParams"
+      },
+      "result": {
+        "$ref": "#/$defs/HatchStep"
+      },
+      "since": "1.0"
+    },
+    "pets.hatch.start": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/HatchStartParams"
+      },
+      "result": {
+        "$ref": "#/$defs/HatchStep"
+      },
+      "since": "1.0"
+    },
+    "pets.install": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetInstallParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetsState"
+      },
+      "since": "1.0"
+    },
+    "pets.set": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetSetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetsState"
+      },
+      "since": "1.0"
+    },
+    "pets.sprite": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetSpriteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetSprite"
+      },
+      "since": "1.0"
+    },
+    "pets.state": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetsProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetsState"
       },
       "since": "1.0"
     },

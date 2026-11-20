@@ -130,7 +130,7 @@ impl Repl {
             }
             "stop" if args.trim() == "all" => Ok(self.stop_all()),
             "stop" => Ok(pmt_i18n::t!(self.strings(), "cli.nothing_running")),
-            "fork" => self.fork(args).await,
+            "fork" => Box::pin(self.fork(args)).await,
             "resume" => self.resume(args).await,
             "prompt" => return self.compose(args).await,
             "snapshot" => self.snapshot(args).await,
@@ -140,6 +140,14 @@ impl Repl {
             }
             "wake" => {
                 self.wake_command(args).await;
+                return Flow::Continue;
+            }
+            "pet" => {
+                self.pet_command(args);
+                return Flow::Continue;
+            }
+            "hatch" => {
+                self.hatch_command(args);
                 return Flow::Continue;
             }
             "retry" | "learn" | "tools" | "model" | "moa" | "plan" => {

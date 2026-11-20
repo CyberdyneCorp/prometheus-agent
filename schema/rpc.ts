@@ -36,6 +36,50 @@ export const CLOSE_CODES = {
   "protocol_unsupported": 4426,
 } as const;
 
+/** One badge. */
+export interface AchievementBadge {
+  /** Its group. */
+  category: string;
+  /** Exactly what it counts. */
+  description: string;
+  /** The achievement id. */
+  id: string;
+  /** Its name. */
+  name: string;
+  /** The count it needs. */
+  next_threshold?: number | null;
+  /** The next tier. */
+  next_tier?: string | null;
+  /** The highest tier unlocked (`copper`, `silver`, `gold`, `diamond`, `olympian`). */
+  tier?: string | null;
+  /** When the shown tier unlocked (RFC 3339). */
+  unlocked_at?: string | null;
+  /** The current count. */
+  value: number;
+}
+
+/** `achievement.unlocked` payload. */
+export interface AchievementUnlocked {
+  /** The achievement. */
+  id: string;
+  /** The profile. */
+  profile: string;
+  /** The tier reached. */
+  tier: string;
+}
+
+/** `achievements.list` result: what is known now; a scan runs in the background while `scanning`. */
+export interface Achievements {
+  /** The badges. */
+  badges: Array<AchievementBadge>;
+  /** When the last scan finished. */
+  scanned_at?: string | null;
+  /** A scan runs. */
+  scanning: boolean;
+  /** Sessions analysed so far. */
+  sessions: number;
+}
+
 /** `{"ok": true}`. */
 export interface Ack {
   /** Always true. */
@@ -1410,6 +1454,40 @@ export interface HarnessVersions {
   versions: Array<unknown>;
 }
 
+/** `pets.hatch.answer` params. */
+export interface HatchAnswerParams {
+  /** The answer (`y`, a draft number, `remix <tweak>`, `retry`, `cancel`). */
+  answer: string;
+  /** The flow `pets.hatch.start` opened. */
+  flow: string;
+  /** The profile. */
+  profile: string;
+}
+
+/** `pets.hatch.start` params. */
+export interface HatchStartParams {
+  /** What the pet looks like. */
+  description: string;
+  /** The profile. */
+  profile: string;
+}
+
+/** One step of a generate flow. */
+export interface HatchStep {
+  /** The flow is over. */
+  done: boolean;
+  /** The drafts to pick from, as PNG `data:` URLs. */
+  drafts?: Array<string>;
+  /** It failed. */
+  failed?: boolean;
+  /** The flow. */
+  flow: string;
+  /** The pet installed. */
+  slug?: string | null;
+  /** What to show (a question while `done` is false). */
+  text: string;
+}
+
 /** `health.changed` payload. */
 export interface HealthChanged {
   /** The component. */
@@ -1868,6 +1946,112 @@ export interface PairingApproved {
   sender_id: string;
   /** The sender's display name, when known. */
   sender_name?: string | null;
+}
+
+/** `pets.gallery` result. */
+export interface PetGallery {
+  /** The gallery's pets. */
+  pets: Array<PetInfo>;
+}
+
+/** `pets.gallery` params. */
+export interface PetGalleryParams {
+  /** At most this many (default 100). */
+  limit?: number | null;
+  /** The profile (its `pets.gallery_url`). */
+  profile: string;
+  /** Only pets whose slug or name contains this. */
+  query?: string;
+}
+
+/** One installed or gallery pet. */
+export interface PetInfo {
+  /** Who made it. */
+  author?: string;
+  /** Installed in the profile. */
+  installed: boolean;
+  /** Its display name. */
+  name: string;
+  /** Its slug. */
+  slug: string;
+}
+
+/** `pets.install` params. */
+export interface PetInstallParams {
+  /** The profile. */
+  profile: string;
+  /** Show it from now on. */
+  select?: boolean;
+  /** The gallery slug. */
+  slug: string;
+}
+
+/** One state's row of the atlas. */
+export interface PetRow {
+  /** Its frames (0: the state shows the idle row). */
+  frames: number;
+  /** The row. */
+  row: number;
+}
+
+/** `pets.set` params: the `[pets]` keys to change (validated; the scale is clamped to 0.1-3.0). */
+export interface PetSetParams {
+  /** Show or hide the pet (on without a slug: the first installed). */
+  enabled?: boolean | null;
+  /** The profile. */
+  profile: string;
+  /** Wander while the agent is idle (desktop). */
+  roam?: boolean | null;
+  /** The size on every surface. */
+  scale?: number | null;
+  /** Adopt this installed pet (and show it). */
+  slug?: string | null;
+}
+
+/** `pets.sprite` result: the validated atlas and each state's row and frame count. */
+export interface PetSprite {
+  /** The atlas as a `data:` URL (PNG or WebP). */
+  atlas: string;
+  /** A cell's height in pixels. */
+  frame_height: number;
+  /** A cell's width in pixels. */
+  frame_width: number;
+  /** Its name. */
+  name: string;
+  /** The pet. */
+  slug: string;
+  /** The atlas row and the frame count of each state (`idle`, `wave`, `run`, `failed`, `review`, `jump`, `waiting`). */
+  states: Record<string, PetRow>;
+}
+
+/** `pets.sprite` params. */
+export interface PetSpriteParams {
+  /** The profile. */
+  profile: string;
+  /** The pet (default: the active one). */
+  slug?: string | null;
+}
+
+/** A profile. */
+export interface PetsProfileParams {
+  /** The profile. */
+  profile: string;
+}
+
+/** `pets.state` result: the `[pets]` keys and the installed pets. */
+export interface PetsState {
+  /** The pet shown (the configured one if installed, else the first). */
+  active?: string | null;
+  /** `pets.enabled`. */
+  enabled: boolean;
+  /** The installed pets. */
+  installed: Array<PetInfo>;
+  /** The line to show for the change just made, when there was one. */
+  notice?: string | null;
+  /** `pets.roam`. */
+  roam: boolean;
+  /** `pets.scale`. */
+  scale: number;
 }
 
 /** The daemon's build target and its support tier. */
@@ -3582,6 +3766,7 @@ export interface WorktreeStatus {
 }
 
 export interface Methods {
+  "achievements.list": { params: PetsProfileParams; result: Achievements };
   "adapters.list": { params: ProfileParams; result: AdapterList };
   "adapters.pairing.cancel": { params: AdapterRef; result: Ack };
   "adapters.pairing.start": { params: AdapterRef; result: unknown };
@@ -3688,6 +3873,13 @@ export interface Methods {
   "model.options": { params: ModelOptionsParams; result: ModelOptions };
   "onboarding.ensure": { params: ProfileParams; result: OnboardingChat };
   "pairing.approve": { params: PairingApproveParams; result: PairingApproved };
+  "pets.gallery": { params: PetGalleryParams; result: PetGallery };
+  "pets.hatch.answer": { params: HatchAnswerParams; result: HatchStep };
+  "pets.hatch.start": { params: HatchStartParams; result: HatchStep };
+  "pets.install": { params: PetInstallParams; result: PetsState };
+  "pets.set": { params: PetSetParams; result: PetsState };
+  "pets.sprite": { params: PetSpriteParams; result: PetSprite };
+  "pets.state": { params: PetsProfileParams; result: PetsState };
   "process.list": { params: SessionRef; result: ProcessList };
   "process.log": { params: ProcessRef; result: ProcessLog };
   "projects.create": { params: ProjectsCreateParams; result: ProjectRow };
@@ -3780,6 +3972,7 @@ export interface ServerRequests {
 }
 
 export interface Events {
+  "achievement.unlocked": AchievementUnlocked;
   "adapter.state": AdapterStatePayload;
   "automation.state": AutomationStatePayload;
   "health.changed": HealthChanged;
@@ -3807,5 +4000,4 @@ export const UNDECLARED = [
   "grants.revoke",
   "tools.call",
   "tools.list",
-  "achievement.unlocked",
 ] as const;

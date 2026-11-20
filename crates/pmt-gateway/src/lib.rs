@@ -43,6 +43,7 @@ pub mod moa;
 pub mod observability;
 mod observer;
 pub mod panes;
+pub mod pets;
 pub mod pty;
 pub mod queue;
 pub mod remote;

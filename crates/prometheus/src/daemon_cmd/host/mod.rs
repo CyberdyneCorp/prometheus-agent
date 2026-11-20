@@ -22,7 +22,7 @@ use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
     ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind,
     ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError, TurnFinished,
+    SubmitParams, Submitted, Transcript, TranscriptMessage,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 use tracing::Instrument as _;
@@ -68,6 +68,7 @@ mod local_telemetry;
 mod model_picker;
 mod notify;
 mod panes;
+mod pets;
 #[cfg(feature = "dashboard")]
 mod profile_create;
 mod projects;
@@ -600,27 +601,6 @@ fn source_of(client: Option<ClientKind>) -> Source {
         Some(ClientKind::Acp) => Source::Acp,
         Some(ClientKind::Eval) => Source::Eval,
         Some(ClientKind::Cli) | None => Source::Cli,
-    }
-}
-
-fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>) -> TurnFinished {
-    match outcome {
-        Ok(result) => TurnFinished {
-            turn_id,
-            exit_reason: result.exit_reason.as_str().to_owned(),
-            final_response: result.final_response,
-            error: result.error.as_ref().map(TurnError::of),
-            usage: serde_json::to_value(result.usage).ok(),
-            report: None,
-        },
-        Err(err) => TurnFinished {
-            turn_id,
-            exit_reason: "error".to_owned(),
-            final_response: None,
-            error: Some(TurnError::of(&err)),
-            usage: None,
-            report: None,
-        },
     }
 }
 
@@ -1223,6 +1203,14 @@ impl Host for DaemonHost {
         request: pmt_gateway::voice::VoiceCall,
     ) -> HostFuture<'a, serde_json::Value> {
         Box::pin(self.voice_call(profile, request))
+    }
+
+    fn pets<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::pets::PetsCall,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(self.pets_call(profile, request))
     }
 
     fn relay_drain(

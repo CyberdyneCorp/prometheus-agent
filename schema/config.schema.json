@@ -7726,6 +7726,95 @@
       ],
       "type": "object"
     },
+    "PetRenderMode": {
+      "description": "`pets.render_mode`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The richest protocol the terminal is known to speak, else\nhalf-blocks.",
+          "type": "string"
+        },
+        {
+          "const": "kitty",
+          "description": "The kitty graphics protocol (kitty, `Ghostty`, `WezTerm`).",
+          "type": "string"
+        },
+        {
+          "const": "iterm",
+          "description": "iTerm2 inline images.",
+          "type": "string"
+        },
+        {
+          "const": "sixel",
+          "description": "DEC sixel graphics.",
+          "type": "string"
+        },
+        {
+          "const": "unicode",
+          "description": "Truecolor Unicode half-blocks.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never draw the pet in a terminal.",
+          "type": "string"
+        }
+      ]
+    },
+    "PetsConfig": {
+      "additionalProperties": false,
+      "description": "The `[pets]` section.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Show the pet on the line interface, the TUI and the desktop app.",
+          "type": "boolean"
+        },
+        "gallery_url": {
+          "default": "https://petdex.dev/api/manifest",
+          "description": "The gallery `prometheus pets list` and `install` read.",
+          "type": "string"
+        },
+        "image_provider": {
+          "default": "",
+          "description": "The image backend `/hatch` uses (empty: the first configured one\nthat takes reference images).",
+          "type": "string"
+        },
+        "render_mode": {
+          "$ref": "#/$defs/PetRenderMode",
+          "default": "auto",
+          "description": "How terminals draw it (`auto` picks the richest graphics protocol\nthe terminal speaks)."
+        },
+        "roam": {
+          "default": false,
+          "description": "On the desktop, the pet wanders while the agent is idle.",
+          "type": "boolean"
+        },
+        "scale": {
+          "default": 0.33,
+          "description": "The size, as a fraction of the native 192x208 pixel cell, on every\nsurface.",
+          "format": "double",
+          "maximum": 3.0,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "slug": {
+          "default": "",
+          "description": "The installed pet shown (empty: the first installed one).",
+          "type": "string"
+        },
+        "unicode_cols": {
+          "default": 0,
+          "description": "Terminal columns of a half-block pet (0: derived from `scale`).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
     "PhraseMode": {
       "description": "How a status phrase file combines with the built-in phrases.",
       "oneOf": [
@@ -14089,6 +14178,20 @@
       "description": "Peer gateways reached over their API server, keyed by name.",
       "type": "object",
       "x-apply": "next_session"
+    },
+    "pets": {
+      "$ref": "#/$defs/PetsConfig",
+      "default": {
+        "enabled": false,
+        "gallery_url": "https://petdex.dev/api/manifest",
+        "image_provider": "",
+        "render_mode": "auto",
+        "roam": false,
+        "scale": 0.33,
+        "slug": "",
+        "unicode_cols": 0
+      },
+      "description": "The optional animated mascot of the interactive surfaces."
     },
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",

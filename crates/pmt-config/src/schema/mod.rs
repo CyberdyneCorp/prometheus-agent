@@ -44,6 +44,7 @@ mod media;
 mod moa;
 mod models;
 mod operations;
+mod pets;
 mod plugins;
 mod projects;
 mod provider_routing;
@@ -144,6 +145,9 @@ pub use operations::{
     OtelPreset, OtelProtocol, PrivacyConfig, SandboxConfig, SandboxMode, SecretCommandConfig,
     SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
     VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
+};
+pub use pets::{
+    DEFAULT_GALLERY_URL, DEFAULT_PET_SCALE, MAX_PET_SCALE, MIN_PET_SCALE, PetRenderMode, PetsConfig,
 };
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
@@ -309,6 +313,8 @@ pub struct Config {
     pub prompt_cache: PromptCacheConfig,
     /// PII redaction.
     pub privacy: PrivacyConfig,
+    /// The optional animated mascot of the interactive surfaces.
+    pub pets: PetsConfig,
     /// Peer gateways reached over their API server, keyed by name.
     #[schemars(extend("x-apply" = "next_session"))]
     pub peers: std::collections::BTreeMap<String, PeerGateway>,
@@ -436,6 +442,7 @@ impl Default for Config {
             python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             privacy: PrivacyConfig::default(),
+            pets: PetsConfig::default(),
             peers: std::collections::BTreeMap::new(),
             provider_routing: ProviderRoutingConfig::default(),
             providers: std::collections::BTreeMap::new(),

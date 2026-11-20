@@ -1429,4 +1429,22 @@ error_codes! {
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");
+    /// No installed or gallery pet has the slug.
+    PET_NOT_FOUND = ("pet.not_found", NotFound,
+        "No installed pet (`<profile>/pets/<slug>/`) or gallery pet has that slug; `prometheus pets list` shows the gallery and `prometheus pets list --installed` the installed ones.");
+    /// A pet atlas does not validate.
+    PET_INVALID_ATLAS = ("pet.invalid_atlas", InvalidInput,
+        "A pet atlas is not a PNG or WebP image of at most 8 MiB measuring 1536x1872 pixels (8 columns by 9 rows of 192x208 cells); nothing was installed.");
+    /// The pet is installed already.
+    PET_EXISTS = ("pet.exists", Conflict,
+        "A pet with that slug is installed already; `--force` replaces it.");
+    /// The pet gallery could not be read.
+    PET_GALLERY = ("pet.gallery", Unavailable,
+        "The pet gallery (`pets.gallery_url`) or a pet's atlas could not be downloaded (network failure, an HTTP error, a non-HTTPS URL or an unreadable manifest).");
+    /// No image backend can generate a pet.
+    PET_NO_IMAGE_BACKEND = ("pet.no_image_backend", Config,
+        "Pet generation needs an image backend that takes reference images (`pets.image_provider`, else the configured image generation provider); configure one with `prometheus tools`. Nothing was spent.");
+    /// Pet generation failed.
+    PET_GENERATION_FAILED = ("pet.generation_failed", Provider,
+        "The image backend failed while generating a pet's drafts or animation rows; the message names the step. Nothing was installed.");
 }

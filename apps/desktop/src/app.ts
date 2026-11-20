@@ -24,6 +24,7 @@ import { hudWindow, toggleHud } from "./hud";
 import { type InstallLink, installDialog } from "./install";
 import { ManagePane } from "./manage";
 import { PanelHost } from "./panels";
+import { FloatingPet } from "./pet/floating";
 import { ProfileClients } from "./profiles";
 import { ProjectsSidebar } from "./projects";
 import { localPrefsChannel } from "./remote-prefs";
@@ -166,6 +167,10 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     remember(profile);
     await client.switchProfile(profile);
   };
+  const pet = new FloatingPet(client, chat, say, dialogs);
+  chat.onPet = (name, args) => void pet.command(name, args);
+  chat.onSent = (text) => pet.sent(text);
+  client.on("achievement.unlocked", (envelope) => pet.unlocked(envelope.data as { id: string; tier: string }));
   const voice = new VoiceControls({ link: client, chat, switchProfile: async (p) => {
     await switchTo(p);
     await client.ready();
@@ -205,7 +210,10 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     say(latch.message, "error");
   };
 
-  client.onEvent = (envelope) => chat.apply(envelope);
+  client.onEvent = (envelope) => {
+    chat.apply(envelope);
+    pet.observe(envelope);
+  };
   client.onRequest = (request) => {
     if (ui.handle(request)) return;
     chat.request(request);
@@ -214,6 +222,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   for (const event of ["request.resolved", "request.cancel"]) client.on(event, (envelope) => attention.settled((envelope.data as { id: string }).id));
   client.on("turn.finished", (envelope) => {
     attention.turn(envelope.session_id ?? "", false, "");
+    pet.turnFinished(envelope.session_id ?? null, Boolean((envelope.data as TurnFinished).error));
     if (envelope.session_id) void chat.turnFinished(envelope.session_id, envelope.data as TurnFinished);
   });
   chat.onSubmitted = (sessionId) => attention.turn(sessionId, true, chat.title() ?? sessionId);
@@ -241,6 +250,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
       .catch((err: unknown) => console.warn("UI preferences or onboarding unavailable:", err));
     void panels.load(client.profile);
     void voice.refresh();
+    void pet.load();
     void projects.load();
     void applyFonts(client);
     void language.load().catch((err: unknown) => console.warn("languages unavailable:", err));
@@ -303,7 +313,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   keys.onSave = (overrides) => void prefs.set("keybindings", overrides).catch(() => {});
   prefs.onChange((values) => keys.load(values.keybindings));
   panels.onShortcut = (shortcut) => keys.add(shortcut);
-  const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom }));
+  const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom, pet }));
   windowActions(keys, opener, { palette, graph, zoom });
   work.aside.append(panels.el);
   const side = h("nav", { class: "side" }, switcher.el, newChat, botChat, onboarding.skip, list, projects.el);
@@ -320,6 +330,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     ),
     dialogs,
     notices,
+    pet.toasts,
+    pet.el,
     background.el,
     graph.el,
     palette.el,
@@ -540,6 +552,7 @@ interface PaletteParts {
   graph: MemoryGraph;
   files: ProfileFiles;
   zoom: Zoom;
+  pet: FloatingPet;
 }
 
 /** What the palette finds: pages, settings, sessions and actions. */
@@ -551,6 +564,7 @@ async function paletteEntries(o: Opener, work: Workspace, p: PaletteParts): Prom
   const actions: Entry[] = [
     { kind: "action", label: "New chat", run: () => o.chat.draft() },
     { kind: "action", label: "Memory graph", run: () => void p.graph.open() },
+    { kind: "action", label: "Pets…", keywords: "pet list gallery hatch", run: () => void p.pet.command("pet", "list") },
     { kind: "action", label: "HUD mode", run: () => void toggleHud(o.client.profile, o.chat.sessionId) },
     { kind: "action", label: "Zoom in", run: () => p.zoom.step(1) },
     { kind: "action", label: "Zoom out", run: () => p.zoom.step(-1) },

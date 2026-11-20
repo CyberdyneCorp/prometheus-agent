@@ -242,6 +242,7 @@ impl Shell {
             Request::PickDirectory { title } => self.pick(true, title).await,
             other if crate::features::owns(&other) => self.feature(window, other).await,
             other if crate::profile_files::owns(&other) => self.profile_file(other).await,
+            other if crate::pet::owns(&other) => self.pet(window, other),
             other if crate::connections::service::owns(&other) => {
                 self.connection_request(other).await
             }

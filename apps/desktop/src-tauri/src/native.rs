@@ -21,14 +21,16 @@ pub(crate) const OPEN_SESSION_EVENT: &str = "open-session";
 pub(crate) struct TauriNative<R: Runtime> {
     app: AppHandle<R>,
     update: Option<(Target, PathBuf)>,
+    /// The Prometheus home (the pet overlay's place is kept there).
+    home: PathBuf,
 }
 
 impl<R: Runtime> TauriNative<R> {
-    pub(crate) fn new(app: AppHandle<R>, update: Option<(Target, PathBuf)>) -> Self {
+    pub(crate) fn new(app: AppHandle<R>, update: Option<(Target, PathBuf)>, home: PathBuf) -> Self {
         if let Some(update) = &update {
             app.manage(StagedUpdate(update.clone()));
         }
-        Self { app, update }
+        Self { app, update, home }
     }
 }
 
@@ -190,5 +192,32 @@ impl<R: Runtime> Native for TauriNative<R> {
     fn facts(&self) -> pmt_desktop::platform::Facts {
         let x11 = std::env::var("GDK_BACKEND").is_ok_and(|b| b == "x11");
         pmt_desktop::platform::Facts::detect(x11)
+    }
+
+    fn pet_overlay(&self, open: bool) -> Result<bool, String> {
+        crate::pet::overlay(&self.app, &self.home, open).map_err(text)
+    }
+
+    fn emit_to(
+        &self,
+        window: &str,
+        event: &str,
+        payload: &serde_json::Value,
+    ) -> Result<(), String> {
+        self.app
+            .emit_to(window, event, payload.clone())
+            .map_err(text)
+    }
+
+    fn drag_window(&self, window: &str) -> Result<(), String> {
+        let window = self
+            .app
+            .get_webview_window(window)
+            .ok_or_else(|| format!("no window {window}"))?;
+        window.start_dragging().map_err(text)
+    }
+
+    fn main_window(&self, toggle: bool) -> Result<bool, String> {
+        crate::pet::main_window(&self.app, toggle).map_err(text)
     }
 }

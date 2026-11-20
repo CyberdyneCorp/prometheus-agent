@@ -26,6 +26,7 @@
 - [The local terminal](guide/terminal.md)
 - [File and web tools](guide/files-and-web.md)
 - [Voice mode](guide/voice.md)
+- [Pets and achievements](guide/pets.md)
 - [LSP diagnostics](guide/lsp.md)
 - [Undo, checkpoints and verification](guide/snapshots.md)
 - [Browser automation](guide/browser.md)

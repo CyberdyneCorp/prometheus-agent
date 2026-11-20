@@ -99,6 +99,14 @@ impl Chat<'_, '_> {
                 self.wake_command(args).await;
                 return Ok(Some(Flow::Continue));
             }
+            "pet" => {
+                self.pet_command(args);
+                return Ok(Some(Flow::Continue));
+            }
+            "hatch" | "generate-pet" => {
+                self.hatch_command(args);
+                return Ok(Some(Flow::Continue));
+            }
             "handoff" => {
                 let scope = self.start.scope;
                 let handed = crate::chat::handoff::handoff(

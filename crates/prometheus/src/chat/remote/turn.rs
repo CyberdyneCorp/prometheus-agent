@@ -197,6 +197,7 @@ fn on_event(
                 out.notice(strings.get("cli.question_elsewhere"));
             }
         }
+        "achievement.unlocked" => out.achievement(&event.data),
         _ => {}
     }
     None

@@ -116,6 +116,7 @@ capabilities = [
     "observability",
     "workspace-architecture",
     "voice-mode",
+    "pets",
 ]
 
 [workspace-architecture."Single binary with subcommand surfaces"]
@@ -5246,3 +5247,45 @@ capabilities = [
 [voice-mode."Realtime full-duplex voice chat mode (upgrade)"]
 "Realtime voice delegates work" = { tests = ["crates/prometheus/tests/desktop_voice.rs::realtime_voice_delegates_to_the_agent_and_keeps_the_key_on_the_daemon"], note = "the provider's model is played by the spec on the WebRTC data channel (the page's peer is a stand-in): its prometheus_agent call runs as a turn of the chat that reads notes.txt with read_file, and the answer goes back as the function output followed by response.create" }
 "Key stays on the daemon" = ["crates/prometheus/tests/voice_realtime.rs::the_daemon_creates_the_realtime_call_and_hands_out_no_key", "crates/prometheus/tests/desktop_voice.rs::realtime_voice_delegates_to_the_agent_and_keeps_the_key_on_the_daemon"]
+
+[pets."Pets are cosmetic and cache-neutral"]
+"Selecting a pet mid-session" = { tests = ["crates/prometheus/tests/pets_daemon.rs::selecting_a_pet_mid_session_leaves_the_prompt_and_tools_unchanged"], note = "after a first turn the pet is selected from the CLI and changed over pets.set (slug, scale, roam); the second turn leaves the session's system prompt hash and its recorded tool surface unchanged, and no tools_rebuilt event is written" }
+
+[pets."Pet storage and sprite format"]
+"Wrong dimensions" = ["crates/prometheus/tests/pets_cli.rs::an_atlas_of_the_wrong_size_installs_nothing", "crates/pmt-pets/src/atlas.rs::wrong_dimensions_are_refused_with_the_expected_size", "crates/pmt-pets/src/store.rs::an_invalid_atlas_writes_nothing"]
+
+[pets."Pet gallery commands"]
+"Install and select" = ["crates/prometheus/tests/pets_cli.rs::install_with_select_shows_the_pet"]
+"Removing the active pet" = ["crates/prometheus/tests/pets_cli.rs::removing_the_active_pet_turns_pets_off"]
+
+[pets."Pet configuration and scale"]
+"Out-of-range scale" = ["crates/prometheus/tests/pets_cli.rs::an_out_of_range_scale_is_clamped_and_said"]
+
+[pets."One activity-to-state mapping"]
+"Approval pending" = { tests = ["crates/pmt-pets/src/state.rs::a_turn_waiting_on_an_approval_is_waiting", "crates/pmt-pets/src/state.rs::precedence_follows_the_spec"], note = "the line interface and the TUI feed this Tracker; the desktop's pet/state.ts mirrors the same table and precedence" }
+
+[pets."Terminal pet rendering"]
+"Output redirected" = ["crates/prometheus/tests/pets_cli.rs::redirected_output_carries_no_graphics_escapes", "crates/pmt-pets/src/render/detect.rs::redirected_output_is_always_off"]
+
+[pets."Pet preview and doctor"]
+"Selected but disabled" = ["crates/prometheus/tests/pets_cli.rs::the_doctor_names_the_first_missing_item"]
+
+[pets."Pet slash command"]
+"Adopt from the TUI" = ["crates/prometheus/tests/pets_tui.rs::pet_slug_adopts_an_installed_pet_without_a_turn"]
+
+[pets."Generating a pet"]
+"No reference-capable backend" = ["crates/prometheus/tests/pets_cli.rs::hatching_without_a_reference_capable_backend_spends_nothing", "crates/prometheus/tests/pets_line.rs::the_in_process_line_interface_runs_pet_commands_here"]
+"Hatched pet is a normal pet" = { tests = ["crates/prometheus/tests/pets_daemon.rs::a_pet_hatched_through_the_daemon_is_installed_like_a_gallery_pet", "crates/pmt-pets/src/hatch/mod.rs::a_hatched_pet_is_installed_and_selectable"], note = "against the OpenAI Images API (wiremock): four drafts, then nine rows each with the chosen draft as reference; the packed atlas installs and is adopted with pets.set" }
+
+[pets."Affection reactions"]
+"Thank-you message" = ["crates/prometheus/tests/pets_tui.rs::a_thank_you_plays_the_heart", "crates/prometheus/tests/pets_daemon.rs::an_affectionate_message_is_stored_as_sent", "crates/pmt-pets/src/affection.rs::thanks_and_good_bot_are_affection"]
+
+[pets."Desktop pet and pop-out overlay"]
+"Prompt from the overlay" = { tests = ["crates/prometheus/tests/pets_e2e.rs::the_desktop_pet_pops_out_and_prompts_through_the_main_window"], note = "desktop-pet.spec.ts: Shift+click opens the overlay window (no WebSocket of its own); with the main window hidden, a prompt typed on the pet is submitted on the main window's connection to the most recent session and no window is brought back; the mail badge shows for the turn that finished while hidden" }
+
+[pets."Achievements from session history"]
+"Incremental rescan" = ["crates/pmt-pets/tests/achievements.rs::only_new_or_changed_sessions_are_analysed"]
+"First scan does not block" = ["crates/prometheus/tests/pets_e2e.rs::the_achievements_page_renders_before_the_first_scan_ends", "crates/prometheus/tests/pets_daemon.rs::the_first_scan_runs_in_the_background"]
+
+[pets."Achievement unlocks celebrate (upgrade)"]
+"Unlock during a session" = { tests = ["crates/prometheus/tests/pets_tui.rs::an_unlock_shows_a_toast", "crates/prometheus/tests/pets_daemon.rs::a_turn_that_reaches_a_tier_announces_it_and_the_session_never_hears_of_it", "crates/prometheus/tests/pets_e2e.rs::a_desktop_unlock_shows_a_toast_and_the_pet_jumps", "crates/pmt-pets/tests/achievements.rs::unlocks_persist_and_only_new_tiers_are_reported"], note = "a profile whose time zone makes now a night hour reaches night-owl silver with its tenth session: the daemon announces achievement.unlocked as a daemon-level event, the TUI and the desktop show the toast and the pet jumps, and the session's prompt hash, tools and messages carry no mention of it" }

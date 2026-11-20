@@ -8,6 +8,7 @@ mod hud;
 mod launch;
 mod native;
 mod panels;
+mod pet;
 mod tray;
 
 fn main() {

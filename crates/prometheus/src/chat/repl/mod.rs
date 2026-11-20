@@ -10,11 +10,12 @@
 //! approvals, confirmations) are answered from the next line.
 
 mod automation;
-mod bottom_line;
+pub mod bottom_line;
 mod commands;
 pub(crate) mod compose;
 pub mod input;
 mod layout;
+mod pet;
 mod progress;
 mod prompts;
 pub mod queue;
@@ -126,6 +127,10 @@ struct Repl {
         crate::chat::wake::Woken,
         mpsc::UnboundedReceiver<pmt_voice::wake::engine::Detection>,
     ),
+    /// The pet pane (spec: pets); dropped before the input.
+    pet: Option<crate::pets_host::line::LinePet>,
+    /// `/hatch` waiting for an answer.
+    hatch: Option<Box<pmt_pets::hatch::Hatch>>,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -227,6 +232,7 @@ pub async fn run(
     let factory_scope = factory.scope.clone();
     let factory_cwd = factory.options.cwd.clone();
     let launch = factory.launch().clone();
+    let pet = crate::pets_host::line::LinePet::start(&factory_scope, &launch, input.pet_line());
     let mut repl = Repl {
         factory,
         live: None,
@@ -259,6 +265,8 @@ pub async fn run(
         voice_cut: None,
         wake: crate::chat::wake::WakeClient::new(&factory_scope, &launch, "cli"),
         woken: crate::chat::wake::channel(),
+        pet: Some(pet),
+        hatch: None,
     };
     repl.attach(live);
     let notices = print_notices(asks.notices, repl.input.printer(), repl.strings());
@@ -276,6 +284,7 @@ pub async fn run(
     repl.arm_wake().await;
     repl.spacer();
     let status = Box::pin(repl.main_loop()).await;
+    repl.pet = None;
     repl.wake.disarm();
     notices.abort();
     let _ = notices.await;
@@ -406,6 +415,9 @@ impl Repl {
     async fn idle_line(&mut self, line: String) -> Flow {
         if let Some(pending) = self.pending.take() {
             return Box::pin(self.answer(pending, &line)).await;
+        }
+        if self.hatch_answer(&line).await {
+            return Flow::Continue;
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {

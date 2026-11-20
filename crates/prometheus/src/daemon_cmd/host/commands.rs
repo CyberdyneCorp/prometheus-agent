@@ -38,6 +38,9 @@ pub(super) const CLIENT_COMMANDS: &[&str] = &[
     "redraw",
     "statusbar",
     "battery",
+    "pet",
+    "hatch",
+    "generate-pet",
 ];
 
 /// The commands that change what `session.settings` shows.

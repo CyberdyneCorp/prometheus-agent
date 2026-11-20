@@ -226,4 +226,12 @@ impl Out for Speaking<'_> {
     fn error(&self, err: &Error) {
         self.screen.error(err);
     }
+
+    fn raw_event(&self, event: &pmt_rpc::contracts::Envelope) {
+        self.screen.raw_event(event);
+    }
+
+    fn achievement(&self, data: &serde_json::Value) {
+        self.screen.achievement(data);
+    }
 }

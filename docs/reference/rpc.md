@@ -46,6 +46,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 
 | Name | Owner | Since | Params | Result |
 |---|---|---|---|---|
+| `achievements.list` | `pets` | 1.0 | [`PetsProfileParams`](#petsprofileparams) | [`Achievements`](#achievements) |
 | `adapters.list` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`AdapterList`](#adapterlist) |
 | `adapters.pairing.cancel` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | [`Ack`](#ack) |
 | `adapters.pairing.start` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | any |
@@ -154,6 +155,13 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `model.options` | `tui` | 1.0 | [`ModelOptionsParams`](#modeloptionsparams) | [`ModelOptions`](#modeloptions) |
 | `onboarding.ensure` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`OnboardingChat`](#onboardingchat) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
+| `pets.gallery` | `pets` | 1.0 | [`PetGalleryParams`](#petgalleryparams) | [`PetGallery`](#petgallery) |
+| `pets.hatch.answer` | `pets` | 1.0 | [`HatchAnswerParams`](#hatchanswerparams) | [`HatchStep`](#hatchstep) |
+| `pets.hatch.start` | `pets` | 1.0 | [`HatchStartParams`](#hatchstartparams) | [`HatchStep`](#hatchstep) |
+| `pets.install` | `pets` | 1.0 | [`PetInstallParams`](#petinstallparams) | [`PetsState`](#petsstate) |
+| `pets.set` | `pets` | 1.0 | [`PetSetParams`](#petsetparams) | [`PetsState`](#petsstate) |
+| `pets.sprite` | `pets` | 1.0 | [`PetSpriteParams`](#petspriteparams) | [`PetSprite`](#petsprite) |
+| `pets.state` | `pets` | 1.0 | [`PetsProfileParams`](#petsprofileparams) | [`PetsState`](#petsstate) |
 | `process.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`ProcessList`](#processlist) |
 | `process.log` | `desktop-app` | 1.0 | [`ProcessRef`](#processref) | [`ProcessLog`](#processlog) |
 | `projects.create` | `projects` | 1.0 | [`ProjectsCreateParams`](#projectscreateparams) | [`ProjectRow`](#projectrow) |
@@ -252,7 +260,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 
 | Name | Owner | Since | Payload |
 |---|---|---|---|
-| `achievement.unlocked` | `pets` | 1.0 | not served yet |
+| `achievement.unlocked` | `pets` | 1.0 | [`AchievementUnlocked`](#achievementunlocked) |
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
@@ -275,6 +283,43 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `wake.detected` | `voice-mode` | 1.0 | [`WakeDetected`](#wakedetected) |
 
 ## Types
+
+### `AchievementBadge`
+
+One badge.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `category` | string | yes | Its group. |
+| `description` | string | yes | Exactly what it counts. |
+| `id` | string | yes | The achievement id. |
+| `name` | string | yes | Its name. |
+| `next_threshold` | integer or null | no | The count it needs. |
+| `next_tier` | string or null | no | The next tier. |
+| `tier` | string or null | no | The highest tier unlocked (`copper`, `silver`, `gold`, `diamond`, `olympian`). |
+| `unlocked_at` | string or null | no | When the shown tier unlocked (RFC 3339). |
+| `value` | integer | yes | The current count. |
+
+### `AchievementUnlocked`
+
+`achievement.unlocked` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The achievement. |
+| `profile` | string | yes | The profile. |
+| `tier` | string | yes | The tier reached. |
+
+### `Achievements`
+
+`achievements.list` result: what is known now; a scan runs in the background while `scanning`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `badges` | array of [`AchievementBadge`](#achievementbadge) | yes | The badges. |
+| `scanned_at` | string or null | no | When the last scan finished. |
+| `scanning` | boolean | yes | A scan runs. |
+| `sessions` | integer | yes | Sessions analysed so far. |
 
 ### `Ack`
 
@@ -1612,6 +1657,38 @@ What a command run through the session's terminal backend printed.
 | `active` | string | yes | The active version. |
 | `versions` | array of any | yes | Each version's `version.toml` as JSON, newest first. |
 
+### `HatchAnswerParams`
+
+`pets.hatch.answer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `answer` | string | yes | The answer (`y`, a draft number, `remix <tweak>`, `retry`, `cancel`). |
+| `flow` | string | yes | The flow `pets.hatch.start` opened. |
+| `profile` | string | yes | The profile. |
+
+### `HatchStartParams`
+
+`pets.hatch.start` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `description` | string | yes | What the pet looks like. |
+| `profile` | string | yes | The profile. |
+
+### `HatchStep`
+
+One step of a generate flow.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `done` | boolean | yes | The flow is over. |
+| `drafts` | array of string | no | The drafts to pick from, as PNG `data:` URLs. |
+| `failed` | boolean | no | It failed. |
+| `flow` | string | yes | The flow. |
+| `slug` | string or null | no | The pet installed. |
+| `text` | string | yes | What to show (a question while `done` is false). |
+
 ### `HealthChanged`
 
 `health.changed` payload.
@@ -2051,6 +2128,109 @@ A server-to-client request still waiting for an answer.
 | `platform` | string | yes | The platform. |
 | `sender_id` | string | yes | The approved sender's platform id. |
 | `sender_name` | string or null | no | The sender's display name, when known. |
+
+### `PetGallery`
+
+`pets.gallery` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pets` | array of [`PetInfo`](#petinfo) | yes | The gallery's pets. |
+
+### `PetGalleryParams`
+
+`pets.gallery` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `limit` | integer or null | no | At most this many (default 100). |
+| `profile` | string | yes | The profile (its `pets.gallery_url`). |
+| `query` | string | no | Only pets whose slug or name contains this. |
+
+### `PetInfo`
+
+One installed or gallery pet.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `author` | string | no | Who made it. |
+| `installed` | boolean | yes | Installed in the profile. |
+| `name` | string | yes | Its display name. |
+| `slug` | string | yes | Its slug. |
+
+### `PetInstallParams`
+
+`pets.install` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+| `select` | boolean | no | Show it from now on. |
+| `slug` | string | yes | The gallery slug. |
+
+### `PetRow`
+
+One state's row of the atlas.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `frames` | integer | yes | Its frames (0: the state shows the idle row). |
+| `row` | integer | yes | The row. |
+
+### `PetSetParams`
+
+`pets.set` params: the `[pets]` keys to change (validated; the scale is clamped to 0.1-3.0).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no | Show or hide the pet (on without a slug: the first installed). |
+| `profile` | string | yes | The profile. |
+| `roam` | boolean or null | no | Wander while the agent is idle (desktop). |
+| `scale` | number or null | no | The size on every surface. |
+| `slug` | string or null | no | Adopt this installed pet (and show it). |
+
+### `PetSprite`
+
+`pets.sprite` result: the validated atlas and each state's row and frame count.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `atlas` | string | yes | The atlas as a `data:` URL (PNG or WebP). |
+| `frame_height` | integer | yes | A cell's height in pixels. |
+| `frame_width` | integer | yes | A cell's width in pixels. |
+| `name` | string | yes | Its name. |
+| `slug` | string | yes | The pet. |
+| `states` | object | yes | The atlas row and the frame count of each state (`idle`, `wave`, `run`, `failed`, `review`, `jump`, `waiting`). |
+
+### `PetSpriteParams`
+
+`pets.sprite` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+| `slug` | string or null | no | The pet (default: the active one). |
+
+### `PetsProfileParams`
+
+A profile.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+
+### `PetsState`
+
+`pets.state` result: the `[pets]` keys and the installed pets.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active` | string or null | no | The pet shown (the configured one if installed, else the first). |
+| `enabled` | boolean | yes | `pets.enabled`. |
+| `installed` | array of [`PetInfo`](#petinfo) | yes | The installed pets. |
+| `notice` | string or null | no | The line to show for the change just made, when there was one. |
+| `roam` | boolean | yes | `pets.roam`. |
+| `scale` | number | yes | `pets.scale`. |
 
 ### `PlatformSupport`
 

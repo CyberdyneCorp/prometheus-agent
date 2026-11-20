@@ -52,6 +52,10 @@ pub enum Local {
     Timeline,
     /// Choose the profile's language (`display.language`).
     Language,
+    /// The pet: `/pet [list|off|scale <factor>|<slug>]` (display only).
+    Pet,
+    /// Generate a pet from a description (`/hatch <description>`).
+    Hatch,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -214,6 +218,18 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "language",
         aliases: &[],
         key: "tui.cmd_language",
+    },
+    LocalCommand {
+        command: Local::Pet,
+        name: "pet",
+        aliases: &[],
+        key: "tui.cmd_pet",
+    },
+    LocalCommand {
+        command: Local::Hatch,
+        name: "hatch",
+        aliases: &["generate-pet"],
+        key: "tui.cmd_hatch",
     },
 ];
 
