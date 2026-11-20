@@ -170,11 +170,20 @@ fn settle(store: &Store, avatar: BotAvatar, generate: Generate<'_>) -> Result<Bo
     }
 }
 
-/// An image the profile already holds.
-fn keep_image(store: &Store, blob: &str, mime: String) -> Result<BotAvatar, Error> {
+/// The bytes of avatar blob `blob` (its SHA-256) in `store`.
+///
+/// # Errors
+///
+/// A malformed blob id; `store.blob_missing`.
+pub fn avatar_bytes(store: &Store, blob: &str) -> Result<Vec<u8>, Error> {
     let reference = BlobRef::parse(&format!("blob:sha256:{blob}"))
         .ok_or_else(|| invalid("an avatar blob is a SHA-256"))?;
-    store.get_blob(&reference)?;
+    store.get_blob(&reference)
+}
+
+/// An image the profile already holds.
+fn keep_image(store: &Store, blob: &str, mime: String) -> Result<BotAvatar, Error> {
+    avatar_bytes(store, blob)?;
     Ok(BotAvatar::Image {
         blob: Some(blob.to_owned()),
         mime,

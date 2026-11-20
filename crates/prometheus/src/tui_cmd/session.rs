@@ -399,7 +399,7 @@ impl Tui<'_> {
             Done::Languages(listed) => self.languages_listed(listed),
             Done::PetGallery(listed) => self.pet_gallery(listed),
             Done::PetInstalled(installed) => self.pet_installed(installed),
-            Done::Hatch(hatch, step) => self.hatched(hatch, step),
+            Done::Hatch(step) => self.hatched(step),
             Done::LanguageSet(set) => self.language_set(set),
         }
     }

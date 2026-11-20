@@ -15,7 +15,9 @@ pub(super) fn run(
     scope: &ProfileScope,
     description: &str,
 ) -> Result<u8, Error> {
-    let backend = crate::pets_host::backend::select(scope)?;
+    // Billed to a hidden session of its own (no chat is open).
+    let billing = crate::pets_host::meter::Billing::Hidden(pmt_store::Source::Cli);
+    let backend = crate::pets_host::backend::select(scope, billing)?;
     if !crate::prompt::stdin_is_tty() {
         return Err(Error::new(
             &codes::CLI_USAGE,

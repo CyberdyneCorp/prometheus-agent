@@ -68,7 +68,8 @@ export class ChatView {
   /** `/journey` (`/learning`, `/memory-graph`): the window opens the graph. */
   onJourney: () => void = () => {};
   /** `/pet …` and `/hatch …`: the window's pet runs them (no turn). */
-  onPet: (name: string, args: string) => void = () => {};
+  /** `/pet` or `/hatch` typed here (`sessionId`: the chat, billed for a hatch). */
+  onPet: (name: string, args: string, sessionId: string | null) => void = () => {};
   /** A message the user sent, as typed (the pet's heart reaction). */
   onSent: (text: string) => void = () => {};
   private cwd: string | null = null;
@@ -365,7 +366,7 @@ export class ChatView {
     }
     // The pet is the window's own: client-side, never a turn.
     if (["pet", "hatch", "generate-pet"].includes(head)) {
-      this.onPet(head, text.slice(1 + head.length).trim());
+      this.onPet(head, text.slice(1 + head.length).trim(), this.sessionId);
       return true;
     }
     if (!catalog.some((e) => e.name === head || (e.aliases ?? []).includes(head))) return false;

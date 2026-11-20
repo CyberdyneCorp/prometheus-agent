@@ -414,7 +414,7 @@ export type BotAvatar = {
 } | {
   /** The image's SHA-256 (set by the daemon). */
   blob?: string | null;
-  /** Base64 bytes: upload only, never returned. */
+  /** Base64 bytes: upload only, never returned (`bot.avatar.get` reads the picture). */
   data?: string | null;
   kind: "image";
   /** `image/png`, `image/jpeg` or `image/webp`. */
@@ -428,6 +428,14 @@ export type BotAvatar = {
   id: string;
   kind: "pet";
 };
+
+/** `bot.avatar.get` result: the picture of an `image` avatar. */
+export interface BotAvatarPicture {
+  /** The image, base64. */
+  data: string;
+  /** `image/png`, `image/jpeg` or `image/webp`. */
+  mime: string;
+}
 
 /** `bot.chat.ensure` result. */
 export interface BotChat {
@@ -1470,6 +1478,8 @@ export interface HatchStartParams {
   description: string;
   /** The profile. */
   profile: string;
+  /** The session whose usage ledger the paid image calls go to (the chat `/hatch` was typed in); absent, a hidden session is made for the flow on its first paid call. */
+  session_id?: string | null;
 }
 
 /** One step of a generate flow. */
@@ -3776,6 +3786,7 @@ export interface Methods {
   "approval.respond": { params: ApprovalRespondParams; result: Ack };
   "artifacts.list": { params: ArtifactsListParams; result: ArtifactList };
   "autoprune.offer": { params: AutopruneOfferParams; result: AutopruneOffer };
+  "bot.avatar.get": { params: BotMetaParams; result: BotAvatarPicture };
   "bot.chat.ensure": { params: ProfileParams; result: BotChat };
   "bot.chat.read": { params: BotMetaParams; result: BotDone };
   "bot.create": { params: BotCreateParams; result: BotCreated };

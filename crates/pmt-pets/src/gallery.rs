@@ -32,19 +32,54 @@ struct Manifest {
     pets: Vec<Raw>,
 }
 
+/// One manifest entry. Every field is optional and may be an explicit
+/// `null` (the live petdex manifest has `"submittedBy": null`), which
+/// `#[serde(default)]` on a `String` would reject.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Raw {
     #[serde(default)]
-    slug: String,
+    slug: Option<String>,
     #[serde(default)]
-    display_name: String,
+    display_name: Option<String>,
     #[serde(default)]
-    submitted_by: String,
+    submitted_by: Option<String>,
     #[serde(default)]
-    spritesheet_url: String,
+    spritesheet_url: Option<String>,
     #[serde(default)]
-    license: String,
+    license: Option<String>,
+}
+
+/// The longest display name or author kept from a manifest.
+pub const MAX_LABEL_CHARS: usize = 64;
+
+/// A manifest label made safe to store and print: control and invisible
+/// formatting characters (ESC, CR, bidi overrides, zero-width marks) are
+/// dropped, so a hostile manifest cannot rewrite terminal output through
+/// `pets list` or the stored `pet.toml` name, and it is capped at
+/// [`MAX_LABEL_CHARS`].
+fn label(text: Option<String>) -> String {
+    text.unwrap_or_default()
+        .chars()
+        .filter(|&c| !c.is_control() && !invisible(c))
+        .take(MAX_LABEL_CHARS)
+        .collect::<String>()
+        .trim()
+        .to_owned()
+}
+
+/// Zero-width, bidi-control and other invisible formatting characters.
+fn invisible(c: char) -> bool {
+    matches!(
+        c,
+        '\u{00AD}'
+            | '\u{061C}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
 }
 
 fn unavailable(message: impl Into<String>) -> Error {
@@ -70,17 +105,17 @@ pub fn parse(bytes: &[u8]) -> Result<Vec<Entry>, Error> {
     Ok(manifest
         .pets
         .into_iter()
-        .filter(|p| crate::store::valid_slug(&p.slug) && !p.spritesheet_url.is_empty())
-        .map(|p| Entry {
-            name: if p.display_name.is_empty() {
-                p.slug.clone()
-            } else {
-                p.display_name
-            },
-            slug: p.slug,
-            author: p.submitted_by,
-            atlas_url: p.spritesheet_url,
-            license: p.license,
+        .filter_map(|p| {
+            let slug = p.slug.filter(|s| crate::store::valid_slug(s))?;
+            let atlas_url = p.spritesheet_url.filter(|u| !u.is_empty())?;
+            let name = label(p.display_name);
+            Some(Entry {
+                name: if name.is_empty() { slug.clone() } else { name },
+                slug,
+                author: label(p.submitted_by),
+                atlas_url,
+                license: label(p.license),
+            })
         })
         .collect())
 }
@@ -208,6 +243,29 @@ mod tests {
         assert_eq!(filter(&entries, "BOB", 10)[0].slug, "boba");
         assert_eq!(filter(&entries, "", 1).len(), 1);
         assert_eq!(parse(b"[]").unwrap_err().code().code, "pet.gallery");
+    }
+
+    #[test]
+    fn null_fields_keep_the_entry() {
+        let doc = br#"{"pets": [
+            {"slug": "boba", "displayName": null, "submittedBy": null, "spritesheetUrl": "https://petdex.dev/boba.webp", "license": null}
+        ]}"#;
+        let entries = parse(doc).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "boba");
+        assert_eq!(entries[0].author, "");
+        assert_eq!(entries[0].license, "");
+    }
+
+    #[test]
+    fn labels_lose_terminal_controls_and_are_capped() {
+        let long = "x".repeat(200);
+        let doc = format!(
+            r#"{{"pets": [{{"slug": "boba", "displayName": "Bo\u001b[2Jba\r\u202e", "submittedBy": "{long}", "spritesheetUrl": "https://petdex.dev/boba.webp"}}]}}"#
+        );
+        let entries = parse(doc.as_bytes()).unwrap();
+        assert_eq!(entries[0].name, "Bo[2Jba");
+        assert_eq!(entries[0].author.chars().count(), MAX_LABEL_CHARS);
     }
 
     #[test]

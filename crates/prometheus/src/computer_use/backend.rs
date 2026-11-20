@@ -140,9 +140,13 @@ fn cua_ready(home: &Path, config: &Config) -> Result<(), String> {
     }
     let computer_use = &config.computer_use;
     let daemon = DaemonConfig::load(home).map_err(|e| e.message().to_owned())?;
-    binary::installed(home, computer_use, &daemon)?;
+    let driver = binary::installed(home, computer_use, &daemon)?;
     let vars = |name: &str| std::env::var_os(name);
     let mut facts = platform::Facts::of(&vars);
+    if let Some(driver) = &driver {
+        // First use registers the autostart task when it is due.
+        super::autostart::ensure(computer_use, &mut facts, &driver.path)?;
+    }
     if config.bot_desktop.auto_start {
         // The bot screen starts with the first action and brings its
         // display and session bus.

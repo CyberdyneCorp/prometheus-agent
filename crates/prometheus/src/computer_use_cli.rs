@@ -15,7 +15,7 @@ use pmt_update::runtimes::Store;
 use serde_json::json;
 
 use crate::computer_use::binary::{self, INSTALL_HINT, RUNTIME, Source};
-use crate::computer_use::{backend, doctor, launcher, platform};
+use crate::computer_use::{autostart, backend, doctor, launcher, platform};
 use crate::computer_use_cmd::{ComputerUseCommand, PermissionsCommand};
 use crate::context::Context;
 use crate::model_cmd::block_on;
@@ -48,6 +48,7 @@ fn install(ctx: &Context<'_>, scope: &ProfileScope, upgrade: bool) -> Result<u8,
             "computer_use.driver_path is set: {} is used as it is (never installed or replaced)",
             path.display()
         );
+        autostart(ctx, scope, path)?;
         return Ok(0);
     }
     let home = scope.home();
@@ -74,7 +75,27 @@ fn install(ctx: &Context<'_>, scope: &ProfileScope, upgrade: bool) -> Result<u8,
         );
     }
     eprintln!("{RUNTIME} installed: {}", fresh.exe().display());
+    autostart(ctx, scope, &fresh.exe())?;
     Ok(0)
+}
+
+/// `computer_use.autostart` on Windows outside an interactive session:
+/// registers the per-logon task that runs `driver` in the user's session.
+fn autostart(
+    ctx: &Context<'_>,
+    scope: &ProfileScope,
+    driver: &std::path::Path,
+) -> Result<(), Error> {
+    let config = &scope.config().computer_use;
+    let mut facts =
+        platform::Facts::of(&|name: &str| ctx.launch.inherited(name).map(OsString::from));
+    if !autostart::needed(config, &facts) {
+        return Ok(());
+    }
+    autostart::ensure(config, &mut facts, driver)
+        .map_err(|why| Error::new(&codes::COMPUTER_USE_UNAVAILABLE, why))?;
+    eprintln!("registered the per-logon driver task {}", autostart::TASK);
+    Ok(())
 }
 
 fn status(

@@ -76,6 +76,9 @@ refuse them unless `approvals.<context>_mode = "approve"` or yolo is on.
 Refused in every mode, yolo included: shortcuts that empty the trash,
 force-delete, lock the screen or log out, and typed text matching the
 hardline command patterns (`curl ... | sh`, `rm -rf /`, fork bombs).
+A `key` call's `modifiers` are part of its combination (`keys: "q"` with
+`modifiers: ["cmd", "ctrl"]` is `cmd+ctrl+q`, refused), and the prompt
+names them; `type` takes no `modifiers`.
 
 ## Plugin backends
 
@@ -127,7 +130,9 @@ captures included.
 - Linux: an X11 display (or Wayland with `computer_use.native_wayland`)
   and the AT-SPI bus of a desktop session; the bot screen provides both.
 - Windows: an interactive session, or `computer_use.autostart = true` for
-  a per-logon driver task.
+  a per-logon driver task (`PrometheusCuaDriver`, registered by
+  `computer-use install` or on first use from Session 0); the
+  prerequisite holds once the task exists.
 
 The driver's telemetry is off unless `computer_use.driver_telemetry =
 true`. Its agent cursor overlay is labelled per session; `auto` turns it

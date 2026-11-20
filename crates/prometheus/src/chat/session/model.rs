@@ -982,6 +982,17 @@ impl MeteredConfirm for AskMetered {
     }
 }
 
+/// A usage recorder for calls made outside a session's model caller
+/// (realtime voice, pet generation), priced from the same catalog the
+/// session's calls use: config overrides, then the cached listing, then
+/// the built-in table.
+#[must_use]
+pub fn profile_recorder(scope: &ProfileScope, store: Arc<Store>) -> UsageRecorder {
+    let config = scope.config();
+    let catalog = Catalog::new(config, Some(scope.path("cache/models")));
+    UsageRecorder::new(store, Arc::new(catalog))
+}
+
 /// The target that reproduces `route`.
 #[must_use]
 pub fn target_of(route: &Route) -> Target {

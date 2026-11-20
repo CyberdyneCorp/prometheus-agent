@@ -263,15 +263,26 @@ fn element_json(element: &Element) -> Value {
     })
 }
 
+/// A ULID greater than every earlier one from this process: file names
+/// sort by creation even within one millisecond, which keeping "the
+/// newest" captures and spills relies on.
+fn file_id() -> ulid::Ulid {
+    static GENERATOR: std::sync::Mutex<ulid::Generator> =
+        std::sync::Mutex::new(ulid::Generator::new());
+    let mut generator = GENERATOR
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    generator
+        .generate()
+        .unwrap_or_else(ulid::Overflow::commit_overflow_random)
+}
+
 /// Writes every element (full labels) to a session cache file.
 fn spill(setup: &SessionSetup, elements: &[Element]) -> Option<PathBuf> {
     let dir = crate::spillover::session_dir(&setup.profile_dir, &setup.session_id);
     std::fs::create_dir_all(&dir).ok()?;
     prune(&dir, "computer-use-elements-", KEEP_SPILLS - 1);
-    let path = dir.join(format!(
-        "computer-use-elements-{}.json",
-        ulid::Ulid::generate()
-    ));
+    let path = dir.join(format!("computer-use-elements-{}.json", file_id()));
     let all: Vec<Value> = elements
         .iter()
         .map(|e| json!({"index": e.index, "role": e.role, "label": e.label, "bounds": e.bounds}))
@@ -292,7 +303,7 @@ fn keep(
     private_dir(&dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
     prune(&dir, "capture-", KEEP_SCREENSHOTS - 1);
     let extension = if mime == "image/jpeg" { "jpg" } else { "png" };
-    let path = dir.join(format!("capture-{}.{extension}", ulid::Ulid::generate()));
+    let path = dir.join(format!("capture-{}.{extension}", file_id()));
     private_write(&path, &bytes).map_err(|e| format!("cannot write {}: {e}", path.display()))?;
     Ok((path, mime, size))
 }

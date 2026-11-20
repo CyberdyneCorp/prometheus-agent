@@ -1159,7 +1159,7 @@
               ]
             },
             "data": {
-              "description": "Base64 bytes: upload only, never returned.",
+              "description": "Base64 bytes: upload only, never returned (`bot.avatar.get`\nreads the picture).",
               "type": [
                 "string",
                 "null"
@@ -1219,6 +1219,25 @@
           "type": "object"
         }
       ]
+    },
+    "BotAvatarPicture": {
+      "additionalProperties": false,
+      "description": "`bot.avatar.get` result: the picture of an `image` avatar.",
+      "properties": {
+        "data": {
+          "description": "The image, base64.",
+          "type": "string"
+        },
+        "mime": {
+          "description": "`image/png`, `image/jpeg` or `image/webp`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime",
+        "data"
+      ],
+      "type": "object"
     },
     "BotChat": {
       "additionalProperties": false,
@@ -4243,6 +4262,13 @@
         "profile": {
           "description": "The profile.",
           "type": "string"
+        },
+        "session_id": {
+          "description": "The session whose usage ledger the paid image calls go to (the\nchat `/hatch` was typed in); absent, a hidden session is made for\nthe flow on its first paid call.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -10979,6 +11005,16 @@
       },
       "result": {
         "$ref": "#/$defs/AutopruneOffer"
+      },
+      "since": "1.0"
+    },
+    "bot.avatar.get": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotMetaParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotAvatarPicture"
       },
       "since": "1.0"
     },

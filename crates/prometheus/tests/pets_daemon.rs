@@ -177,14 +177,12 @@ fn strip() -> String {
     base64::engine::general_purpose::STANDARD.encode(png)
 }
 
-/// Scenario: Hatched pet is a normal pet (the desktop generate flow
-/// against the OpenAI Images API).
-#[test]
-fn a_pet_hatched_through_the_daemon_is_installed_like_a_gallery_pet() {
+/// A home whose image backend is the OpenAI Images API on a local mock
+/// answering every call with [`strip`].
+fn images_home(images: &tokio::runtime::Runtime) -> (tempfile::TempDir, wiremock::MockServer) {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
     let home = mock_home();
-    let images = runtime();
     let server = images.block_on(MockServer::start());
     let reply = json!({"data": [{"b64_json": strip()}]});
     for at in ["/v1/images/generations", "/v1/images/edits"] {
@@ -205,13 +203,38 @@ fn a_pet_hatched_through_the_daemon_is_installed_like_a_gallery_pet() {
     let mut secret = common::command(home.path());
     secret.args(["secrets", "set", "OPENAI_API_KEY"]);
     common::run_cmd_with_stdin(&mut secret, "sk-test\n");
+    (home, server)
+}
+
+/// The hatch's ledger rows: (session, purpose detail, cost status, cost).
+fn hatch_rows(home: &Path) -> Vec<(String, String, String, Option<f64>)> {
+    db(home)
+        .prepare(
+            "SELECT session_id, purpose_detail, cost_status, cost_usd FROM usage_ledger \
+             WHERE purpose = 'tool.image_generate'",
+        )
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+/// Scenario: Hatched pet is a normal pet (the desktop generate flow
+/// against the OpenAI Images API). Every paid image is one ledger row of
+/// the session the flow names.
+#[test]
+fn a_pet_hatched_through_the_daemon_is_installed_like_a_gallery_pet() {
+    let images = runtime();
+    let (home, server) = images_home(&images);
     let _daemon = daemon::start(home.path(), &[]);
-    runtime().block_on(async {
+    let chat = runtime().block_on(async {
         let (client, _inbox) = daemon::connect(home.path(), "default").await;
+        let chat = session(&client).await;
         let started = client
             .call(
                 "pets.hatch.start",
-                json!({"profile": "default", "description": "a sleepy fox"}),
+                json!({"profile": "default", "description": "a sleepy fox", "session_id": chat}),
             )
             .await
             .unwrap();
@@ -251,15 +274,71 @@ fn a_pet_hatched_through_the_daemon_is_installed_like_a_gallery_pet() {
             .await
             .unwrap();
         assert_eq!(sprite["states"]["run"]["frames"], 8);
+        chat
     });
     let asked = images.block_on(server.received_requests()).unwrap();
     assert_eq!(asked.len(), 4 + 9, "four drafts, then one row per state");
+    let rows = hatch_rows(home.path());
+    assert_eq!(rows.len(), 4 + 9, "one ledger row per paid image");
+    for (session, detail, status, cost) in rows {
+        assert_eq!(session, chat);
+        assert_eq!(detail, "pets.hatch");
+        assert_eq!(status, "estimated");
+        assert_eq!(cost, Some(0.011));
+    }
     let edits = asked
         .iter()
         .filter(|r| r.url.path().ends_with("/edits"))
         .count();
     assert_eq!(edits, 9, "every row takes the chosen draft as reference");
     ok(&run(home.path(), &["pets", "doctor"]));
+}
+
+/// Outside a chat the flow is billed to a hidden session of its own, and
+/// a daily budget stops it before the image that would cross it.
+#[test]
+fn a_hatch_outside_a_chat_is_billed_and_budgeted() {
+    let images = runtime();
+    let (home, server) = images_home(&images);
+    ok(&run(
+        home.path(),
+        &["config", "set", "budgets.daily_usd", "0.03"],
+    ));
+    let _daemon = daemon::start(home.path(), &[]);
+    runtime().block_on(async {
+        let (client, _inbox) = daemon::connect(home.path(), "default").await;
+        let started = client
+            .call(
+                "pets.hatch.start",
+                json!({"profile": "default", "description": "a sleepy fox"}),
+            )
+            .await
+            .unwrap();
+        let flow = started["flow"].as_str().unwrap().to_owned();
+        let drafts = client
+            .call(
+                "pets.hatch.answer",
+                json!({"profile": "default", "flow": flow, "answer": "y"}),
+            )
+            .await
+            .unwrap();
+        assert!(
+            drafts["text"].as_str().unwrap().contains("budget"),
+            "{drafts}"
+        );
+    });
+    let asked = images.block_on(server.received_requests()).unwrap();
+    assert_eq!(asked.len(), 2, "the third image would cross $0.03");
+    let rows = hatch_rows(home.path());
+    assert_eq!(rows.len(), 2);
+    let hidden: bool = db(home.path())
+        .query_row(
+            "SELECT hidden FROM sessions WHERE id = ?1",
+            [&rows[0].0],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(hidden, "the hatch's own session stays out of listings");
 }
 
 /// Scenario: Thank-you message (the submitted message is unchanged).

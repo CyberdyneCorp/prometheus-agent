@@ -56,6 +56,21 @@ test("a title set on one desktop shows on another, with the same face", async ({
   await expect(row(one, "scribe").locator("svg.avatar")).toHaveAttribute("data-kind", "blob");
 });
 
+// Scenario: an uploaded avatar is what the roster shows (the daemon
+// serves its picture with `bot.avatar.get`), not the monogram.
+test("an uploaded avatar picture shows in the roster", async ({ page }) => {
+  await openDesktop(page);
+  await bots(page);
+  await edit(page, "research");
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  await page.setInputFiles("input[name=bot-avatar]", { name: "face.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  const face = row(page, "research").locator("svg.avatar");
+  await expect(face).toHaveAttribute("data-kind", "image");
+  await expect(face).toHaveAttribute("data-picture", "true");
+  await expect(face.locator("image")).toHaveAttribute("href", `data:image/png;base64,${png}`);
+  await expect(face.locator("text")).toHaveCount(0);
+});
+
 test("hiding and sections are kept on the bots and rebuilt from them", async ({ page }) => {
   await openDesktop(page);
   await bots(page);

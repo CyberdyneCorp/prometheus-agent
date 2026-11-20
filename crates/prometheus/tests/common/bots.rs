@@ -137,3 +137,33 @@ pub async fn tell(client: &Client, profile: &str, text: &str) -> String {
     .await;
     id
 }
+
+/// Calls `method` on `home`'s daemon from a desktop-style connection
+/// granted every profile of the home (room calls act on every local
+/// member, so the connection must cover them all); the result, or the
+/// refusal's message.
+pub fn admin_call(home: &Path, method: &str, params: &Value) -> Result<Value, String> {
+    let mut profiles: Vec<String> = std::fs::read_dir(home.join("profiles"))
+        .unwrap()
+        .flatten()
+        .filter(|e| e.path().join("config.toml").exists())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    profiles.sort();
+    let names: Vec<&str> = profiles.iter().map(String::as_str).collect();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut params = params.clone();
+    if params.get("profile").is_none() {
+        params["profile"] = json!("default");
+    }
+    runtime.block_on(async {
+        let admin = client(home, &names).await;
+        admin
+            .call(method, params)
+            .await
+            .map_err(|e| pmt_rpc::client::error_of(&e).message().to_owned())
+    })
+}

@@ -64,6 +64,16 @@ pub fn summary(action: &str, arguments: &Value) -> String {
         (None, Some(x), Some(y)) => format!(" at ({x}, {y})"),
         _ => String::new(),
     };
+    let held = arguments["modifiers"]
+        .as_array()
+        .map(|m| {
+            m.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join("+")
+        })
+        .filter(|m| !m.is_empty())
+        .map_or_else(String::new, |m| format!(" holding {m}"));
     match action {
         "type" => {
             let text = arguments["text"].as_str().unwrap_or_default();
@@ -71,7 +81,7 @@ pub fn summary(action: &str, arguments: &Value) -> String {
             let more = if text.chars().count() > 60 { "..." } else { "" };
             format!("type {shown:?}{more}")
         }
-        "key" => format!("press {}", arguments["keys"].as_str().unwrap_or_default()),
+        "key" => format!("press {}", super::safety::pressed(arguments)),
         "focus_app" => format!("focus {}", arguments["app"].as_str().unwrap_or_default()),
         "set_value" => format!(
             "set{at} to {:?}",
@@ -81,7 +91,7 @@ pub fn summary(action: &str, arguments: &Value) -> String {
             "scroll {}{at}",
             arguments["direction"].as_str().unwrap_or("down")
         ),
-        other => format!("{other}{at}"),
+        other => format!("{other}{at}{held}"),
     }
 }
 
@@ -272,8 +282,18 @@ impl Act<'_> {
         if a["delivery_mode"].as_str() == Some("foreground") {
             out.insert("delivery_mode".into(), json!("foreground"));
         }
-        if let Some(modifiers) = a["modifiers"].as_array().filter(|m| !m.is_empty()) {
-            out.insert("modifier".into(), Value::Array(modifiers.clone()));
+        // Modifiers held during a pointer action (cmd-click) go to the
+        // driver as they are; for `key` they are part of the combination
+        // (so the hard block saw them), and `type` takes none.
+        let modifiers = a["modifiers"].as_array().filter(|m| !m.is_empty());
+        match (action, modifiers) {
+            ("key", _) | (_, None) => {}
+            ("type", Some(_)) => {
+                return Err("`modifiers` does not apply to type; press a combination with action=\"key\", keys=\"cmd+a\"".to_owned());
+            }
+            (_, Some(modifiers)) => {
+                out.insert("modifier".into(), Value::Array(modifiers.clone()));
+            }
         }
         let tool = match action {
             "click" | "double_click" | "right_click" | "middle_click" => {
@@ -314,7 +334,7 @@ impl Act<'_> {
                 );
                 "type_text"
             }
-            "key" => return key_call(a["keys"].as_str().unwrap_or_default(), out),
+            "key" => return key_call(&super::safety::pressed(a), out),
             "set_value" => {
                 let value = a["value"].as_str().ok_or("set_value requires `value`")?;
                 if a["element"].as_i64().is_none() {

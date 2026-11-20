@@ -35,6 +35,9 @@ pub struct Facts {
     /// Windows: an interactive session (`SESSIONNAME` set; services in
     /// Session 0 have none).
     pub interactive: bool,
+    /// Windows: the `computer_use.autostart` per-logon driver task is
+    /// registered (only looked up outside an interactive session).
+    pub autostart_task: bool,
 }
 
 impl Facts {
@@ -56,6 +59,9 @@ impl Facts {
                 && (std::path::Path::new("/.dockerenv").exists()
                     || std::path::Path::new("/run/.containerenv").exists()),
             interactive: set("SESSIONNAME"),
+            autostart_task: os == "windows"
+                && !set("SESSIONNAME")
+                && super::autostart::registered(),
             os,
         }
     }
@@ -135,8 +141,15 @@ pub fn grants(
         }
         "windows" => vec![Grant {
             name: "interactive_session",
-            granted: facts.interactive || config.autostart,
-            hint: "Session 0 (a service) cannot drive the desktop: set computer_use.autostart = true to register a per-logon driver task".to_owned(),
+            granted: facts.interactive || (config.autostart && facts.autostart_task),
+            hint: if config.autostart {
+                format!(
+                    "computer_use.autostart is on but the per-logon driver task {} is not registered: run `prometheus computer-use install`",
+                    super::autostart::TASK
+                )
+            } else {
+                "Session 0 (a service) cannot drive the desktop: set computer_use.autostart = true to register a per-logon driver task".to_owned()
+            },
         }],
         _ => Vec::new(),
     }
@@ -163,24 +176,6 @@ pub fn settings_pane(name: &str) -> Option<&'static str> {
         }
         _ => None,
     }
-}
-
-/// The `schtasks` arguments registering the per-logon driver task
-/// (`computer_use.autostart` on Windows).
-#[must_use]
-pub fn autostart_task(driver: &std::path::Path) -> Vec<String> {
-    vec![
-        "/Create".to_owned(),
-        "/F".to_owned(),
-        "/SC".to_owned(),
-        "ONLOGON".to_owned(),
-        "/RL".to_owned(),
-        "LIMITED".to_owned(),
-        "/TN".to_owned(),
-        "PrometheusCuaDriver".to_owned(),
-        "/TR".to_owned(),
-        format!("\"{}\" serve", driver.display()),
-    ]
 }
 
 #[cfg(test)]
@@ -254,6 +249,14 @@ mod tests {
             autostart: true,
             ..ComputerUseConfig::default()
         };
-        assert_eq!(missing(&grants(&autostart, &service, None)), None);
+        // Autostart alone is not the task: nothing drives the desktop
+        // until it is registered.
+        let unregistered = missing(&grants(&autostart, &service, None)).unwrap();
+        assert!(unregistered.contains("not registered"), "{unregistered}");
+        let registered = Facts {
+            autostart_task: true,
+            ..service
+        };
+        assert_eq!(missing(&grants(&autostart, &registered, None)), None);
     }
 }

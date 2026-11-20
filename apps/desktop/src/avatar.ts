@@ -91,28 +91,62 @@ const SHAPES: Record<string, (fill: string) => SVGElement> = {
   heart: (fill) => node("path", { d: "M24 41 C10 31 5 23 8 15 C11 8 20 8 24 15 C28 8 37 8 40 15 C43 23 38 31 24 41 Z", fill }),
 };
 
-/** A monogram for kinds whose picture is not drawn here (image, pet). */
+/** A monogram while an image or pet picture loads (or when it cannot). */
 function monogram(name: string): SVGElement[] {
   const letter = node("text", { x: 24, y: 30, "text-anchor": "middle", "font-size": 18, fill: "#fff" });
   letter.textContent = (name[0] ?? "?").toUpperCase();
   return [node("circle", { cx: 24, cy: 24, r: 20, fill: "#495057" }), letter];
 }
 
-function parts(avatar: BotAvatar, name: string): SVGElement[] {
+/** A pet's first idle frame: the atlas's top-left 192x208 cell. */
+function petFrame(atlas: string): SVGElement {
+  const frame = node("svg", { x: 0, y: 0, width: SIZE, height: SIZE, viewBox: "0 0 192 208" });
+  frame.append(node("image", { href: atlas, width: 1536, height: 1872 }));
+  return frame;
+}
+
+function parts(avatar: BotAvatar, name: string, picture: string | null): SVGElement[] {
   switch (avatar.kind) {
     case "blob":
       return blob(avatar.seed ?? 0, avatar.silhouette ?? "round");
     case "geometric":
       return [(SHAPES[avatar.shape] ?? SHAPES.circle)(COLOURS[avatar.color] ?? COLOURS.blue)];
+    case "image":
+      return picture ? [node("image", { href: picture, width: SIZE, height: SIZE, preserveAspectRatio: "xMidYMid slice" })] : monogram(name);
+    case "pet":
+      return picture ? [petFrame(picture)] : monogram(name);
     default:
       return monogram(name);
   }
 }
 
-/** The bot's avatar as an inline SVG; a missing avatar draws a monogram. */
-export function drawAvatar(avatar: BotAvatar | null | undefined, name: string): SVGSVGElement {
+/**
+ * The bot's avatar as an inline SVG; a missing avatar draws a monogram.
+ * `picture` is what an `image` or `pet` avatar shows, which the daemon
+ * serves apart from the roster ([`avatarPicture`]): the image's data URL,
+ * or the pet's atlas.
+ */
+export function drawAvatar(avatar: BotAvatar | null | undefined, name: string, picture: string | null = null): SVGSVGElement {
   const svg = node("svg", { viewBox: `0 0 ${SIZE} ${SIZE}`, width: 32, height: 32, class: "avatar", role: "img", "aria-label": `${name}'s avatar` }) as SVGSVGElement;
   svg.dataset.kind = avatar?.kind ?? "none";
-  svg.append(...parts(avatar ?? { kind: "pet", id: "" }, name));
+  if (picture) svg.dataset.picture = "true";
+  svg.append(...parts(avatar ?? { kind: "pet", id: "" }, name, picture));
   return svg;
+}
+
+/** Calls the daemon for a bot's profile. */
+type BotCall = <T>(method: string, params: Record<string, unknown>) => Promise<T>;
+
+/** The picture an `image` (`bot.avatar.get`) or `pet` (`pets.sprite`) avatar shows; null for the drawn kinds or when it cannot be read. */
+export async function avatarPicture(avatar: BotAvatar | null | undefined, call: BotCall): Promise<string | null> {
+  try {
+    if (avatar?.kind === "image") {
+      const picture = await call<{ mime: string; data: string }>("bot.avatar.get", {});
+      return `data:${picture.mime};base64,${picture.data}`;
+    }
+    if (avatar?.kind === "pet") return (await call<{ atlas: string }>("pets.sprite", { slug: avatar.id })).atlas;
+  } catch {
+    // The monogram stays.
+  }
+  return null;
 }

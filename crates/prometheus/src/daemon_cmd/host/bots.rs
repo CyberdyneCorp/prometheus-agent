@@ -8,14 +8,15 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+use base64::Engine as _;
 use jiff::Timestamp;
 use pmt_config::{Home, ProfileName};
 use pmt_core::error::{Error, codes};
 use pmt_gateway::bots::BotRequest;
 use pmt_rpc::contracts::{
-    BotCreateParams, BotCreated, BotDeleteParams, BotDeleted, BotDone, BotDuplicateParams, BotMeta,
-    BotMetaParams, BotMetaUpdateParams, BotRoutine, BotRoutines, BotSectionDeleteParams,
-    BotSectionDeleted, RosterAgent, RosterChat,
+    BotAvatar, BotCreateParams, BotCreated, BotDeleteParams, BotDeleted, BotDone,
+    BotDuplicateParams, BotMeta, BotMetaParams, BotMetaUpdateParams, BotRoutine, BotRoutines,
+    BotSectionDeleteParams, BotSectionDeleted, RosterAgent, RosterChat,
 };
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -58,6 +59,7 @@ impl DaemonHost {
         match request.method {
             "bot.meta.get" => self.meta_get(&params::<BotMetaParams>(p)?.profile),
             "bot.meta.update" => Box::pin(self.meta_update(params(p)?)).await,
+            "bot.avatar.get" => self.avatar_picture(&params::<BotMetaParams>(p)?.profile),
             "bot.create" => Box::pin(self.bot_create(params(p)?)).await,
             "bot.duplicate" => Box::pin(self.bot_duplicate(params(p)?)).await,
             "bot.delete" => self.bot_delete(&params(p)?).await,
@@ -65,7 +67,7 @@ impl DaemonHost {
             "bot.chat.read" => self.mark_read(&params::<BotMetaParams>(p)?.profile),
             "bot.sections.delete" => self.delete_section(&params(p)?),
             "voice.speak" => Box::pin(self.speak(params(p)?)).await,
-            method => Box::pin(self.room_call(profile, method, p)).await,
+            method => Box::pin(self.room_call(profile, &request.granted, method, p)).await,
         }
     }
 
@@ -74,6 +76,27 @@ impl DaemonHost {
         let mut found = meta::read(&served.store)?;
         found.groups = self.groups_of(profile);
         to_value(&found)
+    }
+
+    /// The picture of the bot's `image` avatar, from its own blobs.
+    fn avatar_picture(&self, profile: &str) -> Result<Value, Error> {
+        let served = self.profile(profile)?;
+        let BotAvatar::Image {
+            blob: Some(blob),
+            mime,
+            ..
+        } = meta::read(&served.store)?.avatar
+        else {
+            return Err(Error::new(
+                &codes::RPC_INVALID_PARAMS,
+                format!("{profile}'s avatar is not an image"),
+            ));
+        };
+        let bytes = meta::avatar_bytes(&served.store, &blob)?;
+        to_value(&pmt_rpc::contracts::BotAvatarPicture {
+            mime,
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        })
     }
 
     async fn meta_update(&self, params: BotMetaUpdateParams) -> Result<Value, Error> {
@@ -259,22 +282,27 @@ impl DaemonHost {
     ) -> Result<(u16, Value), Error> {
         let path: Vec<&str> = call.path.iter().map(String::as_str).collect();
         match (call.method.as_str(), path.as_slice()) {
-            ("POST", ["bots"]) => Ok((
-                201,
-                Box::pin(self.create_for_api(profile, call.body)).await?,
-            )),
+            ("POST", ["bots"]) => Box::pin(self.create_for_api(profile, call.body)).await,
             (_, ["rooms", ..]) => self.room_api(profile, &call),
             _ => Ok((404, json!({"error": {"message": "no such bots route"}}))),
         }
     }
 
     /// `POST /api/bots` on this machine (a peer's `bot.create ... on`):
-    /// the bot is created here, cloning only this machine's profiles.
-    async fn create_for_api(&self, profile: &str, body: Value) -> Result<Value, Error> {
+    /// the bot is created here for the key's profile, which may clone only
+    /// itself: API keys are per profile, so another profile's config,
+    /// memory and API keys are out of the key's reach.
+    async fn create_for_api(&self, profile: &str, body: Value) -> Result<(u16, Value), Error> {
         let mut params: BotCreateParams = params(body)?;
+        if let Some(source) = params.clone_from.as_deref().filter(|s| !s.is_empty())
+            && source != profile
+        {
+            let message = format!("this key's profile {profile} cannot clone profile {source}");
+            return Ok((403, json!({"error": {"message": message}})));
+        }
         params.profile = profile.to_owned();
         params.on = None;
-        Box::pin(self.bot_create(params)).await
+        Ok((201, Box::pin(self.bot_create(params)).await?))
     }
 
     async fn bot_delete(&self, params: &BotDeleteParams) -> Result<Value, Error> {

@@ -47,6 +47,26 @@ pub(super) fn not_authority(room: &RoomRow) -> Error {
     )
 }
 
+/// Refuses a room whose members served here (`served`) are not all in
+/// `granted`. A replica lists members as its authority sees them, so a
+/// "local" member this home does not serve is another gateway's.
+fn covered(room: &RoomRow, granted: &[String], served: &dyn Fn(&str) -> bool) -> Result<(), Error> {
+    match room
+        .members
+        .iter()
+        .find(|m| m.gateway.is_none() && served(&m.profile) && !granted.contains(&m.profile))
+    {
+        Some(member) => Err(Error::new(
+            &codes::PROFILE_NOT_GRANTED,
+            format!(
+                "room {} has member {}, whose profile is not granted to this connection",
+                room.id, member.profile
+            ),
+        )),
+        None => Ok(()),
+    }
+}
+
 /// A log entry on the wire.
 fn entry(e: &EntryRow) -> RoomEntry {
     RoomEntry {
@@ -112,18 +132,31 @@ impl DaemonHost {
         )
     }
 
-    /// One `groups.*` call made for `profile`.
+    /// One `groups.*` call made for `profile` by a connection granted
+    /// `granted`: a room's discussion runs turns as its local members, so
+    /// a room whose local members are not all granted is neither listed
+    /// nor reachable.
     pub(super) async fn room_call(
         &self,
         profile: &str,
+        granted: &[String],
         method: &str,
         p: Value,
     ) -> Result<Value, Error> {
         let store = self.rooms_store()?;
+        let served = |profile: &str| self.profile(profile).is_ok();
+        if let Some(room) = p["room_id"].as_str().and_then(|id| store.room(id).ok()) {
+            covered(&room, granted, &served)?;
+        }
         match method {
             "groups.create" => self.room_create(&store, profile, params(p)?),
             "groups.list" => to_value(&Rooms {
-                rooms: store.rooms()?.iter().map(room_of).collect(),
+                rooms: store
+                    .rooms()?
+                    .iter()
+                    .filter(|room| covered(room, granted, &served).is_ok())
+                    .map(room_of)
+                    .collect(),
             }),
             "groups.get" => to_value(&room_of(&store.room(&params::<RoomParams>(p)?.room_id)?)),
             "groups.update" => room_update(&store, &params(p)?),

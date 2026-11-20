@@ -56,6 +56,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
 | `artifacts.list` | `desktop-app` | 1.0 | [`ArtifactsListParams`](#artifactslistparams) | [`ArtifactList`](#artifactlist) |
 | `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
+| `bot.avatar.get` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotAvatarPicture`](#botavatarpicture) |
 | `bot.chat.ensure` | `bot-mode` | 1.0 | [`ProfileParams`](#profileparams) | [`BotChat`](#botchat) |
 | `bot.chat.read` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotDone`](#botdone) |
 | `bot.create` | `bot-mode` | 1.0 | [`BotCreateParams`](#botcreateparams) | [`BotCreated`](#botcreated) |
@@ -633,6 +634,15 @@ A bot's avatar.
 | `` | An uploaded image, stored content-addressed in the profile's blobs. |
 | `` | An image made by the profile's image-generation backend (update only: it is stored as `image`). |
 | `` | A pets-gallery companion. |
+
+### `BotAvatarPicture`
+
+`bot.avatar.get` result: the picture of an `image` avatar.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | yes | The image, base64. |
+| `mime` | string | yes | `image/png`, `image/jpeg` or `image/webp`. |
 
 ### `BotChat`
 
@@ -1675,6 +1685,7 @@ What a command run through the session's terminal backend printed.
 |---|---|---|---|
 | `description` | string | yes | What the pet looks like. |
 | `profile` | string | yes | The profile. |
+| `session_id` | string or null | no | The session whose usage ledger the paid image calls go to (the chat `/hatch` was typed in); absent, a hidden session is made for the flow on its first paid call. |
 
 ### `HatchStep`
 

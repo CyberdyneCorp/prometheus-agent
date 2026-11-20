@@ -16,6 +16,7 @@
 pub mod achievements;
 pub mod backend;
 pub mod line;
+pub mod meter;
 pub mod rpc;
 pub mod runtime;
 pub mod slash;

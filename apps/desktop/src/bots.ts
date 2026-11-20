@@ -9,7 +9,7 @@
 
 import type { BotCreated, BotRoutines, BotSection, RosterRow } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
-import { drawAvatar } from "./avatar";
+import { avatarPicture, drawAvatar } from "./avatar";
 import type { DesktopClient } from "./client";
 import { confirmIn } from "./confirm";
 import type { ProfileClients } from "./profiles";
@@ -102,7 +102,12 @@ export class BotsPane {
   private row(row: RosterRow): HTMLElement {
     const name = row.agent.name;
     const chat = row.chat ?? {};
-    const open = h("button", { type: "button", name: "open-bot", "data-profile": name }, drawAvatar(row.agent.avatar, name), h("span", { class: "bot-title" }, row.agent.title ?? name), h("span", { class: "bot-handle" }, ` ${row.handle}`));
+    const avatar = row.agent.avatar;
+    const face = drawAvatar(avatar, name);
+    void avatarPicture(avatar, (method, params) => this.call(name, method, params)).then((picture) => {
+      if (picture) face.replaceWith(drawAvatar(avatar, name, picture));
+    });
+    const open = h("button", { type: "button", name: "open-bot", "data-profile": name }, face, h("span", { class: "bot-title" }, row.agent.title ?? name), h("span", { class: "bot-handle" }, ` ${row.handle}`));
     open.addEventListener("click", () => void this.open(name));
     const unread = chat.unread ? h("span", { class: "bot-unread", "aria-label": "Unread messages" }, String(chat.unread)) : null;
     const active = chat.active ? h("span", { class: "bot-active", "aria-label": "Active" }, "●") : null;
@@ -138,7 +143,12 @@ export class BotsPane {
     const description = h("input", { name: "bot-description", value: meta.description ?? "", "aria-label": "Description" });
     const section = h("input", { name: "bot-section", value: meta.section?.name ?? "", "aria-label": "Section" });
     const hidden = h("input", { type: "checkbox", name: "bot-hidden", checked: meta.hidden, "aria-label": "Hidden" });
-    const save = h("form", { class: "bot-meta", "data-profile": name }, title, description, section, h("label", {}, hidden, " Hidden"), h("button", { type: "submit", name: "save-bot" }, "Save"));
+    const upload = h("input", { type: "file", name: "bot-avatar", accept: "image/png,image/jpeg,image/webp", "aria-label": "Avatar image" });
+    upload.addEventListener("change", () => {
+      const file = upload.files?.[0];
+      if (file) void this.guard(this.uploadAvatar(name, file));
+    });
+    const save = h("form", { class: "bot-meta", "data-profile": name }, title, description, section, h("label", {}, hidden, " Hidden"), h("label", {}, "Avatar ", upload), h("button", { type: "submit", name: "save-bot" }, "Save"));
     save.addEventListener("submit", (event) => {
       event.preventDefault();
       const heading = section.value.trim();
@@ -152,6 +162,16 @@ export class BotsPane {
     this.detail.replaceChildren(h("h3", {}, row.agent.title ?? name), save, this.lifecycle(name), routines.el);
     this.detail.dataset.profile = name;
     await routines.render();
+  }
+
+  /** Sets an uploaded picture as the bot's avatar (kept in its blobs). */
+  private async uploadAvatar(name: string, file: File): Promise<void> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let binary = "";
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    const avatar = { kind: "image", mime: file.type, data: btoa(binary) };
+    await this.call(name, "bot.meta.update", { changes: { avatar } });
+    await this.render();
   }
 
   /** Duplicate and delete. */

@@ -92,7 +92,7 @@ pub(super) fn usage(
     profile: &str,
     params: &VoiceRealtimeUsageParams,
 ) -> Result<Value, Error> {
-    let event = {
+    let call = {
         let mut calls = CALLS.lock().expect("realtime calls poisoned");
         let call = calls
             .get_mut(&params.call_id)
@@ -102,17 +102,12 @@ pub(super) fn usage(
             return to_value(&Ack { ok: true });
         }
         let usage = &params.usage;
-        pmt_store::usage::UsageEvent {
-            call_id: format!("{PURPOSE}:{}:{}", params.call_id, params.response_id),
-            ts: jiff::Timestamp::now(),
-            session_id: call.session,
-            turn_id: None,
-            parent_call_id: None,
-            purpose: PURPOSE.to_owned(),
-            purpose_detail: None,
-            provider: call.provider.clone(),
-            model: call.model.clone(),
-            service_tier: None,
+        pmt_obs::usage::Call {
+            call_id: Some(format!(
+                "{PURPOSE}:{}:{}",
+                params.call_id, params.response_id
+            )),
+            billing_source: call.billing_source.clone(),
             tokens: pmt_store::usage::Tokens {
                 input: usage.input_tokens.saturating_sub(usage.cached_tokens),
                 output: usage.output_tokens,
@@ -120,13 +115,12 @@ pub(super) fn usage(
                 cache_write: 0,
                 reasoning: 0,
             },
-            cost_usd: None,
-            cost_status: pmt_store::CostStatus::Unknown,
-            billing_source: call.billing_source.clone(),
-            request_hash: None,
-            cache_hit: false,
+            ..pmt_obs::usage::Call::new(call.session, PURPOSE, &call.provider, &call.model)
         }
     };
-    Store::open(scope)?.record_usage(&event)?;
+    // Priced from the catalog like the agent's own calls, and announced
+    // (`usage.updated`) so status bars and budgets see the voice layer.
+    let store = std::sync::Arc::new(Store::open(scope)?);
+    crate::chat::session::model::profile_recorder(scope, store).record(call)?;
     to_value(&Ack { ok: true })
 }

@@ -249,6 +249,7 @@ pub const INDEX: &[IndexEntry] = &[
     method("bot.roster.list", "bot-mode"),
     method("bot.meta.get", "bot-mode"),
     method("bot.meta.update", "bot-mode"),
+    method("bot.avatar.get", "bot-mode"),
     method("bot.duplicate", "bot-mode"),
     method("bot.delete", "bot-mode"),
     method("bot.routines.list", "bot-mode"),

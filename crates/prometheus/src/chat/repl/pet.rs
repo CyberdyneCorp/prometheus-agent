@@ -104,7 +104,8 @@ impl Repl {
             return;
         }
         let scope = &self.factory.scope;
-        let backend = match crate::pets_host::backend::select(scope) {
+        let billing = crate::pets_host::meter::Billing::Session(self.live().id);
+        let backend = match crate::pets_host::backend::select(scope, billing) {
             Ok(backend) => backend,
             Err(err) => return self.error(&err),
         };

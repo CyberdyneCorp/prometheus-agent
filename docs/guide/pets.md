@@ -102,6 +102,15 @@ takes reference images; without one it stops with `pet generation needs
 an image backend with reference-image support; configure one with
 'prometheus tools'` (exit 78) and spends nothing.
 
+Every generated image is one `tool.image_generate` row of the usage
+ledger (`purpose_detail = pets.hatch`, priced from the same estimate the
+question shows), so the spend shows in `prometheus usage`, `/usage` and
+the dashboard, and the profile's budgets are checked before each image
+(a refusal ends the step). `/hatch` in a chat bills that chat's session;
+`prometheus pets hatch` and the desktop's Generate outside a chat bill a
+hidden session made for the flow. Attached clients (`prometheus chat` on
+a running daemon, the TUI) run the flow on the daemon.
+
 ## On the desktop
 
 The active pet floats in the window. Alt + mouse wheel resizes it (saved

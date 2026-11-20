@@ -30,7 +30,17 @@ prometheus rpc call bot.meta.update '{"profile":"research","changes":{"title":"R
 Avatars are `blob` (the default face, derived from the bot's name),
 `geometric`, `image` (PNG, JPEG or WebP up to 5 MiB, kept in the
 profile's blobs), `generated` (drawn by the profile's image backend, then
-kept as `image`) or `pet`.
+kept as `image`) or `pet`. The roster names an `image` avatar by its blob;
+clients read the picture with `bot.avatar.get`, and draw a `pet` avatar
+from the companion's first idle frame (`pets.sprite`). The desktop's
+bot editor uploads an avatar picture.
+
+Every call names the profile it acts for, and the connection's grant
+must cover every profile it acts on: a `clone_from` source, each local
+member `groups.create` adds, the member `groups.grant` is for, and the
+local members of any room it reads or drives (rooms with one outside the
+grant are not listed). `POST /api/bots` creates the bot for the API
+key's profile, which may clone only itself.
 
 `bot.create` makes a new bot (fresh, cloned from another profile, or
 without bundled skills) with its Bot Chat and an introduction. Static API
@@ -119,7 +129,10 @@ client never stops a discussion; read the room with `groups.log`.
 A room with members on other gateways is driven by its authority. The
 member gateway's owner issues a grant (`groups.grant`) that the
 authority's owner keeps with `groups.member_grant`; without it the member
-is unreachable (`missing_config`). Other gateways keep a replica with
-`groups.replicate`. To move the authority, fence the old writer first,
+is unreachable (`missing_config`). The authority's runs and their state
+(`/api/rooms/<id>/turns[/<run>]`) need that grant; a room's log
+(`/api/rooms/<id>/log`) is served to the key of the profile holding the
+home's rooms (`default`) or of a local member. Other gateways keep a
+replica with `groups.replicate`. To move the authority, fence the old writer first,
 then `groups.promote` the replacement with `confirm: true` and
 `groups.demote` the old one: histories are never merged.

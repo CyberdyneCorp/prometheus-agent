@@ -12,7 +12,6 @@ use pmt_config::profiles::CloneFrom;
 use pmt_config::{Home, Launch, Overrides, ProfileDir, ProfileName, ProfileScope};
 use pmt_core::error::{Error, codes};
 use pmt_rpc::contracts::{BotAvatar, BotCreateParams};
-use pmt_store::blobs::BlobRef;
 use serde_json::{Map, Value};
 
 use super::meta;
@@ -256,9 +255,7 @@ fn copied_meta(from: &pmt_store::Store) -> Result<Map<String, Value>, Error> {
         ..
     } = &copied.avatar
     {
-        let reference = BlobRef::parse(&format!("blob:sha256:{blob}"))
-            .ok_or_else(|| Error::new(&codes::RPC_INTERNAL, "bot metadata: bad avatar blob"))?;
-        let bytes = from.get_blob(&reference)?;
+        let bytes = meta::avatar_bytes(from, blob)?;
         copied.avatar = BotAvatar::Image {
             blob: None,
             mime: mime.clone(),

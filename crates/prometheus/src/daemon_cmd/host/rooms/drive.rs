@@ -335,7 +335,8 @@ impl Driver<'_> {
             self.pending_run(member, Some(run.clone()));
             run
         };
-        let ended = poll_run(&client, &room.id, &run).await;
+        let grant = grant.as_ref().map(|g| g.expose().to_owned());
+        let ended = poll_run(&client, &room.id, &run, grant.as_deref()).await;
         if !matches!(ended, Turn::Failed(ref f) if f.starts_with("runtime_offline")) {
             self.pending_run(member, None);
         }
@@ -381,11 +382,15 @@ fn read(ended: Result<String, String>) -> Turn {
 }
 
 /// Waits for a member gateway's run.
-async fn poll_run(client: &crate::daemon_cmd::peers::client::Peer, room: &str, run: &str) -> Turn {
-    let path = format!("/api/rooms/{room}/turns/{run}");
+async fn poll_run(
+    client: &crate::daemon_cmd::peers::client::Peer,
+    room: &str,
+    run: &str,
+    grant: Option<&str>,
+) -> Turn {
     let started = Instant::now();
     while started.elapsed() < TURN_CAP {
-        match client.call(reqwest::Method::GET, None, &path, None).await {
+        match client.room_run(room, run, grant).await {
             Ok(state) if state["state"] == "done" => {
                 return read(Ok(state["reply"].as_str().unwrap_or_default().to_owned()));
             }

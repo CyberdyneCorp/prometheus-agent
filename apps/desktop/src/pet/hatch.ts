@@ -16,7 +16,9 @@ interface HatchStep {
   slug?: string | null;
 }
 
-export async function hatchDialog(client: DesktopClient, host: HTMLElement, description: string, hatched: () => void): Promise<void> {
+// `sessionId`: the chat `/hatch` was typed in, whose usage ledger the paid
+// images go to; without one the daemon bills a hidden session of its own.
+export async function hatchDialog(client: DesktopClient, host: HTMLElement, description: string, hatched: () => void, sessionId: string | null = null): Promise<void> {
   const profile = client.profile;
   const text = h("p", { class: "hatch-text", role: "status" });
   const drafts = h("div", { class: "hatch-drafts" });
@@ -60,7 +62,9 @@ export async function hatchDialog(client: DesktopClient, host: HTMLElement, desc
     }
   };
   try {
-    show(await client.call<HatchStep>("pets.hatch.start", { profile, description }));
+    const start: Record<string, unknown> = { profile, description };
+    if (sessionId) start.session_id = sessionId;
+    show(await client.call<HatchStep>("pets.hatch.start", start));
   } catch (err) {
     show({ flow: "", text: (err as Error).message, done: true, failed: true });
   }

@@ -104,7 +104,7 @@ impl Chat<'_, '_> {
                 return Ok(Some(Flow::Continue));
             }
             "hatch" | "generate-pet" => {
-                self.hatch_command(args);
+                self.hatch_command(args).await;
                 return Ok(Some(Flow::Continue));
             }
             "handoff" => {

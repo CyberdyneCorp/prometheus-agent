@@ -116,26 +116,47 @@ impl DaemonHost {
 
     /// The member side of `/api/rooms/<id>/...`: the log pages a replica
     /// reads, an authority run of a member of this home, and its state.
+    /// API keys are per profile, so `profile` (the key's) reads a room's
+    /// log only when it owns the home's rooms (`default`, whose store holds
+    /// them) or is a local member; runs and their state need the room
+    /// grant this gateway issued for the room.
     pub(in crate::daemon_cmd::host) fn room_api(
         &self,
-        _profile: &str,
+        profile: &str,
         call: &pmt_api::BotsCall,
     ) -> Result<(u16, Value), Error> {
         let store = self.rooms_store()?;
         let path: Vec<&str> = call.path.iter().map(String::as_str).collect();
         match (call.method.as_str(), path.as_slice()) {
-            ("POST", ["rooms", id, "log"]) => match log_page(&store, id, &call.body) {
-                Ok(page) => Ok((200, page)),
-                Err(err) => Ok((404, api_error(err.message()))),
-            },
+            ("POST", ["rooms", id, "log"]) => {
+                let reader = store.room(id).ok().is_some_and(|room| {
+                    profile == "default"
+                        || room
+                            .members
+                            .iter()
+                            .any(|m| m.gateway.is_none() && m.profile == profile)
+                });
+                if !reader {
+                    return Ok((403, api_error("this key's profile is not in that room")));
+                }
+                match log_page(&store, id, &call.body) {
+                    Ok(page) => Ok((200, page)),
+                    Err(err) => Ok((404, api_error(err.message()))),
+                }
+            }
             ("POST", ["rooms", id, "turns"]) => self.member_run(&store, id, call),
-            ("GET", ["rooms", _, "turns", run]) => Ok(match store.room_run_state(run)? {
-                Some((state, reply, reason)) => (
-                    200,
-                    json!({"state": state, "reply": reply, "reason": reason}),
-                ),
-                None => (404, api_error("no such run")),
-            }),
+            ("GET", ["rooms", id, "turns", run]) => {
+                if granted(&store, id, call)?.is_none() {
+                    return Ok((403, api_error("no room grant for this authority")));
+                }
+                Ok(match store.room_run_state(id, run)? {
+                    Some((state, reply, reason)) => (
+                        200,
+                        json!({"state": state, "reply": reply, "reason": reason}),
+                    ),
+                    None => (404, api_error("no such run")),
+                })
+            }
             _ => Ok((404, api_error("no such room route"))),
         }
     }
@@ -148,21 +169,28 @@ impl DaemonHost {
         id: &str,
         call: &pmt_api::BotsCall,
     ) -> Result<(u16, Value), Error> {
-        let granted = match call.grant.as_deref() {
-            Some(token) => store.room_grant_of(id, token)?,
-            None => None,
-        };
         let member = call.body["member"].as_str().unwrap_or_default();
-        let Some((granted_member, scopes)) = granted else {
+        let Some((granted_member, scopes)) = granted(store, id, call)? else {
             return Ok((403, api_error("no room grant for this authority")));
         };
         if granted_member != member || !scopes.iter().any(|s| s == "post") {
             return Ok((403, api_error("the room grant does not cover this member")));
         }
-        let run = call.body["run_id"].as_str().unwrap_or_default().to_owned();
-        if store.room_run_state(&run)?.is_some() {
+        let Some(run) = call.body["run_id"]
+            .as_str()
+            .filter(|r| !r.is_empty())
+            .map(str::to_owned)
+        else {
+            return Ok((400, api_error("run_id is required")));
+        };
+        if store.room_run_state(id, &run)?.is_some() {
             return Ok((202, json!({"run_id": run})));
         }
+        // The member must be served before a run is recorded: a refused
+        // start leaves no `running` row behind.
+        let (Some(host), Ok(profile)) = (self.arc(), self.profile(member)) else {
+            return Ok((404, api_error("no such member")));
+        };
         let room = RoomRow {
             id: id.to_owned(),
             name: call.body["room_name"].as_str().unwrap_or(id).to_owned(),
@@ -170,9 +198,6 @@ impl DaemonHost {
         };
         let text = call.body["text"].as_str().unwrap_or_default().to_owned();
         store.room_run(&run, (id, member), ("running", None, None))?;
-        let (Some(host), Ok(profile)) = (self.arc(), self.profile(member)) else {
-            return Ok((404, api_error("no such member")));
-        };
         let store = self.rooms_store()?;
         pmt_core::spawn::spawn(async move {
             let ended = Box::pin(super::drive::local_turn(&host, &profile, &room, &text)).await;
@@ -189,6 +214,18 @@ impl DaemonHost {
             }
         });
         Ok((202, json!({"run_id": call.body["run_id"]})))
+    }
+}
+
+/// The member and scopes of the room grant `call` presents for room `id`.
+fn granted(
+    store: &Store,
+    id: &str,
+    call: &pmt_api::BotsCall,
+) -> Result<Option<(String, Vec<String>)>, Error> {
+    match call.grant.as_deref() {
+        Some(token) => store.room_grant_of(id, token),
+        None => Ok(None),
     }
 }
 

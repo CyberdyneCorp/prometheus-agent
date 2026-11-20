@@ -225,8 +225,8 @@ pub(super) struct Chat<'a, 'b> {
         crate::chat::wake::Woken,
         tokio::sync::mpsc::UnboundedReceiver<pmt_voice::wake::engine::Detection>,
     ),
-    /// `/hatch` waiting for an answer.
-    pub(super) hatch: Option<Box<pmt_pets::hatch::Hatch>>,
+    /// The daemon generate flow `/hatch` opened, waiting for an answer.
+    pub(super) hatch: Option<String>,
 }
 
 /// What the loop does after a line.

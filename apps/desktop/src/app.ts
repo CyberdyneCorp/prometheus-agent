@@ -168,7 +168,7 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     await client.switchProfile(profile);
   };
   const pet = new FloatingPet(client, chat, say, dialogs);
-  chat.onPet = (name, args) => void pet.command(name, args);
+  chat.onPet = (name, args, sessionId) => void pet.command(name, args, sessionId);
   chat.onSent = (text) => pet.sent(text);
   client.on("achievement.unlocked", (envelope) => pet.unlocked(envelope.data as { id: string; tier: string }));
   const voice = new VoiceControls({ link: client, chat, switchProfile: async (p) => {

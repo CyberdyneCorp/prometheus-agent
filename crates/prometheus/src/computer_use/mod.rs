@@ -5,6 +5,7 @@
 //! overlay ([`platform`]) and the health report ([`doctor`]). The tool
 //! itself is `pmt_tools::computer_use`.
 
+pub mod autostart;
 pub mod backend;
 pub mod binary;
 pub mod doctor;

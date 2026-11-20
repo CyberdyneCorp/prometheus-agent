@@ -16,17 +16,11 @@ use self::common::bots::{self, bot, store, wait};
 use self::common::{api, daemon, ok, run, run_with_stdin};
 
 fn rpc(home: &Path, method: &str, params: &Value) -> Value {
-    serde_json::from_str(&ok(&run(
-        home,
-        &["rpc", "call", method, &params.to_string()],
-    )))
-    .unwrap()
+    bots::admin_call(home, method, params).unwrap_or_else(|e| panic!("{method}: {e}"))
 }
 
 fn rpc_refused(home: &Path, method: &str, params: &Value) -> String {
-    let out = run(home, &["rpc", "call", method, &params.to_string()]);
-    assert_ne!(out.status.code(), Some(0), "{method} succeeded");
-    common::stderr(&out)
+    bots::admin_call(home, method, params).expect_err(&format!("{method} succeeded"))
 }
 
 /// The room log once its discussion settled (or stopped).

@@ -47,7 +47,8 @@ pub enum BotAvatar {
         blob: Option<String>,
         /// `image/png`, `image/jpeg` or `image/webp`.
         mime: String,
-        /// Base64 bytes: upload only, never returned.
+        /// Base64 bytes: upload only, never returned (`bot.avatar.get`
+        /// reads the picture).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         data: Option<String>,
     },
@@ -267,6 +268,16 @@ pub struct VoiceSpeakParams {
     pub text: String,
 }
 
+/// `bot.avatar.get` result: the picture of an `image` avatar.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BotAvatarPicture {
+    /// `image/png`, `image/jpeg` or `image/webp`.
+    pub mime: String,
+    /// The image, base64.
+    pub data: String,
+}
+
 /// `voice.speak` result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -279,6 +290,9 @@ pub struct VoiceSpoken {
 
 method!(/// `bot.meta.get`: the bot's metadata.
     BotMetaGet = "bot.meta.get" (BotMetaParams) -> BotMeta);
+method!(/// `bot.avatar.get`: the picture of the bot's `image` avatar (an
+    /// uploaded or generated one), which the roster names only by blob.
+    BotAvatarGet = "bot.avatar.get" (BotMetaParams) -> BotAvatarPicture);
 method!(/// `bot.meta.update`: changes the bot's metadata (an unknown avatar
     /// kind is rejected).
     BotMetaUpdate = "bot.meta.update" (BotMetaUpdateParams) -> BotMeta);

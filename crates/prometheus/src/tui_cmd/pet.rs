@@ -1,14 +1,17 @@
 //! The TUI's pet, `/pet`, `/hatch` and achievement toasts (spec: pets,
 //! Terminal pet rendering; Pet slash command; Generating a pet;
-//! Affection reactions; Achievement unlocks celebrate). Everything here is
-//! client-side: config patches, the gallery and the image backend are
-//! reached from this process, and no turn starts.
+//! Affection reactions; Achievement unlocks celebrate). Config patches
+//! and the gallery are reached from this process; `/hatch` is a daemon
+//! generate flow, which bills its images to the shown session. No turn
+//! starts.
 
 use std::io::Write as _;
 use std::time::Instant;
 
 use pmt_core::error::Error;
-use pmt_pets::hatch::{Hatch, Step};
+use pmt_rpc::contracts::{
+    HatchAnswerParams, HatchStartParams, HatchStep, PetsHatchAnswer, PetsHatchStart,
+};
 use pmt_tui::app::Overlay;
 use pmt_tui::pet::{PetView, Toast};
 use pmt_tui::pet_picker::{PetChoice, PetPicker};
@@ -257,49 +260,65 @@ impl Tui<'_> {
         }
     }
 
-    /// `/hatch <description>`: the backend is chosen first (none: the
-    /// error, nothing spent), then each step asks in the transcript.
+    /// `/hatch <description>`: a daemon generate flow (`pets.hatch.*`)
+    /// billed to the shown session; each step asks in the transcript.
     pub(super) fn hatch_command(&mut self, args: &str) {
         if args.trim().is_empty() {
             self.notice("usage: /hatch <description>");
             return;
         }
-        let backend = match crate::pets_host::backend::select(self.open.scope) {
-            Ok(backend) => backend,
-            Err(err) => return self.error(&err),
+        let params = HatchStartParams {
+            profile: self.open.scope.name().to_string(),
+            description: args.to_owned(),
+            session_id: Some(self.link.session.clone()),
         };
-        let pets = crate::pets_host::pets(self.open.scope);
-        let drafts = self.open.scope.dir().join("cache/pets/hatch");
-        let (hatch, step) = Hatch::start(args, backend, pets, drafts);
-        self.hatched(Box::new(hatch), step);
+        let client = self.link.client.clone();
+        self.background(async move {
+            Done::Hatch(
+                client
+                    .call_typed::<PetsHatchStart>(&params)
+                    .await
+                    .map_err(|e| pmt_rpc::client::error_of(&e)),
+            )
+        });
     }
 
     /// An answer to `/hatch`'s question; `false` when none is asked.
     pub(super) fn answer_hatch(&mut self, line: &str) -> bool {
-        let Some(mut hatch) = self.hatch.take() else {
+        let Some(flow) = self.hatch.take() else {
             return false;
         };
-        let line = line.to_owned();
+        let params = HatchAnswerParams {
+            profile: self.open.scope.name().to_string(),
+            flow,
+            answer: line.to_owned(),
+        };
+        let client = self.link.client.clone();
         self.background(async move {
-            let step = hatch.answer(&line).await;
-            Done::Hatch(hatch, step)
+            Done::Hatch(
+                client
+                    .call_typed::<PetsHatchAnswer>(&params)
+                    .await
+                    .map_err(|e| pmt_rpc::client::error_of(&e)),
+            )
         });
         true
     }
 
     /// `Done::Hatch`: show the step; keep the flow while it asks.
-    pub(super) fn hatched(&mut self, hatch: Box<Hatch>, step: Step) {
+    pub(super) fn hatched(&mut self, step: Result<HatchStep, Error>) {
         match step {
-            Step::Ask(text) => {
-                self.notice(text);
-                self.hatch = Some(hatch);
+            Ok(step) if !step.done => {
+                self.notice(step.text);
+                self.hatch = Some(step.flow);
             }
-            Step::Done { text, failed, .. } if failed => {
+            Ok(step) if step.failed => {
                 self.app
                     .transcript
-                    .push(pmt_tui::transcript::Kind::Error, text);
+                    .push(pmt_tui::transcript::Kind::Error, step.text);
             }
-            Step::Done { text, .. } => self.notice(text),
+            Ok(step) => self.notice(step.text),
+            Err(err) => self.error(&err),
         }
     }
 }

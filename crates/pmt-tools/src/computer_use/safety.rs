@@ -72,6 +72,24 @@ pub fn combo_keys(keys: &str) -> Vec<String> {
         .collect()
 }
 
+/// The combination a `key` call presses: its `modifiers` array and its
+/// `keys` string together (`{keys: "q", modifiers: ["cmd", "ctrl"]}` is
+/// `cmd+ctrl+q`), so neither the hard block nor the prompt can be
+/// sidestepped by moving keys into `modifiers`.
+#[must_use]
+pub fn pressed(arguments: &Value) -> String {
+    let mut parts: Vec<&str> = arguments["modifiers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect();
+    if let Some(keys) = arguments["keys"].as_str().filter(|k| !k.is_empty()) {
+        parts.push(keys);
+    }
+    parts.join("+")
+}
+
 /// Shell payloads that fetch and run code, which typing into a terminal
 /// would execute (beyond the hardline commands).
 static PIPE_TO_SHELL: LazyLock<Regex> = LazyLock::new(|| {
@@ -84,8 +102,8 @@ static PIPE_TO_SHELL: LazyLock<Regex> = LazyLock::new(|| {
 pub fn hard_block(action: &str, arguments: &Value) -> Option<String> {
     match action {
         "key" => {
-            let keys = arguments["keys"].as_str().unwrap_or_default();
-            blocked_combo(keys)
+            let keys = pressed(arguments);
+            blocked_combo(&keys)
                 .map(|why| format!("BLOCKED (hard block): the key combination '{keys}' {why}"))
         }
         "type" => {
@@ -180,6 +198,15 @@ mod tests {
             assert!(why.is_some_and(|w| w.contains("hard block")), "{keys}");
         }
         assert!(hard_block("key", &json!({"keys": "cmd+s"})).is_none());
+        for (keys, modifiers) in [
+            ("q", json!(["cmd", "ctrl"])),
+            ("backspace", json!(["cmd", "shift"])),
+            ("ctrl+q", json!(["command"])),
+        ] {
+            let call = json!({"action": "key", "keys": keys, "modifiers": modifiers});
+            assert!(hard_block("key", &call).is_some(), "{call}");
+            assert!(guard(&call).is_none(), "{call}");
+        }
         assert!(hard_block("key", &json!({"keys": "return"})).is_none());
     }
 

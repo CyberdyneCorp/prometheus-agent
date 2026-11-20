@@ -265,6 +265,7 @@ fn declare_desktop(d: &mut Declarations) {
         .method::<c::BotRosterList>()
         .method::<c::BotMetaGet>()
         .method::<c::BotMetaUpdate>()
+        .method::<c::BotAvatarGet>()
         .method::<c::BotCreate>()
         .method::<c::BotDuplicate>()
         .method::<c::BotDelete>()

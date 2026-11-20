@@ -152,7 +152,7 @@ impl CuaLauncher {
             binary::installed(&home, &self.scope.config().computer_use, &daemon)?
                 .ok_or_else(|| format!("{RUNTIME} is not installed: {INSTALL_HINT}"))?
         };
-        match binary::checked(&driver.path, &self.env) {
+        match checked(&driver.path, &self.env).await {
             Ok(manifest) => Ok((driver.path, manifest)),
             Err(problem) if driver.source == Source::Configured => Err(format!(
                 "{problem}; computer_use.driver_path {} is left as it is: update it or unset the key",
@@ -169,7 +169,8 @@ impl CuaLauncher {
                     .installed(RUNTIME)
                     .map(|i| i.exe())
                     .ok_or_else(|| format!("{RUNTIME} repair did not install it"))?;
-                let manifest = binary::checked(&path, &self.env)
+                let manifest = checked(&path, &self.env)
+                    .await
                     .map_err(|again| format!("{again} (after one repair this session)"))?;
                 Ok((path, manifest))
             }
@@ -229,7 +230,17 @@ impl CuaLauncher {
                 .envs(env.iter().map(|(k, v)| (k, v)));
             return McpDriver::open(command, OPEN_TIMEOUT, Box::new(())).await;
         }
-        let daemon = PrivateDaemon::start(&driver, spec, no_overlay, &env, &self.scope)?;
+        let start = Start {
+            driver: driver.clone(),
+            spec: spec.clone(),
+            no_overlay,
+            env: env.clone(),
+            allow_unsigned: self.scope.config().computer_use.allow_unsigned_driver,
+        };
+        // Starting polls the driver for up to 15 s: off the async workers.
+        let daemon = pmt_core::spawn::blocking(move || PrivateDaemon::start(&start))
+            .await
+            .map_err(|e| format!("the private cua-driver start was lost: {e}"))??;
         let mut command = tokio::process::Command::new(&program);
         command
             .args(&manifest.mcp_args)
@@ -371,6 +382,23 @@ fn serve_args(spec: &RuntimeSpec, manifest_applies: Option<bool>) -> Vec<String>
     args
 }
 
+/// `binary::checked` (a bounded driver process) on a blocking thread.
+async fn checked(driver: &Path, env: &[(String, OsString)]) -> Result<binary::Manifest, String> {
+    let (driver, env) = (driver.to_path_buf(), env.to_vec());
+    pmt_core::spawn::blocking(move || binary::checked(&driver, &env))
+        .await
+        .map_err(|e| format!("the {RUNTIME} check was lost: {e}"))?
+}
+
+/// What a private daemon starts with.
+struct Start {
+    driver: PathBuf,
+    spec: RuntimeSpec,
+    no_overlay: Option<&'static str>,
+    env: Vec<(String, OsString)>,
+    allow_unsigned: bool,
+}
+
 /// A private runtime's daemon on this host; dropping it stops the daemon.
 struct PrivateDaemon {
     driver: PathBuf,
@@ -380,13 +408,15 @@ struct PrivateDaemon {
 }
 
 impl PrivateDaemon {
-    fn start(
-        driver: &Path,
-        spec: &RuntimeSpec,
-        no_overlay: Option<&str>,
-        env: &[(String, OsString)],
-        scope: &ProfileScope,
-    ) -> Result<Self, String> {
+    /// Starts the daemon and waits until it listens (blocking).
+    fn start(start: &Start) -> Result<Self, String> {
+        let Start {
+            driver,
+            spec,
+            no_overlay,
+            env,
+            allow_unsigned,
+        } = start;
         let socket = socket_path();
         let mut args: Vec<String> = vec![
             "serve".into(),
@@ -400,7 +430,7 @@ impl PrivateDaemon {
             let app = super::identity::bundle(driver).ok_or_else(|| {
                 format!("private computer-use runtimes on macOS start only through CuaDriver.app, and {} is not inside one: {INSTALL_HINT}", driver.display())
             })?;
-            super::identity::verify(&app, scope.config().computer_use.allow_unsigned_driver)?;
+            super::identity::verify(&app, *allow_unsigned)?;
             let mut open = std::process::Command::new("/usr/bin/open");
             open.args(["-n", "-g", "-a"])
                 .arg(&app)
@@ -422,10 +452,10 @@ impl PrivateDaemon {
             .spawn()
             .map_err(|e| format!("could not start the private cua-driver: {e}"))?;
         let mut daemon = Self {
-            driver: driver.to_path_buf(),
+            driver: driver.clone(),
             socket,
             child: Some(child),
-            env: env.to_vec(),
+            env: env.clone(),
         };
         daemon.wait_ready()?;
         Ok(daemon)
@@ -461,14 +491,26 @@ impl PrivateDaemon {
 
 impl Drop for PrivateDaemon {
     fn drop(&mut self) {
-        let socket = self.socket.display().to_string();
-        let _ = binary::verb(&self.driver, &["stop", "--socket", &socket], &self.env);
-        if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        if !cfg!(windows) {
-            let _ = std::fs::remove_file(&self.socket);
+        let driver = std::mem::take(&mut self.driver);
+        let socket = std::mem::take(&mut self.socket);
+        let env = std::mem::take(&mut self.env);
+        let child = self.child.take();
+        // `stop` runs the driver (bounded, but seconds): a drop on an async
+        // worker hands it to a blocking thread.
+        let stop = move || {
+            let shown = socket.display().to_string();
+            let _ = binary::verb(&driver, &["stop", "--socket", &shown], &env);
+            if let Some(mut child) = child {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            if !cfg!(windows) {
+                let _ = std::fs::remove_file(&socket);
+            }
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => drop(pmt_core::spawn::blocking_on(&handle, stop)),
+            Err(_) => stop(),
         }
     }
 }

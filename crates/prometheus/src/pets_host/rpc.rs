@@ -19,6 +19,7 @@ use pmt_rpc::contracts::{
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use super::meter::Billing;
 use super::{current, patch, pets};
 
 /// Open generate flows by id.
@@ -252,7 +253,11 @@ fn step_of(flow: &str, step: &Step, drafts: Vec<String>) -> HatchStep {
 }
 
 fn hatch_start(scope: &ProfileScope, params: &HatchStartParams) -> Result<HatchStep, Error> {
-    let backend = super::backend::select(scope)?;
+    let billing = match &params.session_id {
+        Some(id) => Billing::Session(id.parse()?),
+        None => Billing::Hidden(pmt_store::Source::Desktop),
+    };
+    let backend = super::backend::select(scope, billing)?;
     let drafts = scope.dir().join("cache/pets/hatch");
     let (hatch, step) = Hatch::start(&params.description, backend, pets(scope), drafts);
     let flow = ulid::Ulid::generate().to_string();

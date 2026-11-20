@@ -649,16 +649,18 @@ impl Store {
         })
     }
 
-    /// An authority run: its state, reply and reason.
+    /// An authority run of room `room`: its state, reply and reason
+    /// (`None` for a run of another room).
     ///
     /// # Errors
     ///
     /// Store errors.
-    pub fn room_run_state(&self, run: &str) -> Result<Option<RunState>, Error> {
+    pub fn room_run_state(&self, room: &str, run: &str) -> Result<Option<RunState>, Error> {
         self.read(|conn| {
             conn.query_row(
-                "SELECT state, reply, reason FROM room_member_runs WHERE run_id = ?1",
-                [run],
+                "SELECT state, reply, reason FROM room_member_runs \
+                 WHERE run_id = ?1 AND room_id = ?2",
+                [run, room],
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()

@@ -470,6 +470,35 @@ async fn the_lock_screen_shortcut_is_refused_under_yolo() {
     assert_eq!(h.log.input_calls(), 0);
 }
 
+/// The lock-screen combination split across `keys` and `modifiers` is
+/// the same combination: still refused under yolo, never sent.
+#[tokio::test]
+async fn modifiers_cannot_smuggle_a_blocked_combination() {
+    let h = harness(Options::default()).await;
+    h.yolo.store(true, Ordering::SeqCst);
+    h.call(json!({"action": "capture"})).await;
+    let result = h
+        .call(json!({"action": "key", "keys": "q", "modifiers": ["cmd", "ctrl"]}))
+        .await;
+    assert_eq!(result.status, Status::Denied, "{}", result.text_content());
+    assert!(result.text_content().contains("locks the screen"));
+    assert_eq!(h.log.input_calls(), 0);
+
+    let h = harness(Options {
+        channel: approving(Decision::Once),
+        ..Options::default()
+    })
+    .await;
+    h.call(json!({"action": "capture"})).await;
+    let allowed = h
+        .call(json!({"action": "key", "keys": "s", "modifiers": ["cmd"]}))
+        .await;
+    assert_eq!(allowed.status, Status::Ok, "{}", allowed.text_content());
+    let hotkeys = h.log.calls("hotkey");
+    assert_eq!(hotkeys[0]["keys"], json!(["cmd", "s"]));
+    assert!(!hotkeys[0].contains_key("modifier"));
+}
+
 /// Scenario: Yolo turned off.
 #[tokio::test]
 async fn turning_yolo_off_stops_the_unrestricted_runtime() {

@@ -157,6 +157,11 @@ pub struct HatchStartParams {
     pub profile: String,
     /// What the pet looks like.
     pub description: String,
+    /// The session whose usage ledger the paid image calls go to (the
+    /// chat `/hatch` was typed in); absent, a hidden session is made for
+    /// the flow on its first paid call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
 }
 
 /// `pets.hatch.answer` params.

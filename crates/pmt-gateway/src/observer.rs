@@ -56,6 +56,7 @@ const READS: &[&str] = &[
     "harness.diff",
     "experience.list",
     "bot.meta.get",
+    "bot.avatar.get",
     "bot.routines.list",
     "groups.list",
     "groups.get",

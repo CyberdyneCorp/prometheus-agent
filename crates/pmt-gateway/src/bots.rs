@@ -1,7 +1,9 @@
 //! Bot Mode's methods (spec: bot-mode): `bot.*` (metadata, creating,
 //! duplicating and deleting bots, routines, sections) and `groups.*`
 //! (group chats and room authority). Each call names the profile it acts
-//! for, which the connection's grant must cover; the host runs it and
+//! for, which the connection's grant must cover, and so must every other
+//! profile it acts on (a clone source, a room member, the member a room
+//! grant is for); the host runs it, checking rooms against the grant, and
 //! answers the method's result.
 
 use pmt_rpc::Catalog;
@@ -19,6 +21,37 @@ pub struct BotRequest {
     pub method: &'static str,
     /// Its params (as the contract parsed them).
     pub params: Value,
+    /// The profiles the connection is granted: a room call acts on the
+    /// room's local members, which the host checks against it.
+    pub granted: Vec<String>,
+}
+
+/// The profiles other than `profile` a call names and acts on: the
+/// source `bot.create` clones (config, memory and API keys), the local
+/// members `groups.create` puts in a room (whose turns run with their keys
+/// and tools) and the member `groups.grant` lets an authority drive.
+/// Remote members (`peer/agent`) are their own gateway's to check.
+fn acted_on(method: &str, params: &Value) -> Vec<String> {
+    let text = |key: &str| {
+        params[key]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+    };
+    match method {
+        "bot.create" => text("clone_from").into_iter().collect(),
+        "groups.grant" => text("member").into_iter().collect(),
+        "groups.create" => params["members"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(|m| m.trim_start_matches('@'))
+            .filter(|m| !m.contains('/'))
+            .map(str::to_owned)
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Registers the methods.
@@ -29,6 +62,7 @@ pub struct BotRequest {
 pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
     add::<c::BotMetaGet>(router, catalog)?;
     add::<c::BotMetaUpdate>(router, catalog)?;
+    add::<c::BotAvatarGet>(router, catalog)?;
     add::<c::BotCreate>(router, catalog)?;
     add::<c::BotDuplicate>(router, catalog)?;
     add::<c::BotDelete>(router, catalog)?;
@@ -69,6 +103,9 @@ fn add<M: Method>(router: &mut Router, catalog: &Catalog) -> Result<(), String> 
     router.register::<M, _, _>(catalog, |call: Call, params: M::Params| async move {
         let params = serde_json::to_value(&params).unwrap_or(Value::Null);
         let profile = profile_for(&call, params.get("profile").and_then(Value::as_str))?;
+        for other in acted_on(M::NAME, &params) {
+            profile_for(&call, Some(&other))?;
+        }
         let value = call
             .server
             .host()
@@ -77,6 +114,7 @@ fn add<M: Method>(router: &mut Router, catalog: &Catalog) -> Result<(), String> 
                 BotRequest {
                     method: M::NAME,
                     params,
+                    granted: call.conn.grant.profiles.clone(),
                 },
             )
             .await
@@ -92,4 +130,32 @@ fn add<M: Method>(router: &mut Router, catalog: &Catalog) -> Result<(), String> 
         })
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::acted_on;
+
+    #[test]
+    fn calls_name_every_local_profile_they_act_on() {
+        assert_eq!(
+            acted_on("bot.create", &json!({"profile": "a", "clone_from": "b"})),
+            ["b"]
+        );
+        assert!(acted_on("bot.create", &json!({"profile": "a", "clone_from": null})).is_empty());
+        assert_eq!(
+            acted_on("groups.grant", &json!({"member": "b", "authority": "peer"})),
+            ["b"]
+        );
+        assert_eq!(
+            acted_on(
+                "groups.create",
+                &json!({"members": ["@a", "b", "laptop/c"]})
+            ),
+            ["a", "b"]
+        );
+        assert!(acted_on("groups.post", &json!({"room_id": "r1"})).is_empty());
+    }
 }

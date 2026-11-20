@@ -29,7 +29,8 @@ fn home_with(mode: &str, base_url: &str) -> tempfile::TempDir {
     let text = std::fs::read_to_string(&config).unwrap()
         + &format!(
             "\n[voice]\nchat_mode = \"{mode}\"\n\n[voice.realtime]\nbase_url = \"{base_url}\"\n\
-             voice = \"cedar\"\ninstructions = \"Answer in English.\"\n"
+             voice = \"cedar\"\ninstructions = \"Answer in English.\"\n\n\
+             [models.\"openai/gpt-realtime\"]\nprice = {{ input = 4.0, output = 16.0 }}\n"
         );
     std::fs::write(&config, text).unwrap();
     ok(&run_with_stdin(
@@ -57,20 +58,52 @@ async fn provider() -> MockServer {
 }
 
 fn usage_rows(home: &std::path::Path) -> Vec<(String, String, i64, i64)> {
+    priced_rows(home)
+        .into_iter()
+        .map(|(purpose, model, input, output, _, _)| (purpose, model, input, output))
+        .collect()
+}
+
+type Row = (String, String, i64, i64, Option<f64>, String);
+
+fn priced_rows(home: &std::path::Path) -> Vec<Row> {
     let db = rusqlite::Connection::open_with_flags(
         home.join("profiles/default/state.db"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .unwrap();
     db.prepare(
-        "SELECT purpose, model, input_tokens, output_tokens FROM usage_ledger \
-         WHERE purpose = 'voice.realtime'",
+        "SELECT purpose, model, input_tokens, output_tokens, cost_usd, cost_status \
+         FROM usage_ledger WHERE purpose = 'voice.realtime'",
     )
     .unwrap()
-    .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+    .query_map([], |r| {
+        Ok((
+            r.get(0)?,
+            r.get(1)?,
+            r.get(2)?,
+            r.get(3)?,
+            r.get(4)?,
+            r.get(5)?,
+        ))
+    })
     .unwrap()
     .collect::<Result<_, _>>()
     .unwrap()
+}
+
+/// The first `usage.updated` payload `inbox` receives.
+async fn usage_updated(inbox: &mut pmt_rpc::client::Inbox) -> serde_json::Value {
+    tokio::time::timeout(std::time::Duration::from_secs(20), async {
+        loop {
+            let event = inbox.events.recv().await.expect("an event");
+            if event.event == "usage.updated" {
+                return event.data;
+            }
+        }
+    })
+    .await
+    .expect("a usage.updated event")
 }
 
 /// Scenario: Key stays on the daemon.
@@ -79,7 +112,7 @@ async fn the_daemon_creates_the_realtime_call_and_hands_out_no_key() {
     let server = provider().await;
     let home = home_with("realtime", &format!("{}/v1", server.uri()));
     let _daemon = common::daemon::start(home.path(), &[]);
-    let (client, _inbox) = common::daemon::desktop(home.path(), "default", &[]).await;
+    let (client, mut inbox) = common::daemon::desktop(home.path(), "default", &[]).await;
     let created = client.call("session.create", json!({})).await.unwrap();
     let session_id = created["session_id"].as_str().unwrap().to_owned();
     let call = client
@@ -133,6 +166,16 @@ async fn the_daemon_creates_the_realtime_call_and_hands_out_no_key() {
             80
         )]
     );
+    // Priced from the profile's catalog (100 x $4/M + 80 x $16/M; no
+    // cache-read rate is configured) and announced to the attached client.
+    let (.., cost, status) = priced_rows(home.path()).remove(0);
+    assert_eq!(status, "estimated");
+    assert!(
+        cost.is_some_and(|usd| (usd - 0.001_68).abs() < 1e-9),
+        "{cost:?}"
+    );
+    let updated = usage_updated(&mut inbox).await;
+    assert_eq!(updated["call"]["purpose"], "voice.realtime", "{updated}");
     // A call this daemon never created records nothing.
     let unknown = client
         .call_typed::<VoiceRealtimeUsage>(&VoiceRealtimeUsageParams {

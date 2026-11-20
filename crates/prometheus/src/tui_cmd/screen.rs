@@ -111,7 +111,7 @@ pub(super) enum Done {
     /// A gallery pet was installed from the picker.
     PetInstalled(Result<String, Error>),
     /// A `/hatch` step finished.
-    Hatch(Box<pmt_pets::hatch::Hatch>, pmt_pets::hatch::Step),
+    Hatch(Result<pmt_rpc::contracts::HatchStep, Error>),
 }
 
 /// The TUI's state.
@@ -176,7 +176,7 @@ pub(super) struct Tui<'a> {
     /// The pet (spec: pets).
     pub(super) pet: crate::pets_host::runtime::Runtime,
     /// `/hatch` waiting for an answer.
-    pub(super) hatch: Option<Box<pmt_pets::hatch::Hatch>>,
+    pub(super) hatch: Option<String>,
     /// The graphics pet's last escape on screen (redrawn only on change).
     pub(super) pet_drawn: Option<String>,
 }

@@ -16,10 +16,13 @@ use pmt_media::image::providers::{self, Aspect, Request};
 use pmt_media::image::{self, Plan};
 use pmt_pets::hatch::{Backend, BackendInfo, Generation};
 
-/// A chosen provider and model.
+use super::meter::{Billing, Meter};
+
+/// A chosen provider and model, and where its calls are billed.
 pub struct ImageBackend {
     plan: Plan,
     client: reqwest::Client,
+    meter: Meter,
 }
 
 /// The estimated price of one image of `model` (`None`: unknown).
@@ -63,9 +66,11 @@ impl Backend for ImageBackend {
                 references,
                 upscale: false,
             };
-            providers::generate(&self.client, &self.plan, &request)
-                .await
-                .map(|generated| generated.bytes)
+            let usd = price(&self.plan);
+            let session = self.meter.allow(&self.plan, usd)?;
+            let generated = providers::generate(&self.client, &self.plan, &request).await?;
+            self.meter.record(session, &self.plan, usd);
+            Ok(generated.bytes)
         })
     }
 }
@@ -112,13 +117,14 @@ fn for_provider(config: &Config, provider: &str) -> Result<Config, String> {
     Ok(config)
 }
 
-/// The backend `/hatch` uses.
+/// The backend `/hatch` uses, its paid calls billed per `billing`.
 ///
 /// # Errors
 ///
 /// `pet.no_image_backend` naming why the first candidate is unfit;
-/// network setup errors.
-pub fn select(scope: &ProfileScope) -> Result<Arc<dyn Backend>, Error> {
+/// network setup errors; store errors (`session.not_found` for a
+/// billed session that is not the profile's).
+pub fn select(scope: &ProfileScope, billing: Billing) -> Result<Arc<dyn Backend>, Error> {
     let base = crate::chat::session::media::credentials(scope);
     let wanted = crate::pets_host::current(scope).image_provider;
     let mut first_reason = None;
@@ -138,7 +144,12 @@ pub fn select(scope: &ProfileScope) -> Result<Arc<dyn Backend>, Error> {
                     extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
                     proxy: network.proxy.clone(),
                 })?;
-                return Ok(Arc::new(ImageBackend { plan, client }));
+                let meter = Meter::open(scope, billing)?;
+                return Ok(Arc::new(ImageBackend {
+                    plan,
+                    client,
+                    meter,
+                }));
             }
             Ok(plan) => {
                 first_reason.get_or_insert(format!(

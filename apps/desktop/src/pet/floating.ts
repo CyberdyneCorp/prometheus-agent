@@ -119,9 +119,9 @@ export class FloatingPet {
   }
 
   /** `/pet …` and `/hatch …` typed in the desktop's composer. */
-  async command(name: string, args: string): Promise<void> {
+  async command(name: string, args: string, sessionId: string | null = null): Promise<void> {
     if (name === "hatch" || name === "generate-pet") {
-      return hatchDialog(this.client, this.dialogs, args, () => void this.load());
+      return hatchDialog(this.client, this.dialogs, args, () => void this.load(), sessionId);
     }
     const [word = "", value = ""] = args.trim().split(/\s+/);
     if (word === "list") return petsDialog(this.client, this.dialogs, () => void this.load(), (n, a) => void this.command(n, a));
