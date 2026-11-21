@@ -28,6 +28,8 @@ use pmt_plugins::host::platform_adapter_world as wit;
 use pmt_plugins::host::{CallInfo, Instance};
 use serde_json::{Value, json};
 
+use super::sidecar;
+
 /// How often inbound messages are polled.
 const POLL_EVERY: Duration = Duration::from_millis(250);
 /// Crashes within [`CRASH_WINDOW`] that stop the adapter for good.
@@ -111,11 +113,10 @@ fn enabled_adapters(home: &Path) -> Vec<String> {
 pub fn factory() -> AdapterFactory {
     Arc::new(|setup: &AdapterSetup| {
         let plugins = super::current(&setup.scope, RECHECK).current();
-        let instance = plugins
+        let plugin = plugins
             .plugins
             .iter()
             .find(|p| p.manifest.adapter_platform().as_deref() == Some(setup.platform.as_str()))
-            .map(|p| Arc::clone(&p.instance))
             .ok_or_else(|| {
                 Error::new(
                     &codes::PLUGINS_LOAD,
@@ -128,8 +129,81 @@ pub fn factory() -> AdapterFactory {
                 .with_hint("prometheus plugins list shows why an adapter plugin did not load")
             })?;
         let options = Value::Object(setup.config.options.clone().into_iter().collect());
-        Ok(Arc::new(PluginAdapter::read(instance, &setup.platform, &options)?) as Arc<dyn Adapter>)
+        let mut adapter =
+            PluginAdapter::read(Arc::clone(&plugin.instance), &setup.platform, &options)?;
+        adapter.sidecar = sidecar_of(setup, plugin);
+        Ok(Arc::new(adapter) as Arc<dyn Adapter>)
     })
+}
+
+/// What starts `plugin`'s sidecar, when it declares one.
+fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) -> Option<Sidecar> {
+    let declaration = plugin.manifest.sidecar.clone()?;
+    let Some(dir) = plugin.dir.clone() else {
+        tracing::warn!(
+            plugin = plugin.manifest.id,
+            "an embedded plugin cannot run a sidecar"
+        );
+        return None;
+    };
+    let names = sidecar::granted_secrets(&declaration, &plugin.grants.current());
+    Some(Sidecar {
+        spec: sidecar::Spec {
+            home: setup.scope.home().to_path_buf(),
+            profile: setup.scope.name().as_str().to_owned(),
+            plugin: plugin.manifest.id.clone(),
+            plugin_dir: dir,
+            declaration,
+            secrets: Vec::new(),
+            node: None,
+        },
+        names,
+        scope: setup.scope.clone(),
+        running: Mutex::default(),
+    })
+}
+
+/// A plugin's sidecar and the secrets it may receive.
+struct Sidecar {
+    spec: sidecar::Spec,
+    names: Vec<String>,
+    scope: pmt_config::ProfileScope,
+    running: Mutex<Option<sidecar::Running>>,
+}
+
+impl Sidecar {
+    /// Starts it (installing its runtime first when needed); the options
+    /// the adapter starts with then carry its `sidecar` URL and token.
+    async fn start(
+        &self,
+        link: Arc<dyn AdapterLink>,
+        options: &str,
+    ) -> Result<String, AdapterError> {
+        let mut spec = self.spec.clone();
+        // Only declared, granted secrets that resolve: never others.
+        spec.secrets = self
+            .names
+            .iter()
+            .filter_map(|n| {
+                Some((
+                    n.clone(),
+                    self.scope.secrets().resolve(n).ok()?.expose().to_owned(),
+                ))
+            })
+            .collect();
+        if spec.declaration.runtime == pmt_plugins::manifest::sidecar::Runtime::Node {
+            spec.node = Some(sidecar::prepare_node(&spec, &self.scope.config().network).await?);
+        }
+        let running = sidecar::start(&spec, link).await?;
+        let mut merged: Value = serde_json::from_str(options).unwrap_or_else(|_| json!({}));
+        merged["sidecar"] = running.options();
+        *lock(&self.running) = Some(running);
+        Ok(merged.to_string())
+    }
+
+    fn stop(&self) {
+        lock(&self.running).take();
+    }
 }
 
 /// One plugin's adapter.
@@ -141,6 +215,7 @@ struct PluginAdapter {
     link: Mutex<Option<Arc<dyn AdapterLink>>>,
     poller: Mutex<Option<tokio::task::JoinHandle<()>>>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
+    sidecar: Option<Sidecar>,
 }
 
 impl PluginAdapter {
@@ -174,6 +249,7 @@ impl PluginAdapter {
             link: Mutex::default(),
             poller: Mutex::default(),
             crashes: Arc::default(),
+            sidecar: None,
         })
     }
 
@@ -187,6 +263,12 @@ impl PluginAdapter {
         pmt_core::spawn::blocking(move || f(&instance, &call))
             .await
             .map_err(|e| Error::new(&codes::PLUGINS_CALL, format!("plugin call: {e}")))?
+    }
+
+    fn stop_sidecar(&self) {
+        if let Some(sidecar) = &self.sidecar {
+            sidecar.stop();
+        }
     }
 
     /// Reports a trap or timeout to the gateway (when connected).
@@ -330,13 +412,17 @@ impl Adapter for PluginAdapter {
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
         Box::pin(async move {
-            let options = self.options.clone();
+            let options = match &self.sidecar {
+                Some(sidecar) => sidecar.start(Arc::clone(&link), &self.options).await?,
+                None => self.options.clone(),
+            };
             match self
                 .blocking(move |instance, call| instance.adapter_start(call, &options))
                 .await
             {
                 Ok(Ok(())) => {}
                 Ok(Err(why)) => {
+                    self.stop_sidecar();
                     return Err(AdapterError {
                         retryable: true,
                         code: "plugin_start".to_owned(),
@@ -344,6 +430,7 @@ impl Adapter for PluginAdapter {
                     });
                 }
                 Err(err) => {
+                    self.stop_sidecar();
                     record_crash(&self.crashes);
                     return Err(crash_error(&err));
                 }
@@ -368,6 +455,7 @@ impl Adapter for PluginAdapter {
                 task.abort();
             }
             lock(&self.link).take();
+            self.stop_sidecar();
             if let Err(err) = self.blocking(Instance::adapter_stop).await {
                 tracing::warn!(plugin = %self.instance.id(), "the adapter's stop failed: {}", err.message());
             }

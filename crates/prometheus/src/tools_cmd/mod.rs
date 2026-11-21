@@ -132,6 +132,9 @@ pub fn extended_registry(
     calls: &SessionCalls,
 ) -> Result<(ToolRegistry, Vec<String>), Error> {
     let mut registry = base_registry(scope)?;
+    // Adapters' own tools, only for platforms this profile enables; never
+    // opted in (a platform's bundle or the user enables them).
+    pmt_tools::platform_tools::register(&mut registry, scope.dir(), &scope.config().gateway);
     // Listing the tools runs for no session.
     let mut toolsets = plugins
         .current()

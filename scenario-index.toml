@@ -5302,3 +5302,13 @@ capabilities = [
 
 [plugin-system."MCP events"]
 "Duplicate event ignored" = { tests = ["crates/pmt-adapters-webhook/tests/events.rs::event_data_is_inert_and_a_redelivered_event_id_runs_once", "crates/pmt-mcp/tests/events.rs::a_subscription_asks_every_time_and_stores_a_signed_route"], note = "the subscription test stores the route the server delivers to; the webhook test delivers one eventId twice on such a route (two webhook-ids) and sees one run" }
+
+# Group 78.1 (partial): supervised sidecars of adapter plugins
+# (crates/prometheus/src/plugins_host/sidecar.rs runs the MCP fixture
+# binary as the sidecar) and platform-contributed toolsets
+# (crates/pmt-tools/tests/platform_tools.rs).
+[platform-adapters."Supervised sidecar adapters"]
+"Sidecar crash contained" = { tests = ["crates/prometheus/src/plugins_host/sidecar.rs::a_sidecar_exit_puts_only_its_adapter_into_retrying"], note = "the exit is reported on that adapter's own link as retrying/sidecar_exited; the gateway reconnects only that slot with its backoff (each slot has its own link, as the M2 plugin-adapter trap test shows)" }
+
+[platform-adapters."Platform-contributed toolsets"]
+"Toolset absent elsewhere" = ["crates/pmt-tools/tests/platform_tools.rs::a_profile_without_the_platform_has_none_of_its_tools", "crates/pmt-tools/tests/platform_tools.rs::an_enabled_platform_brings_its_tools_into_its_bundle"]
