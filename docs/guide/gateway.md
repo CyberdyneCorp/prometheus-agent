@@ -139,8 +139,8 @@ bot may download to 2048 MB: log the bot out of the public server once
 `options.api_base_url` (and `options.file_base_url`, default
 `<api_base_url>/file`) at your server. With `options.local_mode = true`
 (a server run with `--local`) files are read from the absolute path the
-server returns, which must be readable on this host ("local Bot API file
-not readable: <path>" otherwise). `gateway.media.max_inbound_bytes`
+server returns, which must be readable on this host (`local Bot API file
+not readable: <path>` otherwise). `gateway.media.max_inbound_bytes`
 (128 MB) still applies: a larger file is refused with the effective
 maximum named.
 
