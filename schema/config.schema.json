@@ -5919,6 +5919,30 @@
       },
       "type": "object"
     },
+    "McpEventRoute": {
+      "additionalProperties": false,
+      "description": "The MCP event a route receives (spec: plugin-system, MCP events).",
+      "properties": {
+        "arguments": {
+          "description": "The subscription's arguments, as a JSON object.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The event type's name.",
+          "type": "string"
+        },
+        "server": {
+          "description": "The `[mcp.servers.<name>]` that publishes it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server",
+        "name",
+        "arguments"
+      ],
+      "type": "object"
+    },
     "McpEvents": {
       "additionalProperties": false,
       "description": "`[gateway.mcp_events]` (experimental).",
@@ -6184,6 +6208,11 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "events": {
+          "default": false,
+          "description": "The server publishes events (the experimental MCP `events/*`\nextension): offer `list_event_types`, `subscribe_event` and\n`unsubscribe_event`, delivered to the webhook adapter.",
+          "type": "boolean"
         },
         "headers": {
           "additionalProperties": {
@@ -12799,6 +12828,34 @@
       },
       "type": "object"
     },
+    "WebhookCoalesce": {
+      "additionalProperties": false,
+      "description": "A route's `coalesce` block (spec: platform-adapters, Webhook event\ncoalescing).",
+      "properties": {
+        "key": {
+          "default": "",
+          "description": "What groups events: a payload dot path (`pull_request.number`) or\na template (`{repository.full_name}#{number}`).",
+          "type": "string"
+        },
+        "max_wait_secs": {
+          "default": 300,
+          "description": "Seconds after a group's first event by which its turn runs anyway.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "window_secs": {
+          "default": 30,
+          "description": "Quiet seconds after the newest event of a group before its turn.",
+          "format": "uint64",
+          "maximum": 3600,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "WebhookFilter": {
       "description": "One filter condition over `payload.<path>`, `event` or\n`headers.<Name>`.",
       "oneOf": [
@@ -12973,6 +13030,17 @@
       "additionalProperties": false,
       "description": "One webhook route.",
       "properties": {
+        "coalesce": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WebhookCoalesce"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Hold bursts of events on one entity and run one turn on the\nlatest (not with `deliver_only` or `cron_job`)."
+        },
         "cron_job": {
           "description": "Fire this scheduled job (its id or name) instead of a turn: the\nrendered prompt becomes the run's `## Run Context`, and the job's\nown delivery, skills and toolsets apply (`deliver` and `skills`\nare ignored). A paused or running job drops the event.",
           "type": [
@@ -13042,6 +13110,17 @@
           "default": false,
           "description": "Admit unsigned requests (only while `gateway.http.listen` is a\nloopback address).",
           "type": "boolean"
+        },
+        "mcp_event": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/McpEventRoute"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The MCP event subscription this route was created for (set by\n`subscribe_event`, never by hand)."
         },
         "mirror_to_session": {
           "default": false,

@@ -372,12 +372,18 @@ pub struct WebhookOptions {
     /// The GitHub REST API `deliver = "github_comment"` posts to (GitHub
     /// Enterprise: `https://<host>/api/v3`).
     pub github_api_url: String,
+    /// The `https://` origin that reaches this daemon's HTTP listener from
+    /// outside (a reverse proxy or tunnel): MCP servers deliver events to
+    /// `<public_url>/p/<profile>/webhook/<route>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_url: Option<String>,
 }
 
 impl Default for WebhookOptions {
     fn default() -> Self {
         Self {
             github_api_url: "https://api.github.com".to_owned(),
+            public_url: None,
         }
     }
 }

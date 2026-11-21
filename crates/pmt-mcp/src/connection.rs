@@ -68,6 +68,15 @@ pub enum CallError {
     Failed(String),
 }
 
+/// A server's JSON-RPC error answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal {
+    /// The JSON-RPC error code.
+    pub code: i32,
+    /// Its message.
+    pub message: String,
+}
+
 /// What a server offers besides tools (spec: tool-system, MCP resource
 /// and prompt utility tools).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -222,6 +231,33 @@ impl Connection {
             .bounded(timeout, self.service.get_prompt(params))
             .await?;
         Ok(serde_json::to_value(prompt).unwrap_or_default())
+    }
+
+    /// A request outside the core protocol (`events/subscribe`...): its
+    /// result as JSON, or the server's JSON-RPC refusal (code, message).
+    ///
+    /// # Errors
+    ///
+    /// [`CallError`] when no answer came.
+    pub async fn custom(
+        &self,
+        method: &str,
+        params: Value,
+        timeout: Duration,
+    ) -> Result<Result<Value, Refusal>, CallError> {
+        let request = rmcp::model::ClientRequest::CustomRequest(rmcp::model::CustomRequest::new(
+            method,
+            Some(params),
+        ));
+        match tokio::time::timeout(timeout, self.service.peer().send_request(request)).await {
+            Err(_) => Err(CallError::TimedOut(timeout)),
+            Ok(Ok(result)) => Ok(Ok(serde_json::to_value(result).unwrap_or_default())),
+            Ok(Err(ServiceError::McpError(error))) => Ok(Err(Refusal {
+                code: error.code.0,
+                message: error.message.to_string(),
+            })),
+            Ok(Err(err)) => Err(self.classify(err)),
+        }
     }
 
     async fn bounded<T>(

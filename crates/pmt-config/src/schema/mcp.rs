@@ -136,6 +136,10 @@ pub struct McpServerConfig {
     /// Overrides `mcp.connect_timeout_secs` for this server.
     #[schemars(range(min = 1, max = 3_600))]
     pub connect_timeout_secs: Option<u64>,
+    /// The server publishes events (the experimental MCP `events/*`
+    /// extension): offer `list_event_types`, `subscribe_event` and
+    /// `unsubscribe_event`, delivered to the webhook adapter.
+    pub events: bool,
 }
 
 impl Default for McpServerConfig {
@@ -169,6 +173,7 @@ impl Default for McpServerConfig {
             tools: McpToolFilter::default(),
             timeout_secs: None,
             connect_timeout_secs: None,
+            events: false,
         }
     }
 }

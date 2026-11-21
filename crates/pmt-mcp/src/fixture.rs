@@ -14,6 +14,13 @@
 //! `sample {n}` (`n` sampling requests, their answers or errors back as
 //! text) and `render` (a tool to put a cost on). `resources` and `prompts`
 //! advertise and serve one resource and one prompt.
+//!
+//! It also answers the experimental `events/*` requests: `events/list`
+//! offers `issue.opened`; `events/subscribe` grants a subscription (id
+//! `sub-<name>`, `refreshBefore` far ahead, cursor `c0`) unless its
+//! arguments hold `"revoked": true` (refused as forbidden, -32024);
+//! `events/unsubscribe` answers `{}`. Each is logged as
+//! `<method> <params JSON>`.
 
 #![allow(deprecated)] // the fixture sends sampling requests (deprecated upstream)
 
@@ -338,6 +345,17 @@ impl ServerHandler for Fixture {
         std::future::ready(Ok(ListToolsResult::with_all_items(self.offered())))
     }
 
+    fn on_custom_request(
+        &self,
+        request: rmcp::model::CustomRequest,
+        _: RequestContext<RoleServer>,
+    ) -> impl Future<Output = Result<rmcp::model::CustomResult, ErrorData>> + MaybeSendFuture + '_
+    {
+        let params = request.params.unwrap_or_default();
+        self.record(&format!("{} {params}", request.method));
+        std::future::ready(events(&request.method, &params).map(rmcp::model::CustomResult))
+    }
+
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -396,6 +414,33 @@ impl ServerHandler for Fixture {
         std::future::ready(Ok(GetPromptResponse::Complete(GetPromptResult::new(vec![
             message,
         ]))))
+    }
+}
+
+/// The answer to an `events/*` request.
+fn events(method: &str, params: &Value) -> Result<Value, ErrorData> {
+    match method {
+        "events/list" => Ok(json!({"events": [{
+            "name": "issue.opened",
+            "description": "An issue was opened.",
+            "inputSchema": {"type": "object", "properties": {"repo": {"type": "string"}}},
+        }]})),
+        "events/subscribe" if params["arguments"]["revoked"] == json!(true) => Err(ErrorData::new(
+            rmcp::model::ErrorCode(-32024),
+            "access revoked",
+            None,
+        )),
+        "events/subscribe" => Ok(json!({
+            "id": format!("sub-{}", params["name"].as_str().unwrap_or_default()),
+            "refreshBefore": "2099-01-01T00:00:00Z",
+            "cursor": "c0",
+        })),
+        "events/unsubscribe" => Ok(json!({})),
+        other => Err(ErrorData::new(
+            rmcp::model::ErrorCode::METHOD_NOT_FOUND,
+            other.to_owned(),
+            None,
+        )),
     }
 }
 

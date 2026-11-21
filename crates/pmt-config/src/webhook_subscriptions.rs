@@ -91,6 +91,30 @@ pub fn save(
     })
 }
 
+/// Removes subscription `name` with the secret generated for it and any
+/// MCP event state it had; the removed subscription, `None` when there was
+/// none.
+///
+/// # Errors
+///
+/// `config.parse`, `home.io` and secrets-store errors.
+pub fn remove(scope: &crate::ProfileScope, name: &str) -> Result<Option<Subscription>, Error> {
+    let mut subscriptions = load(scope.dir())?;
+    let Some(removed) = subscriptions.remove(name) else {
+        return Ok(None);
+    };
+    save(scope.dir(), &subscriptions)?;
+    if removed.generated_secret
+        && let Some(secret) = &removed.route.secret_secret
+    {
+        scope.secrets().store().remove(&secret.0)?;
+    }
+    if let Err(e) = crate::mcp_event_state::remove(scope.dir(), name) {
+        tracing::warn!(route = name, "MCP event state not removed: {e}");
+    }
+    Ok(Some(removed))
+}
+
 /// The secret name a subscription's generated signing secret is stored
 /// under: `WEBHOOK_<NAME>` (`-` becomes `_`).
 #[must_use]

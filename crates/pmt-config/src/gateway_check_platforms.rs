@@ -233,6 +233,7 @@ pub fn check_route(
         )));
     }
     check_route_delivery(key, route)?;
+    check_coalesce(key, route)?;
     crate::gateway_check::check_narrowing(config, route.toolsets.as_deref(), key, "a route")?;
     if let Some(script) = &route.script {
         check_confined(
@@ -259,6 +260,35 @@ fn check_route_name(key: &str, name: &str) -> Result<(), Error> {
             "{key}: a route name uses only a-z, 0-9, '-' and '_'"
         )))
     }
+}
+
+/// A `coalesce` block: a key, positive windows, and only on routes that
+/// run a turn.
+fn check_coalesce(key: &str, route: &WebhookRoute) -> Result<(), Error> {
+    let Some(coalesce) = &route.coalesce else {
+        return Ok(());
+    };
+    for (on, field) in [
+        (route.deliver_only, "deliver_only"),
+        (route.cron_job.is_some(), "cron_job"),
+    ] {
+        if on {
+            return Err(invalid(format!(
+                "{key}.coalesce: coalescing applies to routes that run a turn, not with {field}"
+            )));
+        }
+    }
+    if coalesce.key.trim().is_empty() {
+        return Err(invalid(format!(
+            "{key}.coalesce.key: name a payload field (pull_request.number) or a template ({{repository.full_name}}#{{number}})"
+        )));
+    }
+    if coalesce.window_secs == 0 || coalesce.max_wait_secs == 0 {
+        return Err(invalid(format!(
+            "{key}.coalesce: window_secs and max_wait_secs must be at least 1"
+        )));
+    }
+    Ok(())
 }
 
 /// A `cron_job` route: a job named, never with `deliver_only`.
@@ -498,6 +528,21 @@ mod tests {
         .unwrap_err();
         assert!(err.message().contains("not both"), "{}", err.message());
         check_toml("[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\ncron_job = \"sweeper\"\n").unwrap();
+    }
+
+    #[test]
+    fn coalescing_with_deliver_only_or_cron_job_fails_validation() {
+        for extra in [
+            "deliver_only = true\ndeliver = \"telegram\"\n",
+            "cron_job = \"sweeper\"\n",
+        ] {
+            let err = check_toml(&format!(
+                "[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n{extra}[gateway.platforms.webhook.routes.pr.coalesce]\nkey = \"payload.ref\"\n"
+            ))
+            .unwrap_err();
+            assert!(err.message().contains("coalesce"), "{}", err.message());
+        }
+        check_toml("[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n[gateway.platforms.webhook.routes.pr.coalesce]\nkey = \"ref\"\n").unwrap();
     }
 
     #[test]

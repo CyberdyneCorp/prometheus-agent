@@ -64,6 +64,7 @@ pub fn registered(server: &Arc<Server>) -> Vec<RegisteredTool> {
         .collect();
     let offered: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
     entries.extend(crate::utility::registered(server, &offered));
+    entries.extend(crate::events::registered(server));
     entries
         .into_iter()
         .map(|entry| entry.with_probe(Arc::clone(&probe)))

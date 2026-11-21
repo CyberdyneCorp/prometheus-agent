@@ -182,7 +182,8 @@ pub use wake::{
     WakeSurface,
 };
 pub use webhook::{
-    FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
+    FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, McpEventRoute,
+    WebhookCoalesce, WebhookFilter, WebhookFilters,
 };
 
 /// The `config.toml` schema version this build writes and reads.

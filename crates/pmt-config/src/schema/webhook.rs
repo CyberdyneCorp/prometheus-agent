@@ -87,6 +87,52 @@ pub struct WebhookRoute {
     /// Seconds the transform script may run.
     #[schemars(range(min = 1, max = 3600))]
     pub script_timeout_secs: u64,
+    /// Hold bursts of events on one entity and run one turn on the
+    /// latest (not with `deliver_only` or `cron_job`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coalesce: Option<WebhookCoalesce>,
+    /// The MCP event subscription this route was created for (set by
+    /// `subscribe_event`, never by hand).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mcp_event: Option<McpEventRoute>,
+}
+
+/// A route's `coalesce` block (spec: platform-adapters, Webhook event
+/// coalescing).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct WebhookCoalesce {
+    /// What groups events: a payload dot path (`pull_request.number`) or
+    /// a template (`{repository.full_name}#{number}`).
+    pub key: String,
+    /// Quiet seconds after the newest event of a group before its turn.
+    #[schemars(range(min = 1, max = 3600))]
+    pub window_secs: u64,
+    /// Seconds after a group's first event by which its turn runs anyway.
+    #[schemars(range(min = 1, max = 86_400))]
+    pub max_wait_secs: u64,
+}
+
+impl Default for WebhookCoalesce {
+    fn default() -> Self {
+        Self {
+            key: String::new(),
+            window_secs: 30,
+            max_wait_secs: 300,
+        }
+    }
+}
+
+/// The MCP event a route receives (spec: plugin-system, MCP events).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct McpEventRoute {
+    /// The `[mcp.servers.<name>]` that publishes it.
+    pub server: String,
+    /// The event type's name.
+    pub name: String,
+    /// The subscription's arguments, as a JSON object.
+    pub arguments: String,
 }
 
 impl Default for WebhookRoute {
@@ -111,6 +157,8 @@ impl Default for WebhookRoute {
             filters: None,
             script: None,
             script_timeout_secs: 30,
+            coalesce: None,
+            mcp_event: None,
         }
     }
 }

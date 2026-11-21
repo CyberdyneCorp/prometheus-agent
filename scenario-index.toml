@@ -5289,3 +5289,16 @@ capabilities = [
 
 [pets."Achievement unlocks celebrate (upgrade)"]
 "Unlock during a session" = { tests = ["crates/prometheus/tests/pets_tui.rs::an_unlock_shows_a_toast", "crates/prometheus/tests/pets_daemon.rs::a_turn_that_reaches_a_tier_announces_it_and_the_session_never_hears_of_it", "crates/prometheus/tests/pets_daemon.rs::a_tier_found_by_a_page_scan_is_announced", "crates/prometheus/tests/pets_e2e.rs::a_desktop_unlock_shows_a_toast_and_the_pet_jumps", "crates/pmt-pets/tests/achievements.rs::unlocks_persist_and_only_new_tiers_are_reported"], note = "a profile whose time zone makes now a night hour reaches night-owl silver with its tenth session: the daemon announces achievement.unlocked as a daemon-level event, the TUI and the desktop show the toast and the pet jumps, and the session's prompt hash, tools and messages carry no mention of it; a tier first recorded by the scan a page's achievements.list starts (sessions no daemon turn rescanned) is announced the same way" }
+
+# Group 78.3: webhook event coalescing and MCP events delivered through the
+# webhook pipeline (crates/pmt-adapters-webhook/tests/events.rs drives the
+# adapter; crates/pmt-mcp/tests/events.rs the subscription tools against the
+# fixture server's events/* answers).
+[platform-adapters."Webhook event coalescing"]
+"Burst of pushes" = ["crates/pmt-adapters-webhook/tests/events.rs::a_burst_of_pushes_runs_one_turn_on_the_last_payload", "crates/pmt-adapters-webhook/src/coalesce.rs::a_burst_runs_once_on_the_newest_event"]
+
+[platform-adapters."MCP server events into the webhook pipeline"]
+"Placeholder injection inert" = ["crates/pmt-adapters-webhook/tests/events.rs::event_data_is_inert_and_a_redelivered_event_id_runs_once", "crates/pmt-adapters-webhook/src/render.rs::event_data_goes_in_after_rendering_and_is_cut_with_a_note"]
+
+[plugin-system."MCP events"]
+"Duplicate event ignored" = { tests = ["crates/pmt-adapters-webhook/tests/events.rs::event_data_is_inert_and_a_redelivered_event_id_runs_once", "crates/pmt-mcp/tests/events.rs::a_subscription_asks_every_time_and_stores_a_signed_route"], note = "the subscription test stores the route the server delivers to; the webhook test delivers one eventId twice on such a route (two webhook-ids) and sees one run" }
