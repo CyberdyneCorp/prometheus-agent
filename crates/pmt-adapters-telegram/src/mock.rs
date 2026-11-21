@@ -49,6 +49,10 @@ struct State {
     failures: VecDeque<Failure>,
     drop_next_poll: bool,
     files: Vec<(String, Vec<u8>)>,
+    /// `getFile` sizes declared larger than the stored bytes.
+    declared: Vec<(String, u64)>,
+    /// Files a `--local` server returns by absolute path.
+    local: Vec<(String, String)>,
     uploads: Vec<String>,
     /// Ids of messages sent with `disable_notification`.
     silent: Vec<String>,
@@ -74,6 +78,28 @@ pub struct BotApi {
     state: Mutex<State>,
     arrived: Notify,
     addr: SocketAddr,
+}
+
+fn get_file(state: &State, id: &str) -> (u16, Value) {
+    let declared = state
+        .declared
+        .iter()
+        .find(|(f, _)| f == id)
+        .map(|(_, n)| *n);
+    if let Some((_, path)) = state.local.iter().find(|(f, _)| f == id) {
+        return ok(&json!({"file_id": id, "file_path": path, "file_size": declared}));
+    }
+    let stored = state
+        .files
+        .iter()
+        .find(|(f, _)| f == id)
+        .map(|(_, b)| b.len() as u64);
+    match stored {
+        Some(size) => ok(
+            &json!({"file_id": id, "file_path": format!("files/{id}"), "file_size": declared.unwrap_or(size)}),
+        ),
+        None => refused(400, "Bad Request: invalid file_id"),
+    }
 }
 
 fn ok(result: &Value) -> (u16, Value) {
@@ -134,6 +160,21 @@ impl BotApi {
     /// Stores a file the bot can download by `file_id`.
     pub fn add_file(&self, file_id: &str, bytes: Vec<u8>) {
         self.lock().files.push((file_id.to_owned(), bytes));
+    }
+
+    /// Stores a file whose `getFile` declares `size` bytes (a large video
+    /// without serving it whole).
+    pub fn add_large_file(&self, file_id: &str, bytes: Vec<u8>, size: u64) {
+        let mut state = self.lock();
+        state.files.push((file_id.to_owned(), bytes));
+        state.declared.push((file_id.to_owned(), size));
+    }
+
+    /// A `--local` server's file: `getFile` answers with absolute `path`.
+    pub fn add_local_file(&self, file_id: &str, path: &str, size: u64) {
+        let mut state = self.lock();
+        state.local.push((file_id.to_owned(), path.to_owned()));
+        state.declared.push((file_id.to_owned(), size));
     }
 
     /// Methods of the uploads received (`sendPhoto`, ...).
@@ -398,9 +439,11 @@ impl BotApi {
             "getChat" => {
                 ok(&json!({"id": args["chat_id"], "type": "private", "first_name": "Kit"}))
             }
-            "answerCallbackQuery" | "setMyCommands" | "deleteMyCommands" | "answerInlineQuery" => {
-                ok(&json!(true))
-            }
+            "answerCallbackQuery"
+            | "setMyCommands"
+            | "deleteMyCommands"
+            | "answerInlineQuery"
+            | "logOut" => ok(&json!(true)),
             "setWebhook" => {
                 let url = args["url"].as_str().unwrap_or_default().to_owned();
                 let secret = args["secret_token"].as_str().unwrap_or_default().to_owned();
@@ -429,20 +472,7 @@ impl BotApi {
                 state.topics.push((chat, thread, name));
                 ok(&json!(true))
             }
-            "getFile" => {
-                let id = args["file_id"].as_str().unwrap_or_default();
-                let size = state
-                    .files
-                    .iter()
-                    .find(|(f, _)| f == id)
-                    .map(|(_, b)| b.len());
-                match size {
-                    Some(size) => ok(
-                        &json!({"file_id": id, "file_path": format!("files/{id}"), "file_size": size}),
-                    ),
-                    None => refused(400, "Bad Request: invalid file_id"),
-                }
-            }
+            "getFile" => get_file(&state, args["file_id"].as_str().unwrap_or_default()),
             _ => refused(404, "Not Found: method not found"),
         }
     }

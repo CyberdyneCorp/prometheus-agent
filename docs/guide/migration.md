@@ -89,6 +89,16 @@ What lands where:
   (`--enable-cron` keeps enabled ones enabled; stop the Hermes scheduler
   first). Plugins and messaging adapters arrive disabled; Telegram and
   other users you approved through pairing stay approved.
+- A platform Prometheus serves through a signed catalog adapter plugin
+  (Mattermost, Teams, Google Chat, Feishu, LINE, SMS, IRC and the rest
+  of the catalog set) or a Hermes integration that is a catalog plugin
+  (Home Assistant, Camofox): the plugin is installed from the plugin
+  catalog, disabled and without grants, and the platform's
+  `[gateway.platforms.<name>]` table is written like a built-in one,
+  disabled, with its token as a secret reference. Review it with
+  `prometheus plugins show <id>` and enable it with `prometheus plugins
+  enable <id>`. A plugin the catalog does not offer is reported
+  `unsupported`.
 
 ### Running it again
 

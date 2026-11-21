@@ -1,0 +1,23 @@
+# First-party catalog adapter: Raft, wake-only (spec: platform-adapters,
+# Raft wake-only adapter). Its sidecar runs `raft agent bridge` with only
+# the Raft profile name (and a per-start wake token) in its environment
+# and receives the bridge's wake hints on a loopback port; the adapter
+# turns each into a content-free wake notice, and the agent reads and
+# answers with the Raft CLI. It holds no Raft credentials or cursors.
+# Options: `raft_profile` (required), `raft_command` (default `raft`).
+manifest_version = 1
+id = "raft"
+version = "1.0.0"
+kind = "wasm"
+description = "Raft wake hints: the agent reads and replies with the Raft CLI."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["127.0.0.1"]
+
+[sidecar]
+runtime = "node"
+command = "sidecar/raft-wake.mjs"
+lockfile = "sidecar/package-lock.json"

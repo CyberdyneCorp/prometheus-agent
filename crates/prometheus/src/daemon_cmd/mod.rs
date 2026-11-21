@@ -17,6 +17,7 @@ pub(crate) mod peers;
 mod platform_cmd;
 mod record;
 pub(crate) mod self_guard;
+mod selftest_cmd;
 pub(crate) mod send_cmd;
 pub(crate) mod serve;
 pub mod service;
@@ -25,6 +26,7 @@ pub(crate) mod standalone;
 pub mod sub_proxy;
 mod support_matrix;
 mod systemd;
+mod telegram_cmd;
 #[cfg(debug_assertions)]
 mod test_adapter;
 mod turn;
@@ -55,6 +57,17 @@ pub enum DaemonCommand {
         /// live daemon of another home or profile holds.
         #[arg(long)]
         replace: bool,
+        /// Run only the messaging adapters and forward every admitted event
+        /// to the `--upstream` daemon, which owns the sessions (platform
+        /// crypto or native dependencies on this host, the agent elsewhere).
+        #[arg(long, requires = "upstream")]
+        adapters_only: bool,
+        /// The upstream daemon's adapter endpoint,
+        /// `wss://<host>:<port>/adapters` on its remote listener
+        /// (`daemon.remote`); the admin device token comes from the secret
+        /// `daemon.upstream_ticket_secret` names.
+        #[arg(long, value_name = "WS_URL", requires = "adapters_only")]
+        upstream: Option<String>,
     },
     /// Start the daemon in the background; does nothing when it runs.
     Start,
@@ -102,7 +115,12 @@ pub use serve::ServeDashboard;
 /// (78) when the listener may not bind.
 pub fn serve_foreground(ctx: &Context<'_>, dashboard: &ServeDashboard) -> Result<u8, Error> {
     let home = ctx.home()?;
-    serve::run_with(home.root(), ctx, false, Some(dashboard))
+    serve::run_with(
+        home.root(),
+        ctx,
+        &serve::RunMode::default(),
+        Some(dashboard),
+    )
 }
 
 /// Runs `prometheus gateway <command>`.
@@ -135,7 +153,15 @@ pub fn run(command: &DaemonCommand, ctx: &Context<'_>) -> Result<u8, Error> {
     let home = ctx.home()?;
     let root = home.root().to_path_buf();
     match command {
-        DaemonCommand::Run { replace } => serve::run(&root, ctx, *replace),
+        DaemonCommand::Run {
+            replace, upstream, ..
+        } => {
+            let mode = serve::RunMode {
+                replace_locks: *replace,
+                upstream: upstream.clone(),
+            };
+            serve::run(&root, ctx, &mode)
+        }
         DaemonCommand::Start => start(&root, ctx),
         DaemonCommand::Ensure => ensure(&root, ctx),
         DaemonCommand::Stop => stop(&root, ctx.json),

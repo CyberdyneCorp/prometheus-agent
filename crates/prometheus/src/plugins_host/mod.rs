@@ -32,6 +32,7 @@ mod outside;
 mod ports;
 pub mod providers;
 pub mod reload;
+mod sidecar;
 pub mod subagents;
 pub mod terminal;
 

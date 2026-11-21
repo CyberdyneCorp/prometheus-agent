@@ -5289,3 +5289,75 @@ capabilities = [
 
 [pets."Achievement unlocks celebrate (upgrade)"]
 "Unlock during a session" = { tests = ["crates/prometheus/tests/pets_tui.rs::an_unlock_shows_a_toast", "crates/prometheus/tests/pets_daemon.rs::a_turn_that_reaches_a_tier_announces_it_and_the_session_never_hears_of_it", "crates/prometheus/tests/pets_daemon.rs::a_tier_found_by_a_page_scan_is_announced", "crates/prometheus/tests/pets_e2e.rs::a_desktop_unlock_shows_a_toast_and_the_pet_jumps", "crates/pmt-pets/tests/achievements.rs::unlocks_persist_and_only_new_tiers_are_reported"], note = "a profile whose time zone makes now a night hour reaches night-owl silver with its tenth session: the daemon announces achievement.unlocked as a daemon-level event, the TUI and the desktop show the toast and the pet jumps, and the session's prompt hash, tools and messages carry no mention of it; a tier first recorded by the scan a page's achievements.list starts (sessions no daemon turn rescanned) is announced the same way" }
+
+# Group 78.3: webhook event coalescing and MCP events delivered through the
+# webhook pipeline (crates/pmt-adapters-webhook/tests/events.rs drives the
+# adapter; crates/pmt-mcp/tests/events.rs the subscription tools against the
+# fixture server's events/* answers).
+[platform-adapters."Webhook event coalescing"]
+"Burst of pushes" = ["crates/pmt-adapters-webhook/tests/events.rs::a_burst_of_pushes_runs_one_turn_on_the_last_payload", "crates/pmt-adapters-webhook/src/coalesce.rs::a_burst_runs_once_on_the_newest_event"]
+
+[platform-adapters."MCP server events into the webhook pipeline"]
+"Placeholder injection inert" = ["crates/pmt-adapters-webhook/tests/events.rs::event_data_is_inert_and_a_redelivered_event_id_runs_once", "crates/pmt-adapters-webhook/src/render.rs::event_data_goes_in_after_rendering_and_is_cut_with_a_note"]
+
+[plugin-system."MCP events"]
+"Duplicate event ignored" = { tests = ["crates/pmt-adapters-webhook/tests/events.rs::event_data_is_inert_and_a_redelivered_event_id_runs_once", "crates/pmt-mcp/tests/events.rs::a_subscription_asks_every_time_and_stores_a_signed_route"], note = "the subscription test stores the route the server delivers to; the webhook test delivers one eventId twice on such a route (two webhook-ids) and sees one run" }
+
+# Group 78.1: supervised sidecars of adapter plugins
+# (crates/prometheus/src/plugins_host/sidecar.rs runs the MCP fixture
+# binary as the sidecar), platform-contributed toolsets
+# (crates/pmt-tools/tests/platform_tools.rs), adapter host forwarding
+# (crates/prometheus/tests/adapter_forwarding.rs: two homes, the host's
+# `test` file adapter) and the catalog adapter set migration
+# (crates/prometheus/tests/migrate_catalog_adapters.rs against a signed
+# test catalog).
+[platform-adapters."Supervised sidecar adapters"]
+"Sidecar crash contained" = { tests = ["crates/prometheus/src/plugins_host/sidecar.rs::a_sidecar_exit_puts_only_its_adapter_into_retrying"], note = "the exit is reported on that adapter's own link as retrying/sidecar_exited; the gateway reconnects only that slot with its backoff (each slot has its own link, as the M2 plugin-adapter trap test shows)" }
+
+[platform-adapters."Adapter host forwarding mode"]
+"Container agent with host crypto" = { tests = ["crates/prometheus/tests/adapter_forwarding.rs::an_adapters_only_host_forwards_and_delivers_the_upstream_reply", "crates/prometheus/tests/adapter_forwarding.rs::an_unreachable_upstream_degrades_the_hosts_adapters", "crates/pmt-gateway/src/messaging/relay/wire.rs::a_forwarded_event_keeps_its_addressing_attachments_and_profile"], note = "the host's file adapter stands in for an adapter that decrypts and encrypts (Matrix end-to-end encryption is task 78.2): what the host's adapter receives is forwarded to the upstream, which runs the turn and owns the only session, and its reply is sent by the host's adapter; an unreachable upstream leaves the host's adapters degraded with upstream_unreachable" }
+
+[platform-adapters."Catalog adapter set"]
+"Migration installs adapter" = { tests = ["crates/prometheus/tests/migrate_catalog_adapters.rs::a_hermes_mattermost_profile_gets_the_catalog_adapter_disabled_with_secret_refs"], note = "the mattermost adapter plugin is published in a catalog signed with the debug builds' test key (the release-key signing of first-party plugins is a known gap)" }
+
+[platform-adapters."Platform-contributed toolsets"]
+"Toolset absent elsewhere" = ["crates/pmt-tools/tests/platform_tools.rs::a_profile_without_the_platform_has_none_of_its_tools", "crates/pmt-tools/tests/platform_tools.rs::an_enabled_platform_brings_its_tools_into_its_bundle"]
+
+# Group 78.2 (partial): Telegram local Bot API server
+# (crates/pmt-adapters-telegram/tests/local_api.rs against the Bot API
+# mock), Slack reaction triggers (adapter against the Slack mock; the
+# reacting user's authorization in the gateway harness), the peer-agent
+# self-test (CLI) and Matrix room rules (config validation, rooms.rs).
+[platform-adapters."Telegram local Bot API server"]
+"Large file with local server" = { tests = ["crates/pmt-adapters-telegram/tests/local_api.rs::a_self_hosted_server_accepts_a_300_mb_video_under_the_gateway_cap"], note = "getFile declares 300 MB: the public server's 20 MB limit refuses it naming the maximum, a self-hosted api_base_url accepts it under a 512 MB gateway.media.max_inbound_bytes, and the default 128 MB cap is named as the effective maximum" }
+
+[platform-adapters."Slack reaction triggers"]
+"Unauthorized reactor" = ["crates/pmt-gateway/tests/messaging/access.rs::a_reaction_trigger_from_an_unlisted_user_starts_no_turn", "crates/pmt-adapters-slack/tests/slack.rs::a_listed_reaction_starts_a_turn_from_the_reactor"]
+
+[platform-adapters."Peer-agent routing self-test (upgrade)"]
+"Bot mentions ignored by config" = ["crates/prometheus/tests/gateway_selftest.rs::bot_mentions_ignored_by_config_are_a_config_failure"]
+
+[platform-adapters."Matrix rooms, invites and clock skew"]
+"Alias in allowlist rejected" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_matrix_room_alias_in_the_allowlist_fails_validation"]
+
+# Group 78.7: the Discord tools (crates/pmt-adapters-discord/tests/tools.rs
+# against a mock REST API).
+[platform-adapters."Discord tools"]
+"Action not allowlisted" = ["crates/pmt-adapters-discord/tests/tools.rs::an_action_outside_server_actions_is_refused_and_hidden", "crates/pmt-config/src/validate_platforms.rs::unknown_discord_server_actions_fail_validation"]
+
+# Group 78.5-78.7 (partial): catalog adapter plugins
+# (plugins/first-party/<platform>) run through the WASM plugin host against
+# mocks of their platforms (crates/prometheus/tests/catalog_<platform>.rs),
+# socket-based ones through the socket bridge sidecar run with the system
+# Node; each also passes the conformance kit there.
+[platform-adapters."SMS adapter"]
+"Bad Twilio signature" = ["crates/prometheus/tests/catalog_sms.rs::a_badly_signed_sms_is_refused_and_admits_nothing"]
+
+[platform-adapters."IRC adapter"]
+"Long reply split" = ["crates/prometheus/tests/catalog_irc.rs::a_long_reply_is_sent_as_privmsg_lines_within_450_bytes"]
+
+[platform-adapters."Raft wake-only adapter"]
+"Content-bearing wake rejected" = ["crates/prometheus/tests/catalog_raft.rs::a_wake_carrying_content_is_rejected_and_injects_nothing"]
+
+[platform-adapters."Home Assistant adapter and toolset"]
+"Dangerous domain blocked" = ["crates/prometheus/tests/catalog_homeassistant.rs::a_service_of_a_blocked_domain_is_refused_naming_it"]

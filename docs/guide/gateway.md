@@ -133,6 +133,17 @@ natively; a rich message Telegram refuses is sent as `MarkdownV2` in
 4096-character parts, and a Bot API without rich messages turns them off
 until the adapter restarts.
 
+A self-hosted Bot API server lifts Telegram's 20 MB limit on the files a
+bot may download to 2048 MB: log the bot out of the public server once
+(`prometheus gateway telegram logout`), then point
+`options.api_base_url` (and `options.file_base_url`, default
+`<api_base_url>/file`) at your server. With `options.local_mode = true`
+(a server run with `--local`) files are read from the absolute path the
+server returns, which must be readable on this host (`local Bot API file
+not readable: <path>` otherwise). `gateway.media.max_inbound_bytes`
+(128 MB) still applies: a larger file is refused with the effective
+maximum named.
+
 Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
 resumes the session after a dropped connection, so missed messages are
 replayed; the bot needs the Message Content privileged intent, and
@@ -149,6 +160,18 @@ sharing the application sets. Both adapters send buttons for approvals, typing
 indicators, reactions and files, and both read the token from the owning
 profile's secrets only.
 
+The Discord adapter also brings two tools to Discord sessions (and to
+sessions that enable their toolsets): `discord` (`fetch_messages`,
+`search_members`, `create_thread`) and `discord_admin` (`list_guilds`,
+`server_info`, `list_channels`, `channel_info`, `list_roles`,
+`member_info`, `list_pins`, `pin_message`, `unpin_message`,
+`delete_message`, `add_role`, `remove_role`). `options.server_actions`
+lists the actions they may use: the others are left out of both tools and
+refused when called ("action add_role disabled by config"); an unknown
+name fails validation. Without the Server Members intent (checked at
+connect, remembered for a day) `member_info` and `search_members` are
+hidden.
+
 The other first-party adapters:
 
 - **Slack** uses Socket Mode with the app-level token `SLACK_APP_TOKEN`
@@ -163,7 +186,13 @@ The other first-party adapters:
   `prometheus gateway slack-manifest` prints an app manifest with Socket
   Mode, the scopes, the events and every slash command (`--write` saves
   it as `<profile>/slack-manifest.json`, `--commands-only` prints the
-  command list).
+  command list). `options.reaction_triggers` makes reactions start
+  turns: `true` for any reaction on the bot's own messages, or a list of
+  emoji names (`["eyes"]`) on any message (default `false`: reactions are
+  dropped). The turn's text is `reaction:added:<emoji>` with the reacted
+  message as its reply context, it answers in
+  `options.reaction_trigger_target` (`channel` or `channel:thread_ts`)
+  when set, and the reacting user must be authorized like any author.
 - **Email** polls the inbox over IMAP every `options.poll_interval_secs`
   (15) and answers over SMTP as `options.address` with the password in
   `EMAIL_PASSWORD`. `options.imap_host` and `options.smtp_host` are
@@ -183,8 +212,16 @@ The other first-party adapters:
   Allowlist entries are whole addresses.
 - **Matrix** syncs with `options.homeserver` using `MATRIX_ACCESS_TOKEN`;
   the sync cursor survives reconnects, a two-member room is a direct
-  chat, and invites from `allow_users` are accepted. Rooms are not
-  end-to-end encrypted yet.
+  chat. `options.allowed_rooms` (internal `!room:server` ids; a `#alias`
+  fails validation) limits the rooms read, before any other gating,
+  direct chats exempt. `options.auto_join` accepts invites from
+  `authorized` users (`allow_users`, the default), `all` or `none`.
+  `options.session_scope` is `auto` (each thread its own session),
+  `room` (one session and workspace binding per room) or `thread` (every
+  top-level message starts its own thread). Events older than the
+  adapter's start minus 5 seconds are dropped; more than 10 such drops
+  after the first 30 seconds log one warning naming clock skew. Rooms are
+  not end-to-end encrypted yet.
 - **Signal** talks to a signal-cli HTTP daemon at `options.http_url` for
   the account `options.account` (E.164). Run the daemon with
   `--receive-mode on-connection` so Signal holds messages while the
@@ -296,6 +333,64 @@ prompt = "ALERT {alert.name} on {alert.host}"
 filters = { equals = { path = "payload.alert.severity", value = "critical" } }
 ```
 
+**Coalescing.** A burst of events about one item (a pull request pushed
+five times in a minute) should run one turn, not five. A route with a
+`coalesce` block holds events whose `key` resolves to the same value:
+`key` is a payload dot path (`pull_request.number`, optionally prefixed
+`payload.`) or a template (`{repository.full_name}#{number}`). Each newer
+event replaces the pending one and restarts the quiet window of
+`window_secs` (30); the turn runs on the newest event when the window
+elapses, or `max_wait_secs` (300) after the group's first event, so a
+steady stream cannot starve it. The sender gets 202
+`{"status":"coalesced",...}` at once (after the duplicate check, so a
+redelivery is still answered `duplicate`), and the turn's input ends with
+a note of how many earlier events it superseded. An event whose key does
+not resolve runs at once. Pending groups are flushed, not dropped, when
+the adapter stops. Coalescing applies only to routes that run a turn:
+with `deliver_only` or `cron_job` it fails validation, as does an empty
+`key`.
+
+```toml
+[gateway.platforms.webhook.routes.pr]
+secret_secret = "GITHUB_WEBHOOK_SECRET"
+events = ["pull_request"]
+prompt = "Review PR #{pull_request.number}: {pull_request.title}"
+coalesce = { key = "pull_request.number", window_secs = 60 }
+```
+
+**Public URL.** `gateway.platforms.webhook.options.public_url` is the
+`https://` origin that reaches the daemon's listener from outside (a
+reverse proxy or tunnel in front of `gateway.http.listen`); a route's
+public address is `<public_url>/p/<profile>/webhook/<route>`. It is
+required for [MCP event subscriptions](mcp.md#events), which refuse a
+plain `http://` origin.
+
+```toml
+[gateway.platforms.webhook]
+options = { public_url = "https://hooks.example.com" }
+```
+
+**MCP events.** A route created by an MCP server's `subscribe_event` (see
+[MCP servers](mcp.md#events)) is kept in `<profile>/webhooks.toml` with an
+`mcp_event` block and accepts only Standard Webhooks signatures with its
+own generated secret. A body with a top-level `type` is a control
+envelope answered without a turn: `verification` echoes its challenge,
+`terminated` removes the route and tells its `deliver` target, `gap`
+resumes from the fresh cursor it carries, and an unknown type is
+acknowledged. Any other body is an event occurrence: its replay cursor is
+remembered, a retry of the same `eventId` is answered `duplicate`, and it
+runs through the route's normal pipeline. The event's `data` is inserted
+into the prompt after the template is rendered, as JSON cut at 32,000
+characters, so text inside it is never read as a placeholder.
+
+`prometheus gateway selftest <platform> [--peer-agent [--peer-id <id>]]`
+replays synthetic messages through the platform's admission and mention
+gating, offline and without credentials: a direct message and a group
+mention from an authorized sender, and with `--peer-agent` another bot
+mentioning this agent. Each failed check is named with its category
+(`config`, `platform_connectivity`, `bot_identity` or `routing_logic`);
+it exits 0 only when every check passes (`--json` prints the report).
+
 `prometheus plugins test-adapter <platform>` runs the adapter conformance
 kit (connect and reconnect, descriptor, normalization, deduplication,
 splitting at the declared limit, retry classification, cards and every
@@ -403,6 +498,47 @@ sample through the listener and prints the session it started.
 prometheus webhooks subscribe deploys --events push --deliver telegram:123
 prometheus webhooks test deploys
 ```
+
+### Catalog adapters
+
+Other platforms arrive as first-party adapter plugins from the plugin
+catalog (`prometheus plugins install <id>`, then `prometheus plugins
+enable <id>`); each passes the conformance kit against a mock of its
+platform. Adapters that hold a socket (IRC, Home Assistant) run a small
+Node sidecar, the socket bridge, which connects only to the hosts the
+plugin was granted; a server other than the declared default is granted
+with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
+
+- `sms` (Twilio): set `account_sid`, `phone_number` and `public_url` (the
+  exact webhook URL configured in Twilio, which it signs) and the secret
+  `TWILIO_AUTH_TOKEN`. A webhook with a bad `X-Twilio-Signature` is
+  answered 401; messages from the adapter's own number are ignored;
+  replies are plain text (Markdown stripped) of at most 1600 characters,
+  and choices are numbered.
+- `irc`: `server`, `channels`, and optionally `port` (6697 with
+  `use_tls`, the default, else 6667) and `nickname` (`prometheus-bot`);
+  secrets `IRC_SERVER_PASSWORD` and `IRC_NICKSERV_PASSWORD` (NickServ
+  `IDENTIFY`). Channels are groups (a message starting with or naming the
+  nickname mentions the bot), private messages are DMs, and replies are
+  `PRIVMSG` lines of at most 450 bytes. The server and nickname are locked
+  across homes like a bot token.
+- `homeassistant`: `url` (default `http://homeassistant.local:8123`),
+  secret `HASS_TOKEN`, and what to watch: `watch_domains`,
+  `watch_entities` or `watch_all` (off by default; nothing is forwarded,
+  with a warning, until one is set), minus `ignore_entities`, each entity
+  at most once per `cooldown_secs` (30). `event_template` shapes the
+  event text (`{name} ({entity_id}) changed from {old} to {new}`). Replies
+  become persistent notifications; a cron job delivers to
+  `homeassistant:<notify target>`. The platform brings the
+  `homeassistant` toolset: `ha_list_entities`, `ha_get_state`,
+  `ha_list_services` and `ha_call_service`, which refuses the
+  `shell_command`, `command_line`, `python_script`, `pyscript`, `hassio`
+  and `rest_command` domains.
+- `raft` (wake-only): `raft_profile` (and `raft_command`, default `raft`).
+  Its sidecar runs `raft agent bridge` with only the profile and a wake
+  token in its environment; each wake hint becomes a content-free notice
+  and the agent reads and answers with the Raft CLI. A hint carrying
+  `text`, `body`, `content` or `messages` is refused.
 
 ## Who may talk to the agent
 
@@ -880,6 +1016,47 @@ sends `send`, `edit` and `egress` requests with an `id`, answered by
 "message":..}}`. Enrollment is `POST <connector-url>/v1/enroll` with
 `{"token","gateway_id"?,"wake_url"?}`, answered by `{"gateway_id",
 "credential","relay_url"?}` or a 4xx `{"error":"already_used"|"expired"}`.
+
+The same frames carry optional additions older connectors ignore: an
+inbound frame's `addressing` (`mentioned`, `replies_to_bot`,
+`in_bot_thread`, `not_addressed`) and `attachments`, a descriptor's
+`descriptors` (each adapter's own descriptor, by platform), a `profile`
+on `send`, `edit` and `media` requests, a `media` request
+(`{"type":"media","id","profile","platform","location"}`, answered with
+base64 `data`) and outgoing attachments carrying their bytes as base64
+`data` (25 MiB at most each).
+
+## Adapter host forwarding
+
+Some platforms need crypto or native libraries on one machine (Matrix
+encryption keys on a Mac) while the agent runs elsewhere (a container).
+`prometheus daemon run --adapters-only --upstream wss://<host>:<port>/adapters`
+runs only the configured adapters on this host and forwards every event
+they admit to the upstream daemon, which owns every session; the
+upstream's replies, edits and attachment reads come back and go out
+through the local adapters.
+
+- **The upstream** enables its remote attachment listener
+  (`[daemon.remote] enabled = true`, see
+  [Remote clients](dashboard.md#remote-clients-and-paired-devices)) and pairs the host as an
+  admin device: `prometheus daemon pair-device matrix-host --role admin
+  --profile-binding default`. Only an admin device may attach at
+  `/adapters` (others are closed with 4403), because the host vouches for
+  the senders it forwards, and it may address only the profiles its
+  device is bound to. One host attaches at a time, and not to a daemon
+  that dials a relay connector.
+- **The host** stores that token in the secret
+  `daemon.upstream_ticket_secret` names (`UPSTREAM_TICKET` by default:
+  `prometheus secrets set UPSTREAM_TICKET`), trusts the upstream's
+  certificate (a self-signed one through `network.extra_ca_file`), and
+  runs with `--adapters-only --upstream`. It keeps sender authorization,
+  pairing, the bot-loop guard and deduplication; it runs no scheduler,
+  automation or network listener, and no session.
+
+Profiles are matched by name. While the upstream cannot be reached the
+host's adapters are `degraded` with `upstream_unreachable`, a person
+writing in is told `Upstream agent unavailable, try again shortly.`, and
+the host reconnects with backoff (1 s to 1 min).
 
 ## Health export
 

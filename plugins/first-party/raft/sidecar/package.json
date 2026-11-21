@@ -1,0 +1,9 @@
+{
+  "name": "prometheus-raft-wake",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runs the Raft CLI bridge and receives its wake hints for the Prometheus raft adapter (no dependencies).",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" }
+}

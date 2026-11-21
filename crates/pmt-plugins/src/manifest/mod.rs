@@ -27,6 +27,7 @@ pub mod dashboard;
 pub mod lanes;
 mod locales;
 mod router;
+pub mod sidecar;
 pub mod ui;
 
 use std::path::Path;
@@ -73,6 +74,7 @@ const FIELDS: &[&str] = &[
     "build",
     "mcp",
     "python",
+    "sidecar",
 ];
 
 /// How a plugin runs.
@@ -140,6 +142,8 @@ pub struct Manifest {
     pub build: Option<String>,
     /// `[mcp]` or `[python]`: how the server or bridge starts it.
     pub launch: Option<Table>,
+    /// `[sidecar]`: the helper process an adapter plugin runs beside it.
+    pub sidecar: Option<sidecar::SidecarDeclaration>,
 }
 
 impl Manifest {
@@ -222,6 +226,7 @@ impl Manifest {
         let launch = launch_table(&table, kind)?;
         let capabilities = Declared::parse(table.get("capabilities"))?;
         let ui_capability = capabilities.ui;
+        let sidecar = sidecar::parse(table.get("sidecar"), &capabilities.secrets)?;
         Ok(Self {
             manifest_version,
             version: Version::parse(&string(&table, "version")?)
@@ -241,6 +246,7 @@ impl Manifest {
             ui: ui::parse(table.get("ui"), ui_capability)?,
             build: optional_string(&table, "build")?,
             launch,
+            sidecar,
             id,
         })
     }

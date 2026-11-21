@@ -132,6 +132,21 @@ pub fn extended_registry(
     calls: &SessionCalls,
 ) -> Result<(ToolRegistry, Vec<String>), Error> {
     let mut registry = base_registry(scope)?;
+    // Adapters' own tools, only for platforms this profile enables; never
+    // opted in (a platform's bundle or the user enables them).
+    crate::platform_tools_host::contribute_all();
+    let owner = scope.clone();
+    let secrets: pmt_tools::platform_tools::SecretReader = Arc::new(move |name| {
+        let value = owner.secrets().store().get(name).ok().flatten()?;
+        Some(value.expose().to_owned())
+    });
+    pmt_tools::platform_tools::register(
+        &mut registry,
+        scope.dir(),
+        &scope.config().gateway,
+        &secrets,
+        &crate::runtimes_cmd::browser::outbound(&scope.config().network),
+    );
     // Listing the tools runs for no session.
     let mut toolsets = plugins
         .current()

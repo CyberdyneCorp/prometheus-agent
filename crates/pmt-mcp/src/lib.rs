@@ -17,6 +17,7 @@ pub mod cache;
 pub mod computer_use;
 pub mod connection;
 pub mod costs;
+pub mod events;
 pub mod handler;
 pub mod host;
 pub mod manager;

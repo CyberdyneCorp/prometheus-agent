@@ -63,6 +63,7 @@
 # Reference
 
 - [Configuration](reference/configuration.md)
+- [Platform adapter options](reference/platform-options.md)
 - [Daemon configuration](reference/daemon-configuration.md)
 - [CLI](reference/cli.md)
 - [Error codes](reference/error-codes.md)

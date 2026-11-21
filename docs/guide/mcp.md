@@ -249,6 +249,50 @@ can answer it is refused telling the model not to retry. A malformed
 `tool_costs` entry skips the server with an error naming it (`mcp status`
 shows `error`).
 
+### Events
+
+A server that publishes events (the experimental MCP `events/*`
+extension) can start runs when something happens on its side. Opt in per
+server with `events = true`:
+
+```toml
+[mcp.servers.tracker]
+transport = "http"
+url = "https://tracker.example.com/mcp"
+events = true
+
+[gateway.platforms.webhook]
+options = { public_url = "https://hooks.example.com" }
+```
+
+The server's toolset then gains `list_event_types`, `subscribe_event`
+(`name`, `arguments`, `instructions` up to 2,000 characters, `deliver`,
+default `log`) and `unsubscribe_event`. A subscription is a standing
+trigger that starts unattended runs, so every `subscribe_event` asks a
+once-only approval showing the instructions and destination, whatever
+the server's `trust`, the approval mode or YOLO; where no one can answer,
+it is refused.
+
+Events arrive by webhook, so the daemon must run the webhook adapter and
+`gateway.platforms.webhook.options.public_url` must be the `https://`
+origin that reaches it (plain HTTP is refused, and so is a subscription
+without it). Each subscription becomes a webhook route
+`mcp-<server>-<hash>` in `<profile>/webhooks.toml` (listed by
+`prometheus webhooks list`) with its own Standard Webhooks secret in the
+secrets store; the grant and replay cursor live in
+`<profile>/mcp-events.json`. While the server is connected its
+subscriptions are renewed before their granted lifetime runs out (all of
+them on each fresh connection); a renewal the server refuses for good
+(forbidden, not found, unsupported, invalid) removes the route and tells
+its `deliver` target. `unsubscribe_event` or
+`prometheus webhooks remove <route>` ends one.
+
+Each event runs as its own conversation with the route's read-only
+toolset, its payload framed as data, never instructions. The server's
+control envelopes (`verification`, `terminated`, `gap`) are answered
+without a run, and a retried event is ignored; see
+[the webhook adapter](gateway.md#platform-adapters) for the details.
+
 ## Tool search
 
 Many MCP tools make for a large tool array. With `tools.tool_search.mode =

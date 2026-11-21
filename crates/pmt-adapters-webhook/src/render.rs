@@ -64,6 +64,68 @@ pub(crate) fn render(template: Option<&str>, payload: &Value) -> String {
     out
 }
 
+/// Characters of an MCP event's `data` a turn input carries.
+pub(crate) const DATA_CHARS: usize = 32_000;
+
+/// The input of an MCP event occurrence whose template has `{data}`: the
+/// rest of the template renders first and the event's `data` (pretty
+/// JSON, cut at [`DATA_CHARS`] with a note) goes in afterwards, so text
+/// inside it is never read as a placeholder. `None` without `{data}`.
+pub(crate) fn render_event(template: Option<&str>, payload: &Value) -> Option<String> {
+    let template = template.filter(|t| t.contains("{data}"))?;
+    let data = serde_json::to_string_pretty(&payload["data"]).unwrap_or_default();
+    let total = data.chars().count();
+    let data = if total > DATA_CHARS {
+        format!(
+            "{}\n[truncated: the first {DATA_CHARS} of {total} characters]",
+            cut(&data, DATA_CHARS)
+        )
+    } else {
+        data
+    };
+    let parts: Vec<String> = template
+        .split("{data}")
+        .map(|part| {
+            if part.is_empty() {
+                String::new()
+            } else {
+                render(Some(part), payload)
+            }
+        })
+        .collect();
+    Some(parts.join(&data))
+}
+
+/// A coalescing key: a dot path (`pull_request.number`, optionally under
+/// `payload.`) or a template of them; `None` when any path resolves to
+/// nothing, so unrelated events never share a group.
+pub(crate) fn key(spec: &str, payload: &Value) -> Option<String> {
+    let spec = spec.trim();
+    let template = if spec.contains('{') {
+        spec.to_owned()
+    } else {
+        format!("{{{spec}}}")
+    };
+    let mut out = String::new();
+    let mut rest = template.as_str();
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        let close = after.find('}')?;
+        let path = &after[..close];
+        let value = resolve(payload, path)
+            .or_else(|| {
+                path.strip_prefix("payload.")
+                    .and_then(|p| resolve(payload, p))
+            })
+            .filter(|v| !v.is_null())?;
+        out.push_str(&show(value));
+        rest = &after[close + 1..];
+    }
+    out.push_str(rest);
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -93,6 +155,31 @@ mod tests {
             render(Some("{} {not a path} {"), &payload),
             "{} {not a path} {"
         );
+    }
+
+    #[test]
+    fn coalescing_keys_resolve_every_path_or_nothing() {
+        let payload = json!({"ref": "main", "repository": {"full_name": "o/r"}, "number": 7});
+        assert_eq!(key("payload.ref", &payload).as_deref(), Some("main"));
+        assert_eq!(key("ref", &payload).as_deref(), Some("main"));
+        assert_eq!(
+            key("{repository.full_name}#{number}", &payload).as_deref(),
+            Some("o/r#7")
+        );
+        assert_eq!(key("pull_request.number", &payload), None);
+    }
+
+    #[test]
+    fn event_data_goes_in_after_rendering_and_is_cut_with_a_note() {
+        let payload = json!({"eventId": "e1", "data": {"note": "{__raw__} {eventId}"}});
+        let text = render_event(Some("Event {eventId}:\n{data}\nEnd"), &payload).unwrap();
+        assert!(text.starts_with("Event e1:\n"), "{text}");
+        assert!(text.contains("{__raw__} {eventId}"), "{text}");
+        assert!(text.ends_with("\nEnd"));
+        let big = json!({"data": "x".repeat(40_000)});
+        let text = render_event(Some("{data}"), &big).unwrap();
+        assert!(text.contains("[truncated: the first 32000 of 40002 characters]"));
+        assert_eq!(render_event(Some("no data"), &payload), None);
     }
 
     #[test]

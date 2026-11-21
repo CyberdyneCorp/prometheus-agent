@@ -10,6 +10,7 @@
 //! Safe mode starts none.
 
 pub mod editor;
+mod events;
 mod launch;
 pub(crate) use launch::INHERITED;
 pub mod oauth;
@@ -270,6 +271,7 @@ fn settings(
         },
         lazy: server.lazy,
         schema_cache: Some(schema_cache(scope, name)),
+        events: server.events.then(|| events::of(scope)),
     })
 }
 

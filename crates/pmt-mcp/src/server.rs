@@ -83,6 +83,8 @@ pub struct Settings {
     pub lazy: bool,
     /// Where the tool list is cached between processes.
     pub schema_cache: Option<PathBuf>,
+    /// Its event subscriptions (`events = true`).
+    pub events: Option<crate::events::Events>,
 }
 
 impl Default for Settings {
@@ -99,6 +101,7 @@ impl Default for Settings {
             recycle: Recycle::default(),
             lazy: false,
             schema_cache: None,
+            events: None,
         }
     }
 }
@@ -159,6 +162,8 @@ pub struct Server {
     refreshes: AtomicU64,
     pub(crate) sampling_window: Mutex<Window>,
     shared: Mutex<Shared>,
+    /// Wakes the event subscription refresher (a new subscription).
+    events_wake: Arc<tokio::sync::Notify>,
 }
 
 impl std::fmt::Debug for Server {
@@ -215,6 +220,7 @@ impl Server {
             refreshes: AtomicU64::new(0),
             sampling_window: Mutex::new(Window::default()),
             shared: Mutex::new(shared),
+            events_wake: Arc::default(),
         }
     }
 
@@ -389,7 +395,26 @@ impl Server {
         if self.settings.recycle != Recycle::default() {
             pmt_core::spawn::spawn(recycle(Arc::downgrade(self), seq));
         }
+        if self.settings.events.is_some() {
+            pmt_core::spawn::spawn(refresh_events(Arc::downgrade(self), seq));
+        }
         connection
+    }
+
+    /// Connection `seq`, while it is still the live one.
+    fn live(&self, seq: u64) -> Option<Arc<Connection>> {
+        let shared = self.lock();
+        shared
+            .connection
+            .as_ref()
+            .filter(|c| shared.connection_seq == seq && !c.is_closed())
+            .cloned()
+    }
+
+    /// A subscription was made: its refresh is scheduled from its own
+    /// grant rather than after the refresher's current sleep.
+    pub(crate) fn wake_events(&self) {
+        self.events_wake.notify_one();
     }
 
     /// Warns about `tool_costs` entries naming tools the server does not
@@ -669,6 +694,27 @@ async fn recycle(server: Weak<Server>, seq: u64) {
             Some(this) if this.recycle_now(seq) => return,
             Some(_) => {}
             None => return,
+        }
+    }
+}
+
+/// Keeps the server's event subscriptions alive for the life of
+/// connection `seq`: every one at once, then each before its grant runs
+/// out (spec: plugin-system, MCP events).
+async fn refresh_events(server: Weak<Server>, seq: u64) {
+    let mut force = true;
+    loop {
+        let Some(this) = server.upgrade() else { return };
+        let Some(connection) = this.live(seq) else {
+            return;
+        };
+        let next = crate::events::refresh(&this, &connection, force).await;
+        force = false;
+        let wake = Arc::clone(&this.events_wake);
+        drop((this, connection));
+        tokio::select! {
+            () = tokio::time::sleep(crate::events::sleep_until(next)) => {}
+            () = wake.notified() => {}
         }
     }
 }

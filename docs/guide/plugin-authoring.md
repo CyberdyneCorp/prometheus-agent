@@ -379,6 +379,31 @@ and queues every call; see the Memory guide. A `context-engine` plugin
 exports `initialize`, `compact`, `select`, `tool-schemas` and
 `handle-tool-call`.
 
+### Adapter sidecars
+
+A `platform-adapter` plugin whose platform client needs a runtime the
+WASM sandbox cannot host declares a `[sidecar]`. The daemon starts it when
+the adapter connects and stops it when the adapter disconnects:
+
+```toml
+[sidecar]
+runtime = "node"                       # or "none": `command` is an executable you ship
+command = "sidecar/index.js"           # relative to the plugin directory
+args = ["--port", "{port}"]            # {port}: the loopback port it must serve
+lockfile = "sidecar/package-lock.json" # required for node: packages are installed with npm ci
+secrets = ["PHOTON_TOKEN"]             # a subset of capabilities.secrets
+ready_timeout_secs = 30
+```
+
+It gets a fresh loopback port and bearer token on every start
+(`PMT_SIDECAR_PORT`, `PMT_SIDECAR_TOKEN`), `PATH`, and only the listed
+secrets the plugin was granted. The adapter's `start` options carry
+`sidecar = {url, token}`; declare `network = ["127.0.0.1"]` to call it. The
+port and token are also written to `<home>/run/sidecars/<profile>-<plugin>.json`
+for senders outside the daemon. If the sidecar exits on its own, the
+adapter goes to `retrying` with code `sidecar_exited` and the gateway
+reconnects it with the usual backoff, starting the sidecar again.
+
 ### Dashboard pages and slots
 
 A plugin adds to the web dashboard with a `[dashboard]` table (no world

@@ -10,7 +10,7 @@
 
 mod adapter;
 #[cfg(feature = "gateway")]
-mod adapter_plugin;
+pub mod adapter_plugin;
 mod catalog_cmd;
 mod dev;
 pub mod hooks_cmd;

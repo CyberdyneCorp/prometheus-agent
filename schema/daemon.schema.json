@@ -234,6 +234,11 @@
           "minimum": 0,
           "type": "integer"
         },
+        "upstream_ticket_secret": {
+          "$ref": "#/$defs/SecretName",
+          "default": "UPSTREAM_TICKET",
+          "description": "`daemon run --adapters-only --upstream <url>`: the launch profile's\nsecret holding the admin device token the upstream daemon paired\nfor this adapter host (`prometheus daemon pair-device <name> --role\nadmin` there)."
+        },
         "watchdog": {
           "$ref": "#/$defs/WatchdogConfig",
           "default": {
@@ -909,6 +914,7 @@
           "workers": 8
         },
         "systemd_watchdog_secs": 0,
+        "upstream_ticket_secret": "UPSTREAM_TICKET",
         "watchdog": {
           "enabled": true,
           "max_strikes": 3,

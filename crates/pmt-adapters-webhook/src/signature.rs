@@ -91,6 +91,13 @@ pub(crate) fn verify(request: &HttpRequest, secret: &str, now: i64) -> bool {
     false
 }
 
+/// Whether `request` carries a valid Standard Webhooks signature under
+/// `secret` at `now` (the only scheme MCP event routes accept).
+#[must_use]
+pub(crate) fn verify_standard(request: &HttpRequest, secret: &str, now: i64) -> bool {
+    standard(request, secret, now) == Some(true)
+}
+
 /// GitHub's signature header of `body` (what a sender computes).
 #[must_use]
 pub fn github_signature(secret: &str, body: &[u8]) -> String {

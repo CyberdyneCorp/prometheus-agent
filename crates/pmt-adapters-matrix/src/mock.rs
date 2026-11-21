@@ -156,7 +156,8 @@ impl MatrixMock {
     pub fn push(&self, content: &Value) -> String {
         let id = format!("${}", self.id());
         let event = json!({"type": "m.room.message", "event_id": id, "sender": USER,
-                           "origin_server_ts": 1_700_000_000_000_i64, "content": content});
+                           "origin_server_ts": jiff::Timestamp::now().as_millisecond(),
+                           "content": content});
         let mut state = self.lock();
         state.timeline.push(event.clone());
         state.last_event = Some(event);

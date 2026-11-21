@@ -14,6 +14,7 @@ mod api;
 #[cfg(feature = "kit")]
 pub mod mock;
 mod power;
+mod rooms;
 mod sync;
 
 use std::collections::{BTreeSet, HashMap};
@@ -63,6 +64,7 @@ pub struct Matrix {
     poller: Mutex<Option<CancellationToken>>,
     /// Direct-message rooms the adapter opened, by user.
     dms: Mutex<HashMap<String, String>>,
+    rooms: Arc<rooms::Rooms>,
 }
 
 impl std::fmt::Debug for Matrix {
@@ -100,7 +102,9 @@ impl Matrix {
             )
         })?;
         let txn_base = jiff::Timestamp::now().as_millisecond().unsigned_abs();
+        let rooms = Arc::new(rooms::Rooms::new(&options, jiff::Timestamp::now()));
         Ok(Self {
+            rooms,
             scope: setup.scope.clone(),
             secret: setup
                 .config
@@ -210,6 +214,7 @@ impl Matrix {
             user_id: user_id.clone(),
             cursor: Arc::clone(&self.cursor),
             allow_users: self.allow_users.clone(),
+            rooms: Arc::clone(&self.rooms),
             stop: stop.clone(),
         };
         run.start_cursor()

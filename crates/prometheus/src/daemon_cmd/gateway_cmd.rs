@@ -83,6 +83,11 @@ pub enum GatewayCommand {
         /// The platform.
         platform: String,
     },
+    /// Telegram bot maintenance.
+    Telegram(super::telegram_cmd::TelegramArgs),
+    /// Replay synthetic messages through a platform's admission and mention
+    /// gating, offline and without credentials; exits 1 when a check fails.
+    Selftest(super::selftest_cmd::SelftestArgs),
 }
 
 /// `prometheus gateway outbox` subcommands.
@@ -171,6 +176,8 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Whatsapp(args) => super::whatsapp_cmd::run(args, ctx),
         GatewayCommand::Pause { platform } => super::platform_cmd::run(platform, true, ctx),
         GatewayCommand::Resume { platform } => super::platform_cmd::run(platform, false, ctx),
+        GatewayCommand::Selftest(args) => super::selftest_cmd::run(args, ctx),
+        GatewayCommand::Telegram(args) => super::telegram_cmd::run(args, ctx),
     }
 }
 

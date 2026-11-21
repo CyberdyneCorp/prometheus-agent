@@ -43,6 +43,8 @@ pub(crate) struct Run {
     /// How the WebSocket reaches the network.
     pub(crate) proxy: pmt_gateway::messaging::proxy::Proxy,
     pub(crate) slash: Arc<crate::slash::Replies>,
+    /// Which reactions start a turn.
+    pub(crate) reactions: crate::ReactionRule,
     pub(crate) stop: CancellationToken,
 }
 
@@ -163,6 +165,14 @@ impl Run {
                 let event = &payload["event"];
                 normalize::message(event, self.team.as_deref(), &self.bot_user)
                     .or_else(|| normalize::app_home(event, self.team.as_deref()))
+                    .or_else(|| {
+                        normalize::reaction(
+                            event,
+                            self.team.as_deref(),
+                            &self.bot_user,
+                            &self.reactions,
+                        )
+                    })
             }
             Some("interactive") => normalize::action(payload),
             Some("slash_commands") => self.slash.event(payload, self.team.as_deref()),

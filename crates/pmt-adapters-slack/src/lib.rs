@@ -67,6 +67,15 @@ pub struct Slack {
     slash: Arc<slash::Replies>,
     /// The bot's user id and workspace, from `auth.test` at connect.
     me: Mutex<(String, Option<String>)>,
+    reactions: ReactionRule,
+}
+
+/// Which reactions start a turn, and where it answers (spec:
+/// platform-adapters, Slack reaction triggers).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ReactionRule {
+    pub(crate) triggers: pmt_config::platforms::ReactionTriggers,
+    pub(crate) target: Option<String>,
 }
 
 impl std::fmt::Debug for Slack {
@@ -115,6 +124,10 @@ impl Slack {
             socket: Mutex::default(),
             slash: Arc::default(),
             me: Mutex::default(),
+            reactions: ReactionRule {
+                triggers: options.reaction_triggers,
+                target: options.reaction_trigger_target,
+            },
         })
     }
 
@@ -171,6 +184,7 @@ impl Slack {
             extra_ca: self.extra_ca.clone(),
             proxy: self.proxy.clone(),
             slash: Arc::clone(&self.slash),
+            reactions: self.reactions.clone(),
             stop,
         })
         .await

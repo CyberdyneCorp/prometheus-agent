@@ -327,6 +327,7 @@ fn label(registry: Registry) -> &'static str {
         Registry::Theme => "theme",
         Registry::Platform => "platform",
         Registry::MemoryProvider => "memory provider",
+        Registry::CatalogPlugin => "catalog plugin",
     }
 }
 

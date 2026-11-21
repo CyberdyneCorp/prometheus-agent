@@ -97,6 +97,24 @@ fn check_mode_rules(platform: &str, key: &str, table: &PlatformConfig) -> Result
         }
     }
     check_credential_urls(platform, key, table)?;
+    if platform == "matrix"
+        && let Some(alias) = options::<MatrixOptions>(platform, table)
+            .allowed_rooms
+            .into_iter()
+            .find(|r| !r.starts_with('!'))
+    {
+        return Err(invalid(format!(
+            "{key}.options.allowed_rooms: '{alias}' is not a room id; Matrix allowlists require !-prefixed room ids (find it in the room's settings, Advanced)"
+        )));
+    }
+    if platform == "webhook"
+        && let Some(url) = options::<WebhookOptions>(platform, table).public_url
+        && !url.starts_with("https://")
+    {
+        return Err(invalid(format!(
+            "{key}.options.public_url: '{url}' must be an https:// origin (MCP servers deliver events over HTTPS only)"
+        )));
+    }
     if platform == "email"
         && let Some(entry) = table.allow_users.iter().find(|u| !whole_address(u))
     {
@@ -233,6 +251,7 @@ pub fn check_route(
         )));
     }
     check_route_delivery(key, route)?;
+    check_coalesce(key, route)?;
     crate::gateway_check::check_narrowing(config, route.toolsets.as_deref(), key, "a route")?;
     if let Some(script) = &route.script {
         check_confined(
@@ -259,6 +278,35 @@ fn check_route_name(key: &str, name: &str) -> Result<(), Error> {
             "{key}: a route name uses only a-z, 0-9, '-' and '_'"
         )))
     }
+}
+
+/// A `coalesce` block: a key, positive windows, and only on routes that
+/// run a turn.
+fn check_coalesce(key: &str, route: &WebhookRoute) -> Result<(), Error> {
+    let Some(coalesce) = &route.coalesce else {
+        return Ok(());
+    };
+    for (on, field) in [
+        (route.deliver_only, "deliver_only"),
+        (route.cron_job.is_some(), "cron_job"),
+    ] {
+        if on {
+            return Err(invalid(format!(
+                "{key}.coalesce: coalescing applies to routes that run a turn, not with {field}"
+            )));
+        }
+    }
+    if coalesce.key.trim().is_empty() {
+        return Err(invalid(format!(
+            "{key}.coalesce.key: name a payload field (pull_request.number) or a template ({{repository.full_name}}#{{number}})"
+        )));
+    }
+    if coalesce.window_secs == 0 || coalesce.max_wait_secs == 0 {
+        return Err(invalid(format!(
+            "{key}.coalesce: window_secs and max_wait_secs must be at least 1"
+        )));
+    }
+    Ok(())
 }
 
 /// A `cron_job` route: a job named, never with `deliver_only`.
@@ -394,6 +442,19 @@ mod tests {
         assert!(domain.contains("not a whole address"), "{domain}");
     }
 
+    /// Spec: platform-adapters, Matrix rooms, invites and clock skew,
+    /// "Alias in allowlist rejected".
+    #[test]
+    fn a_matrix_room_alias_in_the_allowlist_fails_validation() {
+        let table = "[gateway.platforms.matrix]\nenabled = true\noptions = { homeserver = \"https://matrix.example.org\", allowed_rooms = ";
+        let found = message(&format!("{table}[\"#ops:example.org\"] }}\n"));
+        assert!(
+            found.contains("allowed_rooms") && found.contains("require !-prefixed room ids"),
+            "{found}"
+        );
+        check_toml(&format!("{table}[\"!abc:example.org\"] }}\n")).unwrap();
+    }
+
     #[test]
     fn signal_and_matrix_required_settings() {
         assert!(
@@ -498,6 +559,50 @@ mod tests {
         .unwrap_err();
         assert!(err.message().contains("not both"), "{}", err.message());
         check_toml("[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\ncron_job = \"sweeper\"\n").unwrap();
+    }
+
+    #[test]
+    fn coalescing_with_deliver_only_or_cron_job_fails_validation() {
+        for (extra, field) in [
+            (
+                "deliver_only = true\ndeliver = \"telegram\"\n",
+                "deliver_only",
+            ),
+            ("cron_job = \"sweeper\"\n", "cron_job"),
+        ] {
+            let found = message(&format!(
+                "[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n{extra}[gateway.platforms.webhook.routes.pr.coalesce]\nkey = \"payload.ref\"\n"
+            ));
+            assert!(
+                found.contains("routes.pr.coalesce")
+                    && found.contains(&format!("not with {field}")),
+                "{found}"
+            );
+        }
+        check_toml("[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n[gateway.platforms.webhook.routes.pr.coalesce]\nkey = \"ref\"\n").unwrap();
+    }
+
+    #[test]
+    fn the_webhook_public_url_is_https_only() {
+        let found = message(
+            "[gateway.platforms.webhook]\noptions = { public_url = \"http://hooks.example.com\" }\n",
+        );
+        assert!(
+            found.contains("options.public_url") && found.contains("https://"),
+            "{found}"
+        );
+        check_toml("[gateway.platforms.webhook]\noptions = { public_url = \"https://hooks.example.com\" }\n").unwrap();
+    }
+
+    #[test]
+    fn a_coalesce_block_needs_a_key_and_positive_windows() {
+        let route = "[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n[gateway.platforms.webhook.routes.pr.coalesce]\n";
+        for key in ["\"\"", "\"   \""] {
+            let found = message(&format!("{route}key = {key}\n"));
+            assert!(found.contains("routes.pr.coalesce.key"), "{found}");
+        }
+        let found = message(&format!("{route}key = \"ref\"\nwindow_secs = 0\n"));
+        assert!(found.contains("at least 1"), "{found}");
     }
 
     #[test]

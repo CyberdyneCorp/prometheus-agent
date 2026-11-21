@@ -16,10 +16,13 @@ required-features = ["fixture"]
 [dependencies]
 base64.workspace = true
 bytes.workspace = true
+# Generated Standard Webhooks secrets of event subscriptions.
+getrandom.workspace = true
 glob.workspace = true
 http-body-util.workspace = true
 hyper = { workspace = true, features = ["server", "http1"] }
 hyper-util.workspace = true
+jiff.workspace = true
 pmt-config.workspace = true
 pmt-core.workspace = true
 pmt-tools.workspace = true

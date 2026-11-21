@@ -31,7 +31,7 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use api::Api;
-pub use api::Endpoints;
+pub use api::{Endpoints, log_out};
 use pmt_config::ProfileScope;
 use pmt_config::platforms::{TelegramMode, TelegramOptions};
 use pmt_core::error::Error;
@@ -65,6 +65,21 @@ pub fn factory_at(endpoints: Endpoints) -> AdapterFactory {
     )
 }
 
+/// The endpoints of a self-hosted Bot API server when the options name
+/// one (spec: platform-adapters, Telegram local Bot API server), else
+/// `endpoints`; and whether they are self-hosted.
+fn self_hosted(options: &TelegramOptions, endpoints: Endpoints) -> (Endpoints, bool) {
+    let Some(api) = options.api_base_url.as_deref() else {
+        return (endpoints, false);
+    };
+    let api = api.trim_end_matches('/').to_owned();
+    let files = options.file_base_url.as_deref().map_or_else(
+        || format!("{api}/file"),
+        |f| f.trim_end_matches('/').to_owned(),
+    );
+    (Endpoints { api, files }, true)
+}
+
 /// A Telegram bot of one profile.
 pub struct Telegram {
     scope: ProfileScope,
@@ -89,6 +104,8 @@ pub struct Telegram {
     dm_topics_unavailable: AtomicBool,
     /// Pressed buttons whose answer waits for a private reply.
     callbacks: Arc<private::Callbacks>,
+    /// How inbound files are read (server limit, `--local` mode).
+    files: api::FileAccess,
 }
 
 impl std::fmt::Debug for Telegram {
@@ -142,7 +159,14 @@ impl Telegram {
             .token_secret
             .as_ref()
             .map_or_else(|| TOKEN_SECRET.to_owned(), |s| s.0.clone());
+        let (endpoints, self_hosted) = self_hosted(&options, endpoints);
+        let files = api::FileAccess::new(
+            self_hosted,
+            options.local_mode,
+            setup.scope.config().gateway.media.max_inbound_bytes,
+        );
         Ok(Self {
+            files,
             scope: setup.scope.clone(),
             secret,
             endpoints,
@@ -481,7 +505,11 @@ impl Adapter for Telegram {
         &'a self,
         attachment: &'a Attachment,
     ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
-        Box::pin(async move { self.api()?.download(&attachment.location).await })
+        Box::pin(async move {
+            self.api()?
+                .download(&attachment.location, &self.files)
+                .await
+        })
     }
 
     fn verify_http(&self, request: &HttpRequest) -> bool {

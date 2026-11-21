@@ -1,0 +1,9 @@
+{
+  "name": "prometheus-socket-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Holds WebSocket, TCP/TLS and streamed HTTP connections for a Prometheus catalog adapter plugin (no dependencies).",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" }
+}

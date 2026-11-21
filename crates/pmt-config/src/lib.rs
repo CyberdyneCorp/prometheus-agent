@@ -48,6 +48,7 @@ pub mod layout;
 pub mod lsp_check;
 pub mod managed;
 pub mod mcp_check;
+pub mod mcp_event_state;
 pub mod media_check;
 pub mod migrate;
 pub mod moa_check;
