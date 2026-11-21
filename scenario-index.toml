@@ -5322,3 +5322,20 @@ capabilities = [
 
 [platform-adapters."Platform-contributed toolsets"]
 "Toolset absent elsewhere" = ["crates/pmt-tools/tests/platform_tools.rs::a_profile_without_the_platform_has_none_of_its_tools", "crates/pmt-tools/tests/platform_tools.rs::an_enabled_platform_brings_its_tools_into_its_bundle"]
+
+# Group 78.2 (partial): Telegram local Bot API server
+# (crates/pmt-adapters-telegram/tests/local_api.rs against the Bot API
+# mock), Slack reaction triggers (adapter against the Slack mock; the
+# reacting user's authorization in the gateway harness), the peer-agent
+# self-test (CLI) and Matrix room rules (config validation, rooms.rs).
+[platform-adapters."Telegram local Bot API server"]
+"Large file with local server" = { tests = ["crates/pmt-adapters-telegram/tests/local_api.rs::a_self_hosted_server_accepts_a_300_mb_video_under_the_gateway_cap"], note = "getFile declares 300 MB: the public server's 20 MB limit refuses it naming the maximum, a self-hosted api_base_url accepts it under a 512 MB gateway.media.max_inbound_bytes, and the default 128 MB cap is named as the effective maximum" }
+
+[platform-adapters."Slack reaction triggers"]
+"Unauthorized reactor" = ["crates/pmt-gateway/tests/messaging/access.rs::a_reaction_trigger_from_an_unlisted_user_starts_no_turn", "crates/pmt-adapters-slack/tests/slack.rs::a_listed_reaction_starts_a_turn_from_the_reactor"]
+
+[platform-adapters."Peer-agent routing self-test (upgrade)"]
+"Bot mentions ignored by config" = ["crates/prometheus/tests/gateway_selftest.rs::bot_mentions_ignored_by_config_are_a_config_failure"]
+
+[platform-adapters."Matrix rooms, invites and clock skew"]
+"Alias in allowlist rejected" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_matrix_room_alias_in_the_allowlist_fails_validation"]

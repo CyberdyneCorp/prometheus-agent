@@ -164,3 +164,39 @@ async fn a_pairing_code_is_never_logged() {
         "the code is never stored in the outbox"
     );
 }
+
+/// Spec: platform-adapters, Slack reaction triggers, "Unauthorized
+/// reactor": the turn a reaction starts carries the reacting user as its
+/// sender, so one not on the allowlist starts nothing.
+#[tokio::test]
+async fn a_reaction_trigger_from_an_unlisted_user_starts_no_turn() {
+    let h = Harness::start(Setup::new(&config(
+        "slack",
+        "allow_users = [\"U0ALLOWED\"]",
+    )))
+    .await;
+    let reaction = |user: &str| {
+        let mut event = Inbound::text(ChatType::Group, "C0OPS", user, "reaction:added:eyes");
+        event.message_id = format!("reaction:C0OPS:1.5:{user}:eyes");
+        event.reply_to = Some("1.5".into());
+        event.addressing.mentioned = true;
+        event
+    };
+    assert_eq!(
+        h.send("slack", reaction("U0STRANGER")).await,
+        Admission::Unauthorized
+    );
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    assert!(h.agents.texts().is_empty(), "no turn");
+    assert_eq!(
+        h.send("slack", reaction("U0ALLOWED")).await,
+        Admission::Accepted
+    );
+    eventually("the reaction's turn", || {
+        h.agents
+            .texts()
+            .iter()
+            .any(|t| t.contains("reaction:added:eyes"))
+    })
+    .await;
+}

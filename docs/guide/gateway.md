@@ -133,6 +133,17 @@ natively; a rich message Telegram refuses is sent as `MarkdownV2` in
 4096-character parts, and a Bot API without rich messages turns them off
 until the adapter restarts.
 
+A self-hosted Bot API server lifts Telegram's 20 MB limit on the files a
+bot may download to 2048 MB: log the bot out of the public server once
+(`prometheus gateway telegram logout`), then point
+`options.api_base_url` (and `options.file_base_url`, default
+`<api_base_url>/file`) at your server. With `options.local_mode = true`
+(a server run with `--local`) files are read from the absolute path the
+server returns, which must be readable on this host ("local Bot API file
+not readable: <path>" otherwise). `gateway.media.max_inbound_bytes`
+(128 MB) still applies: a larger file is refused with the effective
+maximum named.
+
 Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
 resumes the session after a dropped connection, so missed messages are
 replayed; the bot needs the Message Content privileged intent, and
@@ -163,7 +174,13 @@ The other first-party adapters:
   `prometheus gateway slack-manifest` prints an app manifest with Socket
   Mode, the scopes, the events and every slash command (`--write` saves
   it as `<profile>/slack-manifest.json`, `--commands-only` prints the
-  command list).
+  command list). `options.reaction_triggers` makes reactions start
+  turns: `true` for any reaction on the bot's own messages, or a list of
+  emoji names (`["eyes"]`) on any message (default `false`: reactions are
+  dropped). The turn's text is `reaction:added:<emoji>` with the reacted
+  message as its reply context, it answers in
+  `options.reaction_trigger_target` (`channel` or `channel:thread_ts`)
+  when set, and the reacting user must be authorized like any author.
 - **Email** polls the inbox over IMAP every `options.poll_interval_secs`
   (15) and answers over SMTP as `options.address` with the password in
   `EMAIL_PASSWORD`. `options.imap_host` and `options.smtp_host` are
@@ -183,8 +200,16 @@ The other first-party adapters:
   Allowlist entries are whole addresses.
 - **Matrix** syncs with `options.homeserver` using `MATRIX_ACCESS_TOKEN`;
   the sync cursor survives reconnects, a two-member room is a direct
-  chat, and invites from `allow_users` are accepted. Rooms are not
-  end-to-end encrypted yet.
+  chat. `options.allowed_rooms` (internal `!room:server` ids; a `#alias`
+  fails validation) limits the rooms read, before any other gating,
+  direct chats exempt. `options.auto_join` accepts invites from
+  `authorized` users (`allow_users`, the default), `all` or `none`.
+  `options.session_scope` is `auto` (each thread its own session),
+  `room` (one session and workspace binding per room) or `thread` (every
+  top-level message starts its own thread). Events older than the
+  adapter's start minus 5 seconds are dropped; more than 10 such drops
+  after the first 30 seconds log one warning naming clock skew. Rooms are
+  not end-to-end encrypted yet.
 - **Signal** talks to a signal-cli HTTP daemon at `options.http_url` for
   the account `options.account` (E.164). Run the daemon with
   `--receive-mode on-connection` so Signal holds messages while the
@@ -345,6 +370,14 @@ remembered, a retry of the same `eventId` is answered `duplicate`, and it
 runs through the route's normal pipeline. The event's `data` is inserted
 into the prompt after the template is rendered, as JSON cut at 32,000
 characters, so text inside it is never read as a placeholder.
+
+`prometheus gateway selftest <platform> [--peer-agent [--peer-id <id>]]`
+replays synthetic messages through the platform's admission and mention
+gating, offline and without credentials: a direct message and a group
+mention from an authorized sender, and with `--peer-agent` another bot
+mentioning this agent. Each failed check is named with its category
+(`config`, `platform_connectivity`, `bot_identity` or `routing_logic`);
+it exits 0 only when every check passes (`--json` prints the report).
 
 `prometheus plugins test-adapter <platform>` runs the adapter conformance
 kit (connect and reconnect, descriptor, normalization, deduplication,

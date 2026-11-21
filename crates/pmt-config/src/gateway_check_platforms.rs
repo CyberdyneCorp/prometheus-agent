@@ -97,6 +97,16 @@ fn check_mode_rules(platform: &str, key: &str, table: &PlatformConfig) -> Result
         }
     }
     check_credential_urls(platform, key, table)?;
+    if platform == "matrix"
+        && let Some(alias) = options::<MatrixOptions>(platform, table)
+            .allowed_rooms
+            .into_iter()
+            .find(|r| !r.starts_with('!'))
+    {
+        return Err(invalid(format!(
+            "{key}.options.allowed_rooms: '{alias}' is not a room id; Matrix allowlists require !-prefixed room ids (find it in the room's settings, Advanced)"
+        )));
+    }
     if platform == "webhook"
         && let Some(url) = options::<WebhookOptions>(platform, table).public_url
         && !url.starts_with("https://")
@@ -430,6 +440,19 @@ mod tests {
         check_toml(&format!("{base}, authserv_id = \"mx.google.com\" }}\n")).unwrap();
         let domain = message("[gateway.platforms.email]\nallow_users = [\"example.org\"]\n");
         assert!(domain.contains("not a whole address"), "{domain}");
+    }
+
+    /// Spec: platform-adapters, Matrix rooms, invites and clock skew,
+    /// "Alias in allowlist rejected".
+    #[test]
+    fn a_matrix_room_alias_in_the_allowlist_fails_validation() {
+        let table = "[gateway.platforms.matrix]\nenabled = true\noptions = { homeserver = \"https://matrix.example.org\", allowed_rooms = ";
+        let found = message(&format!("{table}[\"#ops:example.org\"] }}\n"));
+        assert!(
+            found.contains("allowed_rooms") && found.contains("require !-prefixed room ids"),
+            "{found}"
+        );
+        check_toml(&format!("{table}[\"!abc:example.org\"] }}\n")).unwrap();
     }
 
     #[test]

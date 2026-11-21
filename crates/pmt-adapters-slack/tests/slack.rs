@@ -359,3 +359,94 @@ async fn answers_stream_with_task_cards_and_a_refused_append_is_an_error() {
     assert_eq!(streamed.thread_id.as_deref(), Some("1700000000.000200"));
     slack.disconnect().await;
 }
+
+fn adapter_with(home: &std::path::Path, mock: &SlackMock, table: &str) -> Slack {
+    let setup = kit_setup(
+        home,
+        "slack",
+        table,
+        &[(TOKEN_SECRET, BOT_TOKEN), (APP_TOKEN_SECRET, APP_TOKEN)],
+    )
+    .unwrap();
+    Slack::new(&setup, mock.endpoints()).unwrap()
+}
+
+fn react(mock: &SlackMock, user: &str, emoji: &str, item_user: &str, ts: &str) {
+    mock.envelope(
+        "events_api",
+        &json!({"team_id": mock::TEAM, "type": "event_callback", "event": {
+            "type": "reaction_added", "user": user, "reaction": emoji,
+            "item_user": item_user, "event_ts": "1700000100.000001",
+            "item": {"type": "message", "channel": mock::CHANNEL, "ts": ts}}}),
+    );
+}
+
+/// Spec: platform-adapters, Slack reaction triggers: a listed emoji on
+/// any message starts a turn from the reacting user (who the gateway then
+/// authorizes like an author), others are dropped.
+#[tokio::test]
+async fn a_listed_reaction_starts_a_turn_from_the_reactor() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let slack = adapter_with(
+        home.path(),
+        &mock,
+        "options = { reaction_triggers = [\"eyes\"] }\n",
+    );
+    let link = Arc::new(Recorder::default());
+    slack.connect(Arc::clone(&link) as _).await.unwrap();
+    react(
+        &mock,
+        "U0STRANGER",
+        "thumbsup",
+        "U0OTHER",
+        "1700000000.000500",
+    );
+    react(&mock, "U0STRANGER", "eyes", "U0OTHER", "1700000000.000500");
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let events = link.events.lock().unwrap().clone();
+    assert_eq!(events.len(), 1, "{events:?}");
+    let event = &events[0];
+    assert_eq!(event.text, "reaction:added:eyes");
+    assert_eq!(event.sender_id, "U0STRANGER");
+    assert_eq!(event.chat_id, mock::CHANNEL);
+    assert_eq!(event.reply_to.as_deref(), Some("1700000000.000500"));
+    assert!(event.addressing.mentioned);
+    slack.disconnect().await;
+}
+
+/// `true` triggers on the bot's own messages only; the default (off)
+/// drops every reaction; a target moves the answer.
+#[tokio::test]
+async fn reactions_on_the_bots_messages_and_the_reply_target() {
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let off = adapter(home.path(), &mock);
+    let link = Arc::new(Recorder::default());
+    off.connect(Arc::clone(&link) as _).await.unwrap();
+    react(&mock, mock::USER, "eyes", mock::BOT, "1700000000.000600");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(link.events.lock().unwrap().is_empty());
+    off.disconnect().await;
+
+    let home = tempfile::tempdir().unwrap();
+    let mock = SlackMock::start().await;
+    let on = adapter_with(
+        home.path(),
+        &mock,
+        "options = { reaction_triggers = true, reaction_trigger_target = \"C0ALERTS:1700000000.000009\" }\n",
+    );
+    let link = Arc::new(Recorder::default());
+    on.connect(Arc::clone(&link) as _).await.unwrap();
+    react(&mock, mock::USER, "eyes", mock::USER, "1700000000.000700");
+    react(&mock, mock::USER, "tada", mock::BOT, "1700000000.000701");
+    eventually(|| !link.events.lock().unwrap().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    let events = link.events.lock().unwrap().clone();
+    assert_eq!(events.len(), 1, "{events:?}");
+    assert_eq!(events[0].text, "reaction:added:tada");
+    assert_eq!(events[0].chat_id, "C0ALERTS");
+    assert_eq!(events[0].thread_id.as_deref(), Some("1700000000.000009"));
+    on.disconnect().await;
+}

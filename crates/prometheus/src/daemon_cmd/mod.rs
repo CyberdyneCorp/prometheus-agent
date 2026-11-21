@@ -17,6 +17,7 @@ pub(crate) mod peers;
 mod platform_cmd;
 mod record;
 pub(crate) mod self_guard;
+mod selftest_cmd;
 pub(crate) mod send_cmd;
 pub(crate) mod serve;
 pub mod service;
@@ -25,6 +26,7 @@ pub(crate) mod standalone;
 pub mod sub_proxy;
 mod support_matrix;
 mod systemd;
+mod telegram_cmd;
 #[cfg(debug_assertions)]
 mod test_adapter;
 mod turn;

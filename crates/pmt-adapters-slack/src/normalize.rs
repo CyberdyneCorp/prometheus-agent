@@ -290,3 +290,62 @@ mod tests {
         assert_eq!(inbound.attachments[0].kind, MediaKind::Image);
     }
 }
+
+/// A `reaction_added` event that `rule` makes a trigger, as the turn it
+/// starts: the reacting user is the sender (authorized like any author),
+/// the text `reaction:added:<emoji>`, the reacted message the reply
+/// context; answered in `target` (`channel` or `channel:thread_ts`) when
+/// set, else beside the reacted message. `None` for any other reaction.
+pub(crate) fn reaction(
+    event: &Value,
+    team: Option<&str>,
+    bot_user: &str,
+    rule: &crate::ReactionRule,
+) -> Option<Inbound> {
+    if event["type"].as_str() != Some("reaction_added") || event["item"]["type"] != "message" {
+        return None;
+    }
+    let emoji = text(&event["reaction"])?;
+    let user = text(&event["user"])?;
+    let on_bot_message = !bot_user.is_empty() && event["item_user"].as_str() == Some(bot_user);
+    if user == bot_user || !rule.triggers.triggers(&emoji, on_bot_message) {
+        return None;
+    }
+    let channel = text(&event["item"]["channel"])?;
+    let ts = text(&event["item"]["ts"])?;
+    let (chat, thread) = match rule.target.as_deref() {
+        Some(target) => match target.split_once(':') {
+            Some((chat, thread)) => (chat.to_owned(), Some(thread.to_owned())),
+            None => (target.to_owned(), None),
+        },
+        None => (channel.clone(), None),
+    };
+    // Slack DM channel ids start with D.
+    let chat_type = if chat.starts_with('D') {
+        ChatType::Dm
+    } else {
+        ChatType::Group
+    };
+    Some(Inbound {
+        message_id: format!("reaction:{channel}:{ts}:{user}:{emoji}"),
+        sender_id: user,
+        sender_name: None,
+        chat_id: chat,
+        chat_type,
+        scope_id: text(&event["team"]).or_else(|| team.map(str::to_owned)),
+        thread_id: thread,
+        timestamp: text(&event["event_ts"]).map_or_else(Timestamp::now, |t| timestamp(&t)),
+        text: format!("reaction:added:{emoji}"),
+        attachments: Vec::new(),
+        reply_to: rule.target.is_none().then_some(ts),
+        is_bot: false,
+        callback: None,
+        interaction: None,
+        profile: None,
+        // Configured as a trigger: it addresses the bot like a mention.
+        addressing: pmt_gateway::messaging::Addressing {
+            mentioned: true,
+            ..pmt_gateway::messaging::Addressing::default()
+        },
+    })
+}

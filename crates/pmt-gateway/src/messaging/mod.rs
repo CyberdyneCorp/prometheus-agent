@@ -76,6 +76,7 @@ mod recovery;
 mod relay;
 mod restart;
 mod retry;
+pub mod selftest;
 mod send;
 pub mod shape;
 pub mod sign;

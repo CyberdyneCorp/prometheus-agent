@@ -8,12 +8,15 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `gateway.platforms.telegram.options.api_base_url` | string | unset | any | `next_session` | A self-hosted Bot API server (`http://127.0.0.1:8081`): bots may then download files up to 2048 MB instead of 20 MB. Log the bot out of the public server first (`prometheus gateway telegram logout`). |
 | `gateway.platforms.telegram.options.command_menu.max_commands` | integer | `60` | 1 to 100 | `next_session` | Entries registered at most. |
 | `gateway.platforms.telegram.options.command_menu.priority` | array of string | `[]` | any | `next_session` | Commands placed first (or last, or alone) whatever the cap. |
 | `gateway.platforms.telegram.options.command_menu.priority_mode` | one of "prepend", "append", "replace" | `"prepend"` | `"prepend"`, `"append"`, `"replace"` | `next_session` | Where the priority entries go. |
 | `gateway.platforms.telegram.options.dm_topics.enabled` | boolean | `false` | any | `next_session` | Each DM topic is its own session and the root DM is a lobby that accepts only commands (`/topic new\|list\|rename\|restore`). |
+| `gateway.platforms.telegram.options.file_base_url` | string | unset | any | `next_session` | The self-hosted server's file download base; unset: `<api_base_url>/file`. |
 | `gateway.platforms.telegram.options.group_topics` | table | unset | any | `next_session` | Topics of forum groups, by chat id. |
 | `gateway.platforms.telegram.options.ignore_root_dm` | boolean | `false` | any | `next_session` | Ignore ordinary messages in the root of a private chat (slash commands are still accepted). |
+| `gateway.platforms.telegram.options.local_mode` | boolean | `false` | any | `next_session` | The self-hosted server runs with `--local`: files are read from the absolute path it returns (the server's files must be readable here). |
 | `gateway.platforms.telegram.options.mode` | one of "polling", "webhook" | `"polling"` | `"polling"`, `"webhook"` | `next_session` | How updates arrive: long polling, or webhook posts on the shared listener at `/p/<profile>/telegram/`. |
 | `gateway.platforms.telegram.options.poll_timeout_secs` | integer | `30` | 1 to 50 | `next_session` | Seconds one long-poll `getUpdates` call waits for updates. |
 | `gateway.platforms.telegram.options.rich_messages` | boolean | `false` | any | `next_session` | Send replies as Telegram rich messages (Bot API 10.1 `sendRichMessage`: the raw Markdown, up to 32768 characters), falling back to `MarkdownV2` when Telegram refuses one. |
@@ -38,6 +41,8 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
 | `gateway.platforms.slack.options.app_token_secret` | string | unset | a secret name | `next_session` | The secret holding the Socket Mode app-level token. |
+| `gateway.platforms.slack.options.reaction_trigger_target` | string | unset | any | `next_session` | Where a reaction-triggered turn answers: a channel id, or `channel:thread_ts`; unset answers beside the reacted message. |
+| `gateway.platforms.slack.options.reaction_triggers` | boolean or array of string | unset | any | `next_session` | Reactions that start a turn (`reaction:added:<emoji>`, the reacted message as reply context): `false` none (reaction events are acknowledged and dropped), `true` any reaction on the bot's own messages, or a list of emoji names on any message. The reacting user passes the same authorization as a message author. |
 
 ## Email
 
@@ -61,7 +66,10 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
+| `gateway.platforms.matrix.options.allowed_rooms` | array of string | unset | any | `next_session` | Rooms (internal `!` room ids, not `#` aliases) the bot reads; checked before any other gating. Two-member rooms (DMs) are exempt; empty reads every joined room. |
+| `gateway.platforms.matrix.options.auto_join` | one of "authorized", "all", "none" | `"authorized"` | `"authorized"`, `"all"`, `"none"` | `next_session` | Which invites the bot accepts. |
 | `gateway.platforms.matrix.options.homeserver` | string | unset | any | `next_session` | The homeserver URL. |
+| `gateway.platforms.matrix.options.session_scope` | one of "auto", "room", "thread" | `"auto"` | `"auto"`, `"room"`, `"thread"` | `next_session` | How a room maps onto sessions. |
 
 ## Signal
 

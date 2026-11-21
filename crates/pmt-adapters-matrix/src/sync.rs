@@ -3,7 +3,8 @@
 //! survives reconnects, so the homeserver replays everything the adapter
 //! missed; the first connect only takes the current cursor (history is not
 //! answered). A two-member room is a DM; a reply in a thread carries the
-//! thread root; invites from allowed users are accepted.
+//! thread root; which rooms are read and invites accepted, and stale
+//! events, are [`crate::rooms`]'s.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -36,6 +37,7 @@ pub(crate) struct Run {
     pub(crate) user_id: String,
     pub(crate) cursor: Arc<Mutex<Cursor>>,
     pub(crate) allow_users: Vec<String>,
+    pub(crate) rooms: Arc<crate::rooms::Rooms>,
     pub(crate) stop: CancellationToken,
 }
 
@@ -241,15 +243,27 @@ impl Run {
                         .members
                         .remove(room);
                 }
-                if event["type"].as_str() != Some("m.room.message") {
-                    continue;
-                }
-                let count = members(&self.api, &self.cursor, room).await;
-                if let Some(inbound) = message(event, room, &self.user_id, count) {
-                    self.link.submit(inbound).await;
+                if event["type"].as_str() == Some("m.room.message") {
+                    self.room_message(room, event).await;
                 }
             }
         }
+    }
+
+    /// Submits a room message the room rules admit (allowed room, not
+    /// stale), scoped to its session.
+    async fn room_message(&self, room: &str, event: &Value) {
+        let count = members(&self.api, &self.cursor, room).await;
+        if !self.rooms.reads(room, count) {
+            return;
+        }
+        let Some(inbound) = message(event, room, &self.user_id, count) else {
+            return;
+        };
+        if self.rooms.stale(inbound.timestamp, Timestamp::now()) {
+            return;
+        }
+        self.link.submit(self.rooms.scoped(inbound)).await;
     }
 
     /// Joins rooms an allowed user invited the bot to.
@@ -265,11 +279,11 @@ impl Run {
                 })
                 .and_then(|e| e["sender"].as_str());
             let Some(inviter) = inviter else { continue };
-            if !self.allow_users.iter().any(|u| u == inviter) {
+            if !self.rooms.joins(inviter, &self.allow_users) {
                 tracing::info!(
                     platform = crate::PLATFORM,
                     room,
-                    "ignored an invite from an unlisted user"
+                    "ignored an invite (options.auto_join)"
                 );
                 continue;
             }

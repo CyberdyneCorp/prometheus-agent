@@ -1,8 +1,11 @@
 Gateway — telegram: every field of its configuration (Enter keeps the value shown)
   TELEGRAM_BOT_TOKEN (the adapter's credential): missing
 value for TELEGRAM_BOT_TOKEN (input hidden; Enter skips): TELEGRAM_BOT_TOKEN stored in the secrets store
-  ignore_root_dm: Ignore ordinary messages in the root of a private chat (slash commands are still accepted).
-ignore_root_dm (true, false) [false]:   mode: How updates arrive: long polling, or webhook posts on the shared listener at `/p/<profile>/telegram/`.
+  api_base_url: A self-hosted Bot API server (`http://127.0.0.1:8081`): bots may then download files up to 2048 MB instead of 20 MB. Log the bot out of the public server first (`prometheus gateway telegram logout`).
+api_base_url [unset]:   file_base_url: The self-hosted server's file download base; unset: `<api_base_url>/file`.
+file_base_url [unset]:   ignore_root_dm: Ignore ordinary messages in the root of a private chat (slash commands are still accepted).
+ignore_root_dm (true, false) [false]:   local_mode: The self-hosted server runs with `--local`: files are read from the absolute path it returns (the server's files must be readable here).
+local_mode (true, false) [false]:   mode: How updates arrive: long polling, or webhook posts on the shared listener at `/p/<profile>/telegram/`.
 mode (polling, webhook) [polling]: mode takes (polling, webhook)
 mode (polling, webhook) [polling]:   poll_timeout_secs: Seconds one long-poll `getUpdates` call waits for updates.
 poll_timeout_secs (a number) [30]:   rich_messages: Send replies as Telegram rich messages (Bot API 10.1 `sendRichMessage`: the raw Markdown, up to 32768 characters), falling back to `MarkdownV2` when Telegram refuses one.

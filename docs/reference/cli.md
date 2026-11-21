@@ -31727,6 +31727,8 @@ Commands:
   whatsapp        WhatsApp linked-device setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  telegram        Telegram bot maintenance
+  selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 
 Options:
@@ -33225,6 +33227,165 @@ Options:
           Print help
 ```
 
+## `prometheus gateway telegram`
+
+```text
+Telegram bot maintenance
+
+Usage: prometheus gateway telegram [OPTIONS] <COMMAND>
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway telegram logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus gateway telegram logout [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway telegram help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway telegram help [COMMAND]
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway telegram help logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus gateway telegram help logout
+```
+
+## `prometheus gateway telegram help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway telegram help help
+```
+
+## `prometheus gateway selftest`
+
+```text
+Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
+
+Usage: prometheus gateway selftest [OPTIONS] <PLATFORM>
+
+Arguments:
+  <PLATFORM>
+          The platform (`slack`, `discord`, an adapter plugin's)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --peer-agent
+          Also replay another bot mentioning this agent
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --peer-id <ID>
+          The peer bot's sender id (with `--peer-agent`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus gateway help`
 
 ```text
@@ -33247,6 +33408,8 @@ Commands:
   whatsapp        WhatsApp linked-device setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  telegram        Telegram bot maintenance
+  selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 ```
 
@@ -33494,6 +33657,33 @@ Usage: prometheus gateway help pause
 Clear an adapter's pause and reconnect backoff and reconnect it now
 
 Usage: prometheus gateway help resume
+```
+
+## `prometheus gateway help telegram`
+
+```text
+Telegram bot maintenance
+
+Usage: prometheus gateway help telegram [COMMAND]
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+```
+
+## `prometheus gateway help telegram logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus gateway help telegram logout
+```
+
+## `prometheus gateway help selftest`
+
+```text
+Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
+
+Usage: prometheus gateway help selftest
 ```
 
 ## `prometheus gateway help help`
@@ -43447,6 +43637,8 @@ Commands:
   whatsapp        WhatsApp linked-device setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  telegram        Telegram bot maintenance
+  selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
 ```
 
 ## `prometheus help gateway status`
@@ -43693,6 +43885,33 @@ Usage: prometheus help gateway pause
 Clear an adapter's pause and reconnect backoff and reconnect it now
 
 Usage: prometheus help gateway resume
+```
+
+## `prometheus help gateway telegram`
+
+```text
+Telegram bot maintenance
+
+Usage: prometheus help gateway telegram [COMMAND]
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+```
+
+## `prometheus help gateway telegram logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus help gateway telegram logout
+```
+
+## `prometheus help gateway selftest`
+
+```text
+Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
+
+Usage: prometheus help gateway selftest
 ```
 
 ## `prometheus help pairing`
