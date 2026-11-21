@@ -74,10 +74,15 @@ fn surface_listing_follows_the_surface_config() {
 #[test]
 fn core_listing_shows_the_28_tools_in_order() {
     let home = temp_home();
-    // A desktop session on every host, so `computer_use`'s platform
-    // prerequisites hold and the listing is the same everywhere.
+    // A desktop session and a configured driver on every host, so
+    // `computer_use`'s prerequisites hold and the listing is the same
+    // everywhere (hosts without a pinned driver archive, such as musl,
+    // would otherwise report it unavailable).
+    let driver = home.path().join("cua-driver");
+    std::fs::write(&driver, "").unwrap();
+    let driver_path = format!("computer_use.driver_path='{}'", driver.display());
     let out = common::command(home.path())
-        .args(["toolsets", "show", "core"])
+        .args(["--set", &driver_path, "toolsets", "show", "core"])
         .env("DISPLAY", ":0")
         .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null")
         .env("SESSIONNAME", "Console")
