@@ -81,19 +81,66 @@ mod signed {
         app
     }
 
-    /// Flips one byte in the middle of the executable's first slice (a
-    /// page the signature hashes).
+    /// The file offsets of every Mach-O slice (one for a thin binary).
+    fn slices(bytes: &[u8]) -> Vec<usize> {
+        let be = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+        if be(0) != 0xcafe_babe {
+            return vec![0];
+        }
+        (0..be(4)).map(|i| be(8 + i * 20 + 8)).collect()
+    }
+
+    /// The file range of the `__TEXT,__text` section of the 64-bit Mach-O
+    /// slice at `slice`.
+    fn text_section(bytes: &[u8], slice: usize) -> (usize, usize) {
+        let le32 = |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+        let le64 = |at: usize| {
+            usize::try_from(u64::from_le_bytes(bytes[at..at + 8].try_into().unwrap())).unwrap()
+        };
+        let name = |at: usize| {
+            bytes[at..at + 16]
+                .split(|&b| b == 0)
+                .next()
+                .unwrap()
+                .to_vec()
+        };
+        assert_eq!(le32(slice), 0xfeed_facf, "a 64-bit Mach-O slice");
+        let mut command = slice + 32;
+        for _ in 0..le32(slice + 16) {
+            if le32(command) == 0x19 && name(command + 8) == b"__TEXT" {
+                for i in 0..le32(command + 64) {
+                    let section = command + 72 + i * 80;
+                    if name(section) == b"__text" {
+                        return (slice + le32(section + 48), le64(section + 40));
+                    }
+                }
+            }
+            command += le32(command + 4);
+        }
+        panic!("no __TEXT,__text section");
+    }
+
+    /// Flips one byte of machine code in every slice of the executable:
+    /// `__text` pages are always hashed by the signature, whatever the
+    /// host's copy of the binary looks like (the middle of a slice may be
+    /// the unhashed signature blob itself).
     fn tamper(app: &Path) {
         let exe = app.join("Contents/MacOS/cua-driver");
         let mut bytes = std::fs::read(&exe).unwrap();
-        let word = |at: usize| u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
-        let (offset, size) = if word(0) == 0xcafe_babe {
-            (word(16), word(20))
-        } else {
-            (0, bytes.len())
-        };
-        bytes[offset + size / 2] ^= 0xff;
+        for slice in slices(&bytes) {
+            let (offset, size) = text_section(&bytes, slice);
+            bytes[offset + size / 2] ^= 0xff;
+        }
         std::fs::write(&exe, bytes).unwrap();
+        let verdict = Command::new(CODESIGN)
+            .args(["--verify", "--strict", "--deep"])
+            .arg(app)
+            .output()
+            .unwrap();
+        assert!(
+            !verdict.status.success(),
+            "codesign accepted the tampered bundle"
+        );
     }
 
     /// Scenario: Unsigned bundle.
