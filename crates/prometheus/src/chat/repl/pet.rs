@@ -3,6 +3,7 @@
 //! reactions): the turn's activity drives the pet pane, and the commands
 //! run here without a model call or a change to the session.
 
+use pmt_core::id::SessionId;
 use pmt_pets::hatch::{Hatch, Step};
 use serde_json::json;
 
@@ -96,15 +97,16 @@ impl Repl {
         self.with_pet(crate::pets_host::line::LinePet::refresh);
     }
 
-    /// `/hatch <description>`: the backend first (none: its error, nothing
-    /// spent), then the next lines answer each step.
-    pub(super) fn hatch_command(&mut self, args: &str) {
+    /// `/hatch <description>` in `session` (which pays for the images):
+    /// the backend first (none: its error, nothing spent), then the next
+    /// lines answer each step.
+    pub(super) fn hatch_command(&mut self, args: &str, session: SessionId) {
         if args.trim().is_empty() {
             self.notice("usage: /hatch <description>");
             return;
         }
         let scope = &self.factory.scope;
-        let billing = crate::pets_host::meter::Billing::Session(self.live().id);
+        let billing = crate::pets_host::meter::Billing::Session(session);
         let backend = match crate::pets_host::backend::select(scope, billing) {
             Ok(backend) => backend,
             Err(err) => return self.error(&err),

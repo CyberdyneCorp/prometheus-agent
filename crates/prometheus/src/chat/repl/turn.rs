@@ -284,6 +284,10 @@ impl Repl {
             Event::Line(text) => {
                 if let Some(pending) = self.pending.take() {
                     self.answer_now(pending, &text);
+                } else if self.hatch.is_some() {
+                    // `/hatch` started during this turn asks its questions
+                    // now, as it does between turns.
+                    self.hatch_answer(&text).await;
                 } else if text.trim_start().starts_with('!') {
                     self.notice(self.strings().get("cli.shell_busy"));
                 } else if text.trim_start().starts_with('/') {

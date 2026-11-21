@@ -18,6 +18,19 @@ fn get(home: &std::path::Path, key: &str) -> String {
         .to_owned()
 }
 
+/// The thank-you's turn takes a while, so the pet commands after it are
+/// typed while it runs (as a person typing on would).
+const SLOW_THANKS: &str =
+    "[[rule]]\nuser = \"thanks\"\nlatency_ms = 3000\ntext = \"glad to help\"\nrepeat = true\n";
+
+fn slow_thanks(home: &std::path::Path) {
+    std::fs::write(home.join("profiles/default/mock.toml"), SLOW_THANKS).unwrap();
+    ok(&run(
+        home,
+        &["config", "set", "providers.mock.script", "mock.toml"],
+    ));
+}
+
 fn pet_commands_and_heart(home: &std::path::Path) {
     let mut p = spawn(home, &["chat"]);
     prompt(&mut p);
@@ -47,6 +60,8 @@ fn pet_commands_and_heart(home: &std::path::Path) {
 fn the_in_process_line_interface_runs_pet_commands_here() {
     let home = mock_home();
     let _gallery = install(home.path(), &["boba"]);
+    // The pet commands run during the thank-you's turn, at once.
+    slow_thanks(home.path());
     pet_commands_and_heart(home.path());
 }
 

@@ -147,7 +147,7 @@ impl Repl {
                 return Flow::Continue;
             }
             "hatch" => {
-                self.hatch_command(args);
+                self.hatch_command(args, self.live().id);
                 return Flow::Continue;
             }
             "retry" | "learn" | "tools" | "model" | "moa" | "plan" => {
@@ -233,6 +233,13 @@ impl Repl {
     /// also run while a turn works (`immediate` busy policy) or need only
     /// shared access to the session.
     pub(super) async fn immediate(&mut self, name: &str, args: &str, live: &Live) {
+        // The pet commands show their own outcome; during a turn they run
+        // as they do between turns (`/hatch`'s answers included).
+        match name {
+            "pet" => return self.pet_command(args),
+            "hatch" => return self.hatch_command(args, live.id),
+            _ => {}
+        }
         let result = match name {
             "queue" => super::queue::parse(args)
                 .and_then(|action| super::queue::apply(&self.strings(), &mut self.queue, action)),
