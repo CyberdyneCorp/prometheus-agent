@@ -20,7 +20,7 @@ use expectrl::{Eof, Expect};
 /// A home on the mock model with a command transcriber that hears
 /// `heard`, speaking with `tts` (`fake`: a command copying the text it
 /// gets).
-fn voice_home(heard: &str, tts: &str) -> tempfile::TempDir {
+fn voice_home(heard: &str, tts: &str) -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),
@@ -214,7 +214,7 @@ const SENTENCES: [&str; 3] = [
 ];
 
 /// [`voice_home`] whose mock model answers [`SENTENCES`] slowly.
-fn streaming_home(heard: &str) -> tempfile::TempDir {
+fn streaming_home(heard: &str) -> common::TestHome {
     let home = voice_home(heard, "fake");
     let profile = home.path().join("profiles/default");
     std::fs::write(

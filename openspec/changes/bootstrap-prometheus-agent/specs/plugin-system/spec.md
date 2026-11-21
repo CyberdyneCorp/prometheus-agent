@@ -1,7 +1,7 @@
 # Plugin System
 
 ## Purpose
-The plugin system is how Prometheus grows capability at the edges instead of in the core. Native plugins are WebAssembly components that implement typed WIT worlds (`tool`, `hook`, `provider`, `platform-adapter`, `memory-provider`, `context-engine`, `terminal-backend`, `ui-panel`, and the `bench` world of benchmark adapters) and run in the host with only the capabilities the user granted; external tools arrive through MCP servers, and Hermes-style Python plugins run out-of-process through the python bridge. The key decisions are that no third-party code runs in-process with ambient authority, that every registry (hooks, commands, worlds, capabilities) is typed so unknown names fail at load, and that hot reload never mutates a live session's cached prompt or tool list.
+The plugin system is how Prometheus grows capability at the edges instead of in the core. Native plugins are WebAssembly components that implement typed WIT worlds (`tool`, `hook`, `provider`, `platform-adapter`, `memory-provider`, `context-engine`, `terminal-backend`, `ui-panel`, `computer-use-backend` (desktops the `computer_use` tool drives), and the `bench` world of benchmark adapters) and run in the host with only the capabilities the user granted; external tools arrive through MCP servers, and Hermes-style Python plugins run out-of-process through the python bridge. The key decisions are that no third-party code runs in-process with ambient authority, that every registry (hooks, commands, worlds, capabilities) is typed so unknown names fail at load, and that hot reload never mutates a live session's cached prompt or tool list.
 
 ## ADDED Requirements
 

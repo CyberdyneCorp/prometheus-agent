@@ -77,6 +77,7 @@ impl ClientInbox {
             resume: None,
             api: None,
             entry: None,
+            voice: false,
         };
         {
             let mut queue = session.queue.lock().expect("queue poisoned");

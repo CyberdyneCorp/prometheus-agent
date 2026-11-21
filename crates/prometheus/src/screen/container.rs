@@ -42,12 +42,6 @@ const XAUTH_MOUNT: &str = "/run/pmt-xauth";
 /// The label naming the profile whose screen a container is.
 const SCREEN_LABEL: &str = "prometheus.screen";
 
-/// The desktop container's name.
-#[must_use]
-pub fn name(scope: &ProfileScope) -> String {
-    format!("pmt-screen-{}", super::short_id(scope))
-}
-
 /// The image: `bot_desktop.image`, else the release's desktop variant of
 /// the sandbox image.
 fn image(scope: &ProfileScope) -> String {
@@ -78,7 +72,7 @@ pub(super) fn launch(
     let xauth_dir = readable_dir(&sockets.join("xauth"))?;
     let auth = xauth_dir.join(super::xauth::FILE);
     super::xauth::write(&auth, &super::xauth::fresh()?, true)?;
-    let name = name(scope);
+    let name = super::container_name(scope);
     remove(&runtime, &name);
     create(scope, &runtime, &name, &[&x11, &rfb_dir, &xauth_dir])?;
     let mut launched = Launched::new("container", rfb_dir.join("rfb.sock"), auth);

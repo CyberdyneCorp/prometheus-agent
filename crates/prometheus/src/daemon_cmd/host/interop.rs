@@ -20,7 +20,7 @@ use pmt_core::error::{Error, codes};
 use pmt_gateway::Author;
 use pmt_rpc::contracts::{
     RelayDeliverParams, RelayDelivered, RelayDrainParams, RelayDrained, RelayEnvelope, RelayReply,
-    Roster, RosterAgent, RosterParams, RosterRow, RosterSource, SubmitParams,
+    Roster, RosterAgent, RosterChat, RosterParams, RosterRow, RosterSource, SubmitParams,
 };
 
 use super::{DaemonHost, Profile};
@@ -101,23 +101,34 @@ struct Candidate {
     device: String,
     stale: bool,
     error: Option<String>,
+    chat: Option<RosterChat>,
 }
 
 impl DaemonHost {
     /// `bot.roster.list`.
     pub(super) async fn roster(&self, params: RosterParams) -> Result<Roster, Error> {
         let profile = self.profile(&params.profile)?;
-        let mut candidates: Vec<Candidate> = self
-            .all_profiles()
-            .iter()
-            .map(|(_, p)| Candidate {
-                agent: local_agent(p),
+        let mut candidates: Vec<Candidate> = Vec::new();
+        let home = profile.scope().home().to_path_buf();
+        let heartbeats = pmt_core::spawn::blocking(move || super::bots::worker_heartbeats(&home))
+            .await
+            .unwrap_or_default();
+        for (_, served) in self.all_profiles() {
+            let Some((agent, chat)) = self.local_bot(&served, &heartbeats).await else {
+                continue;
+            };
+            if chat.hidden && !params.include_hidden {
+                continue;
+            }
+            candidates.push(Candidate {
+                agent,
                 source: "local",
                 device: "local".to_owned(),
                 stale: false,
                 error: None,
-            })
-            .collect();
+                chat: Some(chat),
+            });
+        }
         let mut sources = vec![RosterSource {
             source: "local".to_owned(),
             device: "local".to_owned(),
@@ -149,7 +160,7 @@ impl DaemonHost {
 
     /// Lists every registered peer of `profile` whose listing is older
     /// than [`FRESH`] (all of them with `force`), at once.
-    async fn refresh_peers(&self, profile: &Arc<Profile>, name: &str, force: bool) {
+    pub(super) async fn refresh_peers(&self, profile: &Arc<Profile>, name: &str, force: bool) {
         let scope = profile.scope();
         let peers: Vec<String> = scope.config().peers.keys().cloned().collect();
         let due: Vec<String> = peers
@@ -194,12 +205,34 @@ impl DaemonHost {
             };
             self.roster.put(key, listing);
         }
+        self.remember_remote(profile, name);
+    }
+
+    /// Saves `name`'s cached remote rows for its Bot Chats' protocol
+    /// roster (a change reaches them as a `roster.update` notice).
+    fn remember_remote(&self, profile: &Profile, name: &str) {
+        let mut remote = crate::bot_host::protocol::Remote::default();
+        for (peer, listing) in self.roster.of_kind(name, "peer") {
+            let machine = listing.host.clone().unwrap_or_else(|| peer.clone());
+            for agent in &listing.agents {
+                remote.peer(&peer, agent, &machine);
+            }
+        }
+        for (connection, listing) in self.roster.of_kind(name, "connection") {
+            for agent in &listing.agents {
+                remote.connection(&connection, agent);
+            }
+        }
+        if let Err(err) = crate::bot_host::protocol::remember_remote(&profile.store, &remote) {
+            tracing::warn!("remote bot roster not saved: {}", err.message());
+        }
     }
 
     /// `bot.relay.drain`.
     pub(super) fn drain(&self, params: &RelayDrainParams) -> Result<RelayDrained, Error> {
         let profile = self.profile(&params.profile)?;
         self.roster.report(&params.profile, &params.connections);
+        self.remember_remote(&profile, &params.profile);
         let timing = crate::a2a_host::relay::timing(&profile.scope().config().bot_mode);
         let now = Timestamp::now();
         let timed_out = profile.store.relay_time_out(now, timing)?;
@@ -274,6 +307,7 @@ impl DaemonHost {
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let author = Author {
             client_kind: "relay".to_owned(),
@@ -327,11 +361,7 @@ impl DaemonHost {
 
 /// The failure reason code of a failed relayed turn.
 fn reason_of(why: &str) -> String {
-    let code = why.split(':').next().unwrap_or_default();
-    match code {
-        "delivery_timeout" | "runtime_offline" => code.to_owned(),
-        _ => "unknown".to_owned(),
-    }
+    crate::bot_host::reasons::of_failure(why).to_owned()
 }
 
 /// Settles a reply in the sender's outbox.
@@ -349,20 +379,6 @@ fn settle(profile: &Profile, reply: &RelayReply) -> Result<RelayDelivered, Error
         reply: reply.reply.clone(),
         reason: reply.reason.clone(),
     })
-}
-
-/// A local profile as a bot.
-fn local_agent(profile: &Profile) -> RosterAgent {
-    let scope = profile.scope();
-    let config = scope.config();
-    RosterAgent {
-        name: scope.name().to_string(),
-        title: None,
-        description: config.a2a.server.description.clone(),
-        avatar: None,
-        model: config.model.default.clone(),
-        accepts_bot_messages: true,
-    }
 }
 
 /// `GET /api/agents` of `peer`: its host name and agents.
@@ -389,7 +405,9 @@ async fn list_peer(
                     name: row.name,
                     title: row.title,
                     description: row.description,
-                    avatar: row.avatar,
+                    avatar: row
+                        .avatar
+                        .and_then(|avatar| serde_json::from_value(avatar).ok()),
                     model: row.model,
                     accepts_bot_messages: row.accepts_bot_messages.unwrap_or(true),
                 })
@@ -405,7 +423,7 @@ struct AgentRow {
     name: String,
     title: Option<String>,
     description: Option<String>,
-    avatar: Option<String>,
+    avatar: Option<serde_json::Value>,
     model: Option<String>,
     accepts_bot_messages: Option<bool>,
 }
@@ -431,6 +449,7 @@ fn remote_rows(kind: &'static str, device: &str, listing: &Listing) -> Vec<Candi
                 device: device.to_owned(),
                 stale: listing.error.is_some(),
                 error: listing.error.clone(),
+                chat: None,
             }
         })
         .collect()
@@ -472,6 +491,7 @@ fn handles(candidates: Vec<Candidate>) -> Vec<RosterRow> {
                 device: c.device,
                 stale: c.stale,
                 error: c.error,
+                chat: c.chat,
             }
         })
         .collect()
@@ -492,6 +512,7 @@ mod tests {
             device: device.to_owned(),
             stale: false,
             error: None,
+            chat: None,
         }
     }
 

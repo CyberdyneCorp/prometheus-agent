@@ -11,6 +11,7 @@
 //!   banner and the command palette, session switcher and timeline
 //!   overlays;
 //! - [`panes`], [`diff`]: the split panes and an edit's diff card;
+//! - [`pet`]: the pet in the transcript's corner and achievement toasts;
 //! - [`busy`]: the status line's busy indicator;
 //! - [`math`]: LaTeX math in answers;
 //! - [`theme`], [`background`]: colours (`ui.tui.theme`, `NO_COLOR`) and
@@ -30,6 +31,8 @@ pub mod languages;
 pub mod math;
 pub mod palette;
 pub mod panes;
+pub mod pet;
+pub mod pet_picker;
 pub mod slash;
 pub mod status;
 pub mod switcher;

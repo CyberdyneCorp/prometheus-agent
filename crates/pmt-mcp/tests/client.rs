@@ -276,3 +276,31 @@ async fn discovery_starts_at_most_the_configured_number_of_servers_at_once() {
     all_at_once.discover().await;
     assert!(started.elapsed() < Duration::from_millis(1_100));
 }
+
+/// A hung server leaves no process behind once its client is gone: the
+/// connection of a timed-out start, or of a test that ends while a start
+/// is pending, lives on the never-shut-down MCP runtime, so the fixture
+/// itself ends when its stdin closes.
+#[test]
+fn a_hung_server_exits_once_its_client_closes_stdin() {
+    let mut child = std::process::Command::new(pmt_mcp::testkit::fixture())
+        .args(["--mode", "hang"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    drop(child.stdin.take());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break Some(status);
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert!(status.is_some(), "the hung fixture outlived its client");
+}

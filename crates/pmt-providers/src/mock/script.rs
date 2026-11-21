@@ -118,6 +118,7 @@ pub(crate) enum Fault {
     Timeout,
     ServerError { status: u16 },
     AuthError,
+    Quota,
     ContextOverflow,
 }
 
@@ -193,6 +194,7 @@ enum FaultKind {
     Timeout,
     ServerError,
     AuthError,
+    Quota,
     ContextOverflow,
     MalformedStream,
     TruncatedStream,
@@ -205,6 +207,7 @@ impl FaultKind {
             Self::Timeout => "timeout",
             Self::ServerError => "server_error",
             Self::AuthError => "auth_error",
+            Self::Quota => "quota",
             Self::ContextOverflow => "context_overflow",
             Self::MalformedStream => "malformed_stream",
             Self::TruncatedStream => "truncated_stream",
@@ -350,6 +353,7 @@ fn answer(raw: RawRule) -> Result<Answer, String> {
         }
         Some(FaultKind::Timeout) => return Ok(Answer::Fail(Fault::Timeout)),
         Some(FaultKind::AuthError) => return Ok(Answer::Fail(Fault::AuthError)),
+        Some(FaultKind::Quota) => return Ok(Answer::Fail(Fault::Quota)),
         Some(FaultKind::ContextOverflow) => return Ok(Answer::Fail(Fault::ContextOverflow)),
         Some(FaultKind::ServerError) => return server_error(raw.status).map(Answer::Fail),
     };

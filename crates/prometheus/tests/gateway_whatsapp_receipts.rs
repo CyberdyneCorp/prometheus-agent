@@ -30,7 +30,7 @@ fn wait(what: &str, mut done: impl FnMut() -> bool) {
 }
 
 /// A mock home answering on `WhatsApp` through `bridge`.
-fn whatsapp_home(bridge: &BridgeMock) -> tempfile::TempDir {
+fn whatsapp_home(bridge: &BridgeMock) -> common::TestHome {
     let home = mock_home();
     std::fs::write(
         home.path().join("profiles/default/mock.toml"),

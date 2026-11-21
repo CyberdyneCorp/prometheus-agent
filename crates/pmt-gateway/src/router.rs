@@ -139,10 +139,10 @@ mod tests {
     }
 
     /// Indexed, but its capability declared no contract yet.
-    struct WakeFeed;
+    struct ToolsCall;
 
-    impl Method for WakeFeed {
-        const NAME: &'static str = "wake.feed";
+    impl Method for ToolsCall {
+        const NAME: &'static str = "tools.call";
         type Params = Empty;
         type Result = Ack;
     }
@@ -157,7 +157,7 @@ mod tests {
         assert_eq!(err, "unregistered method name: session.frobnicate");
         assert!(
             router
-                .register::<WakeFeed, _, _>(catalog, |_, _| async { Ok(Ack::YES) })
+                .register::<ToolsCall, _, _>(catalog, |_, _| async { Ok(Ack::YES) })
                 .is_err(),
             "a method without a declared contract cannot be served"
         );

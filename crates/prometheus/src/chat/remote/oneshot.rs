@@ -43,6 +43,7 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
     let prompt = Prompt {
         text: start.first.clone().unwrap_or_default(),
         images: start.first_images(),
+        voice: None,
     };
     let outcome = turn::run(attached, prompt, &mut asker, &out, &mut signals).await?;
     if outcome.approval_needed {
@@ -181,6 +182,7 @@ async fn streamed(attached: &mut Attached, start: &Start<'_>) -> Result<u8, Erro
     let prompt = Prompt {
         text: start.first.clone().unwrap_or_default(),
         images: start.first_images(),
+        voice: None,
     };
     let outcome = turn::run(attached, prompt, &mut asker, &out, &mut signals).await?;
     let null = serde_json::Value::Null;

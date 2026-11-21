@@ -52,6 +52,11 @@ impl Tui<'_> {
                 self.app.overlay = Some(Overlay::Languages(picker));
                 step
             }
+            Some(Overlay::Pets(mut picker)) => {
+                let step = self.pet_key(&mut picker, key);
+                self.app.overlay = Some(Overlay::Pets(picker));
+                step
+            }
             None => return self.banner_key(key),
         };
         if matches!(step, Step::Close) {

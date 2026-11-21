@@ -46,6 +46,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 
 | Name | Owner | Since | Params | Result |
 |---|---|---|---|---|
+| `achievements.list` | `pets` | 1.0 | [`PetsProfileParams`](#petsprofileparams) | [`Achievements`](#achievements) |
 | `adapters.list` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`AdapterList`](#adapterlist) |
 | `adapters.pairing.cancel` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | [`Ack`](#ack) |
 | `adapters.pairing.start` | `desktop-app` | 1.0 | [`AdapterRef`](#adapterref) | any |
@@ -55,13 +56,19 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `approval.respond` | `tool-system` | 1.0 | [`ApprovalRespondParams`](#approvalrespondparams) | [`Ack`](#ack) |
 | `artifacts.list` | `desktop-app` | 1.0 | [`ArtifactsListParams`](#artifactslistparams) | [`ArtifactList`](#artifactlist) |
 | `autoprune.offer` | `session-storage` | 1.0 | [`AutopruneOfferParams`](#autopruneofferparams) | [`AutopruneOffer`](#autopruneoffer) |
+| `bot.avatar.get` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotAvatarPicture`](#botavatarpicture) |
 | `bot.chat.ensure` | `bot-mode` | 1.0 | [`ProfileParams`](#profileparams) | [`BotChat`](#botchat) |
-| `bot.create` | `bot-mode` | 1.0 | not served yet | |
-| `bot.meta.get` | `bot-mode` | 1.0 | not served yet | |
-| `bot.meta.update` | `bot-mode` | 1.0 | not served yet | |
+| `bot.chat.read` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotDone`](#botdone) |
+| `bot.create` | `bot-mode` | 1.0 | [`BotCreateParams`](#botcreateparams) | [`BotCreated`](#botcreated) |
+| `bot.delete` | `bot-mode` | 1.0 | [`BotDeleteParams`](#botdeleteparams) | [`BotDeleted`](#botdeleted) |
+| `bot.duplicate` | `bot-mode` | 1.0 | [`BotDuplicateParams`](#botduplicateparams) | [`BotCreated`](#botcreated) |
+| `bot.meta.get` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotMeta`](#botmeta) |
+| `bot.meta.update` | `bot-mode` | 1.0 | [`BotMetaUpdateParams`](#botmetaupdateparams) | [`BotMeta`](#botmeta) |
 | `bot.relay.deliver` | `agent-interop` | 1.0 | [`RelayDeliverParams`](#relaydeliverparams) | [`RelayDelivered`](#relaydelivered) |
 | `bot.relay.drain` | `agent-interop` | 1.0 | [`RelayDrainParams`](#relaydrainparams) | [`RelayDrained`](#relaydrained) |
 | `bot.roster.list` | `bot-mode` | 1.0 | [`RosterParams`](#rosterparams) | [`Roster`](#roster) |
+| `bot.routines.list` | `bot-mode` | 1.0 | [`BotMetaParams`](#botmetaparams) | [`BotRoutines`](#botroutines) |
+| `bot.sections.delete` | `bot-mode` | 1.0 | [`BotSectionDeleteParams`](#botsectiondeleteparams) | [`BotSectionDeleted`](#botsectiondeleted) |
 | `center.list` | `desktop-app` | 1.0 | [`CenterParams`](#centerparams) | [`CenterList`](#centerlist) |
 | `command.dispatch` | `workspace-architecture` | 1.0 | [`DispatchParams`](#dispatchparams) | [`Dispatched`](#dispatched) |
 | `commands.catalog` | `tui` | 1.0 | [`SessionRef`](#sessionref) | [`CommandCatalog`](#commandcatalog) |
@@ -103,10 +110,23 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `git.unstage` | `desktop-app` | 1.0 | [`GitPaths`](#gitpaths) | [`Ack`](#ack) |
 | `grants.list` | `security-boundaries` | 1.0 | not served yet | |
 | `grants.revoke` | `security-boundaries` | 1.0 | not served yet | |
-| `groups.capabilities` | `bot-mode` | 1.0 | not served yet | |
-| `groups.log` | `bot-mode` | 1.0 | not served yet | |
-| `groups.replica_state` | `bot-mode` | 1.0 | not served yet | |
-| `groups.replicate` | `bot-mode` | 1.0 | not served yet | |
+| `groups.capabilities` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`RoomCapabilities`](#roomcapabilities) |
+| `groups.compress_member` | `bot-mode` | 1.0 | [`RoomMemberParams`](#roommemberparams) | [`RoomDone`](#roomdone) |
+| `groups.create` | `bot-mode` | 1.0 | [`RoomCreateParams`](#roomcreateparams) | [`Room`](#room) |
+| `groups.delete` | `bot-mode` | 1.0 | [`RoomDeleteParams`](#roomdeleteparams) | [`RoomDone`](#roomdone) |
+| `groups.demote` | `bot-mode` | 1.0 | [`RoomDemoteParams`](#roomdemoteparams) | [`ReplicaState`](#replicastate) |
+| `groups.get` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`Room`](#room) |
+| `groups.grant` | `bot-mode` | 1.0 | [`RoomGrantParams`](#roomgrantparams) | [`RoomGrant`](#roomgrant) |
+| `groups.list` | `bot-mode` | 1.0 | [`RoomsParams`](#roomsparams) | [`Rooms`](#rooms) |
+| `groups.log` | `bot-mode` | 1.0 | [`RoomLogParams`](#roomlogparams) | [`RoomLog`](#roomlog) |
+| `groups.member_grant` | `bot-mode` | 1.0 | [`RoomMemberGrantParams`](#roommembergrantparams) | [`RoomDone`](#roomdone) |
+| `groups.post` | `bot-mode` | 1.0 | [`RoomPostParams`](#roompostparams) | [`RoomPosted`](#roomposted) |
+| `groups.promote` | `bot-mode` | 1.0 | [`RoomPromoteParams`](#roompromoteparams) | [`RoomAuthority`](#roomauthority) |
+| `groups.replica_state` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`ReplicaState`](#replicastate) |
+| `groups.replicate` | `bot-mode` | 1.0 | [`RoomReplicateParams`](#roomreplicateparams) | [`ReplicaState`](#replicastate) |
+| `groups.revoke` | `bot-mode` | 1.0 | [`RoomRevokeParams`](#roomrevokeparams) | [`RoomDone`](#roomdone) |
+| `groups.stop` | `bot-mode` | 1.0 | [`RoomParams`](#roomparams) | [`RoomDone`](#roomdone) |
+| `groups.update` | `bot-mode` | 1.0 | [`RoomUpdateParams`](#roomupdateparams) | [`Room`](#room) |
 | `harness.diff` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
 | `harness.log` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`HarnessVersions`](#harnessversions) |
 | `harness.rollback` | `harness-evolution` | 1.0 | [`EvolveParams`](#evolveparams) | [`EvolveReply`](#evolvereply) |
@@ -136,6 +156,13 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `model.options` | `tui` | 1.0 | [`ModelOptionsParams`](#modeloptionsparams) | [`ModelOptions`](#modeloptions) |
 | `onboarding.ensure` | `desktop-app` | 1.0 | [`ProfileParams`](#profileparams) | [`OnboardingChat`](#onboardingchat) |
 | `pairing.approve` | `messaging-gateway` | 1.0 | [`PairingApproveParams`](#pairingapproveparams) | [`PairingApproved`](#pairingapproved) |
+| `pets.gallery` | `pets` | 1.0 | [`PetGalleryParams`](#petgalleryparams) | [`PetGallery`](#petgallery) |
+| `pets.hatch.answer` | `pets` | 1.0 | [`HatchAnswerParams`](#hatchanswerparams) | [`HatchStep`](#hatchstep) |
+| `pets.hatch.start` | `pets` | 1.0 | [`HatchStartParams`](#hatchstartparams) | [`HatchStep`](#hatchstep) |
+| `pets.install` | `pets` | 1.0 | [`PetInstallParams`](#petinstallparams) | [`PetsState`](#petsstate) |
+| `pets.set` | `pets` | 1.0 | [`PetSetParams`](#petsetparams) | [`PetsState`](#petsstate) |
+| `pets.sprite` | `pets` | 1.0 | [`PetSpriteParams`](#petspriteparams) | [`PetSprite`](#petsprite) |
+| `pets.state` | `pets` | 1.0 | [`PetsProfileParams`](#petsprofileparams) | [`PetsState`](#petsstate) |
 | `process.list` | `desktop-app` | 1.0 | [`SessionRef`](#sessionref) | [`ProcessList`](#processlist) |
 | `process.log` | `desktop-app` | 1.0 | [`ProcessRef`](#processref) | [`ProcessLog`](#processlog) |
 | `projects.create` | `projects` | 1.0 | [`ProjectsCreateParams`](#projectscreateparams) | [`ProjectRow`](#projectrow) |
@@ -193,8 +220,15 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `vault.list` | `security-boundaries` | 1.0 | [`VaultListParams`](#vaultlistparams) | [`VaultItems`](#vaultitems) |
 | `vault.remove` | `security-boundaries` | 1.0 | [`VaultRemoveParams`](#vaultremoveparams) | [`VaultItem`](#vaultitem) |
 | `vault.sources` | `security-boundaries` | 1.0 | [`VaultSourcesParams`](#vaultsourcesparams) | [`VaultSourceList`](#vaultsourcelist) |
-| `voice.client_config` | `voice-mode` | 1.0 | not served yet | |
-| `wake.feed` | `voice-mode` | 1.0 | not served yet | |
+| `voice.client_config` | `voice-mode` | 1.0 | [`VoiceClientConfigParams`](#voiceclientconfigparams) | [`VoiceClientConfig`](#voiceclientconfig) |
+| `voice.realtime.start` | `voice-mode` | 1.0 | [`VoiceRealtimeStartParams`](#voicerealtimestartparams) | [`VoiceRealtimeCall`](#voicerealtimecall) |
+| `voice.realtime.usage` | `voice-mode` | 1.0 | [`VoiceRealtimeUsageParams`](#voicerealtimeusageparams) | [`Ack`](#ack) |
+| `voice.speak` | `voice-mode` | 1.0 | [`VoiceSpeakParams`](#voicespeakparams) | [`VoiceSpoken`](#voicespoken) |
+| `voice.transcribe` | `voice-mode` | 1.0 | [`VoiceTranscribeParams`](#voicetranscribeparams) | [`VoiceTranscript`](#voicetranscript) |
+| `wake.arm` | `voice-mode` | 1.0 | [`WakeArmParams`](#wakearmparams) | [`WakeArmed`](#wakearmed) |
+| `wake.disarm` | `voice-mode` | 1.0 | [`WakeProfileParams`](#wakeprofileparams) | [`WakeState`](#wakestate) |
+| `wake.feed` | `voice-mode` | 1.0 | [`WakeFeedParams`](#wakefeedparams) | [`WakeState`](#wakestate) |
+| `wake.status` | `voice-mode` | 1.0 | [`WakeProfileParams`](#wakeprofileparams) | [`WakeState`](#wakestate) |
 | `worktree.list` | `git-worktrees` | 1.0 | [`WorktreeSessionParams`](#worktreesessionparams) | [`WorktreeListing`](#worktreelisting) |
 | `worktree.new` | `git-worktrees` | 1.0 | [`WorktreeNewParams`](#worktreenewparams) | [`WorktreeCreated`](#worktreecreated) |
 | `worktree.prune` | `git-worktrees` | 1.0 | [`WorktreePruneParams`](#worktreepruneparams) | [`WorktreePruned`](#worktreepruned) |
@@ -227,7 +261,7 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 
 | Name | Owner | Since | Payload |
 |---|---|---|---|
-| `achievement.unlocked` | `pets` | 1.0 | not served yet |
+| `achievement.unlocked` | `pets` | 1.0 | [`AchievementUnlocked`](#achievementunlocked) |
 | `adapter.state` | `messaging-gateway` | 1.0 | [`AdapterStatePayload`](#adapterstatepayload) |
 | `automation.state` | `session-automation` | 1.0 | [`AutomationStatePayload`](#automationstatepayload) |
 | `health.changed` | `observability` | 1.0 | [`HealthChanged`](#healthchanged) |
@@ -247,9 +281,46 @@ Protocol `1.0`: JSON-RPC 2.0 over the daemon's loopback WebSocket, one message p
 | `turn.finished` | `workspace-architecture` | 1.0 | [`TurnFinished`](#turnfinished) |
 | `ui.prefs.changed` | `desktop-app` | 1.0 | [`UiPrefs`](#uiprefs) |
 | `usage.updated` | `observability` | 1.0 | [`UsageUpdated`](#usageupdated) |
-| `wake.detected` | `voice-mode` | 1.0 | not served yet |
+| `wake.detected` | `voice-mode` | 1.0 | [`WakeDetected`](#wakedetected) |
 
 ## Types
+
+### `AchievementBadge`
+
+One badge.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `category` | string | yes | Its group. |
+| `description` | string | yes | Exactly what it counts. |
+| `id` | string | yes | The achievement id. |
+| `name` | string | yes | Its name. |
+| `next_threshold` | integer or null | no | The count it needs. |
+| `next_tier` | string or null | no | The next tier. |
+| `tier` | string or null | no | The highest tier unlocked (`copper`, `silver`, `gold`, `diamond`, `olympian`). |
+| `unlocked_at` | string or null | no | When the shown tier unlocked (RFC 3339). |
+| `value` | integer | yes | The current count. |
+
+### `AchievementUnlocked`
+
+`achievement.unlocked` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | The achievement. |
+| `profile` | string | yes | The profile. |
+| `tier` | string | yes | The tier reached. |
+
+### `Achievements`
+
+`achievements.list` result: what is known now; a scan runs in the background while `scanning`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `badges` | array of [`AchievementBadge`](#achievementbadge) | yes | The badges. |
+| `scanned_at` | string or null | no | When the last scan finished. |
+| `scanning` | boolean | yes | A scan runs. |
+| `sessions` | integer | yes | Sessions analysed so far. |
 
 ### `Ack`
 
@@ -552,6 +623,27 @@ One slot, as a form field.
 |---|---|---|---|
 | `profile` | string or null | no | The profile (the connection's only one when omitted). |
 
+### `BotAvatar`
+
+A bot's avatar.
+
+| Value | Meaning |
+|---|---|
+| `` | The default soft-body face, derived from the bot's name unless a seed is locked. |
+| `` | One of 7 shapes in one of 10 colours. |
+| `` | An uploaded image, stored content-addressed in the profile's blobs. |
+| `` | An image made by the profile's image-generation backend (update only: it is stored as `image`). |
+| `` | A pets-gallery companion. |
+
+### `BotAvatarPicture`
+
+`bot.avatar.get` result: the picture of an `image` avatar.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `data` | string | yes | The image, base64. |
+| `mime` | string | yes | `image/png`, `image/jpeg` or `image/webp`. |
+
 ### `BotChat`
 
 `bot.chat.ensure` result.
@@ -560,6 +652,147 @@ One slot, as a form field.
 |---|---|---|---|
 | `created` | boolean | yes | Whether this call created it. |
 | `session_id` | string | yes | The profile's canonical Bot Chat. |
+
+### `BotCreateParams`
+
+`bot.create` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `clone_from` | string or null | no | Clone config, skills, `SOUL.md` and memory from this profile. |
+| `copy_api_keys` | boolean or null | no | Copy the source's static API keys (never OAuth or single-use logins); default true. |
+| `description` | string or null | no | What it does. |
+| `empty` | boolean | no | No bundled skills. |
+| `mcp_servers` | array of string | no | MCP servers to keep enabled. |
+| `model` | string or null | no | Pin this model (`provider/model` or a model name). |
+| `name` | string | no | The new bot's profile name. |
+| `on` | string or null | no | A registered peer (or desktop connection) to create the bot on. |
+| `profile` | string | no | The profile asking (the window's): it must be granted. |
+| `skills` | array of string | no | Skills to enable (the others stay as the profile has them). |
+| `soul` | string or null | no | The bot's `SOUL.md`. |
+| `title` | string or null | no | Its title. |
+| `toolsets` | array of string | no | `tools.enabled_toolsets`. |
+
+### `BotCreated`
+
+`bot.create` / `bot.duplicate` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `copied_secrets` | array of string | no | The secrets copied from the source. |
+| `device` | string | yes | The machine it lives on (`local` or the peer). |
+| `handle` | string | yes | Its roster handle. |
+| `introduction` | string or null | no | Its introduction (the Bot Chat's first message). |
+| `profile` | string | yes | The new bot's profile. |
+| `session_id` | string | yes | Its canonical Bot Chat. |
+
+### `BotDeleteParams`
+
+`bot.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | boolean | no | Must be true. |
+| `profile` | string | yes | The bot. |
+
+### `BotDeleted`
+
+`bot.delete` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The deleted profile. |
+
+### `BotDone`
+
+An empty result.
+
+
+### `BotDuplicateParams`
+
+`bot.duplicate` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | The copy's profile name. |
+| `profile` | string | yes | The bot to duplicate. |
+
+### `BotMeta`
+
+A bot's metadata.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `avatar` | [`BotAvatar`](#botavatar) | no | Its avatar. |
+| `description` | string or null | no | What it does. |
+| `groups` | array of string | no | The rooms it is a member of (read only). |
+| `hidden` | boolean | no | Left out of the default roster and toasts (still reachable). |
+| `section` | [`BotSection`](#botsection) or null | no | Its roster section. |
+| `title` | string or null | no | The bot's title (the profile name when unset). |
+
+### `BotMetaParams`
+
+`bot.meta.get` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The bot. |
+
+### `BotMetaUpdateParams`
+
+`bot.meta.update` params: each key of `changes` (`title`, `description`, `avatar`, `hidden`, `section`) replaces that field; `null` clears it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `changes` | object | yes | The fields to change. |
+| `profile` | string | yes | The bot. |
+
+### `BotRoutine`
+
+One routine: a scheduled job of the bot named `[bot:<name>] <routine>`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | string | yes | The job id (`prometheus -p <bot> cron ...` takes it). |
+| `last_status` | string or null | no | How the last run ended. |
+| `next_run_at` | string or null | no | The next run (RFC 3339). |
+| `routine` | string | yes | The routine's name (after the `[bot:<name>]` prefix). |
+| `schedule` | string | yes | The schedule string. |
+| `state` | string | yes | `active`, `paused`, ... |
+
+### `BotRoutines`
+
+`bot.routines.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `routines` | array of [`BotRoutine`](#botroutine) | yes | The bot's routines. |
+
+### `BotSection`
+
+A roster section heading, stored on each member.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | yes | Stable id. |
+| `name` | string | yes | Heading. |
+
+### `BotSectionDeleteParams`
+
+`bot.sections.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile asking (the window's). |
+| `section_id` | string | yes | The section. |
+
+### `BotSectionDeleted`
+
+`bot.sections.delete` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `moved` | array of string | yes | The bots moved to unassigned. |
 
 ### `BudgetStanding`
 
@@ -661,6 +894,24 @@ Which client is attaching.
 | `dashboard` | The web dashboard. |
 | `acp` | The ACP adapter. |
 | `eval` | `prometheus eval`. |
+
+### `ClientSpeech`
+
+How a client reaches one speech provider.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `api_key` | string or null | no | The credential (direct only): kept in memory for the voice session only. |
+| `base_url` | string | no | The API base URL (direct only). |
+| `extra` | object | no | Extra request fields (direct only): form fields of a transcription, JSON body fields of a speech request. |
+| `language` | string or null | no | The spoken language (transcription). |
+| `model` | string | yes | Its model. |
+| `path` | string | yes | `direct` (the client calls the provider), `relay` (through the daemon: `voice.transcribe`, `voice.speak`) or `none`. |
+| `provider` | string | yes | The provider id. |
+| `reason` | string or null | no | Why the relay path (or none). |
+| `strip_tags` | boolean | no | Drop `[bracketed]` audio tags from the text before speaking it. |
+| `voice` | string | no | The voice (speech). |
+| `wire` | string | no | The request shape the client speaks (direct only): `openai` (the OpenAI transcription and speech APIs and their compatible endpoints), `elevenlabs`, `gemini` or `minimax`. |
 
 ### `CommandCatalog`
 
@@ -1416,6 +1667,39 @@ What a command run through the session's terminal backend printed.
 | `active` | string | yes | The active version. |
 | `versions` | array of any | yes | Each version's `version.toml` as JSON, newest first. |
 
+### `HatchAnswerParams`
+
+`pets.hatch.answer` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `answer` | string | yes | The answer (`y`, a draft number, `remix <tweak>`, `retry`, `cancel`). |
+| `flow` | string | yes | The flow `pets.hatch.start` opened. |
+| `profile` | string | yes | The profile. |
+
+### `HatchStartParams`
+
+`pets.hatch.start` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `description` | string | yes | What the pet looks like. |
+| `profile` | string | yes | The profile. |
+| `session_id` | string or null | no | The session whose usage ledger the paid image calls go to (the chat `/hatch` was typed in); absent, a hidden session is made for the flow on its first paid call. |
+
+### `HatchStep`
+
+One step of a generate flow.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `done` | boolean | yes | The flow is over. |
+| `drafts` | array of string | no | The drafts to pick from, as PNG `data:` URLs. |
+| `failed` | boolean | no | It failed. |
+| `flow` | string | yes | The flow. |
+| `slug` | string or null | no | The pet installed. |
+| `text` | string | yes | What to show (a question while `done` is false). |
+
 ### `HealthChanged`
 
 `health.changed` payload.
@@ -1856,6 +2140,109 @@ A server-to-client request still waiting for an answer.
 | `sender_id` | string | yes | The approved sender's platform id. |
 | `sender_name` | string or null | no | The sender's display name, when known. |
 
+### `PetGallery`
+
+`pets.gallery` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pets` | array of [`PetInfo`](#petinfo) | yes | The gallery's pets. |
+
+### `PetGalleryParams`
+
+`pets.gallery` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `limit` | integer or null | no | At most this many (default 100). |
+| `profile` | string | yes | The profile (its `pets.gallery_url`). |
+| `query` | string | no | Only pets whose slug or name contains this. |
+
+### `PetInfo`
+
+One installed or gallery pet.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `author` | string | no | Who made it. |
+| `installed` | boolean | yes | Installed in the profile. |
+| `name` | string | yes | Its display name. |
+| `slug` | string | yes | Its slug. |
+
+### `PetInstallParams`
+
+`pets.install` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+| `select` | boolean | no | Show it from now on. |
+| `slug` | string | yes | The gallery slug. |
+
+### `PetRow`
+
+One state's row of the atlas.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `frames` | integer | yes | Its frames (0: the state shows the idle row). |
+| `row` | integer | yes | The row. |
+
+### `PetSetParams`
+
+`pets.set` params: the `[pets]` keys to change (validated; the scale is clamped to 0.1-3.0).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `enabled` | boolean or null | no | Show or hide the pet (on without a slug: the first installed). |
+| `profile` | string | yes | The profile. |
+| `roam` | boolean or null | no | Wander while the agent is idle (desktop). |
+| `scale` | number or null | no | The size on every surface. |
+| `slug` | string or null | no | Adopt this installed pet (and show it). |
+
+### `PetSprite`
+
+`pets.sprite` result: the validated atlas and each state's row and frame count.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `atlas` | string | yes | The atlas as a `data:` URL (PNG or WebP). |
+| `frame_height` | integer | yes | A cell's height in pixels. |
+| `frame_width` | integer | yes | A cell's width in pixels. |
+| `name` | string | yes | Its name. |
+| `slug` | string | yes | The pet. |
+| `states` | object | yes | The atlas row and the frame count of each state (`idle`, `wave`, `run`, `failed`, `review`, `jump`, `waiting`). |
+
+### `PetSpriteParams`
+
+`pets.sprite` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+| `slug` | string or null | no | The pet (default: the active one). |
+
+### `PetsProfileParams`
+
+A profile.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+
+### `PetsState`
+
+`pets.state` result: the `[pets]` keys and the installed pets.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active` | string or null | no | The pet shown (the configured one if installed, else the first). |
+| `enabled` | boolean | yes | `pets.enabled`. |
+| `installed` | array of [`PetInfo`](#petinfo) | yes | The installed pets. |
+| `notice` | string or null | no | The line to show for the change just made, when there was one. |
+| `roam` | boolean | yes | `pets.roam`. |
+| `scale` | number | yes | `pets.scale`. |
+
 ### `PlatformSupport`
 
 The daemon's build target and its support tier.
@@ -2115,6 +2502,16 @@ One reaction on a message.
 | `by` | string | yes | Who reacted (`agent`). |
 | `emoji` | string | yes | The emoji. |
 
+### `RealtimeUsage`
+
+Token counts of one realtime response, as the provider reported them.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `cached_tokens` | integer | no | Input tokens read from the provider's cache. |
+| `input_tokens` | integer | no | Input tokens (audio and text). |
+| `output_tokens` | integer | no | Output tokens (audio and text). |
+
 ### `RelayConnection`
 
 One connection an attached desktop holds, with its agents.
@@ -2187,6 +2584,19 @@ The target's answer to an envelope, carried back to the sender.
 | `reply` | string or null | no | The reply, when the turn completed. |
 | `signature` | string | yes | The envelope's signature (proves the courier holds the envelope). |
 
+### `ReplicaState`
+
+`groups.replica_state` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority_epoch` | integer | yes | Its lineage. |
+| `authority_gateway_id` | string | yes | The authority. |
+| `last_seq` | integer | yes | The last entry this gateway holds. |
+| `latest_seq` | integer | yes | The last entry the authority reported. |
+| `role` | string | yes | `authority`, `replica` or `demoted`. |
+| `room_id` | string | yes | The room. |
+
 ### `RepoRow`
 
 A repository offered for project creation.
@@ -2256,6 +2666,259 @@ What `session.resolve` looks up.
 | `session_id` | string | yes | The session. |
 | `to_turn` | integer | yes | The last turn the branch keeps (from 1). |
 
+### `Room`
+
+A room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority_epoch` | integer | yes | The authority's lineage. |
+| `authority_gateway_id` | string | yes | The gateway that owns the log. |
+| `detect_stop_directives` | boolean | yes | `stop`/`halt`/`pause` next to a mention holds that member. |
+| `latest_seq` | integer | yes | The last log entry. |
+| `members` | array of [`RoomMember`](#roommember) | yes | The members. |
+| `name` | string | yes | Unique display name. |
+| `needs_you` | boolean | yes | A member asked for the user (`@user`). |
+| `picture` | string or null | no | A picture (data URL or blob reference). |
+| `role` | string | yes | `authority`, `replica` or `demoted`. |
+| `room_id` | string | yes | Stable id. |
+| `running` | boolean | yes | A discussion is running. |
+
+### `RoomAuthority`
+
+`groups.promote` result: the new authority and lineage. The old writer must already be fenced; pass these to its `groups.demote`.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority_epoch` | integer | yes | Its lineage. |
+| `authority_gateway_id` | string | yes | The authority now. |
+
+### `RoomCapabilities`
+
+`groups.capabilities` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `driver` | boolean | yes | This daemon drives the room's discussions itself (every member lives here, or it is the authority of a hosted room). |
+| `hosted` | boolean | yes | Members on other gateways take part. |
+| `max_messages` | integer | yes | `hosted_rooms.discussion.max_messages`. |
+| `max_rounds` | integer | yes | `hosted_rooms.discussion.max_rounds`. |
+
+### `RoomCreateParams`
+
+`groups.create` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `detect_stop_directives` | boolean or null | no | Default true. |
+| `members` | array of string | yes | 2 to 6 members: profiles of this home, or `<peer>/<agent>`. |
+| `name` | string | yes | Unique display name. |
+| `picture` | string or null | no | A picture. |
+| `profile` | string or null | no | The profile asking (the window's). |
+
+### `RoomDeleteParams`
+
+`groups.delete` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | boolean | no | Must be true. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomDemoteParams`
+
+`groups.demote` params (all required): fences this gateway as an old writer. It adopts the newer lineage and refuses further room writes; fence the old writer like this (or stop its daemon) before promoting a replacement.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `observed_epoch` | integer | yes | Its lineage. |
+| `observed_gateway_id` | string | yes | The new authority. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomDone`
+
+An empty result.
+
+
+### `RoomEntry`
+
+One room log entry.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `at` | string | yes | When (RFC 3339). |
+| `author` | string or null | no | `user`, a member, or `room`. |
+| `data` | any | no | Details (outcome, failure reason, round). |
+| `kind` | string | yes | `message`, `turn.started`, `turn.settled`, `pass`, `held`, `released`, `settled`, `stopped`, `authority.lost`, ... |
+| `seq` | integer | yes | Its sequence number. |
+| `text` | string or null | no | Its text. |
+
+### `RoomGrant`
+
+`groups.grant` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `token` | string | yes | The grant token (shown once; give it to the authority's owner). |
+
+### `RoomGrantParams`
+
+`groups.grant` params: lets a room authority drive a member of this home.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority` | string | yes | The authority's gateway id. |
+| `member` | string | yes | The member (a profile of this home). |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+| `scopes` | array of string | yes | `post`, `stop`, `approve`. |
+
+### `RoomLog`
+
+`groups.log` result: one page of the log.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `activity` | array of string | no | The member error summary (`<member> hit an error — <first line>`). |
+| `entries` | array of [`RoomEntry`](#roomentry) | yes | The page. |
+| `latest_seq` | integer | yes | The last entry of the log. |
+| `room` | [`Room`](#room) | yes | The room (with its members). |
+
+### `RoomLogParams`
+
+`groups.log` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `after_seq` | integer | no | Entries after this one. |
+| `limit` | integer or null | no | At most this many (default 200). |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomMember`
+
+A room member.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `gateway` | string or null | no | The peer gateway it lives on (none: this home). |
+| `held` | boolean | yes | Held by a stop directive: no turns until mentioned again. |
+| `member` | string | yes | Its handle in the room (`<profile>`, or `<peer>/<agent>`). |
+| `profile` | string | yes | Its profile on its own machine. |
+| `reason` | string or null | no | Why it is unreachable (a failure reason code). |
+| `state` | string | yes | `ok` or `unreachable`. |
+
+### `RoomMemberGrantParams`
+
+`groups.member_grant` params: the authority keeps a member gateway's grant.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `member` | string | yes | The remote member (`<peer>/<agent>`). |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+| `token` | string | yes | The token its gateway issued. |
+
+### `RoomMemberParams`
+
+`groups.compress_member` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `member` | string | yes | The member. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomParams`
+
+Params naming a room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomPostParams`
+
+`groups.post` params: a user message to the room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+| `text` | string | yes | The message. |
+
+### `RoomPosted`
+
+`groups.post` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `held` | array of string | no | The members a stop directive in it holds now. |
+| `seq` | integer | yes | The message's log entry. |
+
+### `RoomPromoteParams`
+
+`groups.promote` params: makes this gateway the room authority. Fence the old writer first (stop its daemon, or have it run `groups.demote`): promotion never merges diverged histories, so an old writer still accepting messages forks the room.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `confirm` | boolean | no | Must be true. |
+| `force_incomplete` | boolean | no | Promote a replica that is missing entries. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `reason` | string or null | no | Why (kept in the log). |
+| `room_id` | string | yes | The room. |
+
+### `RoomReplicateParams`
+
+`groups.replicate` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `from` | string | yes | The authority, a registered peer. |
+| `profile` | string or null | no | The profile whose peer registry names the authority. |
+| `room_id` | string | yes | The room. |
+
+### `RoomRevokeParams`
+
+`groups.revoke` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `authority` | string | yes | The authority. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `RoomUpdateParams`
+
+`groups.update` params: rename (history and sessions stay), picture, stop directive detection.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `detect_stop_directives` | boolean or null | no | Stop directive detection. |
+| `name` | string or null | no | A new unique name. |
+| `picture` | string or null | no | A new picture. |
+| `profile` | string or null | no | The profile asking (the window's). |
+| `room_id` | string | yes | The room. |
+
+### `Rooms`
+
+`groups.list` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `rooms` | array of [`Room`](#room) | yes | Every room. |
+
+### `RoomsParams`
+
+`groups.list` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string or null | no | The profile asking (the window's). |
+
 ### `Roster`
 
 `bot.roster.list` result.
@@ -2272,11 +2935,24 @@ An agent as a source reports it.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `accepts_bot_messages` | boolean | no | Whether it accepts bot messages. |
-| `avatar` | string or null | no | An avatar reference. |
+| `avatar` | [`BotAvatar`](#botavatar) or null | no | Its avatar (a `BotAvatar`). |
 | `description` | string or null | no | What it does. |
 | `model` | string or null | no | Its model. |
 | `name` | string | yes | The profile name on its machine. |
 | `title` | string or null | no | The bot's title. |
+
+### `RosterChat`
+
+A local bot's Bot Chat as the roster shows it.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `active` | boolean | no | It owns a running turn, wrote within the last 90 seconds, or has a worker heartbeat. |
+| `hidden` | boolean | no | Hidden from the default roster. |
+| `last_message_at` | string or null | no | When that message was written (RFC 3339). |
+| `preview` | string or null | no | The latest message of its Bot Chat, shortened. |
+| `section` | [`BotSection`](#botsection) or null | no | Its section. |
+| `unread` | integer | no | Messages since the Bot Chat was last read. |
 
 ### `RosterParams`
 
@@ -2284,6 +2960,7 @@ An agent as a source reports it.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
+| `include_hidden` | boolean | no | Also list hidden bots. |
 | `include_remote` | boolean | no | Also list registered peers' agents and the agents attached desktops reported for their other connections. |
 | `profile` | string | yes | The window's profile (its peers are the ones listed). |
 | `refresh` | boolean | no | Ask every peer again now instead of using rows younger than 300 s. |
@@ -2295,6 +2972,7 @@ One roster row.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `agent` | [`RosterAgent`](#rosteragent) | yes | The agent. |
+| `chat` | [`RosterChat`](#rosterchat) or null | no | A local bot's Bot Chat and presentation. |
 | `device` | string | yes | `local`, the peer's name or the connection's label. |
 | `error` | string or null | no | Why the source could not be reached. |
 | `handle` | string | yes | `@<name>`, or `@<name>-<device>` when several sources serve the name. |
@@ -2671,6 +3349,7 @@ One subcommand of a `commands.catalog` entry.
 | `run_budget_secs` | integer or null | no | Wall-clock budget of this turn in seconds (`--run-budget`). |
 | `session_id` | string | yes | The session. |
 | `text` | string | yes | The prompt. |
+| `voice` | boolean | no | A spoken message of a voice conversation: the turn runs on the `[auxiliary.voice_chat]` route and reasoning (spec: voice-mode, Voice turn model and reasoning). |
 
 ### `Submitted`
 
@@ -2975,6 +3654,168 @@ A `<major>.<minor>` protocol version on the wire.
 |---|---|---|---|
 | `major` | integer | yes | Incompatible revisions. |
 | `minor` | integer | yes | Backward-compatible additions. |
+
+### `VoiceClientConfig`
+
+`voice.client_config` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `chat_mode` | string | yes | `voice.chat_mode` (`chained` or `realtime`). |
+| `client_direct` | boolean | yes | `voice.client_direct`. |
+| `listen` | [`VoiceListening`](#voicelistening) | yes | How the client listens. |
+| `stt` | [`ClientSpeech`](#clientspeech) | yes | Speech-to-text. |
+| `tts` | [`ClientSpeech`](#clientspeech) | yes | Text-to-speech. |
+
+### `VoiceClientConfigParams`
+
+`voice.client_config` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `credentials` | boolean | no | Include the credentials of direct providers: asked only right before the client calls one, so a key is held for that voice action alone (and never while a realtime session runs). |
+| `profile` | string | yes | The profile. |
+
+### `VoiceListening`
+
+How the client listens in a voice conversation (the `[voice]` settings the CLI and TUI use).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `barge_in` | boolean | yes | Speaking over a reply interrupts it. |
+| `barge_in_threshold_multiplier` | number | yes | How far above the quiet room's level speech must rise to interrupt. |
+| `max_recording_secs` | integer | yes | The longest recording. |
+| `no_speech_timeout_secs` | integer | yes | A recording without speech by then ends untranscribed. |
+| `silence_duration_ms` | integer | yes | Quiet after confirmed speech that ends the recording. |
+| `silence_threshold` | integer | yes | Input level (RMS, 0-32767) above which audio counts as speech. |
+| `speech_confirm_ms` | integer | yes | How long the level must stay above the threshold to confirm speech. |
+| `stop_phrases` | array of string | yes | Utterances that end the conversation instead of being sent. |
+
+### `VoiceRealtimeCall`
+
+`voice.realtime.start` result: what the client needs to connect, never the key.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `call_id` | string | yes | The provider's call id. |
+| `model` | string | yes | The realtime model. |
+| `sdp` | string | yes | The provider's SDP answer. |
+| `tool` | string | yes | The tool through which the voice hands work to the agent. |
+
+### `VoiceRealtimeStartParams`
+
+`voice.realtime.start` params: the desktop's WebRTC offer.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile whose `[voice.realtime]` settings and key are used. |
+| `sdp` | string | yes | The client's SDP offer. |
+| `session_id` | string | yes | The session the agent works in (its usage rows go there). |
+
+### `VoiceRealtimeUsageParams`
+
+`voice.realtime.usage` params: one response of a realtime call.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `call_id` | string | yes | The call (`voice.realtime.start`). |
+| `profile` | string | yes | The profile that created the call. |
+| `response_id` | string | yes | The provider's response id (a repeated one is recorded once). |
+| `usage` | [`RealtimeUsage`](#realtimeusage) | yes | Its tokens. |
+
+### `VoiceSpeakParams`
+
+`voice.speak` params: read a message of a session aloud.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile that owns the session (a bot speaks with its own voice). |
+| `session_id` | string | yes | The session the text belongs to. |
+| `text` | string | yes | What to say. |
+
+### `VoiceSpoken`
+
+`voice.speak` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio` | string | yes | The audio, base64. |
+| `mime` | string | yes | The audio's media type. |
+
+### `VoiceTranscribeParams`
+
+`voice.transcribe` params: a recording relayed through the daemon.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `audio` | string | yes | The recording (WAV, Ogg, MP3 or `WebM`), base64. |
+| `profile` | string | yes | The profile whose speech-to-text provider transcribes. |
+| `session_id` | string or null | no | The session the words go to (metered calls are billed to it). |
+
+### `VoiceTranscript`
+
+`voice.transcribe` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `provider` | string | yes | The provider that transcribed it. |
+| `text` | string | yes | The text. |
+
+### `WakeArmParams`
+
+`wake.arm` params.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `client_capture` | boolean | no | The client sends the audio (`wake.feed`) instead of the daemon opening its own microphone (used when `wake.capture = "auto"`). |
+| `profile` | string | yes | The profile whose wake word listens. |
+
+### `WakeArmed`
+
+`wake.arm` result.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `capture` | string | yes | `local` (the daemon's microphone) or `client` (`wake.feed`). |
+| `engine` | string | yes | The engine listening. |
+| `phrase` | string | yes | The phrase it listens for. |
+| `start_new_session` | boolean | no | `wake.start_new_session`: a request after the phrase opens a new session instead of continuing the current one. |
+
+### `WakeDetected`
+
+`wake.detected` payload.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `phrase` | string | yes | The phrase heard. |
+| `profile` | string | yes | The profile the phrase wakes (another profile's under profile routing: the desktop switches to it). |
+
+### `WakeFeedParams`
+
+`wake.feed` params: audio from the client's microphone.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pcm` | string | yes | 16 kHz mono 16-bit little-endian PCM, base64. |
+| `profile` | string | yes | The profile whose listener takes the audio. |
+
+### `WakeProfileParams`
+
+A profile's wake listener.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `profile` | string | yes | The profile. |
+
+### `WakeState`
+
+`wake.status` result (and the empty answer of `wake.feed` and `wake.disarm`).
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `armed` | boolean | yes | The daemon's listener for the profile is armed. |
+| `error` | string or null | no | Why the listener stopped or could not arm. |
+| `report` | string | no | The `/wake status` report (phrase, engine, owner, capture, input device, audio host API, what is missing, a silent microphone). |
 
 ### `WorktreeArchiveInfo`
 

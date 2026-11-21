@@ -75,8 +75,9 @@ const app = emit(
     join(desktop, "dist"),
     [join(here, "src/styles.css"), join(desktop, "src/desktop.css")],
     join(desktop, "src/index.html"),
-    // Installed by the shell in every frame (the preview's annotate agent).
-    { annotate: join(desktop, "src/annotate-agent.ts") },
+    // Installed by the shell in every frame (the preview's annotate agent);
+    // the voice controls' microphone worklet (an AudioWorklet module).
+    { annotate: join(desktop, "src/annotate-agent.ts"), "voice-worklet": join(desktop, "src/voice/worklet.ts") },
     // The terminal pane's bundled monospace font (SIL OFL 1.1, licence beside it).
     Object.fromEntries(
       ["jetbrains-mono-latin-400-normal.woff2", "jetbrains-mono-latin-ext-400-normal.woff2", "JetBrainsMono-OFL.txt"].map((f) => [`fonts/${f}`, join(desktop, "src/fonts", f)]),

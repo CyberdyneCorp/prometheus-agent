@@ -22,6 +22,7 @@ mod api_server;
 mod automation;
 mod bot_desktop;
 mod bot_mode;
+mod computer_use;
 mod connectors;
 mod cron;
 mod curator;
@@ -43,6 +44,7 @@ mod media;
 mod moa;
 mod models;
 mod operations;
+mod pets;
 mod plugins;
 mod projects;
 mod provider_routing;
@@ -53,6 +55,7 @@ mod state;
 mod tool_gateway;
 mod tools;
 mod voice;
+mod wake;
 mod webhook;
 
 use schemars::JsonSchema;
@@ -71,7 +74,10 @@ pub use agent::{
 pub use api_server::{ApiModelRoute, ApiResponsesConfig, ApiServerConfig};
 pub use automation::{GoalsConfig, HeartbeatConfig, LoopsConfig};
 pub use bot_desktop::{BotDesktopConfig, ScreenPlacement};
-pub use bot_mode::BotModeConfig;
+pub use bot_mode::{BotModeConfig, DiscussionConfig, HostedRoomsConfig};
+pub use computer_use::{
+    CUA_BACKEND, CaptureMode, ComputerUseConfig, ComputerUsePermission, Overlay,
+};
 pub use connectors::{ConnectorsConfig, DEFAULT_CONNECTOR_GATEWAY};
 pub use cron::{
     ContinuableSurface, CronConfig, CronDeliveryConfig, CronManagedConfig, CronProvider,
@@ -140,6 +146,9 @@ pub use operations::{
     SecretsBackend, SecretsConfig, SecurityConfig, TelemetryConfig, TrajectoriesConfig,
     VaultConfig, VaultKeyStorage, VaultSourceConfig, WorktreesConfig,
 };
+pub use pets::{
+    DEFAULT_GALLERY_URL, DEFAULT_PET_SCALE, MAX_PET_SCALE, MIN_PET_SCALE, PetRenderMode, PetsConfig,
+};
 pub use plugins::{
     DEFAULT_CATALOG_URL, GuidanceMode, PluginsConfig, PluginsWasmConfig, SecurityGuidanceConfig,
     SignaturePolicy, TransportFallback,
@@ -167,7 +176,11 @@ pub use tools::{
     ToolSearchConfig, ToolSearchMode, ToolsConfig, ToolsetsConfig, UnattendedApproval, WebConfig,
     WebXaiConfig, WindowsShell,
 };
-pub use voice::VoiceModeConfig;
+pub use voice::{RealtimeVoiceConfig, VoiceChatMode, VoiceModeConfig};
+pub use wake::{
+    OpenWakeWordConfig, PorcupineConfig, SherpaConfig, WakeCapture, WakeConfig, WakeEngine,
+    WakeSurface,
+};
 pub use webhook::{
     FilterFile, FilterPath, FilterPattern, FilterValue, FilterValues, WebhookFilter, WebhookFilters,
 };
@@ -203,12 +216,17 @@ pub struct Config {
     /// The bot screen: the virtual display the agent's headed browsers
     /// and `computer_use` act on.
     pub bot_desktop: BotDesktopConfig,
-    /// How bot messages travel between bots (the desktop relay's bounds).
+    /// Bot Mode: the profile as a bot, its protocol and how bot messages
+    /// travel between bots.
     pub bot_mode: BotModeConfig,
+    /// Group chats (rooms) this home drives.
+    pub hosted_rooms: HostedRoomsConfig,
     /// Side-model (auxiliary) task routing.
     pub auxiliary: AuxiliaryConfig,
     /// Browser tool sessions.
     pub browser: BrowserConfig,
+    /// The desktop driver of the `computer_use` tool.
+    pub computer_use: ComputerUseConfig,
     /// Hard token and cost budgets (`0` = off).
     pub budgets: BudgetsConfig,
     /// What input typed while a turn runs does.
@@ -295,6 +313,8 @@ pub struct Config {
     pub prompt_cache: PromptCacheConfig,
     /// PII redaction.
     pub privacy: PrivacyConfig,
+    /// The optional animated mascot of the interactive surfaces.
+    pub pets: PetsConfig,
     /// Peer gateways reached over their API server, keyed by name.
     #[schemars(extend("x-apply" = "next_session"))]
     pub peers: std::collections::BTreeMap<String, PeerGateway>,
@@ -344,8 +364,13 @@ pub struct Config {
     pub ui: UiConfig,
     /// The credential vault.
     pub vault: VaultConfig,
-    /// Voice conversations on the CLI, TUI and desktop.
-    pub voice: VoiceModeConfig,
+    /// Voice conversations on the CLI, TUI and desktop (boxed: read by the
+    /// voice surfaces only, kept out of every future that holds a
+    /// configuration).
+    pub voice: Box<VoiceModeConfig>,
+    /// The on-device wake word listener (boxed: rarely read, kept out of
+    /// every future that holds a configuration).
+    pub wake: Box<WakeConfig>,
     /// Video generation's provider selection.
     pub video_gen: VideoGenConfig,
     /// Image input routing.
@@ -371,8 +396,10 @@ impl Default for Config {
             auth: AuthConfig::default(),
             bot_desktop: BotDesktopConfig::default(),
             bot_mode: BotModeConfig::default(),
+            hosted_rooms: HostedRoomsConfig::default(),
             auxiliary: AuxiliaryConfig::default(),
             browser: BrowserConfig::default(),
+            computer_use: ComputerUseConfig::default(),
             budgets: BudgetsConfig::default(),
             busy: BusyConfig::default(),
             cli: CliConfig::default(),
@@ -415,6 +442,7 @@ impl Default for Config {
             python_bridge: PythonBridgeConfig::default(),
             prompt_cache: PromptCacheConfig::default(),
             privacy: PrivacyConfig::default(),
+            pets: PetsConfig::default(),
             peers: std::collections::BTreeMap::new(),
             provider_routing: ProviderRoutingConfig::default(),
             providers: std::collections::BTreeMap::new(),
@@ -438,7 +466,8 @@ impl Default for Config {
             tts: TtsConfig::default(),
             ui: UiConfig::default(),
             vault: VaultConfig::default(),
-            voice: VoiceModeConfig::default(),
+            voice: Box::default(),
+            wake: Box::default(),
             video_gen: VideoGenConfig::default(),
             vision: VisionConfig::default(),
             web: WebConfig::default(),

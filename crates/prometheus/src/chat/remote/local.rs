@@ -95,6 +95,18 @@ impl Chat<'_, '_> {
                 self.voice_command(args).await;
                 return Ok(Some(Flow::Continue));
             }
+            "wake" => {
+                self.wake_command(args).await;
+                return Ok(Some(Flow::Continue));
+            }
+            "pet" => {
+                self.pet_command(args);
+                return Ok(Some(Flow::Continue));
+            }
+            "hatch" | "generate-pet" => {
+                self.hatch_command(args).await;
+                return Ok(Some(Flow::Continue));
+            }
             "handoff" => {
                 let scope = self.start.scope;
                 let handed = crate::chat::handoff::handoff(
@@ -121,6 +133,16 @@ impl Chat<'_, '_> {
                 let created = open::claim(&self.attached.client, None, self.start).await;
                 self.switch(created).await;
                 return Ok(Some(Flow::Continue));
+            }
+            // A canonical Bot Chat keeps its relationship: the daemon
+            // compresses it instead (spec: bot-mode, Canonical Bot Chat).
+            "new"
+                if crate::chat::session::bots::is_bot_chat(
+                    self.start.scope,
+                    &self.attached.session,
+                ) =>
+            {
+                return Ok(None);
             }
             "new" => {
                 let created = open::claim(&self.attached.client, None, self.start).await;

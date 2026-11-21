@@ -357,7 +357,7 @@ fn onboarding(ready_after: usize) -> Onboarding {
     }
 }
 
-fn telegram_home(service: &Onboarding) -> tempfile::TempDir {
+fn telegram_home(service: &Onboarding) -> common::TestHome {
     let home = mock_home();
     common::append_config(
         home.path(),

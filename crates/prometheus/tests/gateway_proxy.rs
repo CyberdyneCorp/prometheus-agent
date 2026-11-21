@@ -17,7 +17,7 @@ use self::common::gateway::{Daemon, gateway_home_with, send, texts, wait, wait_s
 use self::common::{api, ok, run, run_with_stdin};
 
 /// The host: a mock profile serving the API, answering `host answered`.
-fn host() -> tempfile::TempDir {
+fn host() -> common::TestHome {
     let home = api::home("");
     let profile = home.path().join("profiles/default");
     std::fs::write(
@@ -31,7 +31,7 @@ fn host() -> tempfile::TempDir {
 
 /// The container: answers `container answered` itself, proxied to `url`
 /// with `key` in `UPSTREAM_KEY`.
-fn container(url: &str, key: &str) -> tempfile::TempDir {
+fn container(url: &str, key: &str) -> common::TestHome {
     let home = gateway_home_with(
         "[[rule]]\nrepeat = true\ntext = \"container answered\"\n",
         &format!("\n[gateway.proxy]\nurl = \"{url}\"\nkey_secret = \"UPSTREAM_KEY\"\n"),

@@ -78,6 +78,10 @@ is the harness's own text, the layer order and the tool schemas. A strict
 replay has no secrets (placeholders stand in for the names the
 configuration references), no plugins, MCP servers or language servers,
 and never runs a tool: a call without a recorded result is a divergence.
+Every replay enables exactly the built-in toolsets the recorded session
+exposed, so a tool whose availability depends on the machine (such as
+`computer_use` on a desktop session) does not change the tool surface
+from one replaying machine to the next.
 
 A recording is shared data, so the recorded configuration only shapes the
 conversation (agent, prompt, compression, tool output). Everything that

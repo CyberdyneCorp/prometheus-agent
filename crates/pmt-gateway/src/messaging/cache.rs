@@ -153,7 +153,8 @@ pub(crate) async fn sweep(shared: &Shared) {
 }
 
 /// Deletes cached inbound media older than `gateway.media.
-/// cache_max_age_secs` that no kept (pinned) session mentions.
+/// cache_max_age_secs` that no kept (pinned) session mentions, and kept
+/// voice recordings of that age.
 pub(crate) fn sweep_media(shared: &Shared) {
     for profile in &shared.server.profiles() {
         let (Some(store), Some(scope)) = (shared.store(profile), shared.agents.scope(profile))
@@ -163,7 +164,12 @@ pub(crate) fn sweep_media(shared: &Shared) {
         let max_age = Duration::from_secs(scope.config().gateway.media.cache_max_age_secs);
         let kept = |name: &str| store.pinned_sessions_mention(name).unwrap_or(true);
         let cache = super::media::cache_dir(scope.dir());
-        let deleted = super::media::sweep(&cache, std::time::SystemTime::now(), max_age, kept);
+        let now = std::time::SystemTime::now();
+        let mut deleted = super::media::sweep(&cache, now, max_age, kept);
+        // Voice recordings kept by `voice.keep_recordings` expire with the
+        // media (spec: voice-mode, Recording retention and privacy).
+        let recordings = scope.dir().join("cache").join("voice");
+        deleted += super::media::sweep(&recordings, now, max_age, |_| false);
         if deleted > 0 {
             tracing::debug!(profile, deleted, "expired cached media deleted");
         }

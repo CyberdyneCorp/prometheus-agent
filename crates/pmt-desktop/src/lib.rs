@@ -22,6 +22,7 @@ pub mod links;
 pub mod navigation;
 pub mod options;
 pub mod panels;
+pub mod pet;
 pub mod platform;
 pub mod profile_files;
 pub mod quick_ask;

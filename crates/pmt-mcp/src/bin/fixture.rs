@@ -6,8 +6,10 @@
 //! [--start-delay-ms <n>]`:
 //! stdio by default; `--http` serves streamable HTTP
 //! and prints `listening <addr>`; `crash-on-start` exits at once and
-//! `hang` never answers `initialize`; `--start-delay-ms` waits that long
-//! before serving (a slow server).
+//! `hang` never answers `initialize` (it reads and drops its input, and
+//! exits once its client closes stdin, so a test that gives up on it,
+//! or ends while a connect is still pending, leaves no process behind);
+//! `--start-delay-ms` waits that long before serving (a slow server).
 
 use std::io::Write as _;
 
@@ -33,9 +35,10 @@ async fn main() {
     };
     match value("--mode").as_deref() {
         Some("crash-on-start") => std::process::exit(2),
-        Some("hang") => loop {
-            tokio::time::sleep(std::time::Duration::from_hours(1)).await;
-        },
+        Some("hang") => {
+            let _ = tokio::io::copy(&mut tokio::io::stdin(), &mut tokio::io::sink()).await;
+            return;
+        }
         _ => {}
     }
     if let Some(delay) = value("--start-delay-ms").and_then(|d| d.parse().ok()) {

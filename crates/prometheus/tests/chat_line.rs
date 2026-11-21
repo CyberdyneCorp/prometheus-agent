@@ -19,7 +19,7 @@ use expectrl::session::OsSession;
 use expectrl::{Eof, Expect};
 
 /// A home whose default profile talks to the mock provider.
-fn mock_home() -> tempfile::TempDir {
+fn mock_home() -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

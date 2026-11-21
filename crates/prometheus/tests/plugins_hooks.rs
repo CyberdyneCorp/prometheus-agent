@@ -66,7 +66,7 @@ fn run_terminal_turn(home: &Path) -> String {
     stdout(&out)
 }
 
-fn guarded_home() -> (tempfile::TempDir, PathBuf) {
+fn guarded_home() -> (common::TestHome, PathBuf) {
     let home = mock_home();
     let guard = script(
         home.path(),

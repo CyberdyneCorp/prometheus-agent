@@ -73,7 +73,7 @@ fn spans(bodies: &Bodies) -> Vec<Span> {
         .collect()
 }
 
-fn exporting_home(url: &str) -> tempfile::TempDir {
+fn exporting_home(url: &str) -> common::TestHome {
     let home = mock_home();
     append_config(
         home.path(),

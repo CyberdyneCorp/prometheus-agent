@@ -13,6 +13,7 @@ import { canDrive, prefsStarted, state } from "./lib/state";
 import { loadPlugins, placeTabs } from "./lib/plugins";
 import type { Contribution } from "./lib/plugin-frames";
 import { chatPage } from "./pages/chat";
+import { achievementsPage } from "./pages/achievements";
 import { adaptersPage } from "./pages/adapters";
 import { docsPage } from "./pages/docs";
 import { filesPage } from "./pages/files";
@@ -73,9 +74,7 @@ const NAV: [string, string][] = [
 ];
 
 /** Pages whose backends arrive with later capabilities. */
-const PENDING: [string, string, string][] = [
-  ["/achievements", "Achievements", "Achievements"],
-];
+const PENDING: [string, string, string][] = [];
 
 function routes(): void {
   route("/chat", chatPage);
@@ -104,6 +103,7 @@ function routes(): void {
   route("/themes", themesPage);
   route("/evolution", evolutionPage);
   route("/experience", experiencePage);
+  route("/achievements", achievementsPage);
   for (const [path, title, what] of PENDING) route(path, pendingPage(title, what));
   notFound(notFoundPage);
 }

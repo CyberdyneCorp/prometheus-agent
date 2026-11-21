@@ -94,8 +94,8 @@ impl SystemMicrophone {
         Some(Self { recorder })
     }
 
-    fn command(&self, devices: &[String]) -> Command {
-        let device = devices.first().cloned().unwrap_or_default();
+    fn command(&self, devices: &[String], index: usize) -> Command {
+        let device = devices.get(index).cloned().unwrap_or_default();
         let mut command = match &self.recorder {
             Recorder::Avfoundation(ffmpeg) | Recorder::Dshow(ffmpeg) => {
                 let input = if matches!(self.recorder, Recorder::Dshow(_)) {
@@ -106,7 +106,12 @@ impl SystemMicrophone {
                         format!("audio={device}"),
                     ]
                 } else {
-                    ["-f".into(), "avfoundation".into(), "-i".into(), ":0".into()]
+                    [
+                        "-f".into(),
+                        "avfoundation".into(),
+                        "-i".into(),
+                        format!(":{index}"),
+                    ]
                 };
                 let mut command = Command::new(ffmpeg);
                 command
@@ -126,6 +131,9 @@ impl SystemMicrophone {
             Recorder::Alsa(arecord) => {
                 let mut command = Command::new(arecord);
                 command.args(["-q", "-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "raw"]);
+                if index > 0 {
+                    command.arg(format!("-Dplughw:{index}"));
+                }
                 command
             }
         };
@@ -201,17 +209,31 @@ impl Microphone for SystemMicrophone {
     }
 
     fn open(&self) -> BoxFuture<'_, Result<Box<dyn Capture>, String>> {
+        self.open_at(0)
+    }
+
+    fn open_at(&self, index: usize) -> BoxFuture<'_, Result<Box<dyn Capture>, String>> {
         Box::pin(async move {
             let devices = self.devices().await;
             if devices.is_empty() {
                 return Err(crate::mode::NO_DEVICE.to_owned());
             }
             let child = self
-                .command(&devices)
+                .command(&devices, index)
                 .spawn()
                 .map_err(|e| format!("the recorder could not start: {e}"))?;
             Ok(Box::new(Recording { child }) as Box<dyn Capture>)
         })
+    }
+
+    fn host_api(&self) -> String {
+        match &self.recorder {
+            Recorder::Avfoundation(_) => "AVFoundation (ffmpeg)",
+            Recorder::Dshow(_) => "DirectShow (ffmpeg)",
+            Recorder::Pulse { .. } => "PulseAudio/PipeWire (parecord)",
+            Recorder::Alsa(_) => "ALSA (arecord)",
+        }
+        .to_owned()
     }
 }
 

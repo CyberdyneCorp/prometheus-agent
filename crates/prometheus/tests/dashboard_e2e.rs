@@ -215,7 +215,7 @@ fn the_plugin_mcp_cron_and_memory_pages_show_the_profiles_data() {
 /// (plus a chat answer to "hello") and one finished k = 1 job on a ledger
 /// task in domain `accounting`; the pending proposal's id.
 #[cfg(feature = "evolve")]
-fn evolved_home() -> (tempfile::TempDir, String) {
+fn evolved_home() -> (common::TestHome, String) {
     let home = mock_home();
     for (key, value) in [
         ("evolve.enabled", "true"),

@@ -25,7 +25,7 @@ use wiremock::MockServer;
 const LAZY_DISABLED: &str = "chromium is not installed and lazy installs are disabled: run 'prometheus runtimes install chromium'";
 
 struct Fixture {
-    home: tempfile::TempDir,
+    home: common::TestHome,
     /// The session's working directory.
     work: PathBuf,
     /// The only directory on the session's `PATH`.

@@ -300,7 +300,7 @@ impl Acp {
 
 /// A test home on the mock provider with a working directory `work`.
 pub(crate) struct Home {
-    pub(crate) dir: tempfile::TempDir,
+    pub(crate) dir: common::TestHome,
     pub(crate) work: PathBuf,
 }
 

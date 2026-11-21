@@ -31,7 +31,7 @@ fn path_with(extra: &[PathBuf]) -> OsString {
 }
 
 struct Backend {
-    home: tempfile::TempDir,
+    home: common::TestHome,
     /// The stand-ins' state and call logs (`XDG_RUNTIME_DIR`).
     state: PathBuf,
     path: OsString,

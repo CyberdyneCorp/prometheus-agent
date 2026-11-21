@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use pmt_config::schema::VoiceModeConfig;
+use pmt_core::cancel::CancelToken;
 use pmt_voice::converse::{self, Ended, Heard, Host, Interjection, Kit};
 use pmt_voice::device::{BoxFuture, Clip, Player, Sound, Synth, Transcriber};
 use pmt_voice::fixture::{FixtureMicrophone, FixturePlayer};
@@ -110,6 +111,8 @@ fn kit(mic: &Path, ears: &Arc<Ears>, player: &Arc<Speakers>, voice: Option<Arc<V
     Kit {
         mic: Arc::new(FixtureMicrophone::new(mic)),
         ears: Arc::clone(ears) as _,
+        streaming: None,
+        partial: Arc::new(|_| {}),
         player: Arc::clone(player) as _,
         voice: voice.map(|v| v as Arc<dyn Synth>),
         meter: Arc::new(|_| {}),
@@ -124,6 +127,8 @@ struct Surface {
     turns: Vec<String>,
     typed: Vec<String>,
     stop_after: Option<usize>,
+    /// Where the start beep of a recording shows.
+    listening: Option<Arc<Speakers>>,
     interjections: VecDeque<Interjection>,
 }
 
@@ -134,13 +139,14 @@ impl Surface {
             turns: Vec::new(),
             typed: Vec::new(),
             stop_after: None,
+            listening: None,
             interjections: VecDeque::new(),
         }
     }
 }
 
 impl Host for Surface {
-    async fn turn(&mut self, text: String, mouth: Option<Arc<Mouth>>) {
+    async fn turn(&mut self, text: String, mouth: Option<Arc<Mouth>>, _cut: CancelToken) {
         self.turns.push(text);
         if let Some(mouth) = mouth {
             let (first, rest) = self.reply.split_at(self.reply.len() / 2);
@@ -151,6 +157,13 @@ impl Host for Surface {
 
     async fn interjection(&mut self) -> Interjection {
         if self.stop_after.is_some_and(|n| self.turns.len() >= n) {
+            // Pressed once the next recording started (a press during the
+            // reply's playback would only silence it).
+            if let Some(speakers) = &self.listening {
+                while speakers.played().last().map(String::as_str) != Some("beep:start") {
+                    tokio::time::sleep(Duration::from_millis(2)).await;
+                }
+            }
             return Interjection::RecordKey;
         }
         match self.interjections.pop_front() {
@@ -237,6 +250,7 @@ async fn the_conversation_continues_without_a_key_press() {
     let kit = kit(mic.path(), &ears, &speakers, Some(Arc::clone(&voice)));
     let mut surface = Surface::new("It is three in the afternoon in Lisbon. Anything else?");
     surface.stop_after = Some(2);
+    surface.listening = Some(Arc::clone(&speakers));
     let ended = converse::converse(&mut surface, &kit).await;
     assert_eq!(ended, Ended::RecordKey);
     assert_eq!(

@@ -50,7 +50,7 @@ fn runtime_setting() -> Option<String> {
 /// A mock home whose terminal backend is a non-persistent container. A
 /// rootful daemon (CI's Docker) is accepted with `allow_degraded = ["all"]`
 /// as in the pmt-tools container tests.
-fn container_home(setting: &str) -> tempfile::TempDir {
+fn container_home(setting: &str) -> common::TestHome {
     let home = mock_home();
     append_config(
         home.path(),

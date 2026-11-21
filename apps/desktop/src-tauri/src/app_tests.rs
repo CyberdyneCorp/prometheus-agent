@@ -11,10 +11,10 @@ use serde_json::{Value, json};
 use tauri::Listener as _;
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder};
-use tauri::webview::{InvokeRequest, NewWindowResponse};
+use tauri::webview::{InvokeRequest, NewWindowResponse, PermissionKind, PermissionResponse};
 use tauri::{Manager as _, WebviewWindow, WebviewWindowBuilder};
 
-use super::{DEEP_LINK_EVENT, MAIN, deliver, new_window, with_shell};
+use super::{DEEP_LINK_EVENT, MAIN, deliver, new_window, permission, with_shell};
 
 /// Records what reached the OS.
 #[derive(Default)]
@@ -266,4 +266,22 @@ fn a_plugin_panel_origin_reaches_no_native_command() {
         assert!(answer.is_err(), "{origin}: {answer:?}");
     }
     assert!(recorder.calls().is_empty());
+}
+
+/// The voice controls need the microphone; the webview grants nothing
+/// else on its own (spec: voice-mode, Desktop voice controls).
+#[test]
+fn the_app_page_may_use_the_microphone_and_nothing_else() {
+    assert_eq!(
+        permission(PermissionKind::Microphone),
+        PermissionResponse::Allow
+    );
+    for other in [
+        PermissionKind::Camera,
+        PermissionKind::Geolocation,
+        PermissionKind::DisplayCapture,
+        PermissionKind::ClipboardRead,
+    ] {
+        assert_eq!(permission(other), PermissionResponse::Default, "{other:?}");
+    }
 }

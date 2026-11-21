@@ -53,7 +53,7 @@ fn store(home: &Path) -> pmt_store::Store {
 
 /// A peer home serving its API (and the bot-chat endpoints) with the
 /// default profile's key, answering every turn with `reply`.
-fn api_peer(reply: &str) -> tempfile::TempDir {
+fn api_peer(reply: &str) -> common::TestHome {
     let home = api::home("");
     script(
         home.path(),

@@ -54,7 +54,7 @@ fn denials(home: &Path) -> Vec<Value> {
 
 /// A home whose blocklist file names `*.casino.example`, with a web
 /// extraction backend that is never reached.
-fn blocklisted_home() -> tempfile::TempDir {
+fn blocklisted_home() -> common::TestHome {
     let home = mock_home();
     let list = home.path().join("blocked.txt");
     std::fs::write(&list, "# shared by the team\n*.casino.example\n").unwrap();

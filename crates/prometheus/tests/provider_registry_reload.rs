@@ -61,7 +61,7 @@ mod line {
     fn setup() -> (
         tokio::runtime::Runtime,
         MockServer,
-        tempfile::TempDir,
+        super::common::TestHome,
         std::path::PathBuf,
     ) {
         let runtime = tokio::runtime::Runtime::new().unwrap();

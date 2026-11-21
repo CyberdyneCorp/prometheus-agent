@@ -34,7 +34,6 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `code_execution` | `execute_code` |  |  | Run code in a sandbox |
 | `delegation` | `delegate_task` |  |  | Delegate work to subagents |
 | `kanban` | `kanban_show`, `kanban_list`, `kanban_create`, `kanban_comment`, `kanban_attach`, `kanban_link`, `kanban_complete`, `kanban_block`, `kanban_schedule`, `kanban_heartbeat`, `kanban_request_review`, `kanban_request_changes`, `kanban_unblock`, `kanban_attach_url`, `kanban_attachments` |  | default-off | Kanban boards |
-| `a2a` | `a2a_discover`, `a2a_call`, `a2a_list`, `a2a_history`, `a2a_orchestrate` |  | default-off | Call other agents over the A2A protocol |
 | `debugging` | `terminal`, `process` | `web`, `file` |  | Terminal, processes, web and files |
 | `safe` |  | `web`, `vision`, `image_gen` |  | Web, vision and image generation; nothing that executes |
 | `webhook-safe` | `web_search`, `web_extract`, `vision_analyze`, `clarify` |  |  | Read-only web and vision tools for webhook-triggered runs; nothing that executes or writes |
@@ -53,6 +52,8 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `platform-matrix` |  | `core` |  | The core tools plus those of the matrix platform |
 | `platform-signal` |  | `core` |  | The core tools plus those of the signal platform |
 | `platform-whatsapp` |  | `core` |  | The core tools plus those of the whatsapp platform |
+| `a2a` | `a2a_discover`, `a2a_call`, `a2a_list`, `a2a_history`, `a2a_orchestrate` |  | default-off | Call other agents over the A2A protocol |
+| `bot` | `message_agent` |  | default-off | Message other bots (canonical Bot Chats only) |
 
 ## Tool names
 
@@ -252,26 +253,6 @@ Toolsets: `kanban`.
 
 Toolsets: `kanban`.
 
-### `a2a_discover`
-
-Toolsets: `a2a`.
-
-### `a2a_call`
-
-Toolsets: `a2a`.
-
-### `a2a_list`
-
-Toolsets: `a2a`.
-
-### `a2a_history`
-
-Toolsets: `a2a`.
-
-### `a2a_orchestrate`
-
-Toolsets: `a2a`.
-
 ### `project`
 
 Toolsets: `project`.
@@ -323,3 +304,27 @@ Toolsets: `desktop_ui`.
 ### `setup_beat`
 
 Toolsets: `onboarding`.
+
+### `a2a_discover`
+
+Toolsets: `a2a`.
+
+### `a2a_call`
+
+Toolsets: `a2a`.
+
+### `a2a_list`
+
+Toolsets: `a2a`.
+
+### `a2a_history`
+
+Toolsets: `a2a`.
+
+### `a2a_orchestrate`
+
+Toolsets: `a2a`.
+
+### `message_agent`
+
+Toolsets: `bot`.

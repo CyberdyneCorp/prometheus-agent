@@ -125,6 +125,15 @@ error_codes! {
     /// The bot screen cannot run here.
     SCREEN_UNAVAILABLE = ("screen.unavailable", Unavailable,
         "The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`).");
+    /// The computer-use driver cannot be used.
+    COMPUTER_USE_UNAVAILABLE = ("computer_use.unavailable", Unavailable,
+        "The computer-use driver cannot be used: `cua-driver` is not installed (`prometheus computer-use install`), its version is outside the supported contract, it did not start, or a platform prerequisite is missing (`prometheus computer-use doctor`).");
+    /// The driver's identity check failed.
+    COMPUTER_USE_IDENTITY = ("computer_use.identity", Config,
+        "A private computer-use runtime (bounded, or unrestricted under `/yolo`) is launched on macOS only through a `CuaDriver.app` bundle whose code signature has the official identifier and team; set `computer_use.allow_unsigned_driver = true` only for a local driver build.");
+    /// A bounded runtime has no readable capability manifest.
+    COMPUTER_USE_MANIFEST = ("computer_use.manifest", Config,
+        "`computer_use.permission_mode = \"bounded\"` needs a readable `computer_use.capability_manifest`; the session refuses to start rather than run the driver unbounded.");
     /// A profile distribution's manifest or content is invalid.
     PROFILE_DISTRIBUTION_INVALID = ("profile.distribution_invalid", InvalidInput,
         "A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`.");
@@ -1315,6 +1324,24 @@ error_codes! {
     /// No peer gateway (or agent on it) has the name.
     PEER_NOT_FOUND = ("peer.not_found", NotFound,
         "No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers.");
+    /// No room has this id.
+    ROOM_NOT_FOUND = ("room.not_found", NotFound,
+        "No group chat (room) of this home has this id; `prometheus rpc call groups.list` lists them.");
+    /// Another room already has this name.
+    ROOM_NAME_TAKEN = ("room.name_taken", Conflict,
+        "Room names are unique in a home; pick another name or rename the other room.");
+    /// This gateway is not the room's authority.
+    ROOM_NOT_AUTHORITY = ("room.not_authority", Conflict,
+        "Only the room authority writes the room log; send to the authority named in the message, or promote this gateway after fencing the old one.");
+    /// A promotion without `confirm: true`.
+    ROOM_CONFIRMATION_REQUIRED = ("room.confirmation_required", Usage,
+        "`groups.promote` changes which gateway owns the room log; pass `confirm: true` once the old authority is fenced (stopped or demoted).");
+    /// The replica misses entries of the authority's log.
+    ROOM_REPLICA_INCOMPLETE = ("room.replica_incomplete", Conflict,
+        "This gateway's copy of the room log is behind the authority's (`last_seq < latest_seq`); run `groups.replicate` first, or pass `force_incomplete: true` to promote it anyway.");
+    /// A room member is not reachable.
+    ROOM_MEMBER_REFUSED = ("room.member_refused", PermissionDenied,
+        "The member's gateway refused the room authority: it has not issued a room grant (`groups.grant`), or the grant was revoked.");
     /// The subscription proxy's provider has no usable sign-in.
     PROXY_NOT_LOGGED_IN = ("proxy.not_logged_in", Auth,
         "The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`.");
@@ -1402,4 +1429,22 @@ error_codes! {
     /// The session cannot take turns.
     SESSION_READ_ONLY = ("session.read_only", PermissionDenied,
         "The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them.");
+    /// No installed or gallery pet has the slug.
+    PET_NOT_FOUND = ("pet.not_found", NotFound,
+        "No installed pet (`<profile>/pets/<slug>/`) or gallery pet has that slug; `prometheus pets list` shows the gallery and `prometheus pets list --installed` the installed ones.");
+    /// A pet atlas does not validate.
+    PET_INVALID_ATLAS = ("pet.invalid_atlas", InvalidInput,
+        "A pet atlas is not a PNG or WebP image of at most 8 MiB measuring 1536x1872 pixels (8 columns by 9 rows of 192x208 cells); nothing was installed.");
+    /// The pet is installed already.
+    PET_EXISTS = ("pet.exists", Conflict,
+        "A pet with that slug is installed already; `--force` replaces it.");
+    /// The pet gallery could not be read.
+    PET_GALLERY = ("pet.gallery", Unavailable,
+        "The pet gallery (`pets.gallery_url`) or a pet's atlas could not be downloaded (network failure, an HTTP error, a non-HTTPS URL or an unreadable manifest).");
+    /// No image backend can generate a pet.
+    PET_NO_IMAGE_BACKEND = ("pet.no_image_backend", Config,
+        "Pet generation needs an image backend that takes reference images (`pets.image_provider`, else the configured image generation provider); configure one with `prometheus tools`. Nothing was spent.");
+    /// Pet generation failed.
+    PET_GENERATION_FAILED = ("pet.generation_failed", Provider,
+        "The image backend failed while generating a pet's drafts or animation rows; the message names the step. Nothing was installed.");
 }

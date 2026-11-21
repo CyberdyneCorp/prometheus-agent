@@ -38,7 +38,7 @@ fn status(home: &Path, id: &str) -> String {
 }
 
 /// A mock home whose default profile plays `rules`.
-fn worker_home(rules: &str) -> tempfile::TempDir {
+fn worker_home(rules: &str) -> common::TestHome {
     let home = mock_home();
     std::fs::write(home.path().join("profiles/default/mock.toml"), rules).unwrap();
     common::append_config(home.path(), "\n[providers.mock]\nscript = \"mock.toml\"\n");
@@ -231,7 +231,7 @@ fn a_loopback_link_is_refused_and_audited() {
 
 /// A home whose GitHub stand-in has PR 41 with a red required `ci/test`
 /// and PR 42 green, for profile `default`'s token.
-fn github_home() -> (tempfile::TempDir, Server) {
+fn github_home() -> (common::TestHome, Server) {
     let server = Server::start();
     let home = mock_home();
     ok(&run(

@@ -29,6 +29,8 @@ pub(super) trait Out {
     /// Every `session.event` as it arrives (a streamed one-shot run
     /// writes the trajectory events among them as JSON lines).
     fn raw_event(&self, _event: &pmt_rpc::contracts::Envelope) {}
+    /// `achievement.unlocked` (spec: pets, Achievement unlocks celebrate).
+    fn achievement(&self, _data: &serde_json::Value) {}
     /// An error.
     fn error(&self, err: &Error);
 }

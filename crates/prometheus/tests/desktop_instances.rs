@@ -23,7 +23,7 @@ fn runtime() -> tokio::runtime::Runtime {
 }
 
 /// A home serving `default` and a `research` profile on the mock provider.
-fn machine() -> tempfile::TempDir {
+fn machine() -> common::TestHome {
     let home = mock_home();
     ok(&run(
         home.path(),

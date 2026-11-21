@@ -17,7 +17,8 @@ pub struct Daemon<'a> {
 
 impl Drop for Daemon<'_> {
     fn drop(&mut self) {
-        let _ = run(self.home, &["daemon", "stop"]);
+        // Stopped, or killed when it does not stop in time.
+        super::home::reap(self.home);
     }
 }
 

@@ -276,12 +276,6 @@ pub fn builtin() -> Vec<Toolset> {
         ),
         Toolset::new("kanban", "Kanban boards", crate::agent_level_kanban::TOOLS).default_off(),
         Toolset::new(
-            "a2a",
-            "Call other agents over the A2A protocol",
-            crate::agent_level_a2a::TOOLS,
-        )
-        .default_off(),
-        Toolset::new(
             "debugging",
             "Terminal, processes, web and files",
             &["terminal", "process"],
@@ -304,7 +298,28 @@ pub fn builtin() -> Vec<Toolset> {
     ];
     sets.extend(gui_toolsets());
     sets.extend(surface_defaults());
+    sets.extend(agent_messaging());
     sets
+}
+
+/// The toolsets that reach other agents, both off by default: `a2a`
+/// (spec: agent-interop) and `bot` (spec: bot-mode, `message_agent` tool;
+/// only a canonical Bot Chat adds its tool, no surface selects it).
+fn agent_messaging() -> [Toolset; 2] {
+    [
+        Toolset::new(
+            "a2a",
+            "Call other agents over the A2A protocol",
+            crate::agent_level_a2a::TOOLS,
+        )
+        .default_off(),
+        Toolset::new(
+            "bot",
+            "Message other bots (canonical Bot Chats only)",
+            crate::agent_level_bots::TOOLS,
+        )
+        .default_off(),
+    ]
 }
 
 /// The GUI surfaces' toolsets (spec: tool-system, Surface toolsets come

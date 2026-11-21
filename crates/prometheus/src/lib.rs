@@ -7,6 +7,7 @@
 
 pub mod a2a_host;
 pub mod accounts;
+pub mod achievements_cmd;
 #[cfg(feature = "acp")]
 pub mod acp_cmd;
 pub mod advisories;
@@ -14,6 +15,7 @@ pub mod approvals_cmd;
 pub mod auth_cmd;
 pub mod automation;
 pub mod backup_cmd;
+pub mod bot_host;
 pub mod bridge_cmd;
 pub mod browser_cmd;
 pub mod build_info;
@@ -23,6 +25,8 @@ pub mod chat;
 pub mod cli;
 pub mod codex_runtime_cmd;
 pub mod completions;
+pub mod computer_use;
+pub mod computer_use_cli;
 pub mod computer_use_cmd;
 pub mod config_cmd;
 pub mod config_plane;
@@ -76,6 +80,8 @@ pub mod model_cmd;
 pub mod model_slash;
 pub mod output;
 pub mod pause_cmd;
+pub mod pets_cmd;
+pub mod pets_host;
 pub mod plugins_cmd;
 pub mod plugins_host;
 pub mod portal_cmd;

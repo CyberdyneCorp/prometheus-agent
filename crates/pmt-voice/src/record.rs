@@ -5,7 +5,7 @@
 
 use pmt_config::schema::VoiceModeConfig;
 
-use crate::device::{Clip, Microphone, Player, Sound};
+use crate::device::{Capture, Clip, Microphone, Player, Sound};
 use crate::pcm::{self, FRAME_MS, FRAME_SAMPLES, RATE};
 use crate::vad::{Detector, End, Limits};
 
@@ -60,10 +60,29 @@ pub async fn record(
     config: &VoiceModeConfig,
     meter: &Meter,
 ) -> Result<Recording, String> {
+    record_with(mic, player, config, meter, &mut |_| {}).await
+}
+
+/// Like [`record`], handing every captured frame to `tap` as it arrives
+/// (a streaming transcriber).
+///
+/// # Errors
+///
+/// As [`record`].
+pub async fn record_with(
+    mic: &dyn Microphone,
+    player: &dyn Player,
+    config: &VoiceModeConfig,
+    meter: &Meter,
+    tap: &mut (dyn FnMut(&[i16]) + Send),
+) -> Result<Recording, String> {
     if config.beep_enabled {
         cue(player, "beep:start", START_BEEP_HZ, 1).await;
     }
-    let recording = capture(mic, Limits::of(config), meter).await;
+    let recording = match mic.open().await {
+        Ok(device) => capture(device, Vec::new(), Limits::of(config), meter, tap).await,
+        Err(why) => Err(why),
+    };
     if config.beep_enabled {
         cue(player, "beep:end", END_BEEP_HZ, 2).await;
     }
@@ -83,19 +102,31 @@ async fn cue(player: &dyn Player, label: &str, hz: f64, count: u32) {
     }
 }
 
-async fn capture(mic: &dyn Microphone, limits: Limits, meter: &Meter) -> Result<Recording, String> {
-    let mut device = mic.open().await?;
+/// Captures from the open `device` until the detector ends the
+/// recording; `heard` is audio already captured (the start of an
+/// utterance that interrupted a reply), fed first.
+///
+/// # Errors
+///
+/// The device stops before speech was heard.
+pub async fn capture(
+    mut device: Box<dyn Capture>,
+    heard: Vec<i16>,
+    limits: Limits,
+    meter: &Meter,
+    tap: &mut (dyn FnMut(&[i16]) + Send),
+) -> Result<Recording, String> {
     let mut detector = Detector::new(limits);
     let mut samples = Vec::new();
-    let mut pending: Vec<i16> = Vec::new();
+    let mut pending: Vec<i16> = heard;
     let mut frames = 0u64;
-    while let Some(chunk) = device.read().await {
-        pending.extend(chunk);
+    loop {
         let mut at = 0;
         while pending.len() - at >= FRAME_SAMPLES {
             let frame = &pending[at..at + FRAME_SAMPLES];
             at += FRAME_SAMPLES;
             samples.extend_from_slice(frame);
+            tap(frame);
             let rms = pcm::rms(frame);
             let end = detector.feed(u64::from(FRAME_MS), rms);
             frames += 1;
@@ -111,6 +142,10 @@ async fn capture(mic: &dyn Microphone, limits: Limits, meter: &Meter) -> Result<
             }
         }
         pending.drain(..at);
+        let Some(chunk) = device.read().await else {
+            break;
+        };
+        pending.extend(chunk);
     }
     if detector.heard_speech() {
         return Ok(Recording {

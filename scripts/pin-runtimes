@@ -32,6 +32,10 @@ OP = "2.42.0"
 # Lightpanda headless browser (github.com/lightpanda-io/browser): bare
 # executables, no Windows build.
 LIGHTPANDA = "1.0.2"
+# cua-driver, the computer-use driver (github.com/trycua/cua, MIT): the
+# macOS archive carries the signed CuaDriver.app (TCC identity); no musl or
+# Android build.
+CUA_DRIVER = "0.21.0"
 
 OUT = pathlib.Path(__file__).resolve().parent.parent / "crates/pmt-update/runtimes/index.json"
 
@@ -245,6 +249,31 @@ def lightpanda():
     return {"version": LIGHTPANDA, "artifacts": artifacts}
 
 
+CUA_DRIVER_PLATFORMS = {
+    "darwin-arm64": ("darwin-universal", "tar.gz"),
+    "darwin-x64": ("darwin-universal", "tar.gz"),
+    "linux-x64": ("linux-x86_64-binary", "tar.gz"),
+    "linux-arm64": ("linux-arm64-binary", "tar.gz"),
+    "windows-x64": ("windows-x86_64-binary", "zip"),
+    "windows-arm64": ("windows-arm64-binary", "zip"),
+}
+
+
+def cua_driver():
+    assets = github_assets("trycua/cua", f"cua-driver-rs-v{CUA_DRIVER}")
+    artifacts = {}
+    for platform, (name, fmt) in CUA_DRIVER_PLATFORMS.items():
+        if platform.startswith("darwin"):
+            exe = f"cua-driver-rs-{CUA_DRIVER}-{name}/CuaDriver.app/Contents/MacOS/cua-driver"
+        elif platform.startswith("windows"):
+            exe = "cua-driver.exe"
+        else:
+            exe = "cua-driver"
+        asset = assets[f"cua-driver-rs-{CUA_DRIVER}-{name}.{fmt}"]
+        artifacts[platform] = from_asset(asset, fmt, exe)
+    return {"version": CUA_DRIVER, "artifacts": artifacts}
+
+
 def main():
     index = {
         "schema": "prometheus.runtime-index.v1",
@@ -257,6 +286,7 @@ def main():
             "bws": bws(),
             "op": op(),
             "lightpanda": lightpanda(),
+            "cua-driver": cua_driver(),
         },
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)

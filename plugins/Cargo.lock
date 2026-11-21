@@ -363,6 +363,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sample-computer-use-backend"
+version = "0.1.0"
+dependencies = [
+ "wit-bindgen-rt",
+]
+
+[[package]]
 name = "sample-context-engine"
 version = "0.1.0"
 dependencies = [

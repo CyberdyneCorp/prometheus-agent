@@ -112,6 +112,7 @@ pub(crate) fn run_with(
             let liveness = super::watchdog::background(home, ctx.launch);
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
             super::host::publish_usage(&host, &server);
+            host.set_server(&server);
             publish_context_grown(&server);
             let mut messaging =
                 super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;

@@ -286,6 +286,27 @@ pub enum Request {
     PluginConnections,
     /// Update all instances.
     UpdateAll,
+    /// Pops the pet out into its overlay window, or back into the main
+    /// window (spec: pets, Desktop pet and pop-out overlay).
+    PetOverlay {
+        /// Open (true) or close the overlay.
+        open: bool,
+    },
+    /// A message between the main window and the pet overlay, which has
+    /// no protocol connection of its own.
+    PetRelay {
+        /// The receiving window (`main` or `pet`).
+        to: String,
+        /// What is sent (the pet's state, a prompt to submit...).
+        message: serde_json::Value,
+    },
+    /// The user pressed and held the pet overlay: it follows the pointer.
+    PetDrag,
+    /// Shows the main window, or hides it (a double-click on the pet).
+    MainWindow {
+        /// `toggle` or `show`.
+        action: crate::pet::MainAction,
+    },
 }
 
 /// The machine integration behind the allowlist.
@@ -429,6 +450,49 @@ pub trait Native: Send + Sync {
     fn save_path(&self, name: &str) -> Option<PathBuf> {
         let _ = name;
         None
+    }
+    /// Opens the pet overlay window (at its saved place) or closes it;
+    /// whether it now shows.
+    ///
+    /// # Errors
+    ///
+    /// The window system's failure (no overlay in this shell by default).
+    fn pet_overlay(&self, open: bool) -> Result<bool, String> {
+        let _ = open;
+        Err("this shell has no pet overlay".to_owned())
+    }
+    /// Sends shell event `event` with `payload` to window `window`.
+    ///
+    /// # Errors
+    ///
+    /// No such window.
+    fn emit_to(
+        &self,
+        window: &str,
+        event: &str,
+        payload: &serde_json::Value,
+    ) -> Result<(), String> {
+        let _ = (window, event, payload);
+        Err("this shell sends no window events".to_owned())
+    }
+    /// Moves window `window` with the pointer while the button is held.
+    ///
+    /// # Errors
+    ///
+    /// The window system's failure.
+    fn drag_window(&self, window: &str) -> Result<(), String> {
+        let _ = window;
+        Err("this shell cannot move windows".to_owned())
+    }
+    /// Shows the main window (`show`), or toggles it; whether it now
+    /// shows.
+    ///
+    /// # Errors
+    ///
+    /// No main window.
+    fn main_window(&self, toggle: bool) -> Result<bool, String> {
+        let _ = toggle;
+        Err("no main window".to_owned())
     }
 }
 

@@ -142,6 +142,7 @@ fn guard(server: &Arc<Server>, tool: &Tool) -> Option<CallGuard> {
                 rule_key: format!("{}:spend", rule_key(&server, &name)),
                 reason: format!("{stated}; this call would cross the spend limit"),
                 once_only: true,
+                builtin: false,
             });
         }
         ask.then(|| {

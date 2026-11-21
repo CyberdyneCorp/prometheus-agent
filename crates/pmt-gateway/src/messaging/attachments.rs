@@ -3,8 +3,9 @@
 //! (deduplicated; ignored inside code blocks, inline code, blockquotes and
 //! quoted JSON; `[[as_voice]]` and `[[as_document]]` modifiers), and the
 //! gateway delivers a local file only when its fully resolved real path
-//! lies inside the session's workspace, the profile's `cache/media/` or
-//! its blob store, and is not one of the profile's secret-bearing files.
+//! lies inside the session's workspace, the profile's `cache/media/`,
+//! its retained computer-use screenshots (`cache/computer-use/`) or its
+//! blob store, and is not one of the profile's secret-bearing files.
 
 use std::path::{Path, PathBuf};
 
@@ -161,6 +162,9 @@ impl Roots {
     pub fn of_profile(profile_dir: &Path, workspace: Option<&Path>) -> Self {
         let mut allowed = vec![
             profile_dir.join("cache").join("media"),
+            // Retained computer-use screenshots (spec: computer-use,
+            // Screenshot retention and delivery).
+            profile_dir.join("cache").join("computer-use"),
             profile_dir.join("blobs"),
         ];
         allowed.extend(workspace.map(Path::to_path_buf));

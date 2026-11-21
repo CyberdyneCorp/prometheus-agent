@@ -162,7 +162,8 @@ pub fn run(recording: &Recording, settings: &Settings<'_>) -> Result<Report, Err
     let trusted = settings
         .secrets_from
         .map_or_else(pmt_config::Config::default, |scope| scope.config().clone());
-    let config = super::trust::config(&state.config, &trusted)?;
+    let mut config = super::trust::config(&state.config, &trusted)?;
+    pin_toolsets(&mut config, &state.toolsets);
     let workspace = prepare(recording, &state, &config, settings)?;
     let stop = CancelToken::new();
     let source = Arc::new(Replayer::new(
@@ -225,6 +226,30 @@ pub fn run(recording: &Recording, settings: &Settings<'_>) -> Result<Report, Err
         trajectory,
         trajectory_diff,
     })
+}
+
+/// Pins the replay's toolsets to the ones the recorded session exposed.
+/// A tool whose availability depends on the host (`computer_use` where a
+/// desktop session and driver are found) would otherwise change the tool
+/// surface, and with it the requests and token estimates, from one
+/// replaying host to the next. Narrowing only: the recorded config enabled
+/// every one of them. Extension toolsets are left out (a replay runs no
+/// plugins, so naming one would be an unknown toolset).
+fn pin_toolsets(config: &mut pmt_config::Config, recorded: &[String]) {
+    let builtin: Vec<String> = pmt_tools::toolset::builtin()
+        .into_iter()
+        .map(|toolset| toolset.name)
+        .collect();
+    let pinned: Vec<String> = recorded
+        .iter()
+        .filter(|name| builtin.contains(name))
+        .cloned()
+        .collect();
+    if pinned.is_empty() {
+        return;
+    }
+    config.tools.enabled_toolsets = pinned;
+    config.toolsets.surfaces = pmt_config::schema::SurfaceToolsets::default();
 }
 
 /// Creates the output's home (the recorded config), workspace and mock

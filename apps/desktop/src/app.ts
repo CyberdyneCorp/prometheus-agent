@@ -6,12 +6,13 @@
 // `ui.prefs`), approvals for an unfocused window become notifications,
 // and plugin panels load on their own origins.
 
-import type { ApprovalRequestParams } from "../../../schema/rpc";
+import type { ApprovalRequestParams, TurnFinished, WakeDetected } from "../../../schema/rpc";
 import { h, notice } from "../../../web/src/lib/dom";
 import { LanguagePicker } from "../../../web/src/lib/language";
 import { Prefs } from "../../../web/src/lib/prefs";
 import { applyFonts, restore, snapshot, Zoom } from "./appearance";
 import { Attention, focusCard } from "./attention";
+import { BotsPane } from "./bots";
 import { ChatView } from "./chat";
 import { DesktopClient } from "./client";
 import { Background, ConnectionsPanel, Groups, LOCAL, type Listing, listConnections } from "./connections";
@@ -23,6 +24,7 @@ import { hudWindow, toggleHud } from "./hud";
 import { type InstallLink, installDialog } from "./install";
 import { ManagePane } from "./manage";
 import { PanelHost } from "./panels";
+import { FloatingPet } from "./pet/floating";
 import { ProfileClients } from "./profiles";
 import { ProjectsSidebar } from "./projects";
 import { localPrefsChannel } from "./remote-prefs";
@@ -35,6 +37,7 @@ import { Onboarding } from "./onboarding";
 import { Guide } from "./tour";
 import { toolPrefsControls, UiTools } from "./ui-tools";
 import { NOT_FOUND } from "./verdict";
+import { VoiceControls } from "./voice/controls";
 import { showProfile, stageFile } from "./web-shell";
 import { type Workspace, workspace } from "./workspace";
 
@@ -164,6 +167,16 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     remember(profile);
     await client.switchProfile(profile);
   };
+  const pet = new FloatingPet(client, chat, say, dialogs);
+  chat.onPet = (name, args, sessionId) => void pet.command(name, args, sessionId);
+  chat.onSent = (text) => pet.sent(text);
+  client.on("achievement.unlocked", (envelope) => pet.unlocked(envelope.data as { id: string; tier: string }));
+  const voice = new VoiceControls({ link: client, chat, switchProfile: async (p) => {
+    await switchTo(p);
+    await client.ready();
+  }, say });
+  chat.composer.el.append(...voice.composerControls);
+  client.on("wake.detected", (envelope) => void voice.ear.detected(envelope.data as WakeDetected));
   // Another connection: a session left open keeps streaming on its own
   // background connection; the switch is remembered only once it connects
   // (the shell records each successful connect).
@@ -197,7 +210,10 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     say(latch.message, "error");
   };
 
-  client.onEvent = (envelope) => chat.apply(envelope);
+  client.onEvent = (envelope) => {
+    chat.apply(envelope);
+    pet.observe(envelope);
+  };
   client.onRequest = (request) => {
     if (ui.handle(request)) return;
     chat.request(request);
@@ -206,7 +222,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   for (const event of ["request.resolved", "request.cancel"]) client.on(event, (envelope) => attention.settled((envelope.data as { id: string }).id));
   client.on("turn.finished", (envelope) => {
     attention.turn(envelope.session_id ?? "", false, "");
-    if (envelope.session_id) void chat.turnFinished(envelope.session_id);
+    pet.turnFinished(envelope.session_id ?? null, Boolean((envelope.data as TurnFinished).error));
+    if (envelope.session_id) void chat.turnFinished(envelope.session_id, envelope.data as TurnFinished);
   });
   chat.onSubmitted = (sessionId) => attention.turn(sessionId, true, chat.title() ?? sessionId);
   client.onTruncated = (sessionId) => {
@@ -232,6 +249,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
       })
       .catch((err: unknown) => console.warn("UI preferences or onboarding unavailable:", err));
     void panels.load(client.profile);
+    void voice.refresh();
+    void pet.load();
     void projects.load();
     void applyFonts(client);
     void language.load().catch((err: unknown) => console.warn("languages unavailable:", err));
@@ -273,7 +292,17 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     exportProfile: files.exportProfile,
     importProfile: files.importProfile,
   });
-  const work = workspace(client, chat, h("div", {}, settings.el, language.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [{ name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() }]);
+  const bots = new BotsPane(client, pool, dialogs, {
+    openBotChat: async (profile) => {
+      if (served.includes(profile)) await switchTo(profile);
+      const ensured = await pool.call<{ session_id: string }>(profile, "bot.chat.ensure", { profile });
+      await openOwned(ensured.session_id, opener);
+    },
+  });
+  const work = workspace(client, chat, h("div", {}, settings.el, language.el, desktopSection, accentControl(prefs), toolPrefsControls(prefs), connections.el), dialogs, [
+    { name: "manage", label: "Manage", el: manage.el, shown: () => manage.reset() },
+    { name: "bots", label: "Bots", el: bots.el, shown: () => void bots.render() },
+  ]);
   if (isWebapp()) webappParts(client, chat, work.terminal, [desktopSection, connections.el]);
   const guide = new Guide();
   const onboarding = new Onboarding(client, chat, prefs, dialogs);
@@ -284,14 +313,14 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
   keys.onSave = (overrides) => void prefs.set("keybindings", overrides).catch(() => {});
   prefs.onChange((values) => keys.load(values.keybindings));
   panels.onShortcut = (shortcut) => keys.add(shortcut);
-  const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom }));
+  const palette = new CommandPalette(() => paletteEntries(opener, work, { graph, files, zoom, pet }));
   windowActions(keys, opener, { palette, graph, zoom });
   work.aside.append(panels.el);
   const side = h("nav", { class: "side" }, switcher.el, newChat, botChat, onboarding.skip, list, projects.el);
   listenToShell(opener);
   onShellEvent("hud-summon", () => void toggleHud(client.profile, chat.sessionId));
   root().replaceChildren(
-    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), switcher.picker, picker, work.layout.el, status),
+    h("header", { class: "top" }, h("span", { class: "brand" }, "Prometheus"), switcher.picker, picker, work.layout.el, voice.ear.el, status),
     h(
       "div",
       { class: "layout" },
@@ -301,6 +330,8 @@ function window_(profiles: string[], label: string, listing: Listing | null): vo
     ),
     dialogs,
     notices,
+    pet.toasts,
+    pet.el,
     background.el,
     graph.el,
     palette.el,
@@ -521,6 +552,7 @@ interface PaletteParts {
   graph: MemoryGraph;
   files: ProfileFiles;
   zoom: Zoom;
+  pet: FloatingPet;
 }
 
 /** What the palette finds: pages, settings, sessions and actions. */
@@ -532,6 +564,7 @@ async function paletteEntries(o: Opener, work: Workspace, p: PaletteParts): Prom
   const actions: Entry[] = [
     { kind: "action", label: "New chat", run: () => o.chat.draft() },
     { kind: "action", label: "Memory graph", run: () => void p.graph.open() },
+    { kind: "action", label: "Pets…", keywords: "pet list gallery hatch", run: () => void p.pet.command("pet", "list") },
     { kind: "action", label: "HUD mode", run: () => void toggleHud(o.client.profile, o.chat.sessionId) },
     { kind: "action", label: "Zoom in", run: () => p.zoom.step(1) },
     { kind: "action", label: "Zoom out", run: () => p.zoom.step(-1) },

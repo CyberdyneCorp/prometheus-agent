@@ -52,7 +52,7 @@ fn speak_to(home: &Path, output_path: &str) -> (std::process::Output, String) {
     (out, results)
 }
 
-fn tts_home() -> tempfile::TempDir {
+fn tts_home() -> common::TestHome {
     let home = mock_home();
     append_config(
         home.path(),

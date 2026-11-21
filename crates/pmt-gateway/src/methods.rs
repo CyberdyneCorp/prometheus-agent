@@ -62,6 +62,9 @@ pub fn register(router: &mut Router, catalog: &Catalog) -> Result<(), String> {
         .register::<c::ApprovalRespond, _, _>(catalog, approval_respond)?;
     crate::discovery::register(router, catalog)?;
     crate::desktop::register(router, catalog)?;
+    crate::bots::register(router, catalog)?;
+    crate::voice::register(router, catalog)?;
+    crate::pets::register(router, catalog)?;
     crate::ui::register(router, catalog)?;
     crate::queue::register(router, catalog)?;
     crate::workspace::register(router, catalog)?;

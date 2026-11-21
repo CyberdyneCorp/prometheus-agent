@@ -423,6 +423,10 @@ fn yolo(strings: &pmt_i18n::Strings, live: &Live, args: &str) -> String {
         _ => !live.gate.yolo(),
     };
     live.gate.set_yolo(on);
+    if !on && let Some(computer_use) = pmt_tools::computer_use::of_session(&live.id.to_string()) {
+        // An unrestricted runtime never outlives the yolo that launched it.
+        pmt_core::spawn::spawn(async move { computer_use.reconcile().await });
+    }
     let key = if on {
         "slash.yolo_on"
     } else {

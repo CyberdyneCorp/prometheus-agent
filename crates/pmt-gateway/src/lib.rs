@@ -20,6 +20,7 @@
 //!
 //! The protocol itself (frames, codes, catalog, client) is `pmt-rpc`.
 
+pub mod bots;
 pub mod cert;
 pub mod connection;
 pub mod control;
@@ -42,6 +43,7 @@ pub mod moa;
 pub mod observability;
 mod observer;
 pub mod panes;
+pub mod pets;
 pub mod pty;
 pub mod queue;
 pub mod remote;
@@ -57,6 +59,7 @@ pub mod ui;
 pub mod ui_prefs;
 pub mod upkeep;
 pub mod vault;
+pub mod voice;
 pub mod workspace;
 pub mod worktree;
 

@@ -87,7 +87,29 @@ struct Shared {
     voice: AtomicBool,
     /// The bottom status line's text (`None`: no status line).
     status: Mutex<Option<String>>,
+    /// The pet pane's frame (`None`: no pet).
+    pet: Mutex<Option<super::bottom_line::PetFrame>>,
     bottom: Mutex<super::bottom_line::BottomLine>,
+}
+
+impl Shared {
+    /// Redraws the bottom area with the current status and pet.
+    fn redraw_bottom(&self) {
+        let status = self
+            .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        let pet = self
+            .pet
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        self.bottom
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .show(status.as_deref(), pet.as_ref());
+    }
 }
 
 /// How long [`Input::flush`] waits for earlier output.
@@ -117,13 +139,21 @@ pub struct StatusLine(Arc<Shared>);
 impl StatusLine {
     /// Shows `text` on the bottom row (`None` gives the row back).
     pub fn show(&self, text: Option<String>) {
-        let mut status = self.0.status.lock().unwrap_or_else(PoisonError::into_inner);
-        *status = text;
-        self.0
-            .bottom
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .show(status.as_deref());
+        *self.0.status.lock().unwrap_or_else(PoisonError::into_inner) = text;
+        self.0.redraw_bottom();
+    }
+}
+
+/// Draws the pet pane now, between the editor's own redraws (spec: pets,
+/// Terminal pet rendering).
+#[derive(Clone)]
+pub struct PetLine(Arc<Shared>);
+
+impl PetLine {
+    /// Shows `frame` above the status line (`None` gives the rows back).
+    pub fn show(&self, frame: Option<super::bottom_line::PetFrame>) {
+        *self.0.pet.lock().unwrap_or_else(PoisonError::into_inner) = frame;
+        self.0.redraw_bottom();
     }
 }
 
@@ -220,6 +250,12 @@ impl Input {
     #[must_use]
     pub fn status_line(&self) -> StatusLine {
         StatusLine(Arc::clone(&self.shared))
+    }
+
+    /// A handle that draws the pet pane.
+    #[must_use]
+    pub fn pet_line(&self) -> PetLine {
+        PetLine(Arc::clone(&self.shared))
     }
 
     /// `/redraw`: clears the screen; the next read reprints the prompt and
@@ -358,16 +394,7 @@ fn editor_thread(
         .map(|p| Box::new(p) as Box<dyn ExternalPrinter + Send>);
     let _ = printer.send(external);
     while let Ok(prompt) = wanted.recv() {
-        let status = shared
-            .status
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone();
-        shared
-            .bottom
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .show(status.as_deref());
+        shared.redraw_bottom();
         let event = match read_line(&mut editor, shared, &prompt) {
             Ok(line) if shared.masked.load(Ordering::Relaxed) => Event::Line(line),
             Ok(line) => {

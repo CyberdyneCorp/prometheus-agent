@@ -44,12 +44,18 @@ pub enum Local {
     Handoff,
     /// Voice mode: `/voice [on|off|tts|status]` (recorded and spoken here).
     Voice,
+    /// The wake word: `/wake [on|off|status]` (listened for here).
+    Wake,
     /// Show a split pane: `/pane subagents|tools|off`.
     Pane,
     /// Open the session timeline.
     Timeline,
     /// Choose the profile's language (`display.language`).
     Language,
+    /// The pet: `/pet [list|off|scale <factor>|<slug>]` (display only).
+    Pet,
+    /// Generate a pet from a description (`/hatch <description>`).
+    Hatch,
 }
 
 /// One client-local command: its name, other names and `/help` line.
@@ -190,6 +196,12 @@ pub const LOCAL: &[LocalCommand] = &[
         key: "tui.cmd_voice",
     },
     LocalCommand {
+        command: Local::Wake,
+        name: "wake",
+        aliases: &[],
+        key: "tui.cmd_wake",
+    },
+    LocalCommand {
         command: Local::Pane,
         name: "pane",
         aliases: &[],
@@ -206,6 +218,18 @@ pub const LOCAL: &[LocalCommand] = &[
         name: "language",
         aliases: &[],
         key: "tui.cmd_language",
+    },
+    LocalCommand {
+        command: Local::Pet,
+        name: "pet",
+        aliases: &[],
+        key: "tui.cmd_pet",
+    },
+    LocalCommand {
+        command: Local::Hatch,
+        name: "hatch",
+        aliases: &["generate-pet"],
+        key: "tui.cmd_hatch",
     },
 ];
 

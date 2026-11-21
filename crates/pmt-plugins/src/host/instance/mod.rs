@@ -27,6 +27,7 @@ use wasmtime::{Store, StoreLimitsBuilder, Trap};
 mod adapter;
 mod backend;
 mod benchmark;
+mod desktop;
 mod engine;
 mod memory;
 mod meter;
@@ -40,8 +41,8 @@ pub(crate) use meter::Meter;
 
 use super::bindings::PluginHost;
 use super::bindings::exports::prometheus::{
-    bench, context_engine, delegation_router, hook, memory_provider, platform_adapter, provider,
-    terminal_backend, tool, ui_panel,
+    bench, computer_use_backend, context_engine, delegation_router, hook, memory_provider,
+    platform_adapter, provider, terminal_backend, tool, ui_panel,
 };
 use super::imports::{CallInfo, Context, HostState};
 use super::{Limits, Runtime};
@@ -75,6 +76,7 @@ pub struct Instance {
     adapter: Option<platform_adapter::plugin::GuestIndices>,
     panel: Option<ui_panel::plugin::GuestIndices>,
     bench: Option<bench::plugin::GuestIndices>,
+    desktop: Option<computer_use_backend::plugin::GuestIndices>,
     /// `tool.tools()`, read once: a session starting while the instance
     /// is busy (a plugin call waiting on a subagent it launched) must not
     /// wait for it.
@@ -143,6 +145,7 @@ impl Instance {
             adapter: platform_adapter::plugin::GuestIndices::new(&pre).ok(),
             panel: ui_panel::plugin::GuestIndices::new(&pre).ok(),
             bench: bench::plugin::GuestIndices::new(&pre).ok(),
+            desktop: computer_use_backend::plugin::GuestIndices::new(&pre).ok(),
             tool_specs: Mutex::new(None),
             id,
             pre,

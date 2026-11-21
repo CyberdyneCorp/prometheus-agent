@@ -203,6 +203,7 @@ impl Adapter {
                 run_budget_secs: None,
                 input_id: Some(ulid::Ulid::generate().to_string()),
                 author: None,
+                voice: false,
             });
             let session = state
                 .sessions

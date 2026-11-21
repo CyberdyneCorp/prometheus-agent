@@ -10,6 +10,7 @@
 //! ([`device`] ports; [`system`] for real devices, [`fixture`] for
 //! recorded audio).
 
+pub mod barge;
 pub mod converse;
 pub mod device;
 pub mod filter;
@@ -19,5 +20,7 @@ pub mod pcm;
 pub mod record;
 pub mod speakable;
 pub mod speaker;
+pub mod stream;
 pub mod system;
 pub mod vad;
+pub mod wake;

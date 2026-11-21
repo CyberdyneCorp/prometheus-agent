@@ -8,12 +8,23 @@
 //! whole line or every simple command matches some allow rule, so an
 //! allowed `npm test` never lets `npm test; rm -rf build` through.
 //! Entries starting `plugin_rule:` approve plugin escalations by rule key,
-//! never commands.
+//! and entries starting `computer_use:` approve desktop actions
+//! (`computer_use:<action>:<background|foreground>`); neither ever admits a
+//! command.
 
 use super::shell::Script;
 
 /// The prefix of allow entries that approve a plugin escalation.
 pub const PLUGIN_RULE_PREFIX: &str = "plugin_rule:";
+
+/// The prefix of allow entries that approve a `computer_use` action.
+pub const COMPUTER_USE_PREFIX: &str = "computer_use:";
+
+/// Whether an allow entry approves a tool rule rather than commands.
+#[must_use]
+pub fn is_rule_key(entry: &str) -> bool {
+    entry.starts_with(PLUGIN_RULE_PREFIX) || entry.starts_with(COMPUTER_USE_PREFIX)
+}
 
 /// Whether `pattern` matches all of `text`.
 #[must_use]
@@ -53,10 +64,7 @@ pub fn denied<'a>(rules: &'a [String], line: &str, script: &Script) -> Option<&'
 /// the first rule covering a command.
 #[must_use]
 pub fn allowed<'a>(rules: &'a [String], line: &str, script: &Script) -> Option<&'a str> {
-    let commands: Vec<&String> = rules
-        .iter()
-        .filter(|r| !r.starts_with(PLUGIN_RULE_PREFIX))
-        .collect();
+    let commands: Vec<&String> = rules.iter().filter(|r| !is_rule_key(r)).collect();
     let line = line.trim();
     let simple = script.segments.len() <= 1 && script.segments.iter().all(|s| !s.writes());
     if let Some(rule) = commands

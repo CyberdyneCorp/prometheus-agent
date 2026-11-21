@@ -80,11 +80,13 @@ pub(super) fn skills(scope: &ProfileScope) -> Result<Value, Error> {
         .collect())
 }
 
-/// Every profile the daemon serves, as a bot row of `GET /api/agents`.
+/// Every profile the daemon serves with Bot Mode on, as a bot row of
+/// `GET /api/agents` (with its title and avatar).
 pub(super) fn agents(host: &DaemonHost) -> Value {
     let rows: Vec<Value> = host
         .all_profiles()
         .iter()
+        .filter(|(_, profile)| profile.scope().config().bot_mode.enabled)
         .map(|(_, profile)| agent_row(profile))
         .collect();
     Value::Array(rows)
@@ -94,12 +96,13 @@ fn agent_row(profile: &Arc<Profile>) -> Value {
     let scope = profile.scope();
     let config = scope.config();
     let name = scope.name().to_string();
+    let meta = crate::bot_host::meta::read(&profile.store).unwrap_or_default();
     json!({
+        "title": meta.title,
+        "description": meta.description.clone().or_else(|| config.a2a.server.description.clone()),
+        "avatar": crate::bot_host::meta::resolved(&name, &meta.avatar),
         "name": name,
         "bot": true,
-        "title": Value::Null,
-        "description": config.a2a.server.description,
-        "avatar": Value::Null,
         "model": config.model.default,
         "provider": config.model.provider,
         "accepts_bot_messages": true,

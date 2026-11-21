@@ -27,7 +27,7 @@ fn repo() -> PathBuf {
 }
 
 /// A home whose mock model reads a file with a tool, then answers.
-fn scripted_home() -> tempfile::TempDir {
+fn scripted_home() -> common::TestHome {
     let home = mock_home();
     let profile = home.path().join("profiles/default");
     let notes = profile.join("workspace/notes.txt");
@@ -175,7 +175,7 @@ fn a_node_program_runs_a_turn_and_gets_its_events_and_usage() {
 
 /// The `FakeProvider`'s profile: an OpenAI-compatible endpoint that reports
 /// usage and keeps every request body.
-fn provider_home(server: &eval_common::FakeProvider) -> tempfile::TempDir {
+fn provider_home(server: &eval_common::FakeProvider) -> common::TestHome {
     let home = common::temp_home();
     ok(&run(home.path(), &["config", "path"]));
     std::fs::write(
@@ -313,7 +313,7 @@ async fn assert_live_transcript_unreadable(home: &Path, id: &str) {
 
 /// A home whose "daemon" (this process) speaks protocol major 2 at an
 /// RPC address nothing should ever dial.
-fn newer_daemon() -> (tempfile::TempDir, TcpListener) {
+fn newer_daemon() -> (common::TestHome, TcpListener) {
     let home = mock_home();
     let rpc = TcpListener::bind("127.0.0.1:0").unwrap();
     rpc.set_nonblocking(true).unwrap();

@@ -103,7 +103,7 @@ pub async fn synthesize(
             .parse()
             .map_err(|_| "bad header")?,
     );
-    let mut socket = dial(request, network).await?;
+    let mut socket = dial(request, network, "edge").await?;
     let config = format!(
         "X-Timestamp:{}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n\
          {{\"context\":{{\"synthesis\":{{\"audio\":{{\"metadataoptions\":{{\"sentenceBoundaryEnabled\":\"false\",\"wordBoundaryEnabled\":\"false\"}},\"outputFormat\":\"audio-24khz-48kbitrate-mono-mp3\"}}}}}}}}",
@@ -150,14 +150,17 @@ where
     Ok(audio)
 }
 
-async fn dial(
+/// Opens the WebSocket of `request` through the profile's network
+/// settings (proxy, extra CA, IPv4); `who` names the service in errors.
+pub(crate) async fn dial(
     request: tokio_tungstenite::tungstenite::handshake::client::Request,
     network: &NetworkConfig,
+    who: &str,
 ) -> Result<tokio_tungstenite::WebSocketStream<Box<dyn Stream>>, String> {
     let uri = request.uri().clone();
     let host = uri
         .host()
-        .ok_or("edge URL has no host")?
+        .ok_or_else(|| format!("{who} URL has no host"))?
         .trim_start_matches('[')
         .trim_end_matches(']')
         .to_owned();
@@ -171,7 +174,7 @@ async fn dial(
     let stream = pmt_net::stream::open(&host, port, tls, route).await?;
     let (socket, _) = tokio_tungstenite::client_async(request, stream)
         .await
-        .map_err(|e| format!("the edge handshake failed: {e}"))?;
+        .map_err(|e| format!("the {who} handshake failed: {e}"))?;
     Ok(socket)
 }
 

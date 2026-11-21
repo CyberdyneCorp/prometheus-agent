@@ -558,5 +558,8 @@ fn submit_params(session: &str, pending: &Pending) -> SubmitParams {
         run_budget_secs: None,
         input_id: None,
         author: None,
+        // A voice note's turn is a chained voice turn (spec: voice-mode,
+        // Voice turn model and reasoning).
+        voice: pending.voice,
     }
 }

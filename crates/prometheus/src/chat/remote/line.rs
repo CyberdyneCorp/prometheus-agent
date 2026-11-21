@@ -129,6 +129,8 @@ pub(super) struct Screen {
     pub(super) display: Display,
     markdown: MarkdownMode,
     scope: pmt_config::ProfileScope,
+    /// The pet pane (spec: pets).
+    pub(super) pet: Option<crate::pets_host::line::LinePet>,
 }
 
 impl Screen {
@@ -171,6 +173,19 @@ impl Out for Screen {
         let text = crate::output::render_error(err, false);
         self.say(Role::Error, text.trim_end());
     }
+
+    fn raw_event(&self, event: &pmt_rpc::contracts::Envelope) {
+        if let (Some(pet), Some(kind)) = (&self.pet, event.data["type"].as_str()) {
+            pet.event(kind, &event.data["payload"]);
+        }
+    }
+
+    fn achievement(&self, data: &serde_json::Value) {
+        self.notice(&crate::pets_host::achievements::unlocked_line(data));
+        if let Some(pet) = &self.pet {
+            pet.celebrate();
+        }
+    }
 }
 
 /// The attached interface.
@@ -200,6 +215,18 @@ pub(super) struct Chat<'a, 'b> {
     /// Speaks the answer of the turn being run (a voice turn with spoken
     /// replies on).
     pub(super) mouth: Option<std::sync::Arc<pmt_voice::speaker::Mouth>>,
+    /// Set while a voice turn runs: cancelled when the user speaks over
+    /// the reply (the turn is interrupted).
+    pub(super) voice_cut: Option<pmt_core::cancel::CancelToken>,
+    /// `/wake` and this terminal's wake listener.
+    pub(super) wake: crate::chat::wake::WakeClient,
+    /// Where the listener hands its detections.
+    pub(super) woken: (
+        crate::chat::wake::Woken,
+        tokio::sync::mpsc::UnboundedReceiver<pmt_voice::wake::engine::Detection>,
+    ),
+    /// The daemon generate flow `/hatch` opened, waiting for an answer.
+    pub(super) hatch: Option<String>,
 }
 
 /// What the loop does after a line.
@@ -227,6 +254,11 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         display: Display::new(start.scope, no_color, start.ui.quiet),
         markdown: start.scope.config().display.final_response_markdown,
         scope: start.scope.clone(),
+        pet: Some(crate::pets_host::line::LinePet::start(
+            start.scope,
+            start.launch,
+            lines.editor.pet_line(),
+        )),
     };
     let mut chat = Chat {
         confirm_destructive: start.scope.config().cli.confirm_destructive,
@@ -242,6 +274,10 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
         prune: false,
         voice: crate::chat::voice::VoiceClient::new(start.scope, start.launch, start.cwd, "cli"),
         mouth: None,
+        voice_cut: None,
+        wake: crate::chat::wake::WakeClient::new(start.scope, start.launch, "cli"),
+        woken: crate::chat::wake::channel(),
+        hatch: None,
     };
     chat.refresh_model().await;
     let banner = pmt_i18n::t!(
@@ -264,7 +300,10 @@ pub(super) async fn run(attached: &mut Attached, start: &Start<'_>) -> Result<u8
     if let Some(first) = &start.first {
         chat.submit(first.clone()).await?;
     }
+    chat.arm_wake().await;
     let status = chat.main_loop().await;
+    chat.screen.pet = None;
+    chat.wake.disarm();
     chat.memory_summary().await;
     status
 }
@@ -287,6 +326,12 @@ impl Chat<'_, '_> {
                     _ = self.signals.next() => Typed::Interrupt,
                     Some(event) = self.attached.inbox.events.recv() => {
                         self.on_idle_event(&event);
+                        continue;
+                    }
+                    Some(detection) = self.woken.1.recv() => {
+                        if let Flow::Exit = self.woken(detection).await? {
+                            return Ok(0);
+                        }
                         continue;
                     }
                 }
@@ -338,6 +383,9 @@ impl Chat<'_, '_> {
             self.dispatch("autoprune", word).await?;
             return Ok(Flow::Continue);
         }
+        if self.hatch_answer(&line).await {
+            return Ok(Flow::Continue);
+        }
         let text = line.trim();
         if text.is_empty() {
             return Ok(Flow::Continue);
@@ -359,7 +407,17 @@ impl Chat<'_, '_> {
             .into_iter()
             .map(|path| pmt_rpc::contracts::PromptImage::Path(path.to_string_lossy().into_owned()))
             .collect();
-        self.run_turn(Prompt { text, images }).await
+        let voice = self.voice_cut.clone();
+        // A thank-you plays the heart; the message goes as typed.
+        if let Some(pet) = &self.screen.pet {
+            pet.sent(&text);
+        }
+        self.run_turn(Prompt {
+            text,
+            images,
+            voice,
+        })
+        .await
     }
 
     pub(super) async fn run_turn(&mut self, prompt: Prompt) -> Result<(), Error> {
@@ -431,7 +489,11 @@ impl Chat<'_, '_> {
                 }
             }
             "session.event" if !render::is_notice(&event.data) => self.daemon_turn = true,
+            "achievement.unlocked" => self.screen.achievement(&event.data),
             _ => {}
+        }
+        if event.event == "session.event" {
+            self.screen.raw_event(event);
         }
         show_followed(event, &self.screen, &self.strings());
     }
@@ -485,6 +547,7 @@ impl Chat<'_, '_> {
                 self.run_turn(Prompt {
                     text: message,
                     images,
+                    voice: None,
                 })
                 .await?;
             }

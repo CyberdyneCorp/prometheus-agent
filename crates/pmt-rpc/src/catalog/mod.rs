@@ -186,7 +186,23 @@ pub fn declare_builtin(d: &mut Declarations) {
         .event::<c::HealthChangedEvent>();
     declare_evolution(d);
     declare_desktop(d);
+    declare_voice(d);
     declare_live(d);
+    declare_pets(d);
+}
+
+/// Pets and achievements (spec: pets).
+fn declare_pets(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::PetsStateGet>()
+        .method::<c::PetsSpriteGet>()
+        .method::<c::PetsGalleryList>()
+        .method::<c::PetsInstall>()
+        .method::<c::PetsSet>()
+        .method::<c::PetsHatchStart>()
+        .method::<c::PetsHatchAnswer>()
+        .method::<c::AchievementsList>()
+        .event::<c::AchievementUnlockedEvent>();
 }
 
 /// Split panes, the session timeline and shared live sessions (spec: tui,
@@ -224,6 +240,21 @@ fn declare_evolution(d: &mut Declarations) {
         .method::<c::ExperienceRestore>();
 }
 
+/// Voice mode's names (spec: voice-mode).
+fn declare_voice(d: &mut Declarations) {
+    use self::contracts as c;
+    d.method::<c::VoiceSpeak>()
+        .method::<c::WakeArm>()
+        .method::<c::WakeFeed>()
+        .method::<c::WakeDisarm>()
+        .method::<c::WakeStatus>()
+        .event::<c::WakeDetectedEvent>()
+        .method::<c::VoiceClientConfigGet>()
+        .method::<c::VoiceTranscribe>()
+        .method::<c::VoiceRealtimeStart>()
+        .method::<c::VoiceRealtimeUsage>();
+}
+
 /// The desktop app's names (spec: desktop-app).
 fn declare_desktop(d: &mut Declarations) {
     use self::contracts as c;
@@ -232,6 +263,32 @@ fn declare_desktop(d: &mut Declarations) {
         .method::<c::I18nLanguages>()
         .method::<c::BotChatEnsure>()
         .method::<c::BotRosterList>()
+        .method::<c::BotMetaGet>()
+        .method::<c::BotMetaUpdate>()
+        .method::<c::BotAvatarGet>()
+        .method::<c::BotCreate>()
+        .method::<c::BotDuplicate>()
+        .method::<c::BotDelete>()
+        .method::<c::BotRoutinesList>()
+        .method::<c::BotChatRead>()
+        .method::<c::BotSectionsDelete>()
+        .method::<c::GroupsCreate>()
+        .method::<c::GroupsList>()
+        .method::<c::GroupsGet>()
+        .method::<c::GroupsUpdate>()
+        .method::<c::GroupsDelete>()
+        .method::<c::GroupsPost>()
+        .method::<c::GroupsStop>()
+        .method::<c::GroupsCompressMember>()
+        .method::<c::GroupsCapabilities>()
+        .method::<c::GroupsLog>()
+        .method::<c::GroupsReplicate>()
+        .method::<c::GroupsReplicaState>()
+        .method::<c::GroupsPromote>()
+        .method::<c::GroupsDemote>()
+        .method::<c::GroupsGrant>()
+        .method::<c::GroupsRevoke>()
+        .method::<c::GroupsMemberGrant>()
         .method::<c::BotRelayDrain>()
         .method::<c::BotRelayDeliver>()
         .method::<c::UiPrefsGet>()

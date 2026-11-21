@@ -10,11 +10,12 @@
 //! approvals, confirmations) are answered from the next line.
 
 mod automation;
-mod bottom_line;
+pub mod bottom_line;
 mod commands;
 pub(crate) mod compose;
 pub mod input;
 mod layout;
+mod pet;
 mod progress;
 mod prompts;
 pub mod queue;
@@ -115,6 +116,21 @@ struct Repl {
     /// Speaks the reply of the turn being run (a voice turn with spoken
     /// replies on).
     mouth: Option<Arc<pmt_voice::speaker::Mouth>>,
+    /// Set while a voice turn runs: it takes the voice route, and
+    /// cancelling it (the user spoke over the reply) interrupts the turn.
+    voice_cut: Option<pmt_core::cancel::CancelToken>,
+    /// `/wake` and this terminal's wake listener.
+    wake: crate::chat::wake::WakeClient,
+    /// Where the listener hands its detections, and where the idle prompt
+    /// takes them.
+    woken: (
+        crate::chat::wake::Woken,
+        mpsc::UnboundedReceiver<pmt_voice::wake::engine::Detection>,
+    ),
+    /// The pet pane (spec: pets); dropped before the input.
+    pet: Option<crate::pets_host::line::LinePet>,
+    /// `/hatch` waiting for an answer.
+    hatch: Option<Box<pmt_pets::hatch::Hatch>>,
 }
 
 /// The memory approver of an interactive session and the REPL's end of
@@ -216,6 +232,7 @@ pub async fn run(
     let factory_scope = factory.scope.clone();
     let factory_cwd = factory.options.cwd.clone();
     let launch = factory.launch().clone();
+    let pet = crate::pets_host::line::LinePet::start(&factory_scope, &launch, input.pet_line());
     let mut repl = Repl {
         factory,
         live: None,
@@ -245,6 +262,11 @@ pub async fn run(
         wakeup: None,
         voice: crate::chat::voice::VoiceClient::new(&factory_scope, &launch, &factory_cwd, "cli"),
         mouth: None,
+        voice_cut: None,
+        wake: crate::chat::wake::WakeClient::new(&factory_scope, &launch, "cli"),
+        woken: crate::chat::wake::channel(),
+        pet: Some(pet),
+        hatch: None,
     };
     repl.attach(live);
     let notices = print_notices(asks.notices, repl.input.printer(), repl.strings());
@@ -259,8 +281,11 @@ pub async fn run(
         Box::pin(repl.offer_resume()).await;
     }
     repl.offer_autoprune();
+    repl.arm_wake().await;
     repl.spacer();
     let status = Box::pin(repl.main_loop()).await;
+    repl.pet = None;
+    repl.wake.disarm();
     notices.abort();
     let _ = notices.await;
     Ok(status)
@@ -342,6 +367,9 @@ impl Repl {
                 self.queue.push_back(completion);
                 return Flow::Continue;
             }
+            Some(detection) = self.woken.1.recv() => {
+                return Box::pin(self.woken(detection)).await;
+            }
         };
         match event {
             Event::Line(line) => {
@@ -387,6 +415,9 @@ impl Repl {
     async fn idle_line(&mut self, line: String) -> Flow {
         if let Some(pending) = self.pending.take() {
             return Box::pin(self.answer(pending, &line)).await;
+        }
+        if self.hatch_answer(&line).await {
+            return Flow::Continue;
         }
         let trimmed = line.trim();
         if trimmed.is_empty() {

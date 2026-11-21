@@ -7,6 +7,7 @@
 
 pub mod api_hooks;
 pub mod backend;
+pub mod bots;
 pub mod browser;
 pub mod code;
 mod codex_gates;
@@ -50,6 +51,7 @@ mod tool_state;
 pub mod tools;
 mod trace;
 pub mod vision;
+pub mod voice_route;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -784,6 +786,7 @@ impl Factory {
                 (None, None) => self.with_browser_opt_ins(session.id, selection),
             },
         };
+        let selection = bots::selection(&registry, &self.scope, session, selection);
         Ok((registry, selection, surface))
     }
 
@@ -794,6 +797,7 @@ impl Factory {
         setup.interactive = self.options.interactive;
         setup.unattended = !self.options.interactive;
         setup.turn_hooks = Some(self.plugins_for(id).turn_hooks(self.plugin_call(id)));
+        setup.turn_notes = bots::notes(&self.scope, &self.store, id);
     }
 
     /// What plugin host calls of session `id` report as their session:
@@ -1064,6 +1068,7 @@ impl Factory {
             Some(Arc::new(self.models.judge(model, id))
                 as Arc<dyn crate::kanban_host::goal::GoalJudge>),
         ));
+        let tools = tools.with_bots(crate::bot_host::send::port(&self.scope, &self.store));
         let tools = match &self.messaging {
             Some(ports) => tools.with_messaging(ports.port(id, self.read_check(capabilities))),
             None => tools,

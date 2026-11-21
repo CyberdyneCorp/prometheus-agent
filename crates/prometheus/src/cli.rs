@@ -209,6 +209,15 @@ pub enum Command {
         #[command(subcommand)]
         command: crate::projects_cmd::ProjectsCommand,
     },
+    /// Pets: the gallery, installed pets, which one shows and how big, a
+    /// terminal preview, the doctor and generating one.
+    Pets {
+        /// The pets subcommand.
+        #[command(subcommand)]
+        command: crate::pets_cmd::PetsCommand,
+    },
+    /// Achievements computed from this profile's session history.
+    Achievements(crate::achievements_cmd::AchievementsArgs),
     /// Themes: list them, use one, set a colour, spinner or branding key
     /// of the custom theme, show the one in use.
     Themes {

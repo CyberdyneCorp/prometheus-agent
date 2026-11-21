@@ -244,7 +244,7 @@ const STREAM: &str =
 
 /// A profile using the Copilot-shaped Hermes model-provider plugin
 /// against `server`.
-fn copilot_home(server: &str) -> tempfile::TempDir {
+fn copilot_home(server: &str) -> common::TestHome {
     let home = mock_home();
     pmt_pybridge::testkit::seed(home.path());
     for (name, value) in [

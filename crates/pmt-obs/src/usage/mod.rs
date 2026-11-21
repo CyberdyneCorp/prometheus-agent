@@ -19,7 +19,7 @@ use std::sync::Arc;
 use jiff::Timestamp;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
-use pmt_store::{Store, Tokens, UsageEvent, UsageTotals};
+use pmt_store::{CostStatus, Store, Tokens, UsageEvent, UsageTotals};
 
 /// One finished model call or metered tool call, as its caller knows it.
 #[derive(Debug, Clone, PartialEq)]
@@ -129,15 +129,35 @@ impl UsageRecorder {
             .prices
             .price(&call.provider, &call.model)
             .map(|p| p.on_tier(call.service_tier.as_deref()));
-        let (cost_usd, cost_status) = price_call(
-            &Billing {
-                tokens: &call.tokens,
-                reported_usd: call.reported_usd,
-                billing_source: &call.billing_source,
-                cache_hit: call.cache_hit,
-            },
-            price.as_ref(),
-        );
+        let priced = price_call(&billing(&call), price.as_ref());
+        self.append(call, priced, ts)
+    }
+
+    /// Records a call priced per unit rather than per token (one
+    /// generated image): `estimate_usd` is its estimated cost, `None` when
+    /// unknown. Cache hits and subscription calls are priced as usual.
+    ///
+    /// # Errors
+    ///
+    /// As [`record`](Self::record).
+    pub fn record_estimated(
+        &self,
+        call: Call,
+        estimate_usd: Option<f64>,
+    ) -> Result<UsageEvent, Error> {
+        let priced = match (price_call(&billing(&call), None), estimate_usd) {
+            ((None, CostStatus::Unknown), Some(usd)) => (Some(usd), CostStatus::Estimated),
+            (priced, _) => priced,
+        };
+        self.append(call, priced, Timestamp::now())
+    }
+
+    fn append(
+        &self,
+        call: Call,
+        (cost_usd, cost_status): (Option<f64>, CostStatus),
+        ts: Timestamp,
+    ) -> Result<UsageEvent, Error> {
         let event = UsageEvent {
             call_id: call.call_id.unwrap_or_else(|| {
                 format!("call_{}", ulid::Ulid::generate().to_string().to_lowercase())
@@ -162,6 +182,15 @@ impl UsageRecorder {
         crate::metrics::record_model_call(&event);
         live::notify(self.store.profile_name(), &event);
         Ok(event)
+    }
+}
+
+fn billing(call: &Call) -> Billing<'_> {
+    Billing {
+        tokens: &call.tokens,
+        reported_usd: call.reported_usd,
+        billing_source: &call.billing_source,
+        cache_hit: call.cache_hit,
     }
 }
 

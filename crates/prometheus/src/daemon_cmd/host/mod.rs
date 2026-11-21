@@ -22,7 +22,7 @@ use pmt_rpc::contracts::{
     BannerInfo, ClientKind, CommandCatalog, CompactParams, Compacted, CompleteParams, Completions,
     ConfigValue, ContextUsage, DispatchParams, Dispatched, ForkParams, ModelOptions, ResolveKind,
     ResolveParams, SessionCreateParams, SessionList, SessionListParams, SessionRef, SessionSetup,
-    SubmitParams, Submitted, Transcript, TranscriptMessage, TurnError, TurnFinished,
+    SubmitParams, Submitted, Transcript, TranscriptMessage,
 };
 use pmt_store::{NewSession, Source, Store, Visibility};
 use tracing::Instrument as _;
@@ -44,6 +44,8 @@ mod cron_continue;
 mod cron_fire;
 mod cron_managed;
 pub(super) use cron_managed::FireEndpoint;
+mod bot_delivery;
+mod bots;
 mod cron_send;
 #[cfg(feature = "dashboard")]
 mod dashboard;
@@ -66,12 +68,14 @@ mod local_telemetry;
 mod model_picker;
 mod notify;
 mod panes;
+mod pets;
 #[cfg(feature = "dashboard")]
 mod profile_create;
 mod projects;
 mod queue;
 mod reload;
 mod review;
+mod rooms;
 mod send_tool;
 #[cfg(feature = "dashboard")]
 mod session_file;
@@ -82,6 +86,9 @@ mod subagents;
 mod turn_results;
 mod turns;
 mod usage_events;
+mod voice_client;
+mod voice_realtime;
+mod wake;
 mod workspace_fs;
 mod worktrees;
 
@@ -199,11 +206,15 @@ pub(super) struct DaemonHost {
     api_keys: api::KeyCache,
     /// The union roster's remote sources, as last listed.
     roster: interop::RosterCache,
+    /// The desktop's wake listeners, by profile.
+    wake: wake::Listeners,
     /// The API server, once started (it is told when the daemon drains).
     api: std::sync::OnceLock<pmt_api::ApiServer>,
     /// The host itself, for work that outlives the request that started it
     /// (a desktop pairing flow).
     me: std::sync::OnceLock<std::sync::Weak<DaemonHost>>,
+    /// The RPC server, for daemon-level events outside a turn.
+    server: std::sync::OnceLock<std::sync::Weak<pmt_gateway::Server>>,
     /// The adapters' interactive pairing flows, shared by the dashboard
     /// and the desktop's Messaging pane.
     #[cfg(feature = "dashboard")]
@@ -307,8 +318,10 @@ impl DaemonHost {
             gateway: Arc::default(),
             api_keys: api::KeyCache::default(),
             roster: interop::RosterCache::default(),
+            wake: wake::Listeners::default(),
             api: std::sync::OnceLock::new(),
             me: std::sync::OnceLock::new(),
+            server: std::sync::OnceLock::new(),
             #[cfg(feature = "dashboard")]
             pairing_flows: Arc::default(),
         })
@@ -338,6 +351,10 @@ impl DaemonHost {
     /// Hands sessions the started messaging gateway (`send_message`).
     pub(super) fn set_gateway(&self, gateway: pmt_gateway::messaging::Gateway) {
         let _ = self.gateway.set(gateway);
+        // Bot deliveries and rooms run once turns can be submitted.
+        pmt_core::spawn::spawn(bot_delivery::schedule(
+            self.me.get().cloned().unwrap_or_default(),
+        ));
         // Plugins post, inject and act through the same gateway.
         crate::plugins_host::messaging::set_gateway(Arc::clone(&self.gateway));
     }
@@ -403,7 +420,7 @@ impl DaemonHost {
             .lock()
             .expect("setups poisoned")
             .remove(&id)
-            .or_else(|| frozen_policy(profile, &row))
+            .or_else(|| setup::frozen_policy(profile, &row))
             .unwrap_or_default();
         let factory = self.factory_of(profile, cwd, &setup, &row)?;
         let target = factory.models.primary(&setup::flags(&setup)).await?;
@@ -587,27 +604,6 @@ fn source_of(client: Option<ClientKind>) -> Source {
         Some(ClientKind::Acp) => Source::Acp,
         Some(ClientKind::Eval) => Source::Eval,
         Some(ClientKind::Cli) | None => Source::Cli,
-    }
-}
-
-fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>) -> TurnFinished {
-    match outcome {
-        Ok(result) => TurnFinished {
-            turn_id,
-            exit_reason: result.exit_reason.as_str().to_owned(),
-            final_response: result.final_response,
-            error: result.error.as_ref().map(TurnError::of),
-            usage: serde_json::to_value(result.usage).ok(),
-            report: None,
-        },
-        Err(err) => TurnFinished {
-            turn_id,
-            exit_reason: "error".to_owned(),
-            final_response: None,
-            error: Some(TurnError::of(&err)),
-            usage: None,
-            report: None,
-        },
     }
 }
 
@@ -1189,11 +1185,35 @@ impl Host for DaemonHost {
         })
     }
 
+    fn bots<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::bots::BotRequest,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(self.bot_call(profile, request))
+    }
+
     fn bot_roster(
         &self,
         params: pmt_rpc::contracts::RosterParams,
     ) -> HostFuture<'_, pmt_rpc::contracts::Roster> {
         Box::pin(self.roster(params))
+    }
+
+    fn voice<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::voice::VoiceCall,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(self.voice_call(profile, request))
+    }
+
+    fn pets<'a>(
+        &'a self,
+        profile: &'a str,
+        request: pmt_gateway::pets::PetsCall,
+    ) -> HostFuture<'a, serde_json::Value> {
+        Box::pin(self.pets_call(profile, request))
     }
 
     fn relay_drain(
@@ -1461,18 +1481,4 @@ fn still_stored(
         loaded.remove(&id);
     }
     found
-}
-
-/// The setup of the chat policy frozen with a gateway session, which keeps
-/// shaping it after a daemon restart (spec: messaging-gateway, Per-chat
-/// policies).
-fn frozen_policy(profile: &Profile, row: &pmt_store::Session) -> Option<SessionSetup> {
-    let pmt_store::Origin::Gateway { platform, .. } = &row.origin else {
-        return None;
-    };
-    let text = profile.store.session_policy(row.id).ok().flatten()?;
-    let policy: pmt_config::schema::ChatPolicy = serde_json::from_str(&text).ok()?;
-    Some(pmt_gateway::messaging::policy::session_setup(
-        &policy, platform,
-    ))
 }

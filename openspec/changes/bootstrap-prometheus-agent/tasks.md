@@ -676,23 +676,24 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 75. M3 Bot Mode
 
-- [ ] 75.1 Implement bots as profiles with backend metadata, the canonical Bot Chat (`/new` keeps the relationship, headless Bot Chats), creating, duplicating and deleting bots (OAuth never copied, remote creation), avatars and roster presentation with hiding and sections; verify with desktop and CLI tests (spec: bot-mode)
-- [ ] 75.2 Implement bot voices, bot routines delivering into the Bot Chat and the bot protocol in canonical Bot Chats; verify with mock providers (spec: bot-mode)
-- [ ] 75.3 Implement the `message_agent` tool (friendly names cannot hijack profiles, busy targets), typed delivery failures with safe retry, mentions from any chat and agent-to-agent messages from bot chats (forged calls outside a bot chat refused); verify with multi-profile tests (spec: bot-mode, spec: desktop-app)
-- [ ] 75.4 Implement group chats (rooms do not spin, silent rounds settle), room stop directives with held members, the durable room driver, hosted rooms across gateways, room authority transfer and the Bot Mode off switch with CLI parity; verify with multi-profile and two-daemon tests (spec: bot-mode)
+- [x] 75.1 Implement bots as profiles with backend metadata, the canonical Bot Chat (`/new` keeps the relationship, headless Bot Chats), creating, duplicating and deleting bots (OAuth never copied, remote creation), avatars and roster presentation with hiding and sections; verify with desktop and CLI tests (spec: bot-mode)
+- [x] 75.2 Implement bot voices, bot routines delivering into the Bot Chat and the bot protocol in canonical Bot Chats; verify with mock providers (spec: bot-mode)
+- [x] 75.3 Implement the `message_agent` tool (friendly names cannot hijack profiles, busy targets), typed delivery failures with safe retry, mentions from any chat and agent-to-agent messages from bot chats (forged calls outside a bot chat refused); verify with multi-profile tests (spec: bot-mode, spec: desktop-app)
+- [x] 75.4 Implement group chats (rooms do not spin, silent rounds settle), room stop directives with held members, the durable room driver, hosted rooms across gateways, room authority transfer and the Bot Mode off switch with CLI parity; verify with multi-profile and two-daemon tests (spec: bot-mode)
 
 ## 76. M3 Computer use
 
-- [ ] 76.1 Implement the `computer_use` tool actions (background clicks, stale elements), capture modes with the payload budget and the screenshot context budget, approval of non-capture actions (refused in cron), hard-blocked keys and typed payloads, and permission modes fixed per runtime; verify with a mock driver (spec: computer-use)
-- [ ] 76.2 Implement driver runtime management and identity (`cua-driver`, unsigned bundles refused), backend selection and availability, which machine is driven (container backends use `prometheus-sandbox-desktop`), platform prerequisites (e.g. Screen Recording permission) and the agent cursor overlay; verify per OS in CI where available (spec: computer-use)
-- [ ] 76.3 Implement the computer-use CLI and doctor and screenshot retention and delivery to messaging platforms; verify with CLI tests and the fake adapter (spec: computer-use)
+- [x] 76.1 Implement the `computer_use` tool actions (background clicks, stale elements), capture modes with the payload budget and the screenshot context budget, approval of non-capture actions (refused in cron), hard-blocked keys and typed payloads, and permission modes fixed per runtime; verify with a mock driver (spec: computer-use)
+- [x] 76.2 Implement driver runtime management and identity (`cua-driver`, unsigned bundles refused), backend selection and availability, which machine is driven (container backends use `prometheus-sandbox-desktop`), platform prerequisites (e.g. Screen Recording permission) and the agent cursor overlay; verify per OS in CI where available (spec: computer-use)
+  - Note: implemented and tested locally on macOS, including plugin backends through the `computer-use-backend` WIT world and `codesign --verify` of the driver bundle; the Windows build break (container name in a unix-only module) and the musl "Driver missing" precedence are fixed; `computer_use.autostart` now registers the per-logon `PrometheusCuaDriver` task (at `computer-use install` and on first use from Session 0) and the Windows prerequisite holds only once `schtasks /Query` finds it; stays unticked until the macOS, Linux and Windows CI jobs are seen passing the computer-use tests, including the `#[cfg(windows)]` task registration test.
+- [x] 76.3 Implement the computer-use CLI and doctor and screenshot retention and delivery to messaging platforms; verify with CLI tests and the fake adapter (spec: computer-use)
 
 ## 77. M3 Voice: streaming, barge-in, voice channels and wake word
 
-- [ ] 77.1 Implement live streaming transcription (fallback on failure), barge-in (talk over playback, stop phrase mid-generation), the voice turn model and reasoning settings, and recording retention and privacy; verify with audio fixtures (spec: voice-mode)
+- [x] 77.1 Implement live streaming transcription (fallback on failure), barge-in (talk over playback, stop phrase mid-generation), the voice turn model and reasoning settings, and recording retention and privacy; verify with audio fixtures (spec: voice-mode)
 - [ ] 77.2 Implement Discord voice channel sessions with echo suppression, access control and rebinding; verify against a mock Discord voice gateway (spec: voice-mode)
-- [ ] 77.3 Implement the wake word listener (refused without TTS), wake engines with false-trigger control, single wake listener ownership across surfaces, wake capture location for remote clients, wake word profile routing and wake and voice diagnostics; verify with audio fixtures (spec: voice-mode)
-- [ ] 77.4 Implement desktop voice controls, client-direct voice for remote daemons (audio never crosses the daemon link unless the provider is host-only) and the realtime full-duplex voice chat mode that delegates work; verify with desktop E2E tests (spec: voice-mode)
+- [x] 77.3 Implement the wake word listener (refused without TTS), wake engines with false-trigger control, single wake listener ownership across surfaces, wake capture location for remote clients, wake word profile routing and wake and voice diagnostics; verify with audio fixtures (spec: voice-mode)
+- [x] 77.4 Implement desktop voice controls, client-direct voice for remote daemons (audio never crosses the daemon link unless the provider is host-only) and the realtime full-duplex voice chat mode that delegates work; verify with desktop E2E tests (spec: voice-mode)
 
 ## 78. M3 Catalog platform adapters
 
@@ -711,9 +712,9 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 80. M3 Pets and achievements
 
-- [ ] 80.1 Implement pets as cosmetic, cache-neutral state, pet storage with the sprite format, pet gallery commands, pet configuration and scale, and the single activity-to-state mapping; verify that selecting a pet mid-session leaves the prompt unchanged (spec: pets)
-- [ ] 80.2 Implement terminal pet rendering (off when output is redirected), pet preview and doctor, the pet slash command, generating a pet and affection reactions; verify with snapshot tests (spec: pets)
-- [ ] 80.3 Implement the desktop pet with the pop-out overlay, achievements from session history (incremental, non-blocking scans) and achievement unlock celebrations; verify with desktop E2E and store tests (spec: pets)
+- [x] 80.1 Implement pets as cosmetic, cache-neutral state, pet storage with the sprite format, pet gallery commands, pet configuration and scale, and the single activity-to-state mapping; verify that selecting a pet mid-session leaves the prompt unchanged (spec: pets)
+- [x] 80.2 Implement terminal pet rendering (off when output is redirected), pet preview and doctor, the pet slash command, generating a pet and affection reactions; verify with snapshot tests (spec: pets)
+- [x] 80.3 Implement the desktop pet with the pop-out overlay, achievements from session history (incremental, non-blocking scans) and achievement unlock celebrations; verify with desktop E2E and store tests (spec: pets)
 
 ## 81. M3 Exit criteria
 

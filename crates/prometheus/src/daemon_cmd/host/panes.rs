@@ -219,6 +219,7 @@ mod manage {
         ("skill", Change::Skill),
         ("skill_archive", Change::SkillArchive),
         ("toolset", Change::Toolset),
+        ("cron_create", Change::CronCreate),
         ("cron_update", Change::CronUpdate),
         ("cron_delete", Change::CronDelete),
         ("cron_run", Change::CronRun),

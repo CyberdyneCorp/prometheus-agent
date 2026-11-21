@@ -39,6 +39,7 @@ mod replay;
 mod resume;
 mod round;
 mod run;
+pub mod screenshots;
 mod selection;
 mod server_compaction;
 mod steer;
@@ -202,6 +203,9 @@ pub struct AgentSetup {
     pub memory: Option<Arc<dyn crate::tools::MemoryPort>>,
     /// Plugin turn hooks (`pre_llm_call`).
     pub turn_hooks: Option<Arc<dyn TurnHooks>>,
+    /// Notices stored with each turn's user message (a Bot Chat's roster
+    /// changes, resolved @mentions).
+    pub turn_notes: Option<Arc<dyn TurnNotes>>,
     /// Refreshes the session's tools at a compaction boundary, before the
     /// prompt is frozen again: the one point besides session start where
     /// the tool array may change on its own (spec: tool-system, Tool
@@ -239,6 +243,15 @@ pub trait CompactionBoundary: Send + Sync {
     fn settle_tools(&self) -> model::BoxFuture<'_, ()> {
         Box::pin(async {})
     }
+}
+
+/// Host notices a turn carries with its user message (spec: bot-mode, Bot
+/// protocol in canonical Bot Chats; Mentions from any chat).
+pub trait TurnNotes: Send + Sync {
+    /// The notices for the turn `user_text` starts: each is stored with
+    /// that turn's user message (and seen by every later request), never
+    /// put into the system prompt, so the prompt cache holds.
+    fn before_turn(&self, session_id: &str, user_text: &str) -> Vec<String>;
 }
 
 /// Plugin hooks the turn loop fires (spec: plugin-system, `pre_llm_call`
@@ -370,6 +383,7 @@ impl AgentSetup {
             refresh_prompt: None,
             memory: None,
             turn_hooks: None,
+            turn_notes: None,
             compaction_boundary: None,
             context_engine: None,
             recording: None,

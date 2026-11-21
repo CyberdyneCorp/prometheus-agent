@@ -163,7 +163,7 @@ fn front(pki: &Pki, upstream: String) -> Front {
 
 /// A home whose server `tls` is the front, trusting the CA, with `extra`
 /// server keys.
-fn home_with(dir: &Path, port: u16, extra: &str) -> tempfile::TempDir {
+fn home_with(dir: &Path, port: u16, extra: &str) -> common::TestHome {
     let home = mock_home();
     let path = |name: &str| dir.join(name).display().to_string().replace('\\', "/");
     append_config(

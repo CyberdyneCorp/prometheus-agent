@@ -9,9 +9,14 @@ use std::process::{Command, Output, Stdio};
 
 pub const BIN: &str = env!("CARGO_BIN_EXE_prometheus");
 
-/// A temporary directory under the target dir (never the real home).
-pub fn temp_home() -> tempfile::TempDir {
-    tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap()
+pub mod home;
+
+pub use home::TestHome;
+
+/// A temporary directory under the target dir (never the real home); a
+/// daemon started on it is stopped when it drops.
+pub fn temp_home() -> TestHome {
+    TestHome::new()
 }
 
 /// The binary with no inherited Prometheus, editor, log or secret variables.
@@ -144,7 +149,7 @@ pub const PNG: &[u8] = &[
 ];
 
 /// A home whose default profile talks to the mock provider.
-pub fn mock_home() -> tempfile::TempDir {
+pub fn mock_home() -> TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),
@@ -333,6 +338,8 @@ pub fn browser_sign_in(cmd: &mut std::process::Command) -> (Option<i32>, String)
 pub mod a2a;
 #[cfg(feature = "gateway")]
 pub mod api;
+#[cfg(feature = "gateway")]
+pub mod bots;
 #[cfg(all(unix, feature = "dashboard"))]
 pub mod connections;
 #[cfg(feature = "dashboard")]
@@ -343,6 +350,7 @@ pub mod dashboard_plugins;
 pub mod desktop;
 #[cfg(feature = "dashboard")]
 pub mod oidc;
+pub mod pets;
 pub mod plugin_catalog;
 pub mod tls_upstream;
 #[cfg(feature = "gateway")]

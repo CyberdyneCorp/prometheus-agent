@@ -13,7 +13,7 @@ use pmt_core::id::SessionId;
 use prometheus::cron_host::caller::Caller;
 use serde_json::{Value, json};
 
-fn cron_home() -> tempfile::TempDir {
+fn cron_home() -> common::TestHome {
     let home = mock_home();
     std::fs::write(
         home.path().join("profiles/default/mock.toml"),

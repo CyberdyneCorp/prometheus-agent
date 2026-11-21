@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use common::{daemon, ok, stderr, stdout, temp_home};
 
 /// A home on `llamacpp/qwen-x` with the stub as the installed engine.
-fn local_home() -> tempfile::TempDir {
+fn local_home() -> common::TestHome {
     let home = temp_home();
     let h = home.path();
     ok(&common::run(
