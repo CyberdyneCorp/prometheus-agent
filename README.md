@@ -6,7 +6,7 @@ One agent core runs behind every surface: CLI, full-screen TUI, messaging gatewa
 
 It ships as one signed binary, `prometheus` (alias `pmt`). Extensions run as sandboxed WebAssembly components with explicit capability grants, as MCP servers, or as existing Hermes Python plugins through an out-of-process bridge.
 
-> **Status: M0–M2 done, M3 in progress.** The core agent (M1) and the multi-surface and extension layer (M2) are merged. M3 has the web dashboard, the desktop app, ACP, A2A and most of kanban in; harness evolution, the experience library, eval suites, bot mode, computer use and the rest of M3 are next (38 of 101 tasks ticked). The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
+> **Status: M0–M2 done, M3 in progress.** The core agent (M1) and the multi-surface and extension layer (M2) are merged. From M3, the web dashboard, the desktop app, ACP, A2A, kanban, harness evolution, the experience library, eval suites and the upgrades (memory, search, TUI, routing, egress, runtimes, providers, the Lightpanda browser engine and the bot screen) are in; bot mode, computer use, voice upgrades and pets are in review, and the catalog platform adapters, the plugin catalog and the M3 exit criteria are next (75 of 101 tasks ticked). The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
 
 ## Why Prometheus
 
