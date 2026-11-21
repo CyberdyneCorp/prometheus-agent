@@ -51,7 +51,7 @@ fn status(home: &Path) -> serde_json::Value {
 }
 
 /// A home whose screen needs no free memory (CI runners vary).
-fn home() -> tempfile::TempDir {
+fn home() -> common::TestHome {
     let home = mock_home();
     append_config(home.path(), "\n[bot_desktop]\nmin_free_memory_bytes = 0\n");
     home

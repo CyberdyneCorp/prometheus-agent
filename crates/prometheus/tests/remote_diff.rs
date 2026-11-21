@@ -95,7 +95,7 @@ fn repo(dir: &Path, file: &str, old: &str, new: &str) {
 }
 
 struct Fixture {
-    _root: tempfile::TempDir,
+    _root: common::TestHome,
     scope: ProfileScope,
     registry: BackendRegistry,
     host: PathBuf,

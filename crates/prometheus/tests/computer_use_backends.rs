@@ -50,7 +50,7 @@ fn install_sample(home: &Path) {
     ));
 }
 
-fn plugin_home() -> tempfile::TempDir {
+fn plugin_home() -> common::TestHome {
     let home = mock_home();
     install_sample(home.path());
     append_config(

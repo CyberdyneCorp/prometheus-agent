@@ -53,7 +53,7 @@ fn git(dir: &Path, args: &[&str]) {
 /// A home with evolution on, the mock script, and a git workspace
 /// holding `ledger.csv` (plus `files`, committed).
 struct Setup {
-    home: tempfile::TempDir,
+    home: common::TestHome,
     workspace: PathBuf,
 }
 

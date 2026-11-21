@@ -13,7 +13,7 @@ use common::{ok, run, stderr, temp_home};
 
 /// A home whose `secrets.command` runs `script` (written outside the home,
 /// so nothing it prints can be found in the home by accident).
-fn home_with_helper(script: &str) -> (tempfile::TempDir, tempfile::TempDir) {
+fn home_with_helper(script: &str) -> (common::TestHome, common::TestHome) {
     let home = temp_home();
     ok(&run(home.path(), &["secrets", "list"]));
     let tools = temp_home();

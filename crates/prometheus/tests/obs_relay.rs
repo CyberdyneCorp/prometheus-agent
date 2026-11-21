@@ -80,7 +80,7 @@ def event(name, *, handle=None, data=None):
 
 /// A home with the fake Relay indexed and enabled; `capture` sets
 /// `observability.otel.capture_content`.
-fn relay_home(capture: bool) -> (tempfile::TempDir, pmt_pybridge::testkit::Served) {
+fn relay_home(capture: bool) -> (common::TestHome, pmt_pybridge::testkit::Served) {
     let home = mock_home();
     pmt_pybridge::testkit::seed(home.path());
     let index = home.path().join("index");

@@ -16,7 +16,7 @@ use serde_json::Value;
 
 /// A home with a stand-in driver at `computer_use.driver_path`.
 struct Fixture {
-    home: tempfile::TempDir,
+    home: common::TestHome,
     /// The stand-in's directory (`fake.json`, `log.jsonl`).
     bin: PathBuf,
 }

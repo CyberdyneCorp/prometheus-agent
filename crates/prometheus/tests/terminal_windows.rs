@@ -23,7 +23,7 @@ use serde_json::Value;
 /// A mock home with a workspace (`work`, holding `data.txt`, `sub\` and
 /// `script.ps1`) and a directory the sandbox does not grant (`outside`).
 struct Fixture {
-    home: tempfile::TempDir,
+    home: common::TestHome,
     work: PathBuf,
     outside: PathBuf,
 }

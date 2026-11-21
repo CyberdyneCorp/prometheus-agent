@@ -13,7 +13,7 @@ use super::{mock_home, ok, run};
 
 /// A home serving every profile, its default profile answering with
 /// `rules`.
-pub fn home(rules: &str) -> tempfile::TempDir {
+pub fn home(rules: &str) -> super::TestHome {
     let home = mock_home();
     std::fs::write(home.path().join("profiles/default/mock.toml"), rules).unwrap();
     for (key, value) in [

@@ -40,7 +40,7 @@ impl Gateway {
 }
 
 /// A mock-provider home pointed at `gateway`.
-fn home_for(gateway: &Gateway) -> tempfile::TempDir {
+fn home_for(gateway: &Gateway) -> common::TestHome {
     let home = mock_home();
     ok(&run(
         home.path(),

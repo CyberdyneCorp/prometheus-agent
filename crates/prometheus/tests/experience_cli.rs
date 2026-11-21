@@ -40,7 +40,7 @@ fn git(dir: &Path, args: &[&str]) {
 
 /// A home with evolution on, the evolution mock script and a git
 /// workspace holding `ledger.csv`.
-fn setup(extra_config: &str) -> tempfile::TempDir {
+fn setup(extra_config: &str) -> common::TestHome {
     let home = mock_home();
     ok(&run(
         home.path(),

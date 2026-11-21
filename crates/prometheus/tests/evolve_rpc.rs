@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 
 const MOCK: &str = include_str!("fixtures/evolve/mock.toml");
 
-fn setup() -> tempfile::TempDir {
+fn setup() -> common::TestHome {
     let home = mock_home();
     ok(&run(
         home.path(),

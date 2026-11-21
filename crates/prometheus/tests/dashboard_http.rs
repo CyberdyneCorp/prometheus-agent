@@ -452,10 +452,7 @@ fn phc(password: &str) -> String {
 
 /// A home whose dashboard signs in with a password over TLS, and the
 /// certificate to trust.
-fn password_home() -> (
-    tempfile::TempDir,
-    rustls::pki_types::CertificateDer<'static>,
-) {
+fn password_home() -> (common::TestHome, rustls::pki_types::CertificateDer<'static>) {
     let home = mock_home();
     let cert = certificate(home.path());
     ok(&common::run_with_stdin(

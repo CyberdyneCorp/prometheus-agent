@@ -179,7 +179,7 @@ fn strip() -> String {
 
 /// A home whose image backend is the OpenAI Images API on a local mock
 /// answering every call with [`strip`].
-fn images_home(images: &tokio::runtime::Runtime) -> (tempfile::TempDir, wiremock::MockServer) {
+fn images_home(images: &tokio::runtime::Runtime) -> (common::TestHome, wiremock::MockServer) {
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
     let home = mock_home();

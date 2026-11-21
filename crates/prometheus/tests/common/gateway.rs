@@ -128,7 +128,7 @@ pub fn wait_said_within(home: &Path, profile: &str, text: &str, budget: Duration
 
 /// A mock home whose default profile answers on the `test` platform
 /// with the mock `rules` (TOML `[[rule]]` entries), plus `extra` config.
-pub fn gateway_home_with(rules: &str, extra: &str) -> tempfile::TempDir {
+pub fn gateway_home_with(rules: &str, extra: &str) -> super::TestHome {
     let home = mock_home();
     let profile = home.path().join("profiles/default");
     std::fs::write(profile.join("mock.toml"), rules).unwrap();
@@ -144,7 +144,7 @@ pub fn gateway_home_with(rules: &str, extra: &str) -> tempfile::TempDir {
 
 /// A mock home whose default profile answers on the `test` platform:
 /// `slow` takes a minute, anything else answers `fast done`.
-pub fn gateway_home(extra: &str) -> tempfile::TempDir {
+pub fn gateway_home(extra: &str) -> super::TestHome {
     let home = mock_home();
     let profile = home.path().join("profiles/default");
     std::fs::write(

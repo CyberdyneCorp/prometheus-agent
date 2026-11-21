@@ -18,7 +18,7 @@ use expectrl::session::OsSession;
 /// A home on `mock/alpha` with `[auxiliary.voice_chat] model = "voice"`,
 /// a transcriber that hears `heard`, and a mock script answering with the
 /// model that served each turn; `extra` is appended to the config.
-fn voice_route_home(heard: &str, extra: &str) -> tempfile::TempDir {
+fn voice_route_home(heard: &str, extra: &str) -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

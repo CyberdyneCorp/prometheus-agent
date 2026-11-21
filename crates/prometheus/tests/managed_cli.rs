@@ -11,7 +11,7 @@ use std::process::Output;
 use common::{ok, run_cmd_with_stdin, stderr, stdout, temp_home};
 
 /// A home and a managed directory holding `managed` as `managed.toml`.
-fn managed(managed: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+fn managed(managed: &str) -> (common::TestHome, std::path::PathBuf) {
     let home = temp_home();
     let dir = home.path().join("managed-dir");
     std::fs::create_dir_all(&dir).unwrap();

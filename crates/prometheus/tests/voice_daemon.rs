@@ -12,7 +12,7 @@ use pmt_rpc::contracts::{
     VoiceClientConfigGet, VoiceClientConfigParams, VoiceTranscribe, VoiceTranscribeParams,
 };
 
-fn home_with(config: &str) -> tempfile::TempDir {
+fn home_with(config: &str) -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

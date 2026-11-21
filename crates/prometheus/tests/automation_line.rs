@@ -23,7 +23,7 @@ const JUDGE: &str = "You are the goal judge";
 
 /// A mock home whose script answers the judge with `judge` rules and
 /// every other request with `worked on it`.
-fn home_with(judge: &str) -> tempfile::TempDir {
+fn home_with(judge: &str) -> common::TestHome {
     let home = common::mock_home();
     let script = format!("{judge}\n[[rule]]\nrepeat = true\ntext = \"worked on it\"\n");
     std::fs::write(home.path().join("script.toml"), script).unwrap();

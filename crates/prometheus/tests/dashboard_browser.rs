@@ -9,7 +9,7 @@ mod common;
 use common::dashboard::playwright;
 use common::{append_config, daemon, mock_home, ok, run};
 
-fn webapp_home() -> tempfile::TempDir {
+fn webapp_home() -> common::TestHome {
     let home = mock_home();
     std::fs::write(
         home.path().join("daemon.toml"),

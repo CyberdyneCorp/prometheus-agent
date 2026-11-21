@@ -23,7 +23,7 @@ pub const GIB: u64 = 1 << 30;
 
 /// A home on `llamacpp/qwen-x` (launched at 65536, native 262144, which
 /// the server's model listing reports) with a 24 GiB GPU fixture.
-pub fn local_home() -> tempfile::TempDir {
+pub fn local_home() -> super::TestHome {
     let home = temp_home();
     let h = home.path();
     ok(&run(h, &["config", "set", "model.provider", "llamacpp"]));

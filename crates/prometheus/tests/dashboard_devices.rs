@@ -129,7 +129,7 @@ fn the_webapp_is_off_by_default() {
     assert_eq!(get(opened.port, "/app", &signed.cookie).status, 404);
 }
 
-fn webapp_home() -> tempfile::TempDir {
+fn webapp_home() -> common::TestHome {
     let home = mock_home();
     std::fs::write(
         home.path().join("daemon.toml"),

@@ -134,7 +134,7 @@ impl Drop for Server {
 
 /// A profile on the SSH backend injecting `OPENAI_API_KEY` toward
 /// `localhost` (loopback treated as public), with the proxy started.
-fn ssh_home(server: &Server, ca_file: &Path) -> tempfile::TempDir {
+fn ssh_home(server: &Server, ca_file: &Path) -> common::TestHome {
     let home = mock_home();
     let proxy_port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()

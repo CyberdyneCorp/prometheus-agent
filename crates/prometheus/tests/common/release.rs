@@ -19,7 +19,7 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 pub const TEST_KEY: &str = include_str!("../../../pmt-update/tests/fixtures/test.key");
 
 pub struct Fixture {
-    pub dir: tempfile::TempDir,
+    pub dir: super::TestHome,
     pub home: PathBuf,
     pub binary: PathBuf,
     pub server: MockServer,

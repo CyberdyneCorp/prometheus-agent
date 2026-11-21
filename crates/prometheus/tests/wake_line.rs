@@ -19,7 +19,7 @@ use expectrl::session::OsSession;
 
 /// A home on the mock model hearing `heard`, speaking through a command
 /// provider (or `tts` when given), with `extra` config appended.
-fn wake_home(heard: &str, tts: &str, extra: &str) -> tempfile::TempDir {
+fn wake_home(heard: &str, tts: &str, extra: &str) -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

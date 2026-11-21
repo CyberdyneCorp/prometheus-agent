@@ -80,6 +80,14 @@ from a cold disk: 20 s and more), so the binary's `support::browsers()`
 starts it once per test run before any test does (`tests/browser/warm.rs`);
 a new test binary that starts a browser calls it too.
 
+No test may leave a process behind. The `prometheus` CLI tests build their
+homes with `common::temp_home()` (or a helper built on it), a `TestHome`
+that stops, or kills, the daemon running on it when it drops, however that
+daemon was started; a test home made some other way and used with a daemon
+needs the same. Fixture servers end when their client closes their stdin
+(`pmt-mcp-fixture --mode hang` included), since MCP connections live on a
+process-wide runtime that never drops its children.
+
 ### Pre-push hook
 
 ```sh

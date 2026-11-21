@@ -21,7 +21,7 @@ use serde_json::json;
 use self::common::{command, ok, run, stderr, temp_home};
 
 /// A home whose default profile has skill `demo`.
-fn home_with_skill() -> tempfile::TempDir {
+fn home_with_skill() -> common::TestHome {
     let home = temp_home();
     ok(&run(home.path(), &["config", "path"]));
     let skill = home.path().join("profiles/default/skills/demo/SKILL.md");

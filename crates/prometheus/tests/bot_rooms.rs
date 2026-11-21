@@ -47,7 +47,7 @@ fn kinds<'a>(log: &'a Value, kind: &str) -> Vec<&'a Value> {
 }
 
 /// A home with bots `names`, each answering with `rules`.
-fn room_home(names: &[&str], rules: &str) -> tempfile::TempDir {
+fn room_home(names: &[&str], rules: &str) -> common::TestHome {
     let home = bots::home("[[rule]]\nrepeat = true\ntext = \"hi\"\n");
     for name in names {
         bot(home.path(), name, rules, &[]);

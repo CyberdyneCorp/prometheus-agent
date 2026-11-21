@@ -20,7 +20,7 @@ const VALUE: &str = "horse-battery-staple-9417";
 
 /// A home whose known secret `TICKET_TOKEN` is `VALUE`, with redaction
 /// switched off, where the model runs `echo` of the secret.
-fn secret_home() -> tempfile::TempDir {
+fn secret_home() -> common::TestHome {
     let home = api::home("");
     ok(&run(
         home.path(),

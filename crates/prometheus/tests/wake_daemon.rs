@@ -20,7 +20,7 @@ use serde_json::Value;
 
 /// A mock home that speaks and hears through command providers; the
 /// seam directory names the detection the stand-in engine reports.
-fn home_with(detection: &str) -> (tempfile::TempDir, String) {
+fn home_with(detection: &str) -> (common::TestHome, String) {
     let home = temp_home();
     ok(&run(
         home.path(),

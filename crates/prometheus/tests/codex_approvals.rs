@@ -17,7 +17,7 @@ use self::common::{codex_fixture, daemon, ok, run};
 
 /// An API-serving home whose default profile runs `openai-api` on the
 /// fake Codex app-server.
-fn codex_home() -> (tempfile::TempDir, std::path::PathBuf) {
+fn codex_home() -> (common::TestHome, std::path::PathBuf) {
     let home = api::home("");
     let codex = codex_fixture(&home.path().join("bin"));
     let codex_bin = codex.to_string_lossy().into_owned();

@@ -9,9 +9,14 @@ use std::process::{Command, Output, Stdio};
 
 pub const BIN: &str = env!("CARGO_BIN_EXE_prometheus");
 
-/// A temporary directory under the target dir (never the real home).
-pub fn temp_home() -> tempfile::TempDir {
-    tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap()
+pub mod home;
+
+pub use home::TestHome;
+
+/// A temporary directory under the target dir (never the real home); a
+/// daemon started on it is stopped when it drops.
+pub fn temp_home() -> TestHome {
+    TestHome::new()
 }
 
 /// The binary with no inherited Prometheus, editor, log or secret variables.
@@ -144,7 +149,7 @@ pub const PNG: &[u8] = &[
 ];
 
 /// A home whose default profile talks to the mock provider.
-pub fn mock_home() -> tempfile::TempDir {
+pub fn mock_home() -> TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

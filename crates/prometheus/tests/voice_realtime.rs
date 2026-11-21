@@ -20,7 +20,7 @@ use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 const KEY: &str = "sk-realtime-daemon-only";
 const ANSWER: &str = "v=0\r\no=- 1 2 IN IP4 127.0.0.1\r\ns=-\r\n";
 
-fn home_with(mode: &str, base_url: &str) -> tempfile::TempDir {
+fn home_with(mode: &str, base_url: &str) -> common::TestHome {
     let home = temp_home();
     for (key, value) in [("model.provider", "mock"), ("model.default", "mock")] {
         ok(&run(home.path(), &["config", "set", key, value]));

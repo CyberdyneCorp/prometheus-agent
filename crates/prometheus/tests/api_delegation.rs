@@ -37,7 +37,7 @@ repeat = true
 text = "parent got no child result"
 "#;
 
-fn home() -> tempfile::TempDir {
+fn home() -> common::TestHome {
     let home = api::home("");
     let path = home.path().join("api-script.toml");
     std::fs::write(&path, DELEGATING).unwrap();

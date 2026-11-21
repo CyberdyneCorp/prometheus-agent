@@ -176,7 +176,7 @@ fn version_verbose_prints_the_runtime_index_digest() {
 
 /// The browser's lazy install through the store, against a local origin.
 struct Origin {
-    _dir: tempfile::TempDir,
+    _dir: common::TestHome,
     root: PathBuf,
     server: MockServer,
     runtime: tokio::runtime::Runtime,

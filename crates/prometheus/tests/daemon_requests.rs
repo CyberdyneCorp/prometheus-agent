@@ -44,7 +44,7 @@ text = "the secret is missing"
 const VALUE: &str = "ntn-daemon-value-4242";
 
 /// A home with the `notion` skill; the mock script's path.
-fn home_with_skill() -> (tempfile::TempDir, String) {
+fn home_with_skill() -> (common::TestHome, String) {
     let home = mock_home();
     let skill = home.path().join("profiles/default/skills/notion");
     std::fs::create_dir_all(&skill).unwrap();
