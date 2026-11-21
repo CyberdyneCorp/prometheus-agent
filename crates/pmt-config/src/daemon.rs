@@ -196,6 +196,11 @@ pub struct DaemonSection {
     /// Remote client attachment with paired device tokens (spec:
     /// messaging-gateway, Remote client attachment).
     pub remote: crate::daemon_remote::RemoteConfig,
+    /// `daemon run --adapters-only --upstream <url>`: the launch profile's
+    /// secret holding the admin device token the upstream daemon paired
+    /// for this adapter host (`prometheus daemon pair-device <name> --role
+    /// admin` there).
+    pub upstream_ticket_secret: crate::schema::SecretName,
 }
 
 impl Default for DaemonSection {
@@ -208,9 +213,15 @@ impl Default for DaemonSection {
             watchdog: WatchdogConfig::default(),
             systemd_watchdog_secs: 0,
             remote: crate::daemon_remote::RemoteConfig::default(),
+            upstream_ticket_secret: crate::schema::SecretName(
+                DEFAULT_UPSTREAM_TICKET_SECRET.to_owned(),
+            ),
         }
     }
 }
+
+/// The default secret of `daemon.upstream_ticket_secret`.
+pub const DEFAULT_UPSTREAM_TICKET_SECRET: &str = "UPSTREAM_TICKET";
 
 /// `[daemon.watchdog]`: a thread outside the async runtime probes it; a
 /// runtime that misses `max_strikes` probes in a row is dumped and the
@@ -559,6 +570,12 @@ impl DaemonConfig {
             .remote
             .validate()
             .map_err(|message| parse_error(&message))?;
+        if !crate::schema::is_secret_name(&config.daemon.upstream_ticket_secret.0) {
+            return Err(parse_error(&format!(
+                "daemon.upstream_ticket_secret: '{}' is not a secret name (A-Z, 0-9 and _)",
+                config.daemon.upstream_ticket_secret.0
+            )));
+        }
         if !config.webapp.public_url.is_empty() {
             crate::daemon_dashboard::check_public_url(
                 "webapp.public_url",

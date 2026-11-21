@@ -7,7 +7,10 @@
 //! (`token_secret` names it), allowlists, home channels, reply mode,
 //! typing, busy and streaming settings become config. The adapter arrives
 //! disabled, like every migrated adapter, so it never answers from both
-//! agents. Approved pairings become approved senders of the same profile.
+//! agents. A platform served by a catalog adapter plugin the catalog
+//! offers is migrated the same way (the plugins component installs the
+//! plugin, disabled; spec: platform-adapters, Catalog adapter set).
+//! Approved pairings become approved senders of the same profile.
 //! Settings of other platforms are reported `unsupported`.
 
 use std::collections::BTreeMap;
@@ -56,6 +59,14 @@ const PREFIXES: &[(&str, &str)] = &[
     ("IRC_", "irc"),
     ("QQ_", "qqbot"),
 ];
+
+/// Whether Prometheus serves `platform`: a built-in adapter, or a catalog
+/// adapter plugin the catalog offers.
+fn served(src: &Source<'_>, platform: &str) -> bool {
+    src.host.known(Registry::Platform, platform, None)
+        || (crate::plugins::CATALOG_ADAPTERS.contains(&platform)
+            && src.host.known(Registry::CatalogPlugin, platform, None))
+}
 
 /// The platform an `.env` name configures.
 fn platform_of(name: &str) -> Option<(&'static str, &str)> {
@@ -174,7 +185,7 @@ pub fn plan(src: &Source<'_>) -> Result<GatewayStep, Error> {
         pairings: Vec::new(),
     };
     let mut platforms: BTreeMap<String, Platform> = BTreeMap::new();
-    let supported = |p: &str| src.host.known(Registry::Platform, p, None);
+    let supported = |p: &str| served(src, p);
     for root in ["platforms", "gateway.platforms"] {
         if let Some(defs) = src.get(root).and_then(Value::as_object) {
             for (name, def) in defs {
@@ -223,7 +234,7 @@ fn config_platform(
     platforms: &mut BTreeMap<String, Platform>,
     step: &mut GatewayStep,
 ) {
-    let supported = src.host.known(Registry::Platform, name, None);
+    let supported = served(src, name);
     let mut leaves = Vec::new();
     flatten(def, root, &mut leaves);
     let p = platforms.entry(name.to_owned()).or_default();
@@ -391,7 +402,7 @@ fn env_entry(
         }
         return;
     };
-    let supported = src.host.known(Registry::Platform, platform, None);
+    let supported = served(src, platform);
     if class == Class::Secret {
         if supported {
             name_credential(

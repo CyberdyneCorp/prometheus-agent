@@ -20,7 +20,7 @@ use crate::writes;
 
 /// Hermes platforms Prometheus serves through catalog adapter plugins
 /// (spec: platform-adapters, Catalog adapter set).
-const CATALOG_ADAPTERS: &[&str] = &[
+pub(crate) const CATALOG_ADAPTERS: &[&str] = &[
     "whatsapp_cloud",
     "msgraph_webhook",
     "teams",
@@ -48,6 +48,8 @@ const CATALOG_ADAPTERS: &[&str] = &[
 /// The planned plugins component.
 pub struct PluginsStep {
     entries: Vec<Entry>,
+    /// Catalog plugins to install, with their entry.
+    catalog: Vec<(String, usize)>,
     dir: Option<std::path::PathBuf>,
     enabled: Vec<String>,
     /// Entry index per plugin id.
@@ -64,6 +66,9 @@ impl Step for PluginsStep {
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+        for (id, index) in &self.catalog {
+            install_catalog(id, dest, &mut self.entries[*index])?;
+        }
         let Some(dir) = self.dir.clone() else {
             return Ok(());
         };
@@ -178,6 +183,7 @@ pub fn plan(src: &Source<'_>) -> Result<PluginsStep, Error> {
     let enabled = names(src.get("plugins.enabled"));
     let mut step = PluginsStep {
         entries: Vec::new(),
+        catalog: Vec::new(),
         dir: None,
         enabled: enabled.clone(),
         planned: Vec::new(),
@@ -261,12 +267,44 @@ fn integrations(src: &Source<'_>, step: &mut PluginsStep) {
         }
     }
     for (id, what) in needed {
-        step.entries.push(
-            Entry::new(Component::Plugins, format!("integration:{id}"), Disposition::Unsupported)
-                .to(format!("catalog plugin {id}"))
-                .because(format!(
+        let entry = Entry::new(
+            Component::Plugins,
+            format!("integration:{id}"),
+            Disposition::Transformed,
+        )
+        .to(format!("catalog plugin {id}"));
+        if src.host.known(Registry::CatalogPlugin, id, None) {
+            step.entries.push(entry.because(format!(
+                "Hermes used {what}; the signed catalog plugin '{id}' is installed disabled and without grants (review it with `prometheus plugins show {id}`, enable it with `prometheus plugins enable {id}`)"
+            )));
+            step.catalog.push((id.to_owned(), step.entries.len() - 1));
+        } else {
+            step.entries.push(Entry {
+                disposition: Disposition::Unsupported,
+                ..entry.because(format!(
                     "Hermes used {what}; Prometheus serves it with the signed catalog plugin '{id}', which this catalog does not offer yet (install it disabled with `prometheus plugins install {id}` once it does)"
-                )),
+                ))
+            });
+        }
+    }
+}
+
+/// Installs catalog plugin `id` unless the profile already has a plugin
+/// of that id (an earlier run, or the user).
+fn install_catalog(id: &str, dest: &Dest<'_>, entry: &mut Entry) -> Result<(), Error> {
+    let dir = dest.scope.dir().join("plugins").join(id);
+    if dir.exists() {
+        entry.disposition = Disposition::Skipped;
+        entry.reason = format!("plugin '{id}' is already installed; kept");
+        return Ok(());
+    }
+    dest.keep(&dir)?;
+    if let Err(err) = dest.host.install_catalog_plugin(dest.scope, id) {
+        entry.disposition = Disposition::Failed;
+        entry.reason = format!(
+            "the catalog plugin could not be installed: {} (retry with `prometheus plugins install {id}`)",
+            err.message()
         );
     }
+    Ok(())
 }

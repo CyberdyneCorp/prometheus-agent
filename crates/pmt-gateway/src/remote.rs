@@ -9,6 +9,12 @@
 //! with 4401. TLS is mandatory: a configured certificate, else a
 //! self-signed one under `<home>/run/` whose fingerprint the daemon logs
 //! for pinning.
+//!
+//! The path `/adapters` is where a forwarding adapter host (`daemon run
+//! --adapters-only --upstream`) attaches instead of a client: it vouches
+//! for the senders it forwards, so only an `admin` device may (4403
+//! otherwise), and it speaks the relay connector's wire
+//! ([`crate::messaging::Gateway::serve_forwarder`]).
 
 use std::net::SocketAddr;
 use std::path::Path;
@@ -30,6 +36,9 @@ use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, 
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_util::sync::CancellationToken;
+
+/// Where a forwarding adapter host attaches.
+pub const FORWARDER_PATH: &str = "/adapters";
 
 /// The health component of the listener.
 pub const COMPONENT: &str = "listener:remote";
@@ -140,7 +149,9 @@ impl Serving {
     #[allow(clippy::result_large_err)]
     async fn connection<S: crate::connection::Transport>(&self, stream: S) {
         let mut admission = None;
+        let mut forwarder = false;
         let callback = |request: &Request, response: Response| {
+            forwarder = request.uri().path() == FORWARDER_PATH;
             Ok::<_, ErrorResponse>(self.handshake(request, response, &mut admission))
         };
         let Ok(Ok(mut socket)) = tokio::time::timeout(
@@ -151,7 +162,15 @@ impl Serving {
         else {
             return;
         };
-        match admission.unwrap_or(Err(CloseCode::BadCredential)) {
+        let admission = admission.unwrap_or(Err(CloseCode::BadCredential));
+        let admission = match admission {
+            Ok((verified, _)) if forwarder && verified.role != DeviceRole::Admin => {
+                Err(CloseCode::NotAllowed)
+            }
+            other => other,
+        };
+        match admission {
+            Ok((_, profiles)) if forwarder => self.forwarder(socket, profiles).await,
             Ok((verified, profiles)) => {
                 let grant = Grant {
                     profiles,
@@ -167,14 +186,24 @@ impl Serving {
                 crate::connection::serve_upgraded(Arc::clone(&self.server), socket, grant, ends)
                     .await;
             }
-            Err(code) => {
-                let close = Message::Close(Some(CloseFrame {
-                    code: code.code().into(),
-                    reason: code.reason().into(),
-                }));
-                let _ = tokio::time::timeout(HANDSHAKE_TIMEOUT, socket.send(close)).await;
-                let _ = tokio::time::timeout(Duration::from_secs(1), socket.close(None)).await;
-            }
+            Err(code) => close(&mut socket, code).await,
+        }
+    }
+
+    /// Serves an attached forwarding adapter host until it disconnects. A
+    /// refused one (another host attached, a dialed relay) is dropped and
+    /// retries; without a messaging gateway it is closed as disabled.
+    async fn forwarder<S: crate::connection::Transport>(
+        &self,
+        mut socket: tokio_tungstenite::WebSocketStream<S>,
+        profiles: Vec<String>,
+    ) {
+        let Some(gateway) = self.server.messaging().cloned() else {
+            close(&mut socket, CloseCode::EndpointDisabled).await;
+            return;
+        };
+        if let Err(why) = gateway.serve_forwarder(socket, profiles).await {
+            tracing::warn!("forwarding adapter host: {why}");
         }
     }
 
@@ -234,4 +263,16 @@ impl Serving {
         };
         Ok((verified, profiles))
     }
+}
+
+async fn close<S: crate::connection::Transport>(
+    socket: &mut tokio_tungstenite::WebSocketStream<S>,
+    code: CloseCode,
+) {
+    let close = Message::Close(Some(CloseFrame {
+        code: code.code().into(),
+        reason: code.reason().into(),
+    }));
+    let _ = tokio::time::timeout(HANDSHAKE_TIMEOUT, socket.send(close)).await;
+    let _ = tokio::time::timeout(Duration::from_secs(1), socket.close(None)).await;
 }

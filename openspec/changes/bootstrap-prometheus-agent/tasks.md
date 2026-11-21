@@ -697,7 +697,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 78. M3 Catalog platform adapters
 
-- [ ] 78.1 Implement supervised sidecar adapters (crashes contained), the catalog adapter set (migration installs adapters disabled), adapter host forwarding mode and platform-contributed toolsets (absent on other platforms); verify with a sidecar fixture (spec: platform-adapters)
+- [x] 78.1 Implement supervised sidecar adapters (crashes contained), the catalog adapter set (migration installs adapters disabled), adapter host forwarding mode and platform-contributed toolsets (absent on other platforms); verify with a sidecar fixture (spec: platform-adapters)
 - [ ] 78.2 Implement the Telegram local Bot API server, Telegram network resilience and presentation options, Slack reaction triggers and multiple workspaces, the peer-agent routing self-test, Matrix end-to-end encryption (fails closed when required) and Matrix rooms, invites and clock skew; verify against mock servers (spec: platform-adapters)
 - [x] 78.3 Implement webhook event coalescing and MCP server events into the webhook pipeline (duplicate events ignored, placeholder injection inert); verify with event fixtures (spec: platform-adapters, spec: plugin-system)
 - [ ] 78.4 Implement the WhatsApp Cloud API adapter, the Microsoft Graph change-notification listener, the Microsoft Teams adapter, the Teams meeting summary pipeline and the Google Chat adapter as signed catalog adapters; verify each with the conformance kit (spec: platform-adapters)

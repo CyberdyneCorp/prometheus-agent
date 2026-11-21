@@ -7,22 +7,28 @@ use std::sync::{Arc, Weak};
 use super::Relay;
 use super::wire::DEFAULT_MAX_LENGTH;
 use crate::messaging::adapter::{
-    Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterState, ChatInfo, Descriptor,
-    Outgoing, SendError, Sent,
+    Adapter, AdapterError, AdapterFuture, AdapterLink, AdapterState, Attachment, ChatInfo,
+    Descriptor, MediaStream, Outgoing, SendError, Sent,
 };
 
 /// The relay as the adapter of `platform`.
 pub(crate) struct RelayView {
     relay: Weak<Relay>,
+    profile: String,
     platform: String,
 }
 
 impl RelayView {
-    pub(crate) fn new(relay: &Arc<Relay>, platform: &str) -> Self {
+    pub(crate) fn new(relay: &Arc<Relay>, profile: &str, platform: &str) -> Self {
         Self {
             relay: Arc::downgrade(relay),
+            profile: profile.to_owned(),
             platform: platform.to_owned(),
         }
+    }
+
+    fn key(&self) -> (&str, &str) {
+        (&self.profile, &self.platform)
     }
 
     fn relay(&self) -> Result<Arc<Relay>, SendError> {
@@ -35,6 +41,10 @@ impl RelayView {
 impl Adapter for RelayView {
     fn reach(&self) -> Result<crate::messaging::probe::Reach, String> {
         let relay = self.relay.upgrade().ok_or("the relay stopped")?;
+        if relay.is_attached() {
+            // The host dials in: nothing here to probe.
+            return Ok(crate::messaging::probe::Reach::InboundOnly);
+        }
         Ok(crate::messaging::probe::Reach::Endpoints(vec![
             crate::messaging::probe::Endpoint::Http(relay.url().to_owned()),
         ]))
@@ -43,14 +53,20 @@ impl Adapter for RelayView {
     fn describe(&self) -> Descriptor {
         let declared = self.relay.upgrade().and_then(|r| r.descriptor());
         Descriptor {
-            supports_edit: declared.as_ref().is_some_and(|d| d.supports_edit),
             // Only the relay may trust its connector's authorization.
             authorization_is_upstream: true,
-            ..Descriptor::new(
-                &self.platform,
-                declared.map_or(DEFAULT_MAX_LENGTH, |d| d.max_message_length),
+            ..declared.map_or_else(
+                || Descriptor::new(&self.platform, DEFAULT_MAX_LENGTH),
+                |d| d.descriptor_of(&self.platform),
             )
         }
+    }
+
+    fn open_media<'a>(
+        &'a self,
+        attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        Box::pin(async move { self.relay()?.media(self.key(), &attachment.location).await })
     }
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
@@ -76,7 +92,7 @@ impl Adapter for RelayView {
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
         let message = message.clone();
         Box::pin(async move {
-            let message_id = self.relay()?.send(&self.platform, &message, None).await?;
+            let message_id = self.relay()?.send(self.key(), &message, None).await?;
             Ok(Sent { message_id })
         })
     }
@@ -98,7 +114,7 @@ impl Adapter for RelayView {
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
             self.relay()?
-                .send(&self.platform, message, Some(message_id))
+                .send(self.key(), message, Some(message_id))
                 .await
                 .map(|_| ())
         })

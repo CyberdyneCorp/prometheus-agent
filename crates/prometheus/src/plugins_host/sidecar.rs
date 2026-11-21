@@ -431,6 +431,79 @@ mod tests {
         assert_eq!(granted_secrets(&declared, &grants), ["A"]);
     }
 
+    /// A fake managed Node: `node <npm-cli.js> ci ...` records its
+    /// arguments and makes `node_modules`, failing when `FAIL` exists.
+    #[cfg(unix)]
+    fn fake_node(root: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt as _;
+        let bin = root.join("node/bin");
+        let npm = root.join("node/lib/node_modules/npm/bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&npm).unwrap();
+        std::fs::write(npm.join("npm-cli.js"), "").unwrap();
+        let node = bin.join("node");
+        std::fs::write(
+            &node,
+            format!(
+                "#!/bin/sh\n[ -e '{fail}' ] && exit 3\necho \"$@\" >> '{log}'\nmkdir -p node_modules\n",
+                fail = root.join("FAIL").display(),
+                log = root.join("npm.log").display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&node, std::fs::Permissions::from_mode(0o755)).unwrap();
+        node
+    }
+
+    /// The Node sidecar path: the plugin's lockfile is installed with
+    /// `npm ci` (no scripts, no dev packages) into the plugin's own
+    /// runtime directory once per lockfile digest, and the sidecar reads
+    /// it through `NODE_PATH`.
+    #[cfg(unix)]
+    #[test]
+    fn node_packages_install_once_per_lockfile_and_reach_the_sidecar() {
+        let home =
+            tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap();
+        let node = fake_node(home.path());
+        let mut spec = spec(home.path());
+        spec.declaration.runtime = Runtime::Node;
+        spec.declaration.lockfile = Some("sidecar/package-lock.json".into());
+        let sidecar = spec.plugin_dir.join("sidecar");
+        std::fs::create_dir_all(&sidecar).unwrap();
+        std::fs::write(sidecar.join("package.json"), "{\"name\":\"photon\"}").unwrap();
+        std::fs::write(sidecar.join("package-lock.json"), "{\"lockfileVersion\":3}").unwrap();
+        let lockfile = spec.declaration.lockfile.clone().unwrap();
+        install_packages(&spec, &lockfile, &node).unwrap();
+        let installed = modules_dir(home.path(), "photon");
+        assert!(installed.is_dir(), "{}", installed.display());
+        let log = std::fs::read_to_string(home.path().join("npm.log")).unwrap();
+        assert!(log.contains("ci --omit=dev --ignore-scripts"), "{log}");
+        // Unchanged lockfile: not installed again.
+        install_packages(&spec, &lockfile, &node).unwrap();
+        let runs = |p: &Path| {
+            std::fs::read_to_string(p.join("npm.log"))
+                .unwrap()
+                .lines()
+                .count()
+        };
+        assert_eq!(runs(home.path()), 1);
+        // A new lockfile installs again; a failing npm is an error.
+        std::fs::write(
+            sidecar.join("package-lock.json"),
+            "{\"lockfileVersion\":3,\"x\":1}",
+        )
+        .unwrap();
+        std::fs::write(home.path().join("FAIL"), "").unwrap();
+        let err = install_packages(&spec, &lockfile, &node).unwrap_err();
+        assert!(err.contains("npm ci failed"), "{err}");
+        std::fs::remove_file(home.path().join("FAIL")).unwrap();
+        install_packages(&spec, &lockfile, &node).unwrap();
+        assert_eq!(runs(home.path()), 2);
+        let env = environment(&spec, 4000, "tok");
+        let node_path = env.iter().find(|(k, _)| k == "NODE_PATH").unwrap();
+        assert_eq!(std::path::PathBuf::from(&node_path.1), installed);
+    }
+
     /// Spec: platform-adapters, Supervised sidecar adapters, "Sidecar
     /// crash contained".
     #[tokio::test]

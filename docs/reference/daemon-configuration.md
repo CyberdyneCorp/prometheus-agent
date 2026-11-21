@@ -31,6 +31,7 @@ Every key `<PROMETHEUS_HOME>/daemon.toml` accepts: machine-wide settings shared 
 | `daemon.rpc.request_timeout_secs` | integer | `600` | ≥ 1 | `restart` | Deadline of server-to-client requests other than approvals (which use the profile's `approvals.timeout_secs`). |
 | `daemon.rpc.workers` | integer | `8` | 1 to 256 | `restart` | Requests run concurrently per connection; `rpc.ping` never waits for one. |
 | `daemon.systemd_watchdog_secs` | integer | `0` | ≥ 0 | `restart` | Linux: `> 0` makes the generated systemd unit `Type=notify` with this `WatchdogSec`; the daemon notifies only while its watchdog probes succeed. `0` (default): no systemd watchdog. |
+| `daemon.upstream_ticket_secret` | string | `"UPSTREAM_TICKET"` | a secret name | `restart` | `daemon run --adapters-only --upstream <url>`: the launch profile's secret holding the admin device token the upstream daemon paired for this adapter host (`prometheus daemon pair-device <name> --role admin` there). |
 | `daemon.watchdog.enabled` | boolean | `true` | any | `restart` | Run the watchdog. |
 | `daemon.watchdog.max_strikes` | integer | `3` | 1 to 100 | `restart` | Consecutive strikes before the dump and exit. |
 | `daemon.watchdog.probe_interval_secs` | integer | `30` | 1 to 3600 | `restart` | Seconds between probes; a probe not answered within this is a strike. |

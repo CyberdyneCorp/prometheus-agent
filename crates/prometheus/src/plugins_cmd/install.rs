@@ -56,6 +56,31 @@ pub(super) fn install(ctx: &Context<'_>, args: &InstallArgs) -> Result<u8, Error
     finish(ctx, &scope, &id, args)
 }
 
+/// Installs catalog plugin `id` into `scope`'s profile, verified like
+/// `plugins install <id>` (a signature is required) and left disabled with
+/// no grants: what `migrate from-hermes` does for a Hermes integration
+/// whose Prometheus counterpart is a catalog plugin (spec:
+/// platform-adapters, Catalog adapter set).
+///
+/// # Errors
+///
+/// As `plugins install <id>`, without prompting.
+pub(crate) fn install_from_catalog(scope: &ProfileScope, id: &str) -> Result<(), Error> {
+    let args = InstallArgs {
+        identifier: id.to_owned(),
+        git_ref: None,
+        allow_unsigned: false,
+        allow_removed: false,
+        enable: false,
+        no_enable: true,
+        grant: None,
+        force: false,
+    };
+    let fetched = from_catalog(scope, id, &args)?;
+    super::python::check_install(&fetched.staged.dir, &fetched.staged.manifest, false)?;
+    commit(scope, fetched, &args)
+}
+
 /// A staged plugin with what its record will say.
 pub(super) struct Fetched {
     pub staged: Staged,

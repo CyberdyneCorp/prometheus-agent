@@ -30589,11 +30589,17 @@ Options:
       --replace
           Take over messaging platform credentials (bot tokens) that a live daemon of another home or profile holds
 
+      --adapters-only
+          Run only the messaging adapters and forward every admitted event to the `--upstream` daemon, which owns the sessions (platform crypto or native dependencies on this host, the agent elsewhere)
+
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
+
+      --upstream <WS_URL>
+          The upstream daemon's adapter endpoint, `wss://<host>:<port>/adapters` on its remote listener (`daemon.remote`); the admin device token comes from the secret `daemon.upstream_ticket_secret` names
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON

@@ -931,6 +931,47 @@ sends `send`, `edit` and `egress` requests with an `id`, answered by
 `{"token","gateway_id"?,"wake_url"?}`, answered by `{"gateway_id",
 "credential","relay_url"?}` or a 4xx `{"error":"already_used"|"expired"}`.
 
+The same frames carry optional additions older connectors ignore: an
+inbound frame's `addressing` (`mentioned`, `replies_to_bot`,
+`in_bot_thread`, `not_addressed`) and `attachments`, a descriptor's
+`descriptors` (each adapter's own descriptor, by platform), a `profile`
+on `send`, `edit` and `media` requests, a `media` request
+(`{"type":"media","id","profile","platform","location"}`, answered with
+base64 `data`) and outgoing attachments carrying their bytes as base64
+`data` (25 MiB at most each).
+
+## Adapter host forwarding
+
+Some platforms need crypto or native libraries on one machine (Matrix
+encryption keys on a Mac) while the agent runs elsewhere (a container).
+`prometheus daemon run --adapters-only --upstream wss://<host>:<port>/adapters`
+runs only the configured adapters on this host and forwards every event
+they admit to the upstream daemon, which owns every session; the
+upstream's replies, edits and attachment reads come back and go out
+through the local adapters.
+
+- **The upstream** enables its remote attachment listener
+  (`[daemon.remote] enabled = true`, see
+  [Remote clients](dashboard.md#remote-clients-and-paired-devices)) and pairs the host as an
+  admin device: `prometheus daemon pair-device matrix-host --role admin
+  --profile-binding default`. Only an admin device may attach at
+  `/adapters` (others are closed with 4403), because the host vouches for
+  the senders it forwards, and it may address only the profiles its
+  device is bound to. One host attaches at a time, and not to a daemon
+  that dials a relay connector.
+- **The host** stores that token in the secret
+  `daemon.upstream_ticket_secret` names (`UPSTREAM_TICKET` by default:
+  `prometheus secrets set UPSTREAM_TICKET`), trusts the upstream's
+  certificate (a self-signed one through `network.extra_ca_file`), and
+  runs with `--adapters-only --upstream`. It keeps sender authorization,
+  pairing, the bot-loop guard and deduplication; it runs no scheduler,
+  automation or network listener, and no session.
+
+Profiles are matched by name. While the upstream cannot be reached the
+host's adapters are `degraded` with `upstream_unreachable`, a person
+writing in is told `Upstream agent unavailable, try again shortly.`, and
+the host reconnects with backoff (1 s to 1 min).
+
 ## Health export
 
 With `observability.gateway_health.enabled = true` and an OTLP/HTTP

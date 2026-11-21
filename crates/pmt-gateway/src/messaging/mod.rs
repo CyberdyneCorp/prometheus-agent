@@ -50,6 +50,7 @@ pub mod key;
 mod lane;
 pub use lane::LOGIN_IN_DM;
 pub mod actions;
+mod forward;
 mod limits;
 mod locks;
 pub mod markup;
@@ -112,6 +113,7 @@ pub use agents::{
     Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFeed, UpdateFromChat,
     UpdateRun,
 };
+pub use forward::ForwardOptions;
 pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
 pub use http::{CRON_FIRE_PATH, Endpoint};
@@ -149,6 +151,9 @@ pub struct Options {
     /// Reads the relay settings again (`gateway reload` connects a relay
     /// enrolled since the daemon started).
     pub relay_source: Option<RelaySource>,
+    /// `daemon run --adapters-only --upstream`: admitted events go to this
+    /// upstream daemon, which owns the sessions.
+    pub forward: Option<ForwardOptions>,
     /// The health export (`observability.gateway_health` of the launch
     /// profile), when enabled.
     pub health: Option<health::HealthOptions>,
@@ -192,6 +197,7 @@ impl Options {
             hooks: Arc::new(Hooks::default()),
             relay: None,
             relay_source: None,
+            forward: None,
             health: None,
             http: HttpOptions::default(),
             locks_dir: None,
@@ -219,6 +225,8 @@ pub(crate) struct Shared {
     /// Signs approval card callbacks (fresh at every start).
     card_key: cards::CardKey,
     relay: std::sync::OnceLock<Arc<relay::Relay>>,
+    /// The upstream of an adapters-only daemon.
+    forwarder: std::sync::OnceLock<Arc<forward::Forwarder>>,
     last_inbound: send::LastInbound,
     limits: limits::Limits,
     /// Bot message bursts being collected.
@@ -386,6 +394,7 @@ impl Gateway {
             http: http::Listener::default(),
             card_key: cards::CardKey::random(),
             relay: std::sync::OnceLock::new(),
+            forwarder: std::sync::OnceLock::new(),
             last_inbound: send::LastInbound::default(),
             limits: limits::Limits::default(),
             bursts: gating::Bursts::default(),
@@ -459,10 +468,29 @@ impl Gateway {
                 .await;
             adapters::start_profile(&shared, profile);
         }
+        forward::start(&shared);
         server.set_messaging(Self {
             shared: Arc::clone(&shared),
         });
         Ok(Self { shared })
+    }
+
+    /// Serves a forwarding adapter host that attached on the remote
+    /// listener with a device bound to `profiles` (spec: platform-adapters,
+    /// Adapter host forwarding mode), until it disconnects.
+    ///
+    /// # Errors
+    ///
+    /// Why it was refused or why its connection ended.
+    pub async fn serve_forwarder<S>(
+        &self,
+        socket: tokio_tungstenite::WebSocketStream<S>,
+        profiles: Vec<String>,
+    ) -> Result<(), String>
+    where
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        relay::serve_forwarder(&self.shared, socket, profiles).await
     }
 
     /// Submits an inbound event from `platform` of `profile` (what an

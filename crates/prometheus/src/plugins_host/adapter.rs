@@ -39,72 +39,69 @@ const CRASH_WINDOW: Duration = Duration::from_mins(10);
 /// built.
 const RECHECK: Duration = Duration::from_secs(5);
 
-/// Declares the platform of every enabled `platform-adapter` plugin of
+/// Declares the platform of every installed `platform-adapter` plugin of
 /// the home's profiles (spec: platform-adapters, First-party platforms and
 /// typed platform names), so a `[gateway.platforms.<name>]` table naming
-/// one validates: read once per process, from the profiles'
-/// `plugins.enabled` lists and the plugins' manifests, before any
-/// profile's configuration is checked. The platform is the plugin id,
-/// lower case.
+/// one validates: read once per process, from the plugins' manifests,
+/// before any profile's configuration is checked. A disabled plugin counts
+/// (a migrated catalog adapter arrives disabled with its table; the
+/// adapter itself starts only once the plugin is enabled). The platform is
+/// the plugin id, lower case.
 pub fn register_platforms(home: &Path) {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        for platform in enabled_adapters(home) {
-            // A plugin publishes no options schema: its own `start`
-            // checks the options it is given.
-            let any = serde_json::json!({"type": "object", "additionalProperties": true});
-            pmt_config::platforms::register_plugin_platform(&platform, Some(any));
+        for platform in installed_adapters(home) {
+            register(&platform);
         }
     });
+}
+
+/// Declares the platform of plugin `id` just installed in the profile at
+/// `profile_dir`, when it is an adapter.
+pub fn register_installed(profile_dir: &Path, id: &str) {
+    if is_adapter(&profile_dir.join("plugins").join(id)) {
+        register(&id.to_lowercase());
+    }
+}
+
+fn register(platform: &str) {
+    // A plugin publishes no options schema: its own `start` checks the
+    // options it is given.
+    let any = serde_json::json!({"type": "object", "additionalProperties": true});
+    pmt_config::platforms::register_plugin_platform(platform, Some(any));
 }
 
 fn toml_of(path: &Path) -> Option<toml::Table> {
     std::fs::read_to_string(path).ok()?.parse().ok()
 }
 
-fn strings(table: Option<&toml::Value>) -> Vec<String> {
-    table
-        .and_then(toml::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect()
+fn is_adapter(dir: &Path) -> bool {
+    toml_of(&dir.join("plugin.toml")).is_some_and(|m| {
+        m.get("worlds")
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_str)
+            .any(|w| w.starts_with("platform-adapter@"))
+    })
 }
 
-/// The ids (lower case) of the enabled adapter plugins of every profile.
-fn enabled_adapters(home: &Path) -> Vec<String> {
-    let mut found = Vec::new();
-    let profiles = std::fs::read_dir(home.join("profiles"))
+/// The ids (lower case) of the installed adapter plugins of every profile.
+fn installed_adapters(home: &Path) -> Vec<String> {
+    let plugin_dirs = std::fs::read_dir(home.join("profiles"))
         .into_iter()
         .flatten()
-        .flatten();
-    for profile in profiles {
-        // The profile's own configuration: its plane document when the
-        // home uses a remote backend (an unreachable plane fails the
-        // profile's load later, with the same error).
-        let config = pmt_config::ConfigFile::of_profile_dir(&profile.path()).raw();
-        let Some(config) = config
-            .ok()
-            .flatten()
-            .and_then(|text| text.parse::<toml::Table>().ok())
-        else {
-            continue;
-        };
-        let plugins = config.get("plugins");
-        let disabled = strings(plugins.and_then(|p| p.get("disabled")));
-        for id in strings(plugins.and_then(|p| p.get("enabled"))) {
-            let manifest = profile.path().join("plugins").join(&id).join("plugin.toml");
-            let adapter = toml_of(&manifest).is_some_and(|m| {
-                strings(m.get("worlds"))
-                    .iter()
-                    .any(|w| w.starts_with("platform-adapter@"))
-            });
-            if adapter && !disabled.contains(&id) {
-                found.push(id.to_lowercase());
-            }
-        }
-    }
-    found
+        .flatten()
+        .flat_map(|profile| {
+            std::fs::read_dir(profile.path().join("plugins"))
+                .into_iter()
+                .flatten()
+                .flatten()
+        });
+    plugin_dirs
+        .filter(|plugin| is_adapter(&plugin.path()))
+        .map(|plugin| plugin.file_name().to_string_lossy().to_lowercase())
+        .collect()
 }
 
 /// Builds the adapter of a platform an enabled plugin of the profile

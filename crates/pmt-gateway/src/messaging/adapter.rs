@@ -329,7 +329,7 @@ pub struct AdapterStatus {
 }
 
 /// What submitting an inbound event did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Admission {
     /// It starts or joins a turn.

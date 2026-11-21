@@ -2,12 +2,15 @@
 //! here (toolsets, themes, adapters, providers, installed plugins), the
 //! scheduled-job catalog and the Python-bridge plugin import.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
-use pmt_config::{ProfileScope, platforms};
+use pmt_config::layout::ProfileName;
+use pmt_config::{Launch, Overrides, ProfileScope, platforms};
 use pmt_core::env::LaunchEnv;
 use pmt_core::error::Error;
 use pmt_migrate::{Host, PluginOutcome, Registry};
+use pmt_plugins::catalog::Catalog;
 use pmt_plugins::python::audit::Verdict;
 use pmt_providers::registry::ProviderRegistry;
 
@@ -20,6 +23,10 @@ pub(super) struct MigrateHost<'a> {
     launch: &'a LaunchEnv,
     providers: Option<ProviderRegistry>,
     interrupt: Interrupt,
+    /// The profile whose plugin catalog answers when no target profile is
+    /// named: `--into-profile`, else the home's default.
+    catalog_profile: Option<(PathBuf, String)>,
+    catalog: OnceLock<Catalog>,
 }
 
 impl<'a> MigrateHost<'a> {
@@ -32,8 +39,47 @@ impl<'a> MigrateHost<'a> {
             launch,
             providers,
             interrupt,
+            catalog_profile: None,
+            catalog: OnceLock::new(),
         }
     }
+
+    /// Resolves catalog plugins with the catalog of `profile` of `home`.
+    #[must_use]
+    pub(super) fn with_catalog_of(mut self, home: PathBuf, profile: Option<String>) -> Self {
+        let profile = profile.unwrap_or_else(|| ProfileName::default_profile().as_str().to_owned());
+        self.catalog_profile = Some((home, profile));
+        self
+    }
+
+    /// The plugin catalog: `scope`'s when given, else the configured
+    /// profile's (the embedded catalog when it cannot be opened).
+    fn catalog(&self, scope: Option<&ProfileScope>) -> Catalog {
+        if let Some(scope) = scope {
+            return crate::plugins_host::catalog::current(scope, true);
+        }
+        self.catalog
+            .get_or_init(|| {
+                self.catalog_profile
+                    .as_ref()
+                    .and_then(|(home, profile)| open(home, profile))
+                    .map_or_else(
+                        || Catalog::merged(None),
+                        |scope| crate::plugins_host::catalog::current(&scope, true),
+                    )
+            })
+            .clone()
+    }
+}
+
+/// `profile` of `home`, when it exists and loads.
+fn open(home: &Path, profile: &str) -> Option<ProfileScope> {
+    let name = ProfileName::parse(profile).ok()?;
+    let dir = pmt_config::layout::Home::open(home)
+        .ok()?
+        .existing_profile(&name)
+        .ok()?;
+    ProfileScope::open(dir, &Overrides::default(), Launch::Other).ok()
 }
 
 impl Host for MigrateHost<'_> {
@@ -50,6 +96,7 @@ impl Host for MigrateHost<'_> {
                 let dir = s.dir().join("plugins").join(name);
                 dir.join("plugin.toml").is_file() || dir.join("plugin.yaml").is_file()
             }),
+            Registry::CatalogPlugin => self.catalog(scope).find(name).is_some(),
         }
     }
 
@@ -89,6 +136,13 @@ impl Host for MigrateHost<'_> {
                 skipped: p.skipped,
             })
             .collect())
+    }
+
+    fn install_catalog_plugin(&self, scope: &ProfileScope, id: &str) -> Result<(), Error> {
+        crate::plugins_cmd::install::install_from_catalog(scope, id)?;
+        // The new adapter's platform names a valid table from now on.
+        crate::plugins_host::adapter::register_installed(scope.dir(), id);
+        Ok(())
     }
 
     fn progress(&self, line: &str) {
