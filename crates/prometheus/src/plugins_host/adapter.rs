@@ -143,7 +143,8 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
         );
         return None;
     };
-    let names = sidecar::granted_secrets(&declaration, &plugin.grants.current());
+    let grants = plugin.grants.current();
+    let names = sidecar::granted_secrets(&declaration, &grants);
     Some(Sidecar {
         spec: sidecar::Spec {
             home: setup.scope.home().to_path_buf(),
@@ -153,6 +154,7 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
             declaration,
             secrets: Vec::new(),
             node: None,
+            network: sidecar::granted_network(&grants),
         },
         names,
         scope: setup.scope.clone(),
@@ -213,6 +215,32 @@ struct PluginAdapter {
     poller: Mutex<Option<tokio::task::JoinHandle<()>>>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
     sidecar: Option<Sidecar>,
+    /// The credential the gateway locks across homes (spec: Credential
+    /// locks across homes): the values of the options the descriptor's
+    /// `credential_options` names (IRC: server and nickname).
+    credential: Option<String>,
+}
+
+/// The credential identity of `options` for the option keys `keys` (a
+/// descriptor's `credential_options`, each `key` or `key=default`);
+/// `None` when it names none or one without a default is unset.
+fn credential_of(keys: &Value, options: &Value) -> Option<String> {
+    let keys = keys.as_array().filter(|k| !k.is_empty())?;
+    let values: Option<Vec<String>> = keys
+        .iter()
+        .map(|entry| {
+            let (key, default) = entry.as_str()?.split_once('=').map_or_else(
+                || (entry.as_str().unwrap_or_default(), None),
+                |(k, d)| (k, Some(d)),
+            );
+            match &options[key] {
+                Value::String(s) if !s.is_empty() => Some(s.to_lowercase()),
+                Value::Number(n) => Some(n.to_string()),
+                _ => default.map(str::to_lowercase),
+            }
+        })
+        .collect();
+    values.map(|v| v.join("|"))
 }
 
 impl PluginAdapter {
@@ -238,9 +266,11 @@ impl PluginAdapter {
         // Platform names are case-normalized to lower case.
         value["platform"] = Value::String(platform.to_owned());
         let descriptor = Descriptor::from_value(&value).map_err(invalid)?;
+        let credential = credential_of(&value["credential_options"], options);
         Ok(Self {
             instance,
             descriptor,
+            credential,
             options: options.to_string(),
             call,
             link: Mutex::default(),
@@ -310,7 +340,10 @@ fn crash_error(err: &Error) -> AdapterError {
 }
 
 /// One polled message: `{id, chat, chat_type, sender, text, thread,
-/// sender_name, callback}` (a button press carries its `callback` data).
+/// sender_name, callback, reply_to, scope, is_bot, mentioned,
+/// replies_to_bot, not_addressed}` (a button press carries its `callback`
+/// data; the flags say how a group message addresses the bot, for the
+/// gateway's mention gating).
 fn inbound(value: &Value) -> Inbound {
     let text = |key: &str| value[key].as_str().map(str::to_owned);
     let chat_type = value["chat_type"]
@@ -327,6 +360,13 @@ fn inbound(value: &Value) -> Inbound {
     inbound.thread_id = text("thread");
     inbound.sender_name = text("sender_name");
     inbound.callback = text("callback");
+    inbound.reply_to = text("reply_to");
+    inbound.scope_id = text("scope");
+    let flag = |key: &str| value[key].as_bool().unwrap_or(false);
+    inbound.is_bot = flag("is_bot");
+    inbound.addressing.mentioned = flag("mentioned");
+    inbound.addressing.replies_to_bot = flag("replies_to_bot");
+    inbound.addressing.not_addressed = flag("not_addressed");
     inbound
 }
 
@@ -534,6 +574,10 @@ impl Adapter for PluginAdapter {
         })
     }
 
+    fn credential_identity(&self) -> Option<String> {
+        self.credential.clone()
+    }
+
     fn verify_http(&self, _request: &HttpRequest) -> bool {
         // The plugin checks its platform's signature in `handle-http`.
         self.descriptor.binds_http
@@ -573,6 +617,25 @@ impl Adapter for PluginAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_credential_identity_comes_from_the_named_options() {
+        let keys = json!(["server", "nickname=prometheus-bot"]);
+        assert_eq!(
+            credential_of(
+                &keys,
+                &json!({"server": "irc.Libera.chat", "nickname": "bot"})
+            )
+            .as_deref(),
+            Some("irc.libera.chat|bot")
+        );
+        assert_eq!(
+            credential_of(&keys, &json!({"server": "irc.libera.chat"})).as_deref(),
+            Some("irc.libera.chat|prometheus-bot")
+        );
+        assert_eq!(credential_of(&keys, &json!({"nickname": "bot"})), None);
+        assert_eq!(credential_of(&Value::Null, &json!({"server": "x"})), None);
+    }
 
     #[test]
     fn the_fifth_crash_within_ten_minutes_is_fatal() {

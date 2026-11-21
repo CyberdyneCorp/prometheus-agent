@@ -1,0 +1,18 @@
+# First-party catalog adapter: SMS through Twilio (spec: platform-adapters,
+# SMS adapter). Inbound SMS arrive as Twilio webhooks on the shared
+# listener (`/p/<profile>/sms/`), replies go out through the Twilio REST
+# API. Configure `[gateway.platforms.sms]` with options `account_sid`,
+# `phone_number` and `public_url` (the exact webhook URL Twilio calls),
+# and `prometheus secrets set TWILIO_AUTH_TOKEN`.
+manifest_version = 1
+id = "sms"
+version = "1.0.0"
+kind = "wasm"
+description = "SMS through Twilio: signed webhooks in, plain-text replies out."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["api.twilio.com"]
+secrets = ["TWILIO_AUTH_TOKEN"]

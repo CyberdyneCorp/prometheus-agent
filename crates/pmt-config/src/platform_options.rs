@@ -200,6 +200,11 @@ pub struct DiscordOptions {
     /// Channels where answers always stay inline.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub no_thread_channels: Vec<String>,
+    /// The actions the Discord tools offer (`fetch_messages`,
+    /// `list_channels`, `add_role`, ...); unset offers every action.
+    /// Others are left out of both schemas and refused at call time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_actions: Option<Vec<DiscordAction>>,
 }
 
 impl Default for DiscordOptions {
@@ -211,6 +216,68 @@ impl Default for DiscordOptions {
             auto_thread: true,
             free_response_auto_thread: false,
             no_thread_channels: Vec::new(),
+            server_actions: None,
+        }
+    }
+}
+
+/// An action of the Discord tools (spec: platform-adapters, Discord
+/// tools); `gateway.platforms.discord.options.server_actions` lists them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscordAction {
+    /// `discord`: recent messages of a channel.
+    FetchMessages,
+    /// `discord`: members of a server matching a name.
+    SearchMembers,
+    /// `discord`: a thread in a channel.
+    CreateThread,
+    /// `discord_admin`: the servers the bot is in.
+    ListGuilds,
+    /// `discord_admin`: one server.
+    ServerInfo,
+    /// `discord_admin`: a server's channels.
+    ListChannels,
+    /// `discord_admin`: one channel.
+    ChannelInfo,
+    /// `discord_admin`: a server's roles.
+    ListRoles,
+    /// `discord_admin`: one member.
+    MemberInfo,
+    /// `discord_admin`: a channel's pinned messages.
+    ListPins,
+    /// `discord_admin`: pins a message.
+    PinMessage,
+    /// `discord_admin`: unpins a message.
+    UnpinMessage,
+    /// `discord_admin`: deletes a message.
+    DeleteMessage,
+    /// `discord_admin`: gives a member a role.
+    AddRole,
+    /// `discord_admin`: takes a role from a member.
+    RemoveRole,
+}
+
+impl DiscordAction {
+    /// Its configuration name.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::FetchMessages => "fetch_messages",
+            Self::SearchMembers => "search_members",
+            Self::CreateThread => "create_thread",
+            Self::ListGuilds => "list_guilds",
+            Self::ServerInfo => "server_info",
+            Self::ListChannels => "list_channels",
+            Self::ChannelInfo => "channel_info",
+            Self::ListRoles => "list_roles",
+            Self::MemberInfo => "member_info",
+            Self::ListPins => "list_pins",
+            Self::PinMessage => "pin_message",
+            Self::UnpinMessage => "unpin_message",
+            Self::DeleteMessage => "delete_message",
+            Self::AddRole => "add_role",
+            Self::RemoveRole => "remove_role",
         }
     }
 }

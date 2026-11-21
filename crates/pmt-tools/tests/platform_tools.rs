@@ -80,7 +80,14 @@ fn registry(gateway: &GatewayConfig, dir: &std::path::Path) -> ToolRegistry {
     platform_tools::contribute(Arc::new(Feishu));
     let builtins = Builtins::standard(Vec::new()).unwrap();
     let mut registry = ToolRegistry::new("default", Arc::new(builtins)).with_platforms(["feishu"]);
-    platform_tools::register(&mut registry, dir, gateway);
+    let secrets: platform_tools::SecretReader = Arc::new(|_| None);
+    platform_tools::register(
+        &mut registry,
+        dir,
+        gateway,
+        &secrets,
+        &pmt_net::http::OutboundPolicy::default(),
+    );
     registry
 }
 

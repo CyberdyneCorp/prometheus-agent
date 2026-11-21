@@ -40,8 +40,12 @@ pub struct Action {
     pub permission: Option<&'static str>,
 }
 
+/// Reads one of the owning profile's secrets (a platform token) when a
+/// tool runs, so a rotated secret is used without a new session.
+pub type SecretReader = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
 /// What a contributor builds its tools from.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Context<'a> {
     /// The owning profile's directory.
     pub profile_dir: &'a Path,
@@ -49,6 +53,10 @@ pub struct Context<'a> {
     pub config: &'a PlatformConfig,
     /// The permissions the bot holds (`None`: unknown, every action shown).
     pub granted: Option<BTreeSet<String>>,
+    /// The profile's secrets.
+    pub secrets: SecretReader,
+    /// How the profile reaches the network (proxy, extra CA).
+    pub network: &'a pmt_net::http::OutboundPolicy,
 }
 
 /// An adapter's tools.
@@ -87,6 +95,8 @@ pub fn register(
     registry: &mut ToolRegistry,
     profile_dir: &Path,
     gateway: &GatewayConfig,
+    secrets: &SecretReader,
+    network: &pmt_net::http::OutboundPolicy,
 ) -> Vec<String> {
     let all: Vec<Arc<dyn Contributor>> = contributors()
         .read()
@@ -102,6 +112,8 @@ pub fn register(
             profile_dir,
             config,
             granted: permissions(profile_dir, &platform, jiff::Timestamp::now()),
+            secrets: Arc::clone(secrets),
+            network,
         };
         let tools = contributor.tools(&context);
         let owner = Owner::Capability(format!("platform:{platform}"));

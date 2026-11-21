@@ -160,6 +160,18 @@ sharing the application sets. Both adapters send buttons for approvals, typing
 indicators, reactions and files, and both read the token from the owning
 profile's secrets only.
 
+The Discord adapter also brings two tools to Discord sessions (and to
+sessions that enable their toolsets): `discord` (`fetch_messages`,
+`search_members`, `create_thread`) and `discord_admin` (`list_guilds`,
+`server_info`, `list_channels`, `channel_info`, `list_roles`,
+`member_info`, `list_pins`, `pin_message`, `unpin_message`,
+`delete_message`, `add_role`, `remove_role`). `options.server_actions`
+lists the actions they may use: the others are left out of both tools and
+refused when called ("action add_role disabled by config"); an unknown
+name fails validation. Without the Server Members intent (checked at
+connect, remembered for a day) `member_info` and `search_members` are
+hidden.
+
 The other first-party adapters:
 
 - **Slack** uses Socket Mode with the app-level token `SLACK_APP_TOKEN`
@@ -486,6 +498,47 @@ sample through the listener and prints the session it started.
 prometheus webhooks subscribe deploys --events push --deliver telegram:123
 prometheus webhooks test deploys
 ```
+
+### Catalog adapters
+
+Other platforms arrive as first-party adapter plugins from the plugin
+catalog (`prometheus plugins install <id>`, then `prometheus plugins
+enable <id>`); each passes the conformance kit against a mock of its
+platform. Adapters that hold a socket (IRC, Home Assistant) run a small
+Node sidecar, the socket bridge, which connects only to the hosts the
+plugin was granted; a server other than the declared default is granted
+with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
+
+- `sms` (Twilio): set `account_sid`, `phone_number` and `public_url` (the
+  exact webhook URL configured in Twilio, which it signs) and the secret
+  `TWILIO_AUTH_TOKEN`. A webhook with a bad `X-Twilio-Signature` is
+  answered 401; messages from the adapter's own number are ignored;
+  replies are plain text (Markdown stripped) of at most 1600 characters,
+  and choices are numbered.
+- `irc`: `server`, `channels`, and optionally `port` (6697 with
+  `use_tls`, the default, else 6667) and `nickname` (`prometheus-bot`);
+  secrets `IRC_SERVER_PASSWORD` and `IRC_NICKSERV_PASSWORD` (NickServ
+  `IDENTIFY`). Channels are groups (a message starting with or naming the
+  nickname mentions the bot), private messages are DMs, and replies are
+  `PRIVMSG` lines of at most 450 bytes. The server and nickname are locked
+  across homes like a bot token.
+- `homeassistant`: `url` (default `http://homeassistant.local:8123`),
+  secret `HASS_TOKEN`, and what to watch: `watch_domains`,
+  `watch_entities` or `watch_all` (off by default; nothing is forwarded,
+  with a warning, until one is set), minus `ignore_entities`, each entity
+  at most once per `cooldown_secs` (30). `event_template` shapes the
+  event text (`{name} ({entity_id}) changed from {old} to {new}`). Replies
+  become persistent notifications; a cron job delivers to
+  `homeassistant:<notify target>`. The platform brings the
+  `homeassistant` toolset: `ha_list_entities`, `ha_get_state`,
+  `ha_list_services` and `ha_call_service`, which refuses the
+  `shell_command`, `command_line`, `python_script`, `pyscript`, `hassio`
+  and `rest_command` domains.
+- `raft` (wake-only): `raft_profile` (and `raft_command`, default `raft`).
+  Its sidecar runs `raft agent bridge` with only the profile and a wake
+  token in its environment; each wake hint becomes a content-free notice
+  and the agent reads and answers with the Raft CLI. A hint carrying
+  `text`, `body`, `content` or `messages` is refused.
 
 ## Who may talk to the agent
 

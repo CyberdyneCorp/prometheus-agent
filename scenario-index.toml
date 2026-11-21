@@ -5339,3 +5339,25 @@ capabilities = [
 
 [platform-adapters."Matrix rooms, invites and clock skew"]
 "Alias in allowlist rejected" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_matrix_room_alias_in_the_allowlist_fails_validation"]
+
+# Group 78.7: the Discord tools (crates/pmt-adapters-discord/tests/tools.rs
+# against a mock REST API).
+[platform-adapters."Discord tools"]
+"Action not allowlisted" = ["crates/pmt-adapters-discord/tests/tools.rs::an_action_outside_server_actions_is_refused_and_hidden", "crates/pmt-config/src/validate_platforms.rs::unknown_discord_server_actions_fail_validation"]
+
+# Group 78.5-78.7 (partial): catalog adapter plugins
+# (plugins/first-party/<platform>) run through the WASM plugin host against
+# mocks of their platforms (crates/prometheus/tests/catalog_<platform>.rs),
+# socket-based ones through the socket bridge sidecar run with the system
+# Node; each also passes the conformance kit there.
+[platform-adapters."SMS adapter"]
+"Bad Twilio signature" = ["crates/prometheus/tests/catalog_sms.rs::a_badly_signed_sms_is_refused_and_admits_nothing"]
+
+[platform-adapters."IRC adapter"]
+"Long reply split" = ["crates/prometheus/tests/catalog_irc.rs::a_long_reply_is_sent_as_privmsg_lines_within_450_bytes"]
+
+[platform-adapters."Raft wake-only adapter"]
+"Content-bearing wake rejected" = ["crates/prometheus/tests/catalog_raft.rs::a_wake_carrying_content_is_rejected_and_injects_nothing"]
+
+[platform-adapters."Home Assistant adapter and toolset"]
+"Dangerous domain blocked" = ["crates/prometheus/tests/catalog_homeassistant.rs::a_service_of_a_blocked_domain_is_refused_naming_it"]

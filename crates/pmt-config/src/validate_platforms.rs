@@ -248,6 +248,25 @@ mod tests {
         assert!(issues("[gateway.platforms.email.options]\nimap_port = 993\n").is_empty());
     }
 
+    /// Spec (platform-adapters, Discord tools): unknown action names in
+    /// `server_actions` fail validation.
+    #[test]
+    fn unknown_discord_server_actions_fail_validation() {
+        let found = issues(
+            "[gateway.platforms.discord.options]\nserver_actions = [\"fetch_messages\", \"nuke_server\"]\n",
+        );
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found[0].starts_with("gateway.platforms.discord.options.server_actions"),
+            "{}",
+            found[0]
+        );
+        assert!(
+            issues("[gateway.platforms.discord.options]\nserver_actions = [\"add_role\"]\n")
+                .is_empty()
+        );
+    }
+
     #[test]
     fn batching_out_of_range_names_the_maximum() {
         let found = issues("[gateway.platforms.telegram.batching]\ndelay_ms = 5000\n");

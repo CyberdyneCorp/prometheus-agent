@@ -34,6 +34,7 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 | `gateway.platforms.discord.options.free_response_channels` | array of string | unset | any | `next_session` | Channels answered without a mention even when `require_mention` is on. |
 | `gateway.platforms.discord.options.no_thread_channels` | array of string | unset | any | `next_session` | Channels where answers always stay inline. |
 | `gateway.platforms.discord.options.require_mention` | boolean | `false` | any | `next_session` | Answer only messages that mention the bot in server channels (direct messages are always answered). |
+| `gateway.platforms.discord.options.server_actions` | array | unset | any | `next_session` | The actions the Discord tools offer (`fetch_messages`, `list_channels`, `add_role`, ...); unset offers every action. Others are left out of both schemas and refused at call time. |
 | `gateway.platforms.discord.options.slash_commands` | boolean | `true` | any | `next_session` | Register the gateway's commands as application commands; `false` on a follower daemon sharing one application. |
 
 ## Slack

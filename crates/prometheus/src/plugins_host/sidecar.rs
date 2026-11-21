@@ -7,7 +7,9 @@
 //! executable the plugin ships. It serves a loopback port chosen per
 //! start (`{port}` in its arguments, `PMT_SIDECAR_PORT`) and is reached
 //! with a bearer token made per start (`PMT_SIDECAR_TOKEN`). Its
-//! environment holds only those, `PATH` and the secrets its `[sidecar]`
+//! environment holds only those, the plugin's granted network
+//! (`PMT_SIDECAR_NETWORK`, comma-separated, for a sidecar that connects on
+//! the plugin's behalf), `PATH` and the secrets its `[sidecar]`
 //! lists that the plugin was granted: never other gateway or provider
 //! secrets. The port and token are published in
 //! `<home>/run/sidecars/<profile>-<plugin>.json` (owner-only) for
@@ -40,6 +42,10 @@ pub(crate) struct Spec {
     pub secrets: Vec<(String, String)>,
     /// The managed Node executable (`runtime = "node"`).
     pub node: Option<PathBuf>,
+    /// The hosts the plugin may reach (`host`, `*.suffix` or `*`, with an
+    /// optional `:port`): a sidecar that opens connections for the plugin
+    /// (the catalog adapters' socket bridge) holds it to the same grant.
+    pub network: Vec<String>,
 }
 
 /// A running sidecar; dropping it stops the process.
@@ -69,6 +75,21 @@ impl Drop for Running {
 
 /// The secrets a sidecar may receive: those its declaration lists that
 /// the plugin's live grant allows.
+/// The network the plugin was granted, as `PMT_SIDECAR_NETWORK` lists it.
+pub(crate) fn granted_network(grants: &CapabilitySet) -> Vec<String> {
+    grants
+        .iter()
+        .filter_map(|capability| match capability {
+            Capability::NetConnect {
+                host,
+                port: Some(port),
+            } => Some(format!("{host}:{port}")),
+            Capability::NetConnect { host, port: None } => Some(host.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
 pub(crate) fn granted_secrets(
     declaration: &SidecarDeclaration,
     grants: &CapabilitySet,
@@ -154,11 +175,16 @@ pub(crate) async fn start(
         .envs(environment(spec, port, &token))
         .stdin(std::process::Stdio::null())
         .kill_on_drop(true);
+    // Its own process group, so what it starts (the Raft CLI bridge) stops
+    // with it.
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
         .spawn()
         .map_err(|e| failed(format!("{}: {e}", program.display())))?;
     let ready = Duration::from_secs(spec.declaration.ready_timeout_secs);
     if let Err(why) = wait_ready(port, ready, &mut child).await {
+        stop_group(child.id());
         let _ = child.kill().await;
         return Err(failed(why));
     }
@@ -181,6 +207,10 @@ fn environment(spec: &Spec, port: u16, token: &str) -> Vec<(String, std::ffi::Os
     let mut env: Vec<(String, std::ffi::OsString)> = vec![
         ("PMT_SIDECAR_PORT".to_owned(), port.to_string().into()),
         ("PMT_SIDECAR_TOKEN".to_owned(), token.into()),
+        (
+            "PMT_SIDECAR_NETWORK".to_owned(),
+            spec.network.join(",").into(),
+        ),
     ];
     if let Some(path) = std::env::var_os("PATH") {
         env.push(("PATH".to_owned(), path));
@@ -229,16 +259,25 @@ fn publish(path: &Path, port: u16, token: &str, pid: Option<u32>) -> std::io::Re
     pmt_core::private_fs::write_atomic(path, record.to_string().as_bytes())
 }
 
-/// Waits for the process: a wanted stop kills it quietly, an exit of its
-/// own is the adapter's `retrying`.
+/// Kills the process group the sidecar `pid` leads (its own children).
+fn stop_group(pid: Option<u32>) {
+    if let Some(pid) = pid {
+        pmt_tools::browser::cleanup::kill_group(pid);
+    }
+}
+
+/// Waits for the process: a wanted stop kills it (and what it started)
+/// quietly, an exit of its own is the adapter's `retrying`.
 async fn watch(
     mut child: tokio::process::Child,
     stopped: oneshot::Receiver<()>,
     link: Arc<dyn AdapterLink>,
     plugin: String,
 ) {
+    let pid = child.id();
     tokio::select! {
         status = child.wait() => {
+            stop_group(pid);
             let status = status.map_or_else(|e| e.to_string(), |s| s.to_string());
             tracing::warn!(plugin, "the adapter's sidecar exited: {status}");
             link.report(AdapterState::Retrying, Some(AdapterError {
@@ -248,6 +287,7 @@ async fn watch(
             }));
         }
         _ = stopped => {
+            stop_group(pid);
             let _ = child.kill().await;
         }
     }
@@ -403,6 +443,7 @@ mod tests {
             },
             secrets: vec![("PHOTON_TOKEN".into(), "t0k".into())],
             node: None,
+            network: vec!["api.photon.example:443".into()],
         }
     }
 
@@ -419,6 +460,7 @@ mod tests {
             [
                 "PMT_SIDECAR_PORT",
                 "PMT_SIDECAR_TOKEN",
+                "PMT_SIDECAR_NETWORK",
                 "PATH",
                 "PHOTON_TOKEN"
             ]
@@ -427,8 +469,16 @@ mod tests {
             secrets: vec!["A".into(), "B".into()],
             ..spec(home.path()).declaration
         };
-        let grants = CapabilitySet::parse(["secrets.read:A"]).unwrap();
+        let grants = CapabilitySet::parse([
+            "secrets.read:A",
+            "net.connect:chat.example.com:443",
+            "net.connect:*.example.org",
+        ])
+        .unwrap();
         assert_eq!(granted_secrets(&declared, &grants), ["A"]);
+        let mut network = granted_network(&grants);
+        network.sort();
+        assert_eq!(network, ["*.example.org", "chat.example.com:443"]);
     }
 
     /// A fake managed Node: `node <npm-cli.js> ci ...` records its
