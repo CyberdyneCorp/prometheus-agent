@@ -122,7 +122,29 @@ fn check_mode_rules(platform: &str, key: &str, table: &PlatformConfig) -> Result
             "{key}.allow_users: '{entry}' is not a whole address; email allowlists name addresses like user@example.org"
         )));
     }
-    Ok(())
+    check_allowlist_ids(platform, key, table)
+}
+
+/// `SimpleX` contacts have no stable name, only the daemon's numeric
+/// contact id: a display name in the allowlist would never match (or,
+/// worse, match whoever renames themselves to it), so it is refused (spec:
+/// platform-adapters, `SimpleX` adapter). Mattermost user ids are checked
+/// by its adapter at start instead: a migrated Hermes allowlist of
+/// usernames must still migrate (and is reported when the adapter starts).
+fn check_allowlist_ids(platform: &str, key: &str, table: &PlatformConfig) -> Result<(), Error> {
+    if platform != "simplex" {
+        return Ok(());
+    }
+    match table
+        .allow_users
+        .iter()
+        .find(|id| id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()))
+    {
+        Some(entry) => Err(invalid(format!(
+            "{key}.allow_users: '{entry}': SimpleX allowlists take numeric contact ids (the daemon's contact numbers), not display names"
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// URLs the adapter sends a bearer token to must use TLS; plain http is
@@ -453,6 +475,22 @@ mod tests {
             "{found}"
         );
         check_toml(&format!("{table}[\"!abc:example.org\"] }}\n")).unwrap();
+    }
+
+    /// Spec: platform-adapters, `SimpleX` adapter, "Display name in
+    /// allowlist".
+    #[test]
+    fn a_simplex_display_name_in_the_allowlist_fails_validation() {
+        let found = message("[gateway.platforms.simplex]\nallow_users = [\"alice\"]\n");
+        assert!(
+            found.contains("allow_users")
+                && found.contains("SimpleX allowlists take numeric contact ids"),
+            "{found}"
+        );
+        check_toml("[gateway.platforms.simplex]\nallow_users = [\"12\", \"7\"]\n").unwrap();
+        // Mattermost ids are its adapter's to check (a migrated list of
+        // usernames still migrates).
+        check_toml("[gateway.platforms.mattermost]\nallow_users = [\"alice\"]\n").unwrap();
     }
 
     #[test]

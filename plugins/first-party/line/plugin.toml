@@ -1,0 +1,21 @@
+# First-party catalog adapter: LINE (spec: platform-adapters, LINE
+# adapter). Messaging API webhooks arrive on the shared listener
+# (`/p/<profile>/line/`); replies use the reply token, then Push. Configure
+# `[gateway.platforms.line]` with option `public_url` (the HTTPS URL of
+# that route: LINE fetches sent media from `<public_url>/media/...`) and
+# optionally `slow_response_secs` (default 45, 0 off), `allowed_users`
+# (U ids), `allowed_groups` (C ids), `allowed_rooms` (R ids);
+# `prometheus secrets set LINE_CHANNEL_SECRET` and
+# `LINE_CHANNEL_ACCESS_TOKEN`.
+manifest_version = 1
+id = "line"
+version = "1.0.0"
+kind = "wasm"
+description = "LINE chats through the Messaging API: signed webhooks in, replies and pushes out."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["api.line.me", "api-data.line.me"]
+secrets = ["LINE_CHANNEL_SECRET", "LINE_CHANNEL_ACCESS_TOKEN"]

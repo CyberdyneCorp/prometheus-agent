@@ -62,7 +62,9 @@ impl Watch {
             return false;
         }
         let domain = entity.split('.').next().unwrap_or_default();
-        self.all || self.entities.iter().any(|e| e == entity) || self.domains.iter().any(|d| d == domain)
+        self.all
+            || self.entities.iter().any(|e| e == entity)
+            || self.domains.iter().any(|d| d == domain)
     }
 }
 
@@ -89,7 +91,10 @@ fn websocket_url(url: &str) -> String {
     let ws = base
         .strip_prefix("https://")
         .map(|rest| format!("wss://{rest}"))
-        .or_else(|| base.strip_prefix("http://").map(|rest| format!("ws://{rest}")))
+        .or_else(|| {
+            base.strip_prefix("http://")
+                .map(|rest| format!("ws://{rest}"))
+        })
         .unwrap_or_else(|| base.to_owned());
     format!("{ws}/api/websocket")
 }
@@ -147,7 +152,12 @@ impl Session {
             return None;
         }
         self.forwarded.insert(entity.to_owned(), now);
-        let state = |which: &str| data[which]["state"].as_str().unwrap_or("unknown").to_owned();
+        let state = |which: &str| {
+            data[which]["state"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_owned()
+        };
         let name = data["new_state"]["attributes"]["friendly_name"]
             .as_str()
             .unwrap_or(entity);
@@ -169,7 +179,8 @@ impl Session {
         let message: Value = serde_json::from_str(frame).unwrap_or(Value::Null);
         match message["type"].as_str() {
             Some("auth_required") => {
-                let token = host::secret(TOKEN).ok_or_else(|| format!("secret {TOKEN} is not set"))?;
+                let token =
+                    host::secret(TOKEN).ok_or_else(|| format!("secret {TOKEN} is not set"))?;
                 self.send_json(&json!({"type": "auth", "access_token": token}))
             }
             Some("auth_ok") => {
@@ -191,7 +202,8 @@ impl Session {
     }
 
     fn api(&self, path: &str, body: &Value) -> Result<(), String> {
-        let token = host::secret(TOKEN).ok_or_else(|| format!("permanent: secret {TOKEN} is not set"))?;
+        let token =
+            host::secret(TOKEN).ok_or_else(|| format!("permanent: secret {TOKEN} is not set"))?;
         let auth = format!("Bearer {token}");
         let url = format!("{}{path}", self.url.trim_end_matches('/'));
         net::json("POST", &url, &[("authorization", &auth)], body).map(|_| ())
@@ -199,7 +211,10 @@ impl Session {
 }
 
 fn valid_target(target: &str) -> bool {
-    !target.is_empty() && target.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+    !target.is_empty()
+        && target
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
 struct Adapter;
@@ -319,7 +334,11 @@ impl Guest for Adapter {
     }
 
     fn chat_info(chat: String) -> Result<String, String> {
-        let name = if chat == EVENTS { "Home Assistant" } else { chat.as_str() };
+        let name = if chat == EVENTS {
+            "Home Assistant"
+        } else {
+            chat.as_str()
+        };
         Ok(message::chat_info(name, "dm"))
     }
 
@@ -331,7 +350,12 @@ impl Guest for Adapter {
     /// with; nobody else writes in its chats.
     fn authorize_sender(inbound: String) -> String {
         let inbound: Value = serde_json::from_str(&inbound).unwrap_or(Value::Null);
-        if inbound["sender"] == SENDER { "allow" } else { "deny" }.to_owned()
+        if inbound["sender"] == SENDER {
+            "allow"
+        } else {
+            "deny"
+        }
+        .to_owned()
     }
 }
 
@@ -343,12 +367,16 @@ mod tests {
 
     #[test]
     fn filters_and_urls() {
-        let watch = Watch::from(&json!({"watch_domains": ["light"], "ignore_entities": ["light.hall"]}));
+        let watch =
+            Watch::from(&json!({"watch_domains": ["light"], "ignore_entities": ["light.hall"]}));
         assert!(watch.matches("light.kitchen"));
         assert!(!watch.matches("light.hall"));
         assert!(!watch.matches("switch.fan"));
         assert!(Watch::from(&json!({})).is_empty());
-        assert_eq!(websocket_url("https://ha.example:8123/"), "wss://ha.example:8123/api/websocket");
+        assert_eq!(
+            websocket_url("https://ha.example:8123/"),
+            "wss://ha.example:8123/api/websocket"
+        );
         assert!(valid_target("mobile_app_phone") && !valid_target("../x"));
     }
 }

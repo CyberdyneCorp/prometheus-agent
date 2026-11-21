@@ -5356,6 +5356,24 @@ capabilities = [
 [platform-adapters."IRC adapter"]
 "Long reply split" = ["crates/prometheus/tests/catalog_irc.rs::a_long_reply_is_sent_as_privmsg_lines_within_450_bytes"]
 
+[platform-adapters."ntfy adapter"]
+"Outgoing-only target" = ["crates/prometheus/tests/catalog_ntfy.rs::without_an_allowlist_ntfy_admits_nothing_but_still_publishes"]
+
+[platform-adapters."Mattermost adapter"]
+"Channel outside allowlist" = ["crates/prometheus/tests/catalog_mattermost.rs::a_mention_outside_the_allowed_channels_is_ignored"]
+
+[platform-adapters."LINE adapter"]
+"Slow answer retrieved" = ["crates/prometheus/tests/catalog_line.rs::a_slow_answer_waits_for_the_button_and_costs_no_push"]
+
+[platform-adapters."DingTalk adapter"]
+"AI card streaming" = ["crates/prometheus/tests/catalog_dingtalk.rs::a_streamed_reply_updates_one_ai_card"]
+
+[platform-adapters."BlueBubbles iMessage adapter"]
+"Webhook registered" = ["crates/prometheus/tests/catalog_bluebubbles.rs::connecting_registers_the_webhook_and_a_clean_stop_removes_it"]
+
+[platform-adapters."SimpleX adapter"]
+"Display name in allowlist" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_simplex_display_name_in_the_allowlist_fails_validation", "crates/prometheus/tests/catalog_simplex.rs::a_display_name_allowlist_stops_the_adapter"]
+
 [platform-adapters."Raft wake-only adapter"]
 "Content-bearing wake rejected" = ["crates/prometheus/tests/catalog_raft.rs::a_wake_carrying_content_is_rejected_and_injects_nothing"]
 

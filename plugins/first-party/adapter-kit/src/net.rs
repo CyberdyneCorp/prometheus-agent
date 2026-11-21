@@ -132,3 +132,30 @@ pub fn classify(response: &Response) -> Result<(), String> {
 fn short(text: &str) -> String {
     text.chars().take(200).collect()
 }
+
+/// A `multipart/form-data` body of text `fields` and one file `(field,
+/// name, mime, bytes)`; the content type to send it with.
+#[must_use]
+pub fn multipart(fields: &[(&str, &str)], file: (&str, &str, &str, &[u8])) -> (String, Vec<u8>) {
+    let boundary = "----prometheus-adapter-kit-boundary-7f3a9c";
+    let mut body = Vec::new();
+    for (name, value) in fields {
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\ncontent-disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"
+            )
+            .as_bytes(),
+        );
+    }
+    let (field, name, mime, bytes) = file;
+    let name = name.replace(['"', '\r', '\n'], "_");
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\ncontent-disposition: form-data; name=\"{field}\"; filename=\"{name}\"\r\ncontent-type: {mime}\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    (format!("multipart/form-data; boundary={boundary}"), body)
+}

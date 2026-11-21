@@ -3,8 +3,10 @@
 // $PMT_SIDECAR_TOKEN) starts the Raft CLI bridge with `POST /start
 // {"profile", "command"}` and drains wake hints with `POST /wakes`. The
 // bridge child gets only PATH, HOME, RAFT_PROFILE and RAFT_CHANNEL_TOKEN
-// (a token made per start) and posts its hints to `/wake` with that token;
-// a hint carrying message content is refused and never queued.
+// (a token made fresh by every `/start`, so a restarted adapter's bridge
+// never shares one with the previous bridge) and posts its hints to
+// `/wake` with that token; a hint carrying message content, or one sent
+// with an earlier start's token, is refused and never queued.
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -13,12 +15,13 @@ import os from "node:os";
 
 const PORT = Number(process.env.PMT_SIDECAR_PORT);
 const TOKEN = process.env.PMT_SIDECAR_TOKEN || "";
-const WAKE_TOKEN = randomBytes(24).toString("hex");
 const CONTENT_FIELDS = new Set(["text", "body", "content", "messages"]);
 const MAX_QUEUED = 500;
 const MAX_BODY = 16384;
 
 let child = null;
+// The token of the current start; none until the first `/start`.
+let wakeToken = null;
 const wakes = [];
 
 // Whether `value` carries a content field at any depth.
@@ -33,6 +36,7 @@ export function carriesContent(value) {
 function startBridge({ profile, command = "raft" }) {
   if (!profile || typeof profile !== "string") return [400, { error: "profile is required" }];
   if (child) child.kill();
+  wakeToken = randomBytes(24).toString("hex");
   const endpoint = `http://127.0.0.1:${PORT}/wake`;
   child = spawn(
     command,
@@ -43,13 +47,16 @@ function startBridge({ profile, command = "raft" }) {
         // The Raft CLI keeps its own login under the user's home.
         HOME: os.userInfo().homedir,
         RAFT_PROFILE: profile,
-        RAFT_CHANNEL_TOKEN: WAKE_TOKEN,
+        RAFT_CHANNEL_TOKEN: wakeToken,
       },
       stdio: ["ignore", "ignore", "inherit"],
     },
   );
   child.on("error", (error) => process.stderr.write(`raft bridge: ${error.message}\n`));
-  child.on("exit", () => (child = null));
+  const started = child;
+  child.on("exit", () => {
+    if (child === started) child = null;
+  });
   return [200, {}];
 }
 
@@ -61,7 +68,7 @@ function answer(res, status, body) {
 
 function wake(req, raw, res) {
   const given = req.headers["x-raft-bridge-token"] || (req.headers.authorization || "").replace(/^Bearer /, "");
-  if (given !== WAKE_TOKEN) return answer(res, 401, { error: "unauthorized" });
+  if (!wakeToken || given !== wakeToken) return answer(res, 401, { error: "unauthorized" });
   let hint;
   try {
     hint = JSON.parse(raw || "{}");

@@ -504,8 +504,8 @@ prometheus webhooks test deploys
 Other platforms arrive as first-party adapter plugins from the plugin
 catalog (`prometheus plugins install <id>`, then `prometheus plugins
 enable <id>`); each passes the conformance kit against a mock of its
-platform. Adapters that hold a socket (IRC, Home Assistant) run a small
-Node sidecar, the socket bridge, which connects only to the hosts the
+platform. Adapters that hold a socket (IRC, Home Assistant, ntfy,
+Mattermost, DingTalk, SimpleX) run a small Node sidecar, the socket bridge, which connects only to the hosts the
 plugin was granted; a server other than the declared default is granted
 with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
 
@@ -535,10 +535,54 @@ with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
   `shell_command`, `command_line`, `python_script`, `pyscript`, `hassio`
   and `rest_command` domains.
 - `raft` (wake-only): `raft_profile` (and `raft_command`, default `raft`).
-  Its sidecar runs `raft agent bridge` with only the profile and a wake
-  token in its environment; each wake hint becomes a content-free notice
-  and the agent reads and answers with the Raft CLI. A hint carrying
-  `text`, `body`, `content` or `messages` is refused.
+  Its sidecar runs `raft agent bridge` with only the profile, a wake token
+  made fresh at every start, and `PATH`/`HOME` in its environment; each
+  wake hint becomes a content-free notice and the agent reads and answers
+  with the Raft CLI. A hint carrying `text`, `body`, `content` or
+  `messages`, or sent with an earlier start's token, is refused. The
+  bridge child is not yet confined by the OS sandbox.
+- `ntfy`: `topic`, and optionally `server_url` (`https://ntfy.sh`),
+  `publish_topic` (the topic) and `markdown`; secret `NTFY_TOKEN` for a
+  protected topic. The topic is the only identity: list it in
+  `allow_users` to admit what is published there. Without any allowlist
+  the adapter only publishes (cron deliveries, `prometheus gateway send`)
+  and subscribes to nothing. A 401 or 404 stops it (`ntfy_unauthorized`,
+  `ntfy_topic_not_found`); replies longer than 4096 characters are cut
+  with a notice.
+- `mattermost`: `server_url`, secret `MATTERMOST_TOKEN`, and optionally
+  `allowed_channels` (checked first: other channels are ignored even when
+  the bot is mentioned), `free_response_channels` (no mention needed) and
+  `reply_mode` (`off` or `thread`). DMs are always answered; `allow_users`
+  takes 26-character user ids. Files go both ways.
+- `line`: `public_url` (the HTTPS URL of the adapter's route; LINE fetches
+  sent media from it) and secrets `LINE_CHANNEL_SECRET` and
+  `LINE_CHANNEL_ACCESS_TOKEN`; `allowed_users`, `allowed_groups` and
+  `allowed_rooms` take `U`, `C` and `R` ids. Replies use the free reply
+  token, then Push. A turn slower than `slow_response_secs` (45; 0 off)
+  spends the token on a "Still thinking" button whose press delivers the
+  answer.
+- `bluebubbles` (iMessage): `server_url`, `public_url` (where the
+  BlueBubbles server reaches the adapter's route) and secret
+  `BLUEBUBBLES_PASSWORD`; the webhook is registered at connect and removed
+  at a clean stop. With the server's Private API, tapbacks, typing and
+  read receipts (`send_read_receipts`, default on) work. Groups can be
+  limited to `mention_patterns` with `require_mention`.
+- `dingtalk`: `client_id` and secret `DINGTALK_CLIENT_SECRET` (Stream
+  Mode, no public URL); `card_template_id` streams replies into one AI
+  Card; groups need an @mention unless listed in `free_response_chats` or
+  matching `mention_patterns`. Replies follow an incoming message (its
+  session webhook) and are cut at 20000 characters.
+- `simplex`: a local `simplex-chat -p 5225` daemon (`ws_url`, default
+  `ws://127.0.0.1:5225`). `allow_users` takes numeric contact ids (a
+  display name fails validation); contact requests are accepted
+  (`auto_accept`) but stay unauthorized until paired; groups are heard
+  only when listed in `allow_groups`. Receiving files needs a grant on the
+  daemon's files folder (`fs.read:<folder>/**`); files are sent by path.
+
+Adapter plugins exchange files with the host as base64 (inbound files the
+plugin downloaded under its own grants, or a local file inside its
+`fs_read` grant), and ask the host for edits, reactions and typing through
+the same `send` call.
 
 ## Who may talk to the agent
 

@@ -129,12 +129,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-bluebubbles"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
 name = "first-party-daytona"
 version = "0.1.0"
 dependencies = [
  "remote-kit",
  "serde_json",
  "wit-bindgen",
+]
+
+[[package]]
+name = "first-party-dingtalk"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
 ]
 
 [[package]]
@@ -154,6 +170,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-line"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
+name = "first-party-mattermost"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
 name = "first-party-modal"
 version = "0.1.0"
 dependencies = [
@@ -163,7 +195,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-ntfy"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
 name = "first-party-raft"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
+name = "first-party-simplex"
 version = "0.1.0"
 dependencies = [
  "adapter-kit",

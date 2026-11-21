@@ -1,7 +1,7 @@
 //! The `raft` wake-only catalog adapter plugin (spec: platform-adapters,
 //! Raft wake-only adapter; Catalog adapter set): its sidecar (run with the
-//! system Node) starts a fake Raft CLI bridge with only the Raft profile
-//! and a per-start wake token in its environment; wake hints become
+//! system Node) starts a fake Raft CLI bridge with only the Raft profile,
+//! a per-start wake token, `PATH` and `HOME` in its environment; wake hints become
 //! content-free notices, and a hint carrying content is refused.
 
 #![cfg(all(unix, feature = "gateway"))]
@@ -165,7 +165,8 @@ async fn a_wake_carrying_content_is_rejected_and_injects_nothing() {
     adapter.connect(link.dyn_link()).await.unwrap();
     let (_, _, profile) = raft.bridge();
     assert_eq!(profile, "kit-profile");
-    // The bridge child holds only the Raft profile and its wake token.
+    // The bridge child holds only the Raft profile, its wake token and the
+    // PATH and HOME the CLI needs.
     let names = std::fs::read_to_string(dir.path().join("raft-seen.env")).unwrap();
     let names: Vec<&str> = names
         .split_whitespace()
@@ -189,5 +190,41 @@ async fn a_wake_carrying_content_is_rejected_and_injects_nothing() {
     assert_eq!(admitted.len(), 1, "{admitted:?}");
     assert_eq!(admitted[0].text, format!("{NOTICE} (wake e3)"));
     assert!(!admitted[0].text.contains("secret"));
+    adapter.disconnect().await;
+}
+
+/// Every start of the bridge gets a fresh wake token: an adapter restarted
+/// while its sidecar keeps running hands the new bridge a new token, and
+/// the previous bridge's token is refused.
+#[tokio::test(flavor = "multi_thread")]
+async fn each_bridge_start_gets_a_fresh_wake_token() {
+    let dir = catalog::scratch();
+    let (_sidecar, raft, options, hosts) = setup(dir.path());
+    let (kit, _root) = catalog::install("raft", &options, &hosts);
+    let adapter = kit.adapter().unwrap();
+    adapter
+        .connect(catalog::Link::new().dyn_link())
+        .await
+        .unwrap();
+    let (first, endpoint, _) = raft.bridge();
+    adapter.disconnect().await;
+    std::fs::remove_file(&raft.seen).unwrap();
+    let link = catalog::Link::new();
+    adapter.connect(link.dyn_link()).await.unwrap();
+    let (second, _, _) = raft.bridge();
+    assert_ne!(first, second, "the wake token was reused across starts");
+    let stale = catalog::post(
+        &endpoint,
+        &[
+            ("content-type", "application/json"),
+            ("x-raft-bridge-token", &first),
+        ],
+        br#"{"eventId":"old"}"#,
+    );
+    assert_eq!(stale.0, 401);
+    assert_eq!(raft.wake(&json!({"eventId": "new"})), 202);
+    let admitted = link.wait_for(1).await;
+    assert_eq!(admitted.len(), 1, "{admitted:?}");
+    assert!(admitted[0].text.ends_with("(wake new)"));
     adapter.disconnect().await;
 }

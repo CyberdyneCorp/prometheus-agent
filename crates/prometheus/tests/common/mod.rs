@@ -342,6 +342,8 @@ pub mod api;
 pub mod bots;
 #[cfg(feature = "gateway")]
 pub mod catalog;
+#[cfg(feature = "gateway")]
+pub mod catalog_ws;
 #[cfg(all(unix, feature = "dashboard"))]
 pub mod connections;
 #[cfg(feature = "dashboard")]

@@ -17,7 +17,14 @@ use serde_json::{Value, json};
 const WAKE_NOTICE: &str = "Raft wake hint received: new Raft messages may be pending. Read and answer them with the Raft CLI (run `raft manual get raft-cli-overview` first if you have not this session).";
 const CHAT: &str = "raft";
 const CONTENT_FIELDS: [&str; 4] = ["text", "body", "content", "messages"];
-const ID_FIELDS: [&str; 6] = ["eventId", "attemptId", "messageId", "delivery_id", "wake_id", "id"];
+const ID_FIELDS: [&str; 6] = [
+    "eventId",
+    "attemptId",
+    "messageId",
+    "delivery_id",
+    "wake_id",
+    "id",
+];
 
 struct Sidecar {
     url: String,
@@ -53,7 +60,12 @@ fn wake_id(hint: &Value) -> Option<String> {
 impl Sidecar {
     fn call(&self, path: &str, body: &Value) -> Result<Value, String> {
         let auth = format!("Bearer {}", self.token);
-        net::json("POST", &format!("{}{path}", self.url), &[("authorization", &auth)], body)
+        net::json(
+            "POST",
+            &format!("{}{path}", self.url),
+            &[("authorization", &auth)],
+            body,
+        )
     }
 }
 
@@ -100,7 +112,10 @@ impl Guest for Adapter {
             .ok_or("the Raft wake sidecar is not running (options.sidecar missing)")?;
         let sidecar = Sidecar {
             url: url.trim_end_matches('/').to_owned(),
-            token: options["sidecar"]["token"].as_str().unwrap_or_default().to_owned(),
+            token: options["sidecar"]["token"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned(),
             seq: host::load("seq").and_then(|v| v.as_u64()).unwrap_or(0),
         };
         let command = options["raft_command"].as_str().unwrap_or("raft");
@@ -152,7 +167,12 @@ impl Guest for Adapter {
     /// token is checked there).
     fn authorize_sender(inbound: String) -> String {
         let inbound: Value = serde_json::from_str(&inbound).unwrap_or(Value::Null);
-        if inbound["sender"] == CHAT { "allow" } else { "deny" }.to_owned()
+        if inbound["sender"] == CHAT {
+            "allow"
+        } else {
+            "deny"
+        }
+        .to_owned()
     }
 }
 

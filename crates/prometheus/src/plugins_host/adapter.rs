@@ -10,7 +10,9 @@
 //! Inbound messages are polled; a trap or timeout of a plugin call puts
 //! only this adapter into `retrying` (the gateway reconnects it with
 //! backoff, which instantiates the plugin afresh), and five crashes within
-//! ten minutes make it `fatal`.
+//! ten minutes make it `fatal`; a poll error `fatal: <code>: ..` makes it
+//! `fatal` at once. Files cross the boundary as base64 (`adapter_media`);
+//! edits, deletes, reactions and typing go through `send` with an `op`.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -21,13 +23,14 @@ use pmt_core::error::{Error, codes};
 use pmt_gateway::messaging::probe::Reach;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
-    ChatInfo, ChatType, Descriptor, HttpRequest, HttpResponse, Inbound, Outgoing, SendError,
-    SenderVerdict, Sent,
+    Attachment, ChatInfo, ChatType, Descriptor, HttpRequest, HttpResponse, Inbound, MediaStream,
+    Outgoing, SendError, SenderVerdict, Sent,
 };
 use pmt_plugins::host::platform_adapter_world as wit;
 use pmt_plugins::host::{CallInfo, Instance};
 use serde_json::{Value, json};
 
+use super::adapter_media::{self, Inbox};
 use super::sidecar;
 
 /// How often inbound messages are polled.
@@ -125,11 +128,26 @@ pub fn factory() -> AdapterFactory {
                 )
                 .with_hint("prometheus plugins list shows why an adapter plugin did not load")
             })?;
-        let options = Value::Object(setup.config.options.clone().into_iter().collect());
+        let mut options = Value::Object(setup.config.options.clone().into_iter().collect());
+        options["access"] = access_of(&setup.config);
         let mut adapter =
             PluginAdapter::read(Arc::clone(&plugin.instance), &setup.platform, &options)?;
         adapter.sidecar = sidecar_of(setup, plugin);
+        adapter.media = Arc::new(Inbox::granted(Arc::clone(&plugin.grants)));
         Ok(Arc::new(adapter) as Arc<dyn Adapter>)
+    })
+}
+
+/// The platform table's allowlists, handed to the plugin as
+/// `options.access` (`{allow_users, allow_chats, allow_all}`): the gateway
+/// still enforces them, but some platforms behave differently without one
+/// (ntfy then only publishes) or take ids of one shape only (Mattermost
+/// user ids, `SimpleX` contact ids), which the plugin checks at start.
+fn access_of(config: &pmt_config::schema::PlatformConfig) -> Value {
+    json!({
+        "allow_users": config.allow_users,
+        "allow_chats": config.allow_chats,
+        "allow_all": config.allow_all,
     })
 }
 
@@ -214,6 +232,8 @@ struct PluginAdapter {
     link: Mutex<Option<Arc<dyn AdapterLink>>>,
     poller: Mutex<Option<tokio::task::JoinHandle<()>>>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
+    /// Inbound files the plugin handed over, until the gateway opens them.
+    media: Arc<Inbox>,
     sidecar: Option<Sidecar>,
     /// The credential the gateway locks across homes (spec: Credential
     /// locks across homes): the values of the options the descriptor's
@@ -276,6 +296,7 @@ impl PluginAdapter {
             link: Mutex::default(),
             poller: Mutex::default(),
             crashes: Arc::default(),
+            media: Arc::default(),
             sidecar: None,
         })
     }
@@ -290,6 +311,29 @@ impl PluginAdapter {
         pmt_core::spawn::blocking(move || f(&instance, &call))
             .await
             .map_err(|e| Error::new(&codes::PLUGINS_CALL, format!("plugin call: {e}")))?
+    }
+
+    /// Edits, deletes, reactions and typing travel through the plugin's
+    /// `send` as JSON with an `op` (`edit`, `delete`, `react`, `typing`),
+    /// asked only of a plugin whose descriptor declares the capability.
+    fn operation(&self, declared: bool, op: Value) -> AdapterFuture<'_, Result<(), SendError>> {
+        Box::pin(async move {
+            if !declared {
+                return Err(SendError::Unsupported);
+            }
+            let body = op.to_string();
+            match self
+                .blocking(move |instance, call| instance.adapter_send(call, &body))
+                .await
+            {
+                Ok(Ok(_)) => Ok(()),
+                Ok(Err(why)) => Err(send_error(why)),
+                Err(err) => {
+                    self.crashed(&err);
+                    Err(SendError::Network(err.message().to_owned()))
+                }
+            }
+        })
     }
 
     fn stop_sidecar(&self) {
@@ -341,10 +385,11 @@ fn crash_error(err: &Error) -> AdapterError {
 
 /// One polled message: `{id, chat, chat_type, sender, text, thread,
 /// sender_name, callback, reply_to, scope, is_bot, mentioned,
-/// replies_to_bot, not_addressed}` (a button press carries its `callback`
-/// data; the flags say how a group message addresses the bot, for the
-/// gateway's mention gating).
-fn inbound(value: &Value) -> Inbound {
+/// replies_to_bot, not_addressed, attachments}` (a button press carries
+/// its `callback` data; the flags say how a group message addresses the
+/// bot, for the gateway's mention gating; attachments as
+/// [`Inbox::attachments`] reads them).
+fn inbound(value: &Value, media: &Inbox) -> Inbound {
     let text = |key: &str| value[key].as_str().map(str::to_owned);
     let chat_type = value["chat_type"]
         .as_str()
@@ -367,6 +412,7 @@ fn inbound(value: &Value) -> Inbound {
     inbound.addressing.mentioned = flag("mentioned");
     inbound.addressing.replies_to_bot = flag("replies_to_bot");
     inbound.addressing.not_addressed = flag("not_addressed");
+    inbound.attachments = media.attachments(value);
     inbound
 }
 
@@ -376,6 +422,7 @@ async fn poll(
     call: CallInfo,
     link: Arc<dyn AdapterLink>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
+    media: Arc<Inbox>,
 ) {
     loop {
         tokio::time::sleep(POLL_EVERY).await;
@@ -384,12 +431,8 @@ async fn poll(
         let messages = match polled {
             Ok(Ok(Ok(text))) => text,
             Ok(Ok(Err(why))) => {
-                let error = AdapterError {
-                    retryable: true,
-                    code: "plugin_poll".to_owned(),
-                    message: why,
-                };
-                link.report(AdapterState::Retrying, Some(error));
+                let (state, error) = adapter_media::poll_failure(why);
+                link.report(state, Some(error));
                 return;
             }
             Ok(Err(err)) => {
@@ -408,7 +451,7 @@ async fn poll(
             Vec::new()
         });
         for value in &values {
-            link.submit(inbound(value)).await;
+            link.submit(inbound(value, &media)).await;
         }
     }
 }
@@ -478,6 +521,7 @@ impl Adapter for PluginAdapter {
                 self.call.clone(),
                 link,
                 Arc::clone(&self.crashes),
+                Arc::clone(&self.media),
             ));
             if let Some(old) = lock(&self.poller).replace(task) {
                 old.abort();
@@ -500,15 +544,19 @@ impl Adapter for PluginAdapter {
     }
 
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
-        let body = json!({
+        let mut body = json!({
             "chat": message.chat_id,
             "thread": message.thread_id,
             "reply_to": message.reply_to,
             "text": message.text,
             "buttons": message.buttons,
-        })
-        .to_string();
+        });
+        let attachments = message.attachments.clone();
         Box::pin(async move {
+            if !attachments.is_empty() {
+                body["attachments"] = Value::Array(adapter_media::outgoing(&attachments).await?);
+            }
+            let body = body.to_string();
             match self
                 .blocking(move |instance, call| instance.adapter_send(call, &body))
                 .await
@@ -523,6 +571,56 @@ impl Adapter for PluginAdapter {
                 }
             }
         })
+    }
+
+    fn edit<'a>(
+        &'a self,
+        message_id: &'a str,
+        message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op = json!({
+            "op": "edit",
+            "message_id": message_id,
+            "chat": message.chat_id,
+            "thread": message.thread_id,
+            "text": message.text,
+            "buttons": message.buttons,
+        });
+        self.operation(self.descriptor.supports_edit, op)
+    }
+
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op =
+            json!({"op": "delete", "chat": chat_id, "thread": thread_id, "message_id": message_id});
+        self.operation(self.descriptor.supports_delete, op)
+    }
+
+    fn react<'a>(
+        &'a self,
+        reaction: &'a pmt_gateway::messaging::Reaction,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op = json!({
+            "op": "react",
+            "chat": reaction.chat_id,
+            "message_id": reaction.message_id,
+            "emoji": reaction.emoji,
+            "remove": reaction.remove,
+        });
+        self.operation(self.descriptor.supports_reactions, op)
+    }
+
+    fn send_typing<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op = json!({"op": "typing", "chat": chat_id, "thread": thread_id});
+        self.operation(self.descriptor.supports_typing, op)
     }
 
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
@@ -549,6 +647,13 @@ impl Adapter for PluginAdapter {
                     .unwrap_or(ChatType::Dm),
             })
         })
+    }
+
+    fn open_media<'a>(
+        &'a self,
+        attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        Box::pin(async move { self.media.open(attachment) })
     }
 
     fn authorize_sender<'a>(

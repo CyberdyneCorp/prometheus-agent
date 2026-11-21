@@ -115,6 +115,12 @@ impl PluginKit {
         &self.setup
     }
 
+    /// Sets the platform table's `allow_users` for adapters built from now
+    /// on (the plugin sees it as `options.access`).
+    pub fn allow_users(&mut self, users: &[&str]) {
+        self.setup.config.allow_users = users.iter().map(|u| (*u).to_owned()).collect();
+    }
+
     /// Builds the adapter through the gateway's plugin adapter factory.
     ///
     /// # Errors

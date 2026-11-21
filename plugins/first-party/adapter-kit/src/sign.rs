@@ -34,6 +34,17 @@ pub fn same(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
+/// Decodes standard base64.
+///
+/// # Errors
+///
+/// Text that is not base64.
+pub fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
+    base64::engine::general_purpose::STANDARD
+        .decode(text.trim())
+        .map_err(|e| e.to_string())
+}
+
 /// Standard base64.
 #[must_use]
 pub fn base64(data: &[u8]) -> String {

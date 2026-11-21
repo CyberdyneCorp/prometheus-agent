@@ -40,13 +40,16 @@ fn links(line: &str) -> String {
 }
 
 /// Splits `text` into pieces of at most `max` bytes, breaking at a
-/// newline, else a space, else a character boundary; newlines between
-/// pieces are dropped.
+/// newline, else a space, else a character boundary; line breaks between
+/// pieces are dropped. A bare carriage return is a line break too and NUL
+/// is removed, so no piece holds a byte a line protocol (IRC) would read
+/// as the end of a line.
 #[must_use]
 pub fn split_bytes(text: &str, max: usize) -> Vec<String> {
     let mut pieces = Vec::new();
-    for line in text.split('\n') {
-        let mut rest = line.trim_end_matches('\r');
+    let text = text.replace('\0', "");
+    for line in text.split(['\n', '\r']) {
+        let mut rest = line;
         while rest.len() > max {
             let mut cut = max;
             while !rest.is_char_boundary(cut) {
@@ -157,6 +160,12 @@ mod tests {
         assert_eq!(pieces.concat().replace(' ', ""), text.replace(' ', ""));
         let multibyte = "é".repeat(400);
         assert!(split_bytes(&multibyte, 450).iter().all(|p| p.len() <= 450));
+    }
+
+    #[test]
+    fn byte_pieces_hold_no_carriage_return_or_nul() {
+        let pieces = split_bytes("hi\rQUIT :x\r\nnext\0line", 450);
+        assert_eq!(pieces, vec!["hi", "QUIT :x", "nextline"]);
     }
 
     #[test]

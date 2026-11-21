@@ -51,7 +51,14 @@ fn the_bridge_needs_its_token_and_connects_only_to_granted_hosts() {
 fn every_socket_adapter_ships_the_same_bridge() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/first-party");
     let canonical = root.join("adapter-kit/bridge");
-    for plugin in ["irc", "homeassistant"] {
+    for plugin in [
+        "irc",
+        "homeassistant",
+        "ntfy",
+        "mattermost",
+        "simplex",
+        "dingtalk",
+    ] {
         for file in ["bridge.mjs", "package.json", "package-lock.json"] {
             let shipped = std::fs::read(root.join(plugin).join("sidecar").join(file)).unwrap();
             let source = std::fs::read(canonical.join(file)).unwrap();

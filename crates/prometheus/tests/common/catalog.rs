@@ -35,6 +35,17 @@ pub fn scratch() -> tempfile::TempDir {
 /// to `<parent>/<name>`; with `without_sidecar` its `[sidecar]` is left
 /// out (the test runs the bridge itself and passes `options.sidecar`).
 pub fn plugin(name: &str, parent: &Path, without_sidecar: bool) -> PathBuf {
+    plugin_with(name, parent, without_sidecar, |_| {})
+}
+
+/// [`plugin`] with its manifest changed by `edit` first (a test grants a
+/// folder the plugin reads, say).
+pub fn plugin_with(
+    name: &str,
+    parent: &Path,
+    without_sidecar: bool,
+    edit: impl FnOnce(&mut toml::Table),
+) -> PathBuf {
     let source = repo().join("plugins/first-party").join(name);
     let dir = parent.join(name);
     std::fs::create_dir_all(&dir).unwrap();
@@ -47,6 +58,7 @@ pub fn plugin(name: &str, parent: &Path, without_sidecar: bool) -> PathBuf {
     } else if source.join("sidecar").is_dir() {
         pmt_core::private_fs::copy_tree(&source.join("sidecar"), &dir.join("sidecar")).unwrap();
     }
+    edit(&mut manifest);
     std::fs::write(dir.join("plugin.toml"), manifest.to_string()).unwrap();
     pmt_plugins::testkit::install(&format!("first-party-{name}"), &dir);
     dir
@@ -55,8 +67,18 @@ pub fn plugin(name: &str, parent: &Path, without_sidecar: bool) -> PathBuf {
 /// The plugin `name` installed in a fresh home with `options` and `hosts`
 /// granted; the home lives as long as the returned guard.
 pub fn install(name: &str, options: &Value, hosts: &[String]) -> (PluginKit, tempfile::TempDir) {
+    install_with(name, options, hosts, |_| {})
+}
+
+/// [`install`] with the manifest changed by `edit` first.
+pub fn install_with(
+    name: &str,
+    options: &Value,
+    hosts: &[String],
+    edit: impl FnOnce(&mut toml::Table),
+) -> (PluginKit, tempfile::TempDir) {
     let root = scratch();
-    let dir = plugin(name, root.path(), true);
+    let dir = plugin_with(name, root.path(), true, edit);
     let home = root.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
     let kit = PluginKit::install(&home, &dir, options, hosts).unwrap();

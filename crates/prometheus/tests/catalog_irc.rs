@@ -278,3 +278,52 @@ async fn a_long_reply_is_sent_as_privmsg_lines_within_450_bytes() {
     assert!(lines.iter().all(|l| l.len() <= 450), "{lines:?}");
     adapter.disconnect().await;
 }
+
+/// A carriage return or NUL in the model's text (or in a chat name) never
+/// ends the protocol line early: a server that ends lines on a bare CR
+/// would otherwise run the rest as a raw command.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_carriage_return_in_a_reply_starts_no_second_command() {
+    let server = Server::start();
+    let bridge = bridge_for(&server);
+    let (kit, _root) = catalog::install(
+        "irc",
+        &server.options(&bridge),
+        &[bridge.base.trim_start_matches("http://").to_owned()],
+    );
+    let adapter = kit.adapter().unwrap();
+    adapter
+        .connect(catalog::Link::new().dyn_link())
+        .await
+        .unwrap();
+    server.wait(|s| s.joined.contains(&"#kit".to_owned()).then_some(()));
+    let mut sent = false;
+    for _ in 0..100 {
+        if adapter
+            .send(&Outgoing::text("#kit", None, "hi\rQUIT :x\0"))
+            .await
+            .is_ok()
+        {
+            sent = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(sent, "the adapter never registered");
+    adapter
+        .send(&Outgoing::text("#kit\rJOIN #evil", None, "x"))
+        .await
+        .unwrap();
+    let raw = server.wait(|s| (s.sent.len() >= 3).then(|| s.raw.clone()));
+    assert!(
+        raw.iter().all(|l| !l.contains(['\r', '\0'])),
+        "a protocol line held a CR or NUL: {raw:?}"
+    );
+    assert!(
+        raw.iter()
+            .all(|l| l.starts_with("PRIVMSG ") || !l.contains("QUIT :x")),
+        "{raw:?}"
+    );
+    assert!(!raw.iter().any(|l| l.starts_with("JOIN #evil")), "{raw:?}");
+    adapter.disconnect().await;
+}

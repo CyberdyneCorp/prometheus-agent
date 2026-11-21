@@ -88,9 +88,19 @@ fn addressed(text: &str, nickname: &str) -> (String, bool) {
     (text.to_owned(), named)
 }
 
+/// `line` without CR, LF and NUL: a server ends a line at either CR or
+/// LF, so one left inside (from the model's text or a chat name) would
+/// start a second, raw command.
+fn one_line(line: &str) -> String {
+    line.chars()
+        .filter(|c| !matches!(c, '\r' | '\n' | '\0'))
+        .collect()
+}
+
 impl Irc {
     fn write(&self, line: &str) -> Result<(), String> {
-        self.bridge.send(&self.connection, &format!("{line}\r\n"))
+        self.bridge
+            .send(&self.connection, &format!("{}\r\n", one_line(line)))
     }
 
     fn next_id(&mut self) -> String {
@@ -186,8 +196,13 @@ impl Guest for Adapter {
             .filter(|s| !s.is_empty())
             .ok_or("options.server is required")?;
         let tls = options["use_tls"].as_bool().unwrap_or(true);
-        let port = options["port"].as_u64().unwrap_or(if tls { 6697 } else { 6667 });
-        let nickname = options["nickname"].as_str().unwrap_or("prometheus-bot").to_owned();
+        let port = options["port"]
+            .as_u64()
+            .unwrap_or(if tls { 6697 } else { 6667 });
+        let nickname = options["nickname"]
+            .as_str()
+            .unwrap_or("prometheus-bot")
+            .to_owned();
         let bridge = Bridge::from_options(&options)?;
         let mut slot = IRC.lock().map_err(|e| e.to_string())?;
         if let Some(old) = slot.take() {
@@ -283,8 +298,16 @@ mod tests {
     }
 
     #[test]
+    fn a_written_line_never_holds_a_line_break() {
+        assert_eq!(one_line("PRIVMSG #c\r\nQUIT :x\0"), "PRIVMSG #cQUIT :x");
+    }
+
+    #[test]
     fn a_leading_nick_address_is_a_mention_and_is_stripped() {
-        assert_eq!(addressed("pbot: status?", "PBot"), ("status?".to_owned(), true));
+        assert_eq!(
+            addressed("pbot: status?", "PBot"),
+            ("status?".to_owned(), true)
+        );
         assert_eq!(addressed("ask pbot later", "pbot").1, true);
         assert_eq!(addressed("pbotty", "pbot").1, false);
     }
