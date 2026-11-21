@@ -261,6 +261,13 @@ jobs:
         if: runner.os == 'Windows' && !cancelled()
         run: cargo test -p prometheus --lib --locked --target "${{ matrix.target }}" -- "daemon_cmd::support_matrix::"
 
+      # Computer use on Windows (computer-use, driver runtime management and
+      # availability): the module's unit tests, including the autostart task
+      # that is really registered with schtasks, queried and removed.
+      - name: Windows computer use tests
+        if: runner.os == 'Windows' && !cancelled()
+        run: cargo test -p prometheus --lib --locked --target "${{ matrix.target }}" -- "computer_use::"
+
       # A real local browser inside the AppContainer (execution-environments,
       # Local browser isolation): the pinned chrome-headless-shell runtime
       # (downloaded per job), DevTools over inherited pipe handles, every
