@@ -373,7 +373,8 @@ pub struct WebhookOptions {
     /// Enterprise: `https://<host>/api/v3`).
     pub github_api_url: String,
     /// The `https://` origin that reaches this daemon's HTTP listener from
-    /// outside (a reverse proxy or tunnel): MCP servers deliver events to
+    /// outside (a reverse proxy or tunnel; plain `http://` is refused).
+    /// Required for MCP event subscriptions, which servers deliver to
     /// `<public_url>/p/<profile>/webhook/<route>`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_url: Option<String>,

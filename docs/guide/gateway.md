@@ -296,6 +296,56 @@ prompt = "ALERT {alert.name} on {alert.host}"
 filters = { equals = { path = "payload.alert.severity", value = "critical" } }
 ```
 
+**Coalescing.** A burst of events about one item (a pull request pushed
+five times in a minute) should run one turn, not five. A route with a
+`coalesce` block holds events whose `key` resolves to the same value:
+`key` is a payload dot path (`pull_request.number`, optionally prefixed
+`payload.`) or a template (`{repository.full_name}#{number}`). Each newer
+event replaces the pending one and restarts the quiet window of
+`window_secs` (30); the turn runs on the newest event when the window
+elapses, or `max_wait_secs` (300) after the group's first event, so a
+steady stream cannot starve it. The sender gets 202
+`{"status":"coalesced",...}` at once (after the duplicate check, so a
+redelivery is still answered `duplicate`), and the turn's input ends with
+a note of how many earlier events it superseded. An event whose key does
+not resolve runs at once. Pending groups are flushed, not dropped, when
+the adapter stops. Coalescing applies only to routes that run a turn:
+with `deliver_only` or `cron_job` it fails validation, as does an empty
+`key`.
+
+```toml
+[gateway.platforms.webhook.routes.pr]
+secret_secret = "GITHUB_WEBHOOK_SECRET"
+events = ["pull_request"]
+prompt = "Review PR #{pull_request.number}: {pull_request.title}"
+coalesce = { key = "pull_request.number", window_secs = 60 }
+```
+
+**Public URL.** `gateway.platforms.webhook.options.public_url` is the
+`https://` origin that reaches the daemon's listener from outside (a
+reverse proxy or tunnel in front of `gateway.http.listen`); a route's
+public address is `<public_url>/p/<profile>/webhook/<route>`. It is
+required for [MCP event subscriptions](mcp.md#events), which refuse a
+plain `http://` origin.
+
+```toml
+[gateway.platforms.webhook]
+options = { public_url = "https://hooks.example.com" }
+```
+
+**MCP events.** A route created by an MCP server's `subscribe_event` (see
+[MCP servers](mcp.md#events)) is kept in `<profile>/webhooks.toml` with an
+`mcp_event` block and accepts only Standard Webhooks signatures with its
+own generated secret. A body with a top-level `type` is a control
+envelope answered without a turn: `verification` echoes its challenge,
+`terminated` removes the route and tells its `deliver` target, `gap`
+resumes from the fresh cursor it carries, and an unknown type is
+acknowledged. Any other body is an event occurrence: its replay cursor is
+remembered, a retry of the same `eventId` is answered `duplicate`, and it
+runs through the route's normal pipeline. The event's `data` is inserted
+into the prompt after the template is rendered, as JSON cut at 32,000
+characters, so text inside it is never read as a placeholder.
+
 `prometheus plugins test-adapter <platform>` runs the adapter conformance
 kit (connect and reconnect, descriptor, normalization, deduplication,
 splitting at the declared limit, retry classification, cards and every

@@ -97,6 +97,14 @@ fn check_mode_rules(platform: &str, key: &str, table: &PlatformConfig) -> Result
         }
     }
     check_credential_urls(platform, key, table)?;
+    if platform == "webhook"
+        && let Some(url) = options::<WebhookOptions>(platform, table).public_url
+        && !url.starts_with("https://")
+    {
+        return Err(invalid(format!(
+            "{key}.options.public_url: '{url}' must be an https:// origin (MCP servers deliver events over HTTPS only)"
+        )));
+    }
     if platform == "email"
         && let Some(entry) = table.allow_users.iter().find(|u| !whole_address(u))
     {
@@ -532,17 +540,46 @@ mod tests {
 
     #[test]
     fn coalescing_with_deliver_only_or_cron_job_fails_validation() {
-        for extra in [
-            "deliver_only = true\ndeliver = \"telegram\"\n",
-            "cron_job = \"sweeper\"\n",
+        for (extra, field) in [
+            (
+                "deliver_only = true\ndeliver = \"telegram\"\n",
+                "deliver_only",
+            ),
+            ("cron_job = \"sweeper\"\n", "cron_job"),
         ] {
-            let err = check_toml(&format!(
+            let found = message(&format!(
                 "[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n{extra}[gateway.platforms.webhook.routes.pr.coalesce]\nkey = \"payload.ref\"\n"
-            ))
-            .unwrap_err();
-            assert!(err.message().contains("coalesce"), "{}", err.message());
+            ));
+            assert!(
+                found.contains("routes.pr.coalesce")
+                    && found.contains(&format!("not with {field}")),
+                "{found}"
+            );
         }
         check_toml("[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n[gateway.platforms.webhook.routes.pr.coalesce]\nkey = \"ref\"\n").unwrap();
+    }
+
+    #[test]
+    fn the_webhook_public_url_is_https_only() {
+        let found = message(
+            "[gateway.platforms.webhook]\noptions = { public_url = \"http://hooks.example.com\" }\n",
+        );
+        assert!(
+            found.contains("options.public_url") && found.contains("https://"),
+            "{found}"
+        );
+        check_toml("[gateway.platforms.webhook]\noptions = { public_url = \"https://hooks.example.com\" }\n").unwrap();
+    }
+
+    #[test]
+    fn a_coalesce_block_needs_a_key_and_positive_windows() {
+        let route = "[gateway.platforms.webhook.routes.pr]\nsecret_secret = \"S\"\n[gateway.platforms.webhook.routes.pr.coalesce]\n";
+        for key in ["\"\"", "\"   \""] {
+            let found = message(&format!("{route}key = {key}\n"));
+            assert!(found.contains("routes.pr.coalesce.key"), "{found}");
+        }
+        let found = message(&format!("{route}key = \"ref\"\nwindow_secs = 0\n"));
+        assert!(found.contains("at least 1"), "{found}");
     }
 
     #[test]
