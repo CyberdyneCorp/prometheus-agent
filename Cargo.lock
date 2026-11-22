@@ -3058,10 +3058,13 @@ dependencies = [
  "pmt-gateway",
  "pmt-net",
  "pmt-store",
+ "rcgen",
  "reqwest",
+ "rustls",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tracing",
 ]

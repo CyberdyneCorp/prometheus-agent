@@ -144,6 +144,35 @@ not readable: <path>` otherwise). `gateway.media.max_inbound_bytes`
 (128 MB) still applies: a larger file is refused with the effective
 maximum named.
 
+Where `api.telegram.org` does not connect (blocked DNS or addresses), the
+adapter retries on fallback addresses: those DNS-over-HTTPS discovery
+finds (asked once per connection, given up on after
+`options.fallback_discovery_timeout_secs`, 5 by default), then
+`options.fallback_ips` (by default `149.154.166.110` and
+`149.154.167.220`). TLS is still validated for `api.telegram.org`, the
+first address that works is kept for the connection, and connecting gives
+up after 30 seconds (the gateway then retries). `options.fallback_ips = []`
+turns this off, as does a proxy (it resolves the host itself) or a
+self-hosted server; `options.force_ipv4 = true` connects over IPv4 only.
+
+How the bot presents itself:
+
+- `options.notifications = "important"` (the default) delivers silently
+  everything but final replies, approvals and command confirmations;
+  `all` notifies for every message.
+- Progress and long-running notices are edited in place; when an edit
+  fails, the update is sent as a new message.
+- `options.pin_during_turn = true` pins the message that started a turn
+  (silently) while the turn runs.
+- `options.status_indicator = true` sets the bot's short description to
+  `options.status_online` ("Online") while the daemon serves it and to
+  `options.status_offline` ("Offline") after a clean stop.
+- `options.drop_pending_on_cold_boot` (default `true`) drops the updates
+  queued while the daemon was stopped, on its first start only: a
+  reconnect, or a restart of the adapter, keeps them.
+- `options.disable_link_previews = true` sends messages without link
+  previews.
+
 Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
 resumes the session after a dropped connection, so missed messages are
 replayed; the bot needs the Message Content privileged intent, and
@@ -193,6 +222,14 @@ The other first-party adapters:
   message as its reply context, it answers in
   `options.reaction_trigger_target` (`channel` or `channel:thread_ts`)
   when set, and the reacting user must be authorized like any author.
+  One app can serve several workspaces: list more bot-token secrets in
+  `options.bot_token_secrets`, and workspaces installed through OAuth add
+  theirs as `SLACK_BOT_TOKEN_<team id>` (a Hermes `slack_tokens.json` is
+  migrated that way). Each token is checked with `auth.test` at connect
+  (a token listed twice counts once); events and replies are routed by
+  workspace, and a refused token leaves the adapter `degraded`
+  (`partial_outage`, naming the team) while the other workspaces are
+  served.
 - **Email** polls the inbox over IMAP every `options.poll_interval_secs`
   (15) and answers over SMTP as `options.address` with the password in
   `EMAIL_PASSWORD`. `options.imap_host` and `options.smtp_host` are

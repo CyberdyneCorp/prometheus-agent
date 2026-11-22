@@ -16,10 +16,7 @@ fn bot(api: &BotApi, options: &str, extra: &str) -> (tempfile::TempDir, Telegram
     let table = format!("options = {{ {options} }}\n{extra}");
     let setup = kit_setup(home.path(), "telegram", &table, &[(TOKEN_SECRET, TOKEN)]).unwrap();
     let public = if options.contains("api_base_url") {
-        Endpoints {
-            api: "http://127.0.0.1:9".into(),
-            files: "http://127.0.0.1:9/file".into(),
-        }
+        Endpoints::at("http://127.0.0.1:9")
     } else {
         api.endpoints()
     };

@@ -495,7 +495,19 @@ fn plan_slack(src: &Source<'_>, text: &str, step: &mut SecretsStep) {
             );
             continue;
         }
-        let target = next_free("SLACK_BOT_TOKEN", &taken);
+        // A workspace installed through OAuth: the Slack adapter serves
+        // `SLACK_BOT_TOKEN_<team id>` secrets beside its own token.
+        let team_shaped = team.len() > 2
+            && team.starts_with(['T', 'E'])
+            && team
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+        let base = if team_shaped {
+            format!("SLACK_BOT_TOKEN_{team}")
+        } else {
+            "SLACK_BOT_TOKEN".to_owned()
+        };
+        let target = next_free(&base, &taken);
         taken.insert(target.clone(), bot.to_owned());
         let index = push(
             step,

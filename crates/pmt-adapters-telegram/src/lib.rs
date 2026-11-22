@@ -19,13 +19,16 @@ mod commands;
 /// `adapter-kits`), so release binaries do not carry it.
 #[cfg(feature = "kit")]
 pub mod mock;
+mod net;
 mod normalize;
+mod presentation;
 mod private;
 mod rich;
 mod text;
 mod topics;
 mod updates;
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -41,6 +44,7 @@ use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, Attachment,
     ChatInfo, Descriptor, HttpRequest, HttpResponse, Interactive, LengthUnit, Markup, MediaKind,
     MediaStream, MenuCommand, Outgoing, Private, Reaction, SendError, Sent, SessionHints,
+    TurnState,
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
@@ -77,7 +81,14 @@ fn self_hosted(options: &TelegramOptions, endpoints: Endpoints) -> (Endpoints, b
         || format!("{api}/file"),
         |f| f.trim_end_matches('/').to_owned(),
     );
-    (Endpoints { api, files }, true)
+    (
+        Endpoints {
+            api,
+            files,
+            ..endpoints
+        },
+        true,
+    )
 }
 
 /// A Telegram bot of one profile.
@@ -86,7 +97,11 @@ pub struct Telegram {
     secret: String,
     options: TelegramOptions,
     endpoints: Endpoints,
-    client: reqwest::Client,
+    /// Builds the HTTP clients reaching the Bot API.
+    make: net::MakeClient,
+    /// Whether and where requests fall back when the host does not
+    /// connect (`None`: never).
+    fallback: Option<net::Fallback>,
     /// The next update id to ask for (kept across reconnects).
     offset: Arc<AtomicI64>,
     api: Mutex<Option<Api>>,
@@ -106,6 +121,8 @@ pub struct Telegram {
     callbacks: Arc<private::Callbacks>,
     /// How inbound files are read (server limit, `--local` mode).
     files: api::FileAccess,
+    /// Messages pinned while their turn runs: (chat, message).
+    pinned: Mutex<HashSet<(String, String)>>,
 }
 
 impl std::fmt::Debug for Telegram {
@@ -146,9 +163,9 @@ impl Telegram {
     pub fn new(setup: &AdapterSetup, endpoints: Endpoints) -> Result<Self, Error> {
         let options: TelegramOptions =
             pmt_config::platforms::options(PLATFORM, &setup.config.options)?;
-        // Direct unless a proxy is configured or the environment trusted.
-        let (builder, _) = pmt_gateway::messaging::proxy::client_builder(setup)?;
-        let client = builder.build().map_err(|e| {
+        let make = client_maker(setup, options.force_ipv4);
+        // Fails here, not at the first send, when the client cannot exist.
+        make(None).map_err(|e| {
             Error::new(
                 &pmt_core::error::codes::NET_CLIENT_INIT,
                 format!("cannot build the Telegram client: {e}"),
@@ -160,6 +177,7 @@ impl Telegram {
             .as_ref()
             .map_or_else(|| TOKEN_SECRET.to_owned(), |s| s.0.clone());
         let (endpoints, self_hosted) = self_hosted(&options, endpoints);
+        let fallback = fallback_of(setup, &options, &endpoints, self_hosted);
         let files = api::FileAccess::new(
             self_hosted,
             options.local_mode,
@@ -170,7 +188,8 @@ impl Telegram {
             scope: setup.scope.clone(),
             secret,
             endpoints,
-            client,
+            make,
+            fallback,
             offset: Arc::default(),
             api: Mutex::default(),
             poller: Mutex::default(),
@@ -182,6 +201,7 @@ impl Telegram {
             hook: Mutex::default(),
             callbacks: Arc::default(),
             rich_unavailable: AtomicBool::new(false),
+            pinned: Mutex::default(),
             dm_topics_unavailable: AtomicBool::new(false),
             options,
         })
@@ -199,12 +219,71 @@ impl Telegram {
 
     fn api_with(&self, token: String) -> Api {
         Api {
-            client: self.client.clone(),
+            transport: Arc::new(self.transport()),
             endpoints: self.endpoints.clone(),
             token,
         }
     }
 }
+
+/// When and where requests fall back to other addresses of the API host
+/// (spec: platform-adapters, Telegram network resilience): never with
+/// `fallback_ips = []`, when a proxy carries the traffic (it resolves the
+/// host itself), for a self-hosted server, or when the API is reached by
+/// address.
+fn fallback_of(
+    setup: &AdapterSetup,
+    options: &TelegramOptions,
+    endpoints: &Endpoints,
+    self_hosted: bool,
+) -> Option<net::Fallback> {
+    let proxied = !matches!(
+        pmt_gateway::messaging::proxy::Proxy::of(setup),
+        Ok(pmt_gateway::messaging::proxy::Proxy::Direct)
+    );
+    if options.fallback_ips.is_empty() || proxied || self_hosted {
+        return None;
+    }
+    let url = reqwest::Url::parse(&endpoints.api).ok()?;
+    Some(net::Fallback {
+        host: url.domain()?.to_owned(),
+        configured: options.fallback_ips.clone(),
+        resolvers: endpoints.doh.clone(),
+        discovery_timeout: std::time::Duration::from_secs(options.fallback_discovery_timeout_secs),
+        ipv4_only: options.force_ipv4 || setup.scope.config().network.force_ipv4,
+    })
+}
+
+/// Builds the profile's clients (direct unless a proxy is configured or
+/// the environment trusted), IPv4-only with `force_ipv4`, each connection
+/// attempt bounded so a blackholed path leaves time for the others.
+fn client_maker(setup: &AdapterSetup, force_ipv4: bool) -> net::MakeClient {
+    let setup = setup.clone();
+    Arc::new(move |at| {
+        let (builder, _) = pmt_gateway::messaging::proxy::client_builder(&setup)
+            .map_err(|e| e.message().to_owned())?;
+        let mut builder = builder.connect_timeout(net::ATTEMPT_CONNECT);
+        if force_ipv4 {
+            builder = builder.local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+        }
+        if let Some((host, ip)) = at {
+            builder = net::pinned(builder, host, ip);
+        }
+        builder.build().map_err(|e| e.to_string())
+    })
+}
+
+impl Telegram {
+    /// A new connection's paths to the Bot API.
+    fn transport(&self) -> net::Transport {
+        // Built once already in `new`: the same settings build again.
+        let primary = (self.make)(None).unwrap_or_default();
+        net::Transport::new(primary, self.fallback.clone(), Some(Arc::clone(&self.make)))
+    }
+}
+
+/// How long connecting may take before the gateway retries.
+const CONNECT_BOUND: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// A chat or thread id as the Bot API takes it (numbers stay numbers).
 pub(crate) fn chat(id: &str) -> Value {
@@ -269,7 +348,7 @@ impl Telegram {
 
     /// Registers the webhook with its secret token; updates then arrive on
     /// the shared listener.
-    async fn start_webhook(&self, ctx: updates::Ctx) -> Result<(), AdapterError> {
+    async fn start_webhook(&self, ctx: updates::Ctx, drop: bool) -> Result<(), AdapterError> {
         let missing = |what: &str| AdapterError {
             retryable: false,
             code: "missing_option".to_owned(),
@@ -289,7 +368,8 @@ impl Telegram {
             .ok_or_else(|| missing("webhook_public_url"))?;
         let secret = credential(&self.scope, &name.0)?;
         let body = json!({"url": url, "secret_token": secret,
-                          "allowed_updates": updates::ALLOWED});
+                          "allowed_updates": updates::ALLOWED,
+                          "drop_pending_updates": drop});
         ctx.api
             .call("setWebhook", &body)
             .await
@@ -299,10 +379,10 @@ impl Telegram {
     }
 
     /// Deletes any webhook (Telegram refuses `getUpdates` while one is
-    /// set), then polls.
-    async fn start_polling(&self, ctx: updates::Ctx) -> Result<(), AdapterError> {
+    /// set), dropping the queued updates when `drop` says so, then polls.
+    async fn start_polling(&self, ctx: updates::Ctx, drop: bool) -> Result<(), AdapterError> {
         ctx.api
-            .call("deleteWebhook", &json!({"drop_pending_updates": false}))
+            .call("deleteWebhook", &json!({"drop_pending_updates": drop}))
             .await
             .map_err(|e| connect_error(&e))?;
         let stop = CancellationToken::new();
@@ -366,9 +446,16 @@ impl Adapter for Telegram {
         Box::pin(async move {
             let token = credential(&self.scope, &self.secret)?;
             let api = self.api_with(token);
-            let me = api
-                .call("getMe", &json!({}))
+            let me = tokio::time::timeout(CONNECT_BOUND, api.call("getMe", &json!({})))
                 .await
+                .map_err(|_| AdapterError {
+                    retryable: true,
+                    code: "telegram_unreachable".to_owned(),
+                    message: format!(
+                        "Telegram: the Bot API did not answer within {} s",
+                        CONNECT_BOUND.as_secs()
+                    ),
+                })?
                 .map_err(|e| connect_error(&e))?;
             *self.api.lock().expect("api poisoned") = Some(api.clone());
             self.check_dm_topics(&me);
@@ -382,10 +469,13 @@ impl Adapter for Telegram {
                 me: normalize::Me::of(&me),
                 callbacks: Arc::clone(&self.callbacks),
             };
+            let drop = self.drops_pending();
             match self.options.mode {
-                TelegramMode::Webhook => self.start_webhook(ctx).await,
-                TelegramMode::Polling => self.start_polling(ctx).await,
+                TelegramMode::Webhook => self.start_webhook(ctx, drop).await?,
+                TelegramMode::Polling => self.start_polling(ctx, drop).await?,
             }
+            self.show_status(&api, true).await;
+            Ok(())
         })
     }
 
@@ -394,11 +484,21 @@ impl Adapter for Telegram {
             stop.cancel();
         }
         self.hook.lock().expect("hook poisoned").take();
-        Box::pin(async {})
+        let api = self.api.lock().expect("api poisoned").clone();
+        Box::pin(async move {
+            // A clean stop: the bot shows offline.
+            if let Some(api) = api {
+                self.show_status(&api, false).await;
+            }
+        })
+    }
+
+    fn turn_state<'a>(&'a self, turn: &'a TurnState) -> AdapterFuture<'a, ()> {
+        Box::pin(self.pin_during_turn(turn))
     }
 
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
-        let message = message.clone();
+        let message = self.presented(message);
         Box::pin(async move {
             let api = self.api()?;
             let mut first = None;

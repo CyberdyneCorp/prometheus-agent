@@ -152,8 +152,8 @@ impl BotApi {
     /// The endpoints that reach this mock.
     pub fn endpoints(&self) -> crate::Endpoints {
         crate::Endpoints {
-            api: format!("http://{}", self.addr),
-            files: format!("http://{}/file", self.addr),
+            doh: Vec::new(),
+            ..crate::Endpoints::at(&format!("http://{}", self.addr))
         }
     }
 
@@ -443,14 +443,23 @@ impl BotApi {
             | "setMyCommands"
             | "deleteMyCommands"
             | "answerInlineQuery"
+            | "pinChatMessage"
+            | "unpinChatMessage"
+            | "setMyShortDescription"
             | "logOut" => ok(&json!(true)),
             "setWebhook" => {
+                if args["drop_pending_updates"] == true {
+                    state.updates.clear();
+                }
                 let url = args["url"].as_str().unwrap_or_default().to_owned();
                 let secret = args["secret_token"].as_str().unwrap_or_default().to_owned();
                 state.webhook = Some((url, secret));
                 ok(&json!(true))
             }
             "deleteWebhook" => {
+                if args["drop_pending_updates"] == true {
+                    state.updates.clear();
+                }
                 state.webhook = None;
                 ok(&json!(true))
             }

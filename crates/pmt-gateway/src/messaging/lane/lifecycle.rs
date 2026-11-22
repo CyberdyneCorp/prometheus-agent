@@ -56,6 +56,25 @@ impl Lane {
         }
     }
 
+    /// Tells the adapter a turn triggered by `trigger` started
+    /// (`running`) or ended.
+    pub(super) async fn turn_state(&self, trigger: Option<&String>, running: bool) {
+        let Some(slot) = self
+            .shared
+            .adapters
+            .ready(&self.profile, &self.routing.platform)
+        else {
+            return;
+        };
+        let turn = crate::messaging::adapter::TurnState {
+            chat_id: self.routing.chat_id.clone(),
+            thread_id: self.routing.thread_id.clone(),
+            trigger: trigger.cloned(),
+            running,
+        };
+        slot.adapter.turn_state(&turn).await;
+    }
+
     /// Adds `emoji` to message `message_id` of this chat; `false` when the
     /// adapter has no reactions or the platform refused it.
     pub(super) async fn react(&self, message_id: &str, emoji: &str) -> bool {

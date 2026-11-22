@@ -646,3 +646,32 @@ fn a_dry_run_predicts_conflicts_with_an_existing_profile() {
         "transformed"
     );
 }
+
+/// Hermes's OAuth-installed Slack workspaces (`slack_tokens.json`) become
+/// `SLACK_BOT_TOKEN_<team id>` secrets, which the Slack adapter serves
+/// beside its own token (spec: platform-adapters, Slack multiple
+/// workspaces).
+#[test]
+fn slack_workspace_tokens_are_stored_by_team_id() {
+    let tmp = common::temp_home();
+    let h = Hermes::new(&tmp.path().join("hermes"));
+    h.write(
+        "default",
+        "slack_tokens.json",
+        r#"{"T0AAA": {"token": "xoxb-aaa", "team_name": "A"}, "T0BBB": {"token": "xoxb-bbb"}}"#,
+    );
+    let report = report(&migrate(
+        tmp.path(),
+        &h.root,
+        &["--yes", "--only", "secrets"],
+    ));
+    assert_eq!(
+        entry(&report, "default", "slack_tokens.json:T0AAA")["disposition"],
+        "secret"
+    );
+    let listed = common::stdout(&common::run(tmp.path(), &["secrets", "list"]));
+    assert!(
+        listed.contains("SLACK_BOT_TOKEN_T0AAA") && listed.contains("SLACK_BOT_TOKEN_T0BBB"),
+        "{listed}"
+    );
+}

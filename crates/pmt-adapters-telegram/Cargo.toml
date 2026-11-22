@@ -34,7 +34,11 @@ tracing.workspace = true
 # The tests run the adapter against its mock.
 pmt-adapters-telegram = { path = ".", features = ["kit"] }
 pmt-store.workspace = true
+# The network tests' TLS front for the mock.
+rcgen.workspace = true
+rustls.workspace = true
 tempfile.workspace = true
+tokio-rustls.workspace = true
 
 [lints]
 workspace = true

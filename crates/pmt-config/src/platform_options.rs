@@ -65,6 +65,50 @@ pub struct TelegramOptions {
     /// The self-hosted server runs with `--local`: files are read from the
     /// absolute path it returns (the server's files must be readable here).
     pub local_mode: bool,
+    /// Addresses of the Bot API tried when `api.telegram.org` does not
+    /// connect (TLS is still validated for the host name), extended by
+    /// DNS-over-HTTPS discovery; `[]` disables the fallback.
+    pub fallback_ips: Vec<std::net::IpAddr>,
+    /// Seconds DNS-over-HTTPS discovery of more fallback addresses may take.
+    #[schemars(range(min = 1, max = 60))]
+    pub fallback_discovery_timeout_secs: u64,
+    /// Connect to the Bot API over IPv4 only.
+    pub force_ipv4: bool,
+    /// Which sends notify: only final replies, approvals and command
+    /// confirmations (`important`; the rest is delivered silently), or all.
+    pub notifications: TelegramNotifications,
+    /// Pin the message that started a turn (silently) while the turn runs.
+    pub pin_during_turn: bool,
+    /// Show `status_online` / `status_offline` as the bot's short
+    /// description (offline only after a clean shutdown).
+    pub status_indicator: bool,
+    /// The short description while the daemon serves the bot.
+    pub status_online: String,
+    /// The short description after a clean shutdown.
+    pub status_offline: String,
+    /// Drop the updates queued while the daemon was stopped, on its first
+    /// start only (reconnects always keep them).
+    pub drop_pending_on_cold_boot: bool,
+    /// Send messages without link previews.
+    pub disable_link_previews: bool,
+}
+
+/// The seed fallback addresses of `api.telegram.org`.
+pub const TELEGRAM_SEED_IPS: [std::net::IpAddr; 2] = [
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(149, 154, 166, 110)),
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(149, 154, 167, 220)),
+];
+
+/// `gateway.platforms.telegram.options.notifications`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum TelegramNotifications {
+    /// Final replies, approvals and command confirmations notify; every
+    /// other send is silent.
+    #[default]
+    Important,
+    /// Every send notifies (unless the sender asked for silence).
+    All,
 }
 
 /// The hosted Telegram onboarding service.
@@ -87,6 +131,16 @@ impl Default for TelegramOptions {
             api_base_url: None,
             file_base_url: None,
             local_mode: false,
+            fallback_ips: TELEGRAM_SEED_IPS.to_vec(),
+            fallback_discovery_timeout_secs: 5,
+            force_ipv4: false,
+            notifications: TelegramNotifications::Important,
+            pin_during_turn: false,
+            status_indicator: false,
+            status_online: "Online".to_owned(),
+            status_offline: "Offline".to_owned(),
+            drop_pending_on_cold_boot: true,
+            disable_link_previews: false,
         }
     }
 }
@@ -289,6 +343,11 @@ pub struct SlackOptions {
     /// The secret holding the Socket Mode app-level token.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app_token_secret: Option<SecretName>,
+    /// More bot tokens, one per workspace (secret names), served beside
+    /// the table's `token_secret`; workspaces installed through OAuth add
+    /// their own as `SLACK_BOT_TOKEN_<team id>`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub bot_token_secrets: Vec<SecretName>,
     /// Reactions that start a turn (`reaction:added:<emoji>`, the reacted
     /// message as reply context): `false` none (reaction events are
     /// acknowledged and dropped), `true` any reaction on the bot's own
@@ -449,32 +508,6 @@ pub struct MatrixOptions {
     pub auto_join: MatrixAutoJoin,
     /// How a room maps onto sessions.
     pub session_scope: MatrixSessionScope,
-}
-
-/// `gateway.platforms.matrix.options.auto_join`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MatrixAutoJoin {
-    /// Invites from authorized users (`allow_users`).
-    #[default]
-    Authorized,
-    /// Every invite.
-    All,
-    /// None: the bot joins rooms only by hand.
-    None,
-}
-
-/// `gateway.platforms.matrix.options.session_scope`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum MatrixSessionScope {
-    /// The room's conversation, each thread its own session.
-    #[default]
-    Auto,
-    /// One session (and workspace binding) per room: threads included.
-    Room,
-    /// Every top-level message starts its own thread session.
-    Thread,
 }
 
 /// `gateway.platforms.signal.options`.

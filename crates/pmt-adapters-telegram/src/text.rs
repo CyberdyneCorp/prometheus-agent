@@ -33,10 +33,10 @@ impl Telegram {
             } else {
                 vec![message.text.clone()]
             };
-            return send_parts(api, message, parts, self.markup()).await;
+            return send_parts(api, message, parts, self.markup(), self.previews()).await;
         }
         if rich::fits(&message.text) {
-            let mut body = text_body(message, None);
+            let mut body = text_body(message, None, self.previews());
             body["rich_message"] = rich::payload(&message.text);
             match api.call("sendRichMessage", &body).await {
                 Ok(sent) => return Ok(normalize::id(&sent["message_id"])),
@@ -47,7 +47,7 @@ impl Telegram {
             .iter()
             .map(|part| render_in(Markup::Platform, PLATFORM, part))
             .collect();
-        send_parts(api, message, parts, Markup::Platform).await
+        send_parts(api, message, parts, Markup::Platform, self.previews()).await
     }
 
     /// Edits message `id` to `message`'s text.
@@ -62,6 +62,9 @@ impl Telegram {
             "message_id": id,
             "reply_markup": keyboard(message),
         });
+        if !self.previews() {
+            body["link_preview_options"] = json!({"is_disabled": true});
+        }
         let mut markup = self.markup();
         let mut text = message.text.clone();
         if self.raw_markdown(message) {
@@ -114,12 +117,14 @@ impl Telegram {
 }
 
 /// Sends `parts` in order (the first answers the message `message`
-/// replies to; the last carries its buttons); the first one's id.
+/// replies to; the last carries its buttons), with link `previews` or
+/// without; the first one's id.
 async fn send_parts(
     api: &Api,
     message: &Outgoing,
     parts: Vec<String>,
     markup: Markup,
+    previews: bool,
 ) -> Result<Option<String>, SendError> {
     let last = parts.len().saturating_sub(1);
     let mut first = None;
@@ -135,7 +140,7 @@ async fn send_parts(
             ..message.clone()
         };
         let sent = api
-            .call("sendMessage", &text_body(&part, Some(markup)))
+            .call("sendMessage", &text_body(&part, Some(markup), previews))
             .await?;
         first = first.or_else(|| normalize::id(&sent["message_id"]));
     }
@@ -164,9 +169,9 @@ fn parse_mode(message: &Outgoing, markup: Markup) -> Option<&'static str> {
 }
 
 /// The body of a message: its text in `markup` (none for a rich message,
-/// which carries `rich_message` instead), thread, the message it answers
-/// and its buttons.
-fn text_body(message: &Outgoing, markup: Option<Markup>) -> Value {
+/// which carries `rich_message` instead), thread, the message it answers,
+/// its buttons, and whether links are previewed.
+fn text_body(message: &Outgoing, markup: Option<Markup>, previews: bool) -> Value {
     let mut body = json!({"chat_id": chat(&message.chat_id)});
     if let Some(markup) = markup {
         body["text"] = json!(message.text);
@@ -186,6 +191,9 @@ fn text_body(message: &Outgoing, markup: Option<Markup>) -> Value {
     }
     if message.notify == Some(false) {
         body["disable_notification"] = json!(true);
+    }
+    if !previews {
+        body["link_preview_options"] = json!({"is_disabled": true});
     }
     body
 }

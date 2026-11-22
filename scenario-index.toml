@@ -5340,6 +5340,20 @@ capabilities = [
 [platform-adapters."Matrix rooms, invites and clock skew"]
 "Alias in allowlist rejected" = ["crates/pmt-config/src/gateway_check_platforms.rs::a_matrix_room_alias_in_the_allowlist_fails_validation"]
 
+# Group 78.2: Telegram network resilience (the adapter against the Bot API
+# mock behind a TLS front for an unresolvable host name, with a stand-in
+# DNS-over-HTTPS resolver) and presentation options (the adapter against the
+# mock; what the gateway marks notifying in the messaging harness).
+[platform-adapters."Telegram network resilience"]
+"DNS blocked" = { tests = ["crates/pmt-adapters-telegram/tests/network.rs::an_unresolvable_host_connects_through_a_fallback_address_checking_its_certificate", "crates/pmt-adapters-telegram/tests/network.rs::a_fallback_address_with_a_certificate_for_another_name_is_refused"], note = "api.telegram.invalid never resolves; the fallback address reaches a TLS front whose private-CA certificate (trusted through network.extra_ca_file) is validated for the host name, and a certificate for another name is refused" }
+
+[platform-adapters."Telegram presentation options"]
+"Progress is silent" = ["crates/pmt-gateway/tests/messaging/presentation.rs::only_the_final_reply_of_a_turn_is_marked_notifying", "crates/pmt-adapters-telegram/tests/notify.rs::final_messages_notify_and_unmarked_ones_follow_the_notification_mode"]
+"Backlog replay on request" = ["crates/pmt-adapters-telegram/tests/presentation.rs::the_backlog_is_replayed_in_order_when_asked"]
+
+[platform-adapters."Slack multiple workspaces"]
+"Reply goes to the right workspace" = ["crates/pmt-adapters-slack/tests/workspaces.rs::a_message_from_the_second_workspace_is_answered_with_its_token", "crates/pmt-adapters-slack/tests/workspaces.rs::a_channel_never_seen_is_found_in_its_workspace_after_a_restart"]
+
 # Group 78.7: the Discord tools (crates/pmt-adapters-discord/tests/tools.rs
 # against a mock REST API).
 [platform-adapters."Discord tools"]

@@ -698,6 +698,12 @@ pub trait Adapter: Send + Sync + 'static {
     fn reply_privately<'a>(&'a self, _to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async { Err(SendError::Unsupported) })
     }
+    /// A turn of the conversation in `turn.chat_id` started or ended
+    /// (adapters that show it, such as Telegram's pin during a turn); a
+    /// failure here never affects the turn.
+    fn turn_state<'a>(&'a self, _turn: &'a TurnState) -> AdapterFuture<'a, ()> {
+        Box::pin(async {})
+    }
     /// Renames thread (or topic) `thread_id` of `chat_id` to `title`.
     fn rename_thread<'a>(
         &'a self,
@@ -708,6 +714,12 @@ pub trait Adapter: Send + Sync + 'static {
         Box::pin(async { Err(SendError::Unsupported) })
     }
 }
+
+/// The error code of an adapter that serves some of its accounts and not
+/// others (a Slack workspace whose token was refused): it reports
+/// `degraded` with it, and a successful send (through another account)
+/// does not clear it; the next connect does.
+pub const PARTIAL_OUTAGE: &str = "partial_outage";
 
 /// The body limit of the shared listener when the adapter sets none.
 pub const DEFAULT_MAX_BODY: usize = 16 * 1024 * 1024;
@@ -739,6 +751,19 @@ pub fn credential(scope: &ProfileScope, name: &str) -> Result<String, AdapterErr
             ),
         }),
     }
+}
+
+/// A turn that started or ended ([`Adapter::turn_state`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TurnState {
+    /// The chat.
+    pub chat_id: String,
+    /// The thread, when the conversation is one.
+    pub thread_id: Option<String>,
+    /// The user's message that started the turn, when one did.
+    pub trigger: Option<String>,
+    /// The turn runs (`false`: it ended).
+    pub running: bool,
 }
 
 /// A tool call shown as a native task card.

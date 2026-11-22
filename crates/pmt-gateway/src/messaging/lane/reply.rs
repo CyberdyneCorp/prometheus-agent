@@ -177,7 +177,8 @@ impl Lane {
             kind: OutboundKind::Reply,
             body: text.to_owned(),
             attachments: Vec::new(),
-            notify: None,
+            // The final reply notifies (where the rest is silent).
+            notify: Some(true),
         };
         if answer.addressed {
             self.strings()
@@ -303,7 +304,8 @@ impl Lane {
                 kind: OutboundKind::Reply,
                 body,
                 attachments: attached,
-                notify: None,
+                // The final reply notifies (where the rest is silent).
+                notify: Some(true),
             };
             self.shared.deliver(&self.profile, &new);
         }

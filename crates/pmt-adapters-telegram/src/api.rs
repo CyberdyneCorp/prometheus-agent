@@ -5,11 +5,14 @@
 //! The token is only ever part of the URL, never logged.
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use pmt_gateway::messaging::multipart::Form;
 use pmt_gateway::messaging::{MediaStream, SendError};
 use serde_json::Value;
+
+use crate::net::Transport;
 
 /// Where the Bot API lives.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +21,9 @@ pub struct Endpoints {
     pub api: String,
     /// The file download base (`https://api.telegram.org/file`).
     pub files: String,
+    /// The DNS-over-HTTPS resolvers (JSON API) asked for fallback
+    /// addresses of the API host when it does not connect.
+    pub doh: Vec<String>,
 }
 
 impl Default for Endpoints {
@@ -25,6 +31,21 @@ impl Default for Endpoints {
         Self {
             api: "https://api.telegram.org".to_owned(),
             files: "https://api.telegram.org/file".to_owned(),
+            doh: crate::net::DOH_RESOLVERS.map(str::to_owned).to_vec(),
+        }
+    }
+}
+
+impl Endpoints {
+    /// The API at `api` (files under `<api>/file`), with the public
+    /// DNS-over-HTTPS resolvers.
+    #[must_use]
+    pub fn at(api: &str) -> Self {
+        let api = api.trim_end_matches('/');
+        Self {
+            api: api.to_owned(),
+            files: format!("{api}/file"),
+            ..Self::default()
         }
     }
 }
@@ -32,7 +53,7 @@ impl Default for Endpoints {
 /// A Bot API client for one token.
 #[derive(Clone)]
 pub(crate) struct Api {
-    pub(crate) client: reqwest::Client,
+    pub(crate) transport: Arc<Transport>,
     pub(crate) endpoints: Endpoints,
     pub(crate) token: String,
 }
@@ -65,13 +86,19 @@ impl Api {
         body: &Value,
         timeout: Duration,
     ) -> Result<Value, SendError> {
-        let request = self
-            .client
-            .post(self.url(method))
-            .header("content-type", "application/json")
-            .body(body.to_string())
-            .timeout(timeout);
-        answer(request.send().await).await
+        let url = self.url(method);
+        let body = body.to_string();
+        let sent = self
+            .transport
+            .send(|client| {
+                client
+                    .post(&url)
+                    .header("content-type", "application/json")
+                    .body(body.clone())
+                    .timeout(timeout)
+            })
+            .await;
+        answer(sent).await
     }
 
     /// Uploads a file with `method` (`sendPhoto`, `sendDocument`, ...).
@@ -92,13 +119,20 @@ impl Api {
             form.text(key, value);
         }
         form.file(file_field, &name, &bytes);
-        let request = self
-            .client
-            .post(self.url(method))
-            .header("content-type", form.content_type())
-            .body(form.finish())
-            .timeout(Duration::from_mins(5));
-        answer(request.send().await).await
+        let url = self.url(method);
+        let content_type = form.content_type();
+        let body = form.finish();
+        let sent = self
+            .transport
+            .send(|client| {
+                client
+                    .post(&url)
+                    .header("content-type", &content_type)
+                    .body(body.clone())
+                    .timeout(Duration::from_mins(5))
+            })
+            .await;
+        answer(sent).await
     }
 
     /// Opens a file the Bot API stores (`getFile`, then its download, or
@@ -124,7 +158,11 @@ impl Api {
             return local_file(path, file["file_size"].as_u64()).await;
         }
         let url = format!("{}/bot{}/{path}", self.endpoints.files, self.token);
-        let response = self.client.get(url).send().await.map_err(transport)?;
+        let response = self
+            .transport
+            .send(|client| client.get(&url))
+            .await
+            .map_err(transport)?;
         if !response.status().is_success() {
             return Err(status_error(
                 response.status().as_u16(),
@@ -243,7 +281,7 @@ pub async fn log_out(
     token: &str,
 ) -> Result<(), SendError> {
     let api = Api {
-        client: client.clone(),
+        transport: Arc::new(Transport::direct(client.clone())),
         endpoints: endpoints.clone(),
         token: token.to_owned(),
     };

@@ -12,16 +12,26 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 | `gateway.platforms.telegram.options.command_menu.max_commands` | integer | `60` | 1 to 100 | `next_session` | Entries registered at most. |
 | `gateway.platforms.telegram.options.command_menu.priority` | array of string | `[]` | any | `next_session` | Commands placed first (or last, or alone) whatever the cap. |
 | `gateway.platforms.telegram.options.command_menu.priority_mode` | one of "prepend", "append", "replace" | `"prepend"` | `"prepend"`, `"append"`, `"replace"` | `next_session` | Where the priority entries go. |
+| `gateway.platforms.telegram.options.disable_link_previews` | boolean | `false` | any | `next_session` | Send messages without link previews. |
 | `gateway.platforms.telegram.options.dm_topics.enabled` | boolean | `false` | any | `next_session` | Each DM topic is its own session and the root DM is a lobby that accepts only commands (`/topic new\|list\|rename\|restore`). |
+| `gateway.platforms.telegram.options.drop_pending_on_cold_boot` | boolean | `true` | any | `next_session` | Drop the updates queued while the daemon was stopped, on its first start only (reconnects always keep them). |
+| `gateway.platforms.telegram.options.fallback_discovery_timeout_secs` | integer | `5` | 1 to 60 | `next_session` | Seconds DNS-over-HTTPS discovery of more fallback addresses may take. |
+| `gateway.platforms.telegram.options.fallback_ips` | array of string | `["149.154.166.110","149.154.167.220"]` | any | `next_session` | Addresses of the Bot API tried when `api.telegram.org` does not connect (TLS is still validated for the host name), extended by DNS-over-HTTPS discovery; `[]` disables the fallback. |
 | `gateway.platforms.telegram.options.file_base_url` | string | unset | any | `next_session` | The self-hosted server's file download base; unset: `<api_base_url>/file`. |
+| `gateway.platforms.telegram.options.force_ipv4` | boolean | `false` | any | `next_session` | Connect to the Bot API over IPv4 only. |
 | `gateway.platforms.telegram.options.group_topics` | table | unset | any | `next_session` | Topics of forum groups, by chat id. |
 | `gateway.platforms.telegram.options.ignore_root_dm` | boolean | `false` | any | `next_session` | Ignore ordinary messages in the root of a private chat (slash commands are still accepted). |
 | `gateway.platforms.telegram.options.local_mode` | boolean | `false` | any | `next_session` | The self-hosted server runs with `--local`: files are read from the absolute path it returns (the server's files must be readable here). |
 | `gateway.platforms.telegram.options.mode` | one of "polling", "webhook" | `"polling"` | `"polling"`, `"webhook"` | `next_session` | How updates arrive: long polling, or webhook posts on the shared listener at `/p/<profile>/telegram/`. |
+| `gateway.platforms.telegram.options.notifications` | one of "important", "all" | `"important"` | `"important"`, `"all"` | `next_session` | Which sends notify: only final replies, approvals and command confirmations (`important`; the rest is delivered silently), or all. |
+| `gateway.platforms.telegram.options.pin_during_turn` | boolean | `false` | any | `next_session` | Pin the message that started a turn (silently) while the turn runs. |
 | `gateway.platforms.telegram.options.poll_timeout_secs` | integer | `30` | 1 to 50 | `next_session` | Seconds one long-poll `getUpdates` call waits for updates. |
 | `gateway.platforms.telegram.options.rich_messages` | boolean | `false` | any | `next_session` | Send replies as Telegram rich messages (Bot API 10.1 `sendRichMessage`: the raw Markdown, up to 32768 characters), falling back to `MarkdownV2` when Telegram refuses one. |
 | `gateway.platforms.telegram.options.setup_service_url` | string | `"https://setup.hermes-agent.nousresearch.com"` | any | `next_session` | The onboarding service Create with QR asks to create a bot (`POST <url>/v1/telegram/pairings`, then polls the pairing). |
 | `gateway.platforms.telegram.options.slash_commands` | boolean | `true` | any | `next_session` | Register the gateway's commands and skills as the bot's command menu; `false` on a follower daemon sharing one bot. |
+| `gateway.platforms.telegram.options.status_indicator` | boolean | `false` | any | `next_session` | Show `status_online` / `status_offline` as the bot's short description (offline only after a clean shutdown). |
+| `gateway.platforms.telegram.options.status_offline` | string | `"Offline"` | any | `next_session` | The short description after a clean shutdown. |
+| `gateway.platforms.telegram.options.status_online` | string | `"Online"` | any | `next_session` | The short description while the daemon serves the bot. |
 | `gateway.platforms.telegram.options.webhook_public_url` | string | unset | any | `next_session` | The public HTTPS URL Telegram posts updates to in webhook mode (it must reach `/p/<profile>/telegram/` on the shared listener). |
 | `gateway.platforms.telegram.options.webhook_secret_secret` | string | unset | a secret name | `next_session` | The secret token Telegram sends with every webhook update (required in webhook mode). |
 
@@ -42,6 +52,7 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 | Key | Type | Default | Allowed values | Apply | Description |
 |---|---|---|---|---|---|
 | `gateway.platforms.slack.options.app_token_secret` | string | unset | a secret name | `next_session` | The secret holding the Socket Mode app-level token. |
+| `gateway.platforms.slack.options.bot_token_secrets` | array of string | unset | any | `next_session` | More bot tokens, one per workspace (secret names), served beside the table's `token_secret`; workspaces installed through OAuth add their own as `SLACK_BOT_TOKEN_<team id>`. |
 | `gateway.platforms.slack.options.reaction_trigger_target` | string | unset | any | `next_session` | Where a reaction-triggered turn answers: a channel id, or `channel:thread_ts`; unset answers beside the reacted message. |
 | `gateway.platforms.slack.options.reaction_triggers` | boolean or array of string | unset | any | `next_session` | Reactions that start a turn (`reaction:added:<emoji>`, the reacted message as reply context): `false` none (reaction events are acknowledged and dropped), `true` any reaction on the bot's own messages, or a list of emoji names on any message. The reacting user passes the same authorization as a message author. |
 

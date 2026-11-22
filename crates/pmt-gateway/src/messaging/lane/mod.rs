@@ -290,6 +290,9 @@ struct Lane {
     /// platform answering commands privately, such as Slack's slash
     /// commands, recognises its reply by it).
     answering: Option<String>,
+    /// The event being handled is a slash command: what the lane says
+    /// meanwhile confirms it, and notifies.
+    commanding: bool,
     /// The event being handled's private-answer handle
     /// ([`Inbound::interaction`]).
     interaction: Option<String>,
@@ -366,6 +369,7 @@ pub(crate) fn open(shared: &Arc<Shared>, key: &SessionKey, routing: &Routing) ->
         horizon: 0,
         titled: None,
         answering: None,
+        commanding: false,
         interaction: None,
         policy: None,
         mirrors: Vec::new(),
@@ -513,11 +517,13 @@ impl Lane {
             } => {
                 self.voice_input = voice.voice;
                 self.voice_billed = voice.billed;
-                self.answering = Some(inbound.message_id.clone())
-                    .filter(|id| !id.is_empty() && inbound.text.trim_start().starts_with('/'));
+                self.commanding = inbound.text.trim_start().starts_with('/');
+                self.answering =
+                    Some(inbound.message_id.clone()).filter(|id| !id.is_empty() && self.commanding);
                 self.interaction.clone_from(&inbound.interaction);
                 self.inbound(seq, *routing, *inbound).await;
                 self.answering = None;
+                self.commanding = false;
                 self.interaction = None;
             }
             Msg::Finished(finished) => self.finished(finished).await,
@@ -600,8 +606,20 @@ impl Lane {
             kind,
             body,
             attachments: Vec::new(),
-            notify: None,
+            notify: self.notifies(kind),
         }
+    }
+
+    /// Whether a message of `kind` notifies even where the platform sends
+    /// the rest silently (spec: platform-adapters, Telegram presentation
+    /// options): approvals and the confirmations of a command do.
+    fn notifies(&self, kind: OutboundKind) -> Option<bool> {
+        let important = match kind {
+            OutboundKind::Approval => true,
+            OutboundKind::System => self.commanding,
+            _ => false,
+        };
+        important.then_some(true)
     }
 
     /// The profile's gateway configuration now.

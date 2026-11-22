@@ -72,10 +72,7 @@ fn public_endpoints() -> pmt_adapters_telegram::Endpoints {
         .ok()
         .filter(|a| !a.is_empty())
     {
-        return pmt_adapters_telegram::Endpoints {
-            files: format!("{api}/file"),
-            api,
-        };
+        return pmt_adapters_telegram::Endpoints::at(&api);
     }
     pmt_adapters_telegram::Endpoints::default()
 }

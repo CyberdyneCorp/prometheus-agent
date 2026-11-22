@@ -126,13 +126,18 @@ fn reset_restores_the_section_defaults_and_keeps_secrets() {
 fn gateway_setup_asks_every_schema_field_and_stores_the_token_as_a_secret() {
     const TOKEN: &str = "123456:telegram-test-token";
     let home = configured_home();
-    // The token, then the options by name: api_base_url, file_base_url,
+    // The token, then the options by name: api_base_url,
+    // disable_link_previews, drop_pending_on_cold_boot,
+    // fallback_discovery_timeout_secs, file_base_url, force_ipv4,
     // ignore_root_dm, local_mode, mode (a word it does not take, then
-    // Enter), poll_timeout_secs (45), and Enter for the rest.
+    // Enter), notifications, pin_during_turn, poll_timeout_secs (45), and
+    // Enter for the rest.
+    let before_mode = "\n".repeat(8);
+    let rest = "\n".repeat(16);
     let out = run_with_stdin(
         home.path(),
         &["setup", "gateway", "telegram"],
-        &format!("{TOKEN}\n\n\n\n\nsideways\n\n45\n\n\n\n\n\n"),
+        &format!("{TOKEN}\n{before_mode}sideways\n\n\n\n45\n{rest}"),
     );
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
     let asked = stderr(&out);

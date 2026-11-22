@@ -235,11 +235,15 @@ impl Adapters {
     }
 
     /// A send succeeded: a degraded adapter is confirmed active (not one
-    /// degraded because the forwarding upstream is unreachable).
+    /// degraded because the forwarding upstream is unreachable, nor one
+    /// serving only some of its accounts).
     pub(crate) fn confirm(&self, profile: &str, platform: &str) {
         if let Some(slot) = self.slot(profile, platform)
             && slot.state() == AdapterState::Degraded
-            && slot.status().code.as_deref() != Some(UPSTREAM_DOWN)
+            && !matches!(
+                slot.status().code.as_deref(),
+                Some(UPSTREAM_DOWN | super::adapter::PARTIAL_OUTAGE)
+            )
         {
             slot.set(AdapterState::Connected, None);
         }

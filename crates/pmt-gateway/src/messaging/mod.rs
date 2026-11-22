@@ -108,7 +108,7 @@ pub use adapter::{
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
     CronFire, Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive,
     LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Receipt,
-    Select, SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
+    Select, SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus, TurnState,
 };
 pub use agents::{
     Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFeed, UpdateFromChat,
