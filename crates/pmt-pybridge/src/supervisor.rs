@@ -591,6 +591,25 @@ impl Supervisor {
             .map_or_else(|| answer.to_string(), str::to_owned))
     }
 
+    /// Which of the gated tools `names` the plugin offers now (its
+    /// `check_fn` answers, asked as `command.invoke` kind `available`);
+    /// none when the sidecar cannot answer.
+    #[must_use]
+    pub fn available_tools(&self, names: &[String]) -> Vec<String> {
+        let params = json!({"kind": "available", "name": "tools", "names": names});
+        match self.call("command.invoke", &params, self.settings.call_timeout) {
+            Ok(answer) => names
+                .iter()
+                .filter(|n| answer.get(n.as_str()).and_then(Value::as_bool) == Some(true))
+                .cloned()
+                .collect(),
+            Err(err) => {
+                tracing::warn!(plugin = %self.spec.id, "tool availability unknown: {}", err.message());
+                Vec::new()
+            }
+        }
+    }
+
     /// Stops the sidecar (`bridge.shutdown`, then terminate).
     pub fn stop(&self) {
         self.stop_as(State::Stopped);

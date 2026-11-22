@@ -431,8 +431,22 @@ impl ToolSource for BridgedTools {
             return Vec::new();
         }
         let grants = self.grants.current();
+        let gated: Vec<String> = registrations
+            .tools
+            .iter()
+            .filter(|t| t.gated)
+            .map(|t| t.name.clone())
+            .collect();
+        let available = if gated.is_empty() {
+            Vec::new()
+        } else {
+            self.supervisor.available_tools(&gated)
+        };
         let mut registered = Vec::new();
         for tool in registrations.tools {
+            if tool.gated && !available.contains(&tool.name) {
+                continue;
+            }
             let descriptor =
                 ToolDescriptor::new(&tool.name, &id, tool.describe(), tool.parameters());
             let handler = Arc::new(BridgedTool {

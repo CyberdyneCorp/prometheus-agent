@@ -301,9 +301,12 @@ impl PluginsStep {
     fn install_catalog_plugins(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
         for (id, index) in &self.catalog {
             install_catalog(id, dest, &mut self.entries[*index])?;
+            // An already installed plugin (Skipped) still gets the
+            // profile set up: Camofox use in Hermes implies the core browser
+            // toolset is off.
             if id == "camofox"
                 && let Some(url) = &self.camofox_url
-                && self.entries[*index].disposition == Disposition::Transformed
+                && self.entries[*index].disposition != Disposition::Failed
             {
                 configure_camofox(url, dest, &mut self.entries, *index)?;
             }
@@ -317,7 +320,8 @@ const CAMOFOX_DEFAULT_URL: &str = "http://localhost:9377";
 
 /// A migrated Camofox profile (spec: plugin-system, Catalog plugins for
 /// Home Assistant and Camofox): the plugin's server URL, and the core
-/// `browser` toolset disabled so the model browses through the plugin.
+/// `browser` toolset disabled so the model browses through the plugin. A
+/// URL the profile already sets is kept.
 fn configure_camofox(
     url: &str,
     dest: &Dest<'_>,
@@ -343,8 +347,12 @@ fn configure_camofox(
     if !disabled.iter().any(|t| t == "browser") {
         disabled.push("browser".to_owned());
     }
+    let url = writes::lookup_value(&doc, "plugins.entries.camofox.url")
+        .and_then(toml::Value::as_str)
+        .unwrap_or(url)
+        .to_owned();
     let mut out = writes::Writes::default();
-    out.key("plugins.entries.camofox.url", url, index);
+    out.key("plugins.entries.camofox.url", url.as_str(), index);
     out.key(
         "tools.disabled_toolsets",
         toml_edit::Value::Array(disabled.iter().map(String::as_str).collect()),

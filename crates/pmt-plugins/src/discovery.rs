@@ -26,6 +26,11 @@ pub struct EmbeddedPlugin {
     pub manifest: &'static str,
     /// Its component (`wasm` kind).
     pub component: &'static [u8],
+    /// Its source files (`python` kind): path relative to the plugin
+    /// directory, and content. They are written once per digest under the
+    /// profile ([`crate::embedded::materialize`]) before the bridge hosts
+    /// the plugin.
+    pub files: &'static [(&'static str, &'static str)],
     /// Runs unless listed in `plugins.disabled`.
     pub enabled_by_default: bool,
 }
@@ -64,7 +69,8 @@ pub struct Discovered {
     pub id: String,
     /// Where it was found.
     pub source: Source,
-    /// Its directory (`None` when embedded).
+    /// Its directory (`None` for an embedded component; an embedded
+    /// plugin with source files names where they are written).
     pub dir: Option<PathBuf>,
     /// Its identity digest, when its files could be read.
     pub digest: Option<String>,
@@ -104,7 +110,7 @@ pub fn discover(inputs: &Inputs<'_>) -> Vec<Discovered> {
     let mut found: Vec<Discovered> = inputs
         .embedded
         .iter()
-        .map(|e| embedded(e, inputs.running))
+        .map(|e| embedded(e, inputs.profile_dir, inputs.running))
         .collect();
     let mut dirs = vec![(Source::User, inputs.profile_dir.join("plugins"))];
     if let Some(root) = inputs.cwd.and_then(|cwd| trusted_root(inputs.config, cwd)) {
@@ -219,18 +225,19 @@ fn add(found: &mut Vec<Discovered>, mut plugin: Discovered) {
     *existing = plugin;
 }
 
-fn embedded(plugin: &EmbeddedPlugin, running: &Version) -> Discovered {
+fn embedded(plugin: &EmbeddedPlugin, profile_dir: &Path, running: &Version) -> Discovered {
     let manifest = Manifest::parse(plugin.manifest, running);
+    let id = manifest
+        .as_ref()
+        .map_or_else(|_| "<built-in>".to_owned(), |m| m.id.clone());
+    let digest = crate::embedded::digest(plugin);
+    // A plugin with source files runs from their copy in the profile.
+    let dir = (!plugin.files.is_empty()).then(|| crate::embedded::dir(profile_dir, &id, &digest));
     Discovered {
-        id: manifest
-            .as_ref()
-            .map_or_else(|_| "<built-in>".to_owned(), |m| m.id.clone()),
+        id,
         source: Source::Embedded,
-        dir: None,
-        digest: Some(digest::of_bytes(&[
-            plugin.manifest.as_bytes(),
-            plugin.component,
-        ])),
+        dir,
+        digest: Some(digest),
         manifest,
         embedded: Some(*plugin),
         shadowed: Vec::new(),

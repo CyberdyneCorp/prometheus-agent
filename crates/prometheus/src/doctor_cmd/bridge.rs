@@ -35,11 +35,13 @@ pub(super) fn checks(inputs: &Inputs<'_>) -> Vec<Check> {
     let surveyed = pmt_plugins::load::survey(&crate::plugins_host::inputs(
         scope, &cwd, &version, &blocked,
     ));
-    let python = surveyed.iter().any(|(plugin, _)| {
+    // An embedded python plugin counts once enabled: it is not installed.
+    let python = surveyed.iter().any(|(plugin, status)| {
         plugin
             .manifest
             .as_ref()
             .is_ok_and(|m| m.kind == Kind::Python)
+            && (plugin.embedded.is_none() || status.state != pmt_plugins::load::State::Disabled)
     });
     if !python {
         return Vec::new();

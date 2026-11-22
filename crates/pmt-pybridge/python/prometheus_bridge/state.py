@@ -9,6 +9,8 @@ PROFILE = ""
 GRANTED_SECRETS = frozenset()
 CAPABILITIES = frozenset()
 DATA_DIR = ""
+PROFILE_HOME = ""
+TEMP_ROOT = ""
 API = {}
 
 # What the plugin registered.

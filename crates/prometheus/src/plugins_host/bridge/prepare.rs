@@ -142,6 +142,27 @@ fn lock(
     )))
 }
 
+/// Creates the profile directory each `fs_write` grant names as a tree
+/// (`<dir>/**`): the sandbox opens the tree, not its parents, so a plugin
+/// could not create a missing one itself.
+fn create_writable_dirs(scope: &ProfileScope, granted: &pmt_core::capability::CapabilitySet) {
+    for capability in granted {
+        let pmt_core::capability::Capability::FsWrite(glob) = capability else {
+            continue;
+        };
+        let Some(base) = glob.strip_suffix("/**") else {
+            continue;
+        };
+        let base = std::path::Path::new(base);
+        if !base.to_string_lossy().contains('*')
+            && base.starts_with(scope.dir())
+            && let Err(err) = std::fs::create_dir_all(base)
+        {
+            tracing::warn!(dir = %base.display(), "cannot create a granted directory: {err}");
+        }
+    }
+}
+
 /// Prepares `plugin` of `scope`.
 ///
 /// # Errors
@@ -164,6 +185,7 @@ pub fn prepare(scope: &ProfileScope, plugin: &BridgedPlugin) -> Result<Prepared,
     ]);
     let log = Arc::new(Log::new(Log::path_of(scope.dir(), &id)));
     let granted = plugin.grants.current();
+    create_writable_dirs(scope, &granted);
     let load = LoadParams {
         plugin: &id,
         profile: scope.name().as_str(),

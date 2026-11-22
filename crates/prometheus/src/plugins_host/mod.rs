@@ -25,6 +25,7 @@ pub mod catalog_tool;
 pub mod dashboard;
 pub mod desktop;
 pub mod dev;
+pub mod first_party;
 #[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;
@@ -635,7 +636,7 @@ pub fn inputs<'a>(
         profile_dir: scope.dir(),
         cwd: Some(cwd),
         config: &scope.config().plugins,
-        embedded: &[],
+        embedded: first_party::EMBEDDED,
         running: version,
         blocked,
         profile_config: Some(scope.config()),

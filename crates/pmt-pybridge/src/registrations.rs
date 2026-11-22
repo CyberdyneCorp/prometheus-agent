@@ -25,6 +25,10 @@ pub struct Tool {
     /// It replaces a core tool.
     #[serde(default)]
     pub r#override: bool,
+    /// Registered with a `check_fn`: offered to a session only when the
+    /// plugin answers that it is available ([`crate::supervisor::Supervisor::available_tools`]).
+    #[serde(default)]
+    pub gated: bool,
 }
 
 impl Tool {

@@ -195,11 +195,13 @@ other surfaces the tool answers with the `prometheus plugins install` and
 
 ## Enabling a plugin
 
-Nothing found runs until you enable it. In a profile with no plugins:
+Nothing found runs until you enable it. In a profile with only the
+built-in plugins:
 
 ```console
 $ prometheus plugins list
-no plugins found
+disk-cleanup  1.0.0  python  embedded  disabled
+google_meet  1.0.0  python  embedded  disabled
 $ prometheus plugins enable weather # exits 66
 error: no plugin 'weather' was found
 $ prometheus config set plugins.wasm.call_timeout_ms 10000
@@ -258,8 +260,14 @@ Prometheus reads and a `requires_prometheus` range that excludes it. The
 capability keys are `network`, `fs_read`, `fs_write`, `secrets`, `llm`,
 `tools_call`, `tools_override`, `hooks`, `prompt_section`, `commands`,
 `cli_commands`, `providers`, `providers_override`, `approval_transport`,
-`inject_messages`, `platform_actions`, `subprocess`, `ui`, `subagents` and
-`credentials`.
+`inject_messages`, `platform_actions`, `subprocess`, `listen` (loopback
+ports a server of the plugin accepts connections on), `ui`, `subagents` and
+`credentials`. `fs_read`/`fs_write` paths start with `$plugin_data` (the
+plugin's data directory), `$profile_home` (the profile's home), `$tmp` (the
+system temporary directory), `$workspace` or are absolute; python plugins
+read the first three as `ctx.data_dir`, `ctx.profile_home` and
+`ctx.temp_root`. The host creates a missing profile directory a granted
+`fs_write` tree names before the plugin starts.
 
 ## The WIT worlds
 
@@ -572,3 +580,41 @@ server is `plugins.entries.camofox.url` (default `http://localhost:9377`;
 another host needs its network capability approved). Migrating a Hermes
 profile that browsed through Camofox installs it disabled, sets the URL
 and disables the core `browser` toolset in that profile.
+
+## First-party plugins: disk-cleanup and google_meet
+
+Two python plugins ship inside the binary, disabled by default
+(`prometheus plugins list` shows them with source `embedded`). Enabling one
+(`prometheus plugins enable <id>`) writes its files under
+`<profile>/python/embedded/<id>/` and the python bridge hosts it like any
+other.
+
+`disk-cleanup` tracks the test and temporary files the agent creates
+(`test_*`, `tmp_*`, `*.test.*`) with
+[`write_file`](../reference/tools.md#write_file),
+[`patch`](../reference/tools.md#patch) or
+[`terminal`](../reference/tools.md#terminal)
+under the profile home or `<tmp>/prometheus-*`, and removes them when the
+session ends: `test` files always, `temp` after 7 days, `cron-output` after
+14 days, plus empty directories. Old research, browser profiles and files
+over 500 MB are only listed, by `/disk-cleanup deep`. It never touches
+anything outside those roots, the profile's state directories (`logs`,
+`skills`, `plugins`, `cache`, ...), workspace trees or a git checkout.
+`/disk-cleanup status|dry-run|quick|deep|track <path> <category>|forget
+<path>` drives it; its state is `tracked.json` and the append-only
+`cleanup.log` in its plugin data.
+
+`google_meet` lets the agent join a Google Meet call: toolset `google_meet`
+(`meet_join`, `meet_status`, `meet_transcript`, `meet_say`, `meet_leave`).
+Only `https://meet.google.com/...` URLs are joined. The bot is a background
+Chromium (Playwright) that turns on Meet's live captions and writes them to
+`<profile>/workspace/meetings/<id>/transcript.txt`; no meeting audio is
+decoded. With `mode = "realtime"` and the `OPENAI_API_KEY` secret granted,
+`meet_say` speaks through a virtual microphone (PulseAudio on Linux,
+BlackHole and ffmpeg on macOS). Set it up with
+`prometheus plugins run google_meet install` (browser runtime in its plugin
+data) and `... auth` (Google sign-in); the tools are offered only once both
+exist (`... setup` checks). `... join|status|transcript|say|stop` drive a
+meeting from the shell, and `... node run|approve|list|remove|ping` runs
+the bot on another machine (`node run` listens on loopback port 18789,
+reached through an SSH tunnel; another port needs a `net.listen` grant).

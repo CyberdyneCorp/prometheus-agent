@@ -87,3 +87,75 @@ fn a_migrated_camofox_profile_gets_the_plugin_its_url_and_no_core_browser() {
     assert!(listed.contains("\"camofox\""), "{listed}");
     common::ok(&common::run(home.path(), &["config", "validate"]));
 }
+
+/// A Hermes Camofox profile whose `camofox` plugin is already installed
+/// (the install is skipped) still gets the server URL and the core
+/// `browser` toolset disabled.
+#[test]
+fn a_preinstalled_camofox_plugin_still_gets_the_url_and_no_core_browser() {
+    let config = migrate_with_preinstalled_plugin("");
+    assert_eq!(
+        config["plugins"]["entries"]["camofox"]["url"].as_str(),
+        Some("http://127.0.0.1:9377"),
+        "{config:#?}"
+    );
+    let disabled = config["tools"]["disabled_toolsets"].as_array().unwrap();
+    assert!(
+        disabled.iter().any(|t| t.as_str() == Some("browser")),
+        "{disabled:?}"
+    );
+}
+
+/// A Camofox URL the user already set in the profile is kept.
+#[test]
+fn a_camofox_url_the_user_set_is_kept() {
+    let config = migrate_with_preinstalled_plugin(
+        "\n[plugins.entries.camofox]\nurl = \"http://camofox.lan:9377\"\n",
+    );
+    assert_eq!(
+        config["plugins"]["entries"]["camofox"]["url"].as_str(),
+        Some("http://camofox.lan:9377"),
+        "{config:#?}"
+    );
+    let disabled = config["tools"]["disabled_toolsets"].as_array().unwrap();
+    assert!(
+        disabled.iter().any(|t| t.as_str() == Some("browser")),
+        "{disabled:?}"
+    );
+}
+
+/// Migrates a Hermes Camofox profile into a home whose default profile
+/// already has a `camofox` plugin and `config` appended; returns the
+/// profile's `config.toml`.
+fn migrate_with_preinstalled_plugin(config: &str) -> toml::Table {
+    let home = common::mock_home();
+    let server = CatalogServer::start(home.path());
+    server.publish(
+        home.path(),
+        &Published {
+            id: "camofox",
+            crate_name: "sample-tool",
+            world: "tool@1.0",
+            network: "localhost:9377",
+            category: "browser",
+        },
+    );
+    let plugin = home.path().join("profiles/default/plugins/camofox");
+    std::fs::create_dir_all(&plugin).unwrap();
+    std::fs::write(plugin.join("README.md"), "placed by the user\n").unwrap();
+    common::append_config(home.path(), config);
+    let h = Hermes::new(&home.path().join("hermes"));
+    h.write(
+        "default",
+        "config.yaml",
+        "_config_version: 52\nbrowser:\n  cloud_provider: camofox\n",
+    );
+    h.write("default", ".env", "CAMOFOX_URL=http://127.0.0.1:9377\n");
+    let report = migrate(home.path(), &h.root);
+    let skipped = entry(&report, "integration:camofox");
+    assert_eq!(skipped["disposition"], "skipped", "{skipped}");
+    toml::from_str(
+        &std::fs::read_to_string(home.path().join("profiles/default/config.toml")).unwrap(),
+    )
+    .unwrap()
+}

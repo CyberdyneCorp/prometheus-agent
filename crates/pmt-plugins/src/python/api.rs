@@ -57,6 +57,12 @@ pub const SUPPORTED: &[&str] = &[
     "on_unload",
     "spawn_task",
     "manifest",
+    // Prometheus extensions: the plugin's data directory, its profile's
+    // home and the host's temporary directory (paths its `fs_*` grants
+    // name as `$plugin_data`, `$profile_home` and `$tmp`).
+    "data_dir",
+    "profile_home",
+    "temp_root",
 ];
 
 /// The platform-adapter reason.

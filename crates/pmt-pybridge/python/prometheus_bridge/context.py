@@ -279,6 +279,19 @@ class PluginContext:
     def llm(self):
         return self._llm
 
+    # Prometheus extensions: where a plugin's files live on the host.
+    @property
+    def data_dir(self):
+        return state.DATA_DIR
+
+    @property
+    def profile_home(self):
+        return state.PROFILE_HOME
+
+    @property
+    def temp_root(self):
+        return state.TEMP_ROOT
+
     def has_plugin(self, plugin_id):
         return bool(host("plugins.has", {"id": plugin_id}))
 

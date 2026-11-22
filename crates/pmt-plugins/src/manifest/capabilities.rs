@@ -30,6 +30,7 @@ const KEYS: &[&str] = &[
     "inject_messages",
     "platform_actions",
     "subprocess",
+    "listen",
     "ui",
     "subagents",
     "credentials",
@@ -53,7 +54,8 @@ const UI_SURFACE: &str = "plugin_panel";
 pub struct Declared {
     /// `host[:port]` patterns (`*.` prefix allowed, no bare `*`).
     pub network: Vec<String>,
-    /// Readable paths under `$plugin_data`, `$workspace` or absolute.
+    /// Readable paths under `$plugin_data`, `$profile_home`, `$tmp`,
+    /// `$workspace` or absolute.
     pub fs_read: Vec<String>,
     /// Writable paths, as `fs_read`.
     pub fs_write: Vec<String>,
@@ -85,6 +87,8 @@ pub struct Declared {
     pub platform_actions: Vec<String>,
     /// Starts child processes.
     pub subprocess: bool,
+    /// Loopback ports it may accept connections on (a server it runs).
+    pub listen: Vec<u16>,
     /// Shows a UI panel.
     pub ui: bool,
     /// Launches subagents (the `subagents` host interface).
@@ -151,6 +155,7 @@ impl Declared {
             inject_messages: flag(table, "inject_messages")?,
             platform_actions: strings(table, "platform_actions")?,
             subprocess: flag(table, "subprocess")?,
+            listen: ports(table, "listen")?,
             ui: flag(table, "ui")?,
             subagents: flag(table, "subagents")?,
             credentials: strings(table, "credentials")?,
@@ -197,6 +202,11 @@ impl Declared {
             }
         }
         texts.extend(self.secrets.iter().map(|s| format!("secrets.read:{s}")));
+        texts.extend(
+            self.listen
+                .iter()
+                .map(|p| format!("net.listen:loopback:{p}")),
+        );
         if let Some(llm) = &self.llm {
             texts.extend(llm.capabilities());
         }
@@ -281,6 +291,24 @@ fn llm(value: Option<&Value>) -> Result<Option<LlmDeclaration>, Error> {
     }))
 }
 
+fn ports(table: &Table, key: &str) -> Result<Vec<u16>, Error> {
+    let Some(value) = table.get(key) else {
+        return Ok(Vec::new());
+    };
+    let wrong = || invalid(format!("{key} must be a list of port numbers (1-65535)"));
+    value
+        .as_array()
+        .ok_or_else(wrong)?
+        .iter()
+        .map(|v| {
+            v.as_integer()
+                .and_then(|n| u16::try_from(n).ok())
+                .filter(|p| *p > 0)
+                .ok_or_else(wrong)
+        })
+        .collect()
+}
+
 fn flag(table: &Table, key: &str) -> Result<bool, Error> {
     match table.get(key) {
         None => Ok(false),
@@ -289,11 +317,23 @@ fn flag(table: &Table, key: &str) -> Result<bool, Error> {
     }
 }
 
-/// `$plugin_data/x` -> `<plugin data>/x`, `$workspace/x` -> `<workspace>/x`.
+/// `$plugin_data/x` -> `<plugin data>/x`, `$profile_home/x` -> the
+/// profile's home (the directory holding `plugin-data/`), `$tmp/x` -> the
+/// system temporary directory, `$workspace/x` -> `<workspace>/x`.
 fn place(path: &str, plugin_data: &Path) -> Result<String, Error> {
+    let slashed = |dir: &Path| dir.to_string_lossy().replace('\\', "/");
     if let Some(rest) = path.strip_prefix("$plugin_data") {
-        let base = plugin_data.to_string_lossy().replace('\\', "/");
-        return Ok(format!("{base}{rest}"));
+        return Ok(format!("{}{rest}", slashed(plugin_data)));
+    }
+    if let Some(rest) = path.strip_prefix("$profile_home") {
+        let home = plugin_data
+            .parent()
+            .and_then(Path::parent)
+            .unwrap_or(plugin_data);
+        return Ok(format!("{}{rest}", slashed(home)));
+    }
+    if let Some(rest) = path.strip_prefix("$tmp") {
+        return Ok(format!("{}{rest}", slashed(&std::env::temp_dir())));
     }
     if let Some(rest) = path.strip_prefix("$workspace") {
         return Ok(format!("<workspace>{rest}"));
@@ -302,7 +342,7 @@ fn place(path: &str, plugin_data: &Path) -> Result<String, Error> {
         return Ok(path.to_owned());
     }
     Err(invalid(format!(
-        "fs path '{path}' must start with $plugin_data, $workspace or be absolute"
+        "fs path '{path}' must start with $plugin_data, $profile_home, $tmp, $workspace or be absolute"
     )))
 }
 
@@ -325,6 +365,7 @@ fn label_text(text: &str) -> String {
         "tools.call" => "tools_call",
         "tools.override" => "tools_override",
         "process.spawn" => return "subprocess".to_owned(),
+        "net.listen" => "listen",
         "plugin.hook" => "hooks",
         "plugin.command" => "commands",
         "plugin.cli_command" => "cli_commands",
@@ -360,6 +401,10 @@ pub fn describe(capability: &Capability) -> String {
         Capability::ToolsCall(tool) => format!("call the tool {tool}"),
         Capability::ToolsOverride(tool) => format!("replace the built-in tool {tool}"),
         Capability::ProcessSpawn(_) => "start programs".to_owned(),
+        Capability::NetListen { port } => match port {
+            Some(port) => format!("accept connections on local port {port}"),
+            None => "accept connections on local ports".to_owned(),
+        },
         Capability::Ui(_) => "show a panel in the dashboard and desktop app".to_owned(),
         Capability::Plugin { right, target } => describe_right(*right, target.as_deref()),
         other => other.to_string(),

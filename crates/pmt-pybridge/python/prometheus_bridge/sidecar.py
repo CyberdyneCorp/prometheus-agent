@@ -161,6 +161,8 @@ def _load(sidecar, params):
     state.GRANTED_SECRETS = frozenset(params.get("secrets", ()))
     state.CAPABILITIES = frozenset(params.get("capabilities", ()))
     state.DATA_DIR = params.get("data_dir", "")
+    state.PROFILE_HOME = params.get("profile_home") or ""
+    state.TEMP_ROOT = params.get("temp_root") or ""
     state.API = params.get("api", {})
     imports.install()
     directory = params["dir"]
@@ -209,7 +211,8 @@ def registrations():
         static = section["content"] if isinstance(section["content"], str) else None
         sections.append({"id": section_id, "max_chars": section["max_chars"], "static": static})
     return {
-        "tools": [{k: typed.to_wire(v) for k, v in t.items() if k not in ("handler", "check_fn")}
+        "tools": [{**{k: typed.to_wire(v) for k, v in t.items() if k not in ("handler", "check_fn")},
+                   "gated": t.get("check_fn") is not None}
                   for t in reg["tools"].values()],
         "hooks": sorted(reg["hooks"]),
         "sections": sections,
@@ -322,6 +325,8 @@ def _command(sidecar, params):
     name = params["name"]
     if kind == "cli":
         return {"code": cli.run(name, params.get("argv") or [], sidecar.real_stderr)}
+    if kind == "available":
+        return {name: _available(name) for name in params.get("names") or ()}
     if kind == "section":
         content = state.REGISTRY["sections"][name]["content"]
         return content if isinstance(content, str) else str(content(dict(params.get("info") or {})))
@@ -338,6 +343,19 @@ def _command(sidecar, params):
     if inspect.iscoroutine(result):
         result = asyncio.run(result)
     return None if result is None else str(result)
+
+
+def _available(name):
+    """A tool's ``check_fn`` answer; a failing check means unavailable."""
+    entry = state.REGISTRY["tools"].get(name)
+    check = entry and entry.get("check_fn")
+    if check is None:
+        return entry is not None
+    try:
+        return bool(check())
+    except Exception:  # noqa: BLE001 - a broken check hides the tool
+        traceback.print_exc(file=sys.stderr)
+        return False
 
 
 def _provider(_, params):
