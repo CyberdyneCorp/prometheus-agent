@@ -73,7 +73,13 @@ impl Bridge {
         })
     }
 
-    fn call(&self, path: &str, body: &Value) -> Result<Value, String> {
+    /// Posts `body` to the sidecar's `path`: a bridge route, or one a
+    /// sidecar built on the bridge adds (Buzz's `/cli`).
+    ///
+    /// # Errors
+    ///
+    /// The sidecar refused or did not answer.
+    pub fn call(&self, path: &str, body: &Value) -> Result<Value, String> {
         let auth = format!("Bearer {}", self.token);
         net::json(
             "POST",

@@ -505,7 +505,7 @@ Other platforms arrive as first-party adapter plugins from the plugin
 catalog (`prometheus plugins install <id>`, then `prometheus plugins
 enable <id>`); each passes the conformance kit against a mock of its
 platform. Adapters that hold a socket (IRC, Home Assistant, ntfy,
-Mattermost, DingTalk, SimpleX, WeCom, Weixin, QQ Bot, Yuanbao) run a small
+Mattermost, DingTalk, SimpleX, WeCom, Weixin, QQ Bot, Yuanbao, Buzz) run a small
 Node sidecar, the socket bridge, which connects only to the hosts the
 plugin was granted; a server other than the declared default is granted
 with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
@@ -626,6 +626,31 @@ credential stores stay unreadable either way.
   toolset (`yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`,
   `yb_search_sticker` with at most 50 results, `yb_send_sticker`) acts
   through the adapter, so it works in the process that runs the gateway.
+
+- `buzz` (Block's Nostr relay): `relay_url` (wss://), `channels`, `name`
+  (the bot's mention name) and secret `BUZZ_PRIVATE_KEY` (nsec or hex);
+  optionally `transport` (`auto`, `websocket`, `poll`), `poll_interval_secs`
+  (4), `cli_path` (`buzz`), `reply_in_thread` (true) and
+  `attachment_hosts`. The relay socket authenticates with NIP-42 and
+  subscribes from the moment it connects (no history replay); when it
+  cannot connect, `auto` polls through the Buzz CLI. Everything is sent
+  with the Buzz CLI, which receives the key in its environment only.
+  Channels answer only when the bot is mentioned (name, npub or key); DMs
+  always. Inbound files are fetched only from the relay's origin or
+  `attachment_hosts` over HTTPS, and only kept when their SHA-256 matches.
+
+- `photon` (iMessage through Photon's managed lines): run `prometheus
+  gateway photon setup --phone <E164>` (device login in the browser,
+  project and project secret into the secrets store, your number
+  registered, sidecar installed; `--no-install` leaves the install to the
+  first connect) and `prometheus gateway photon status` (the iMessage line
+  each number texts). The sidecar runs Photon's Spectrum SDK; inbound
+  files reach the agent as markers naming the file and its type, never
+  their bytes. Choices go out as native polls (a vote, or replying with
+  the number, picks one); a reply starting with `[effect:<name>]` (`slam`,
+  `loud`, `gentle`, `invisible_ink`, ...) is sent with that effect. Read
+  receipts are sent unless `read_receipts = false`; `dashboard_url`,
+  `spectrum_url` and `dashboard_project` override Photon's defaults.
 
 Adapter plugins exchange files with the host as base64 (inbound files the
 plugin downloaded under its own grants, or a local file inside its

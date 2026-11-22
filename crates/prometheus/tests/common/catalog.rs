@@ -347,6 +347,12 @@ impl Bridge {
     /// Starts the sidecar script at `script` (relative to the repository)
     /// the same way.
     pub fn start_script(script: &str, network: &[String]) -> Self {
+        Self::start_script_with_env(script, network, &[])
+    }
+
+    /// [`Self::start_script`] with `env` added (the secrets the host
+    /// hands a sidecar that declares them).
+    pub fn start_script_with_env(script: &str, network: &[String], env: &[(&str, &str)]) -> Self {
         let port = TcpListener::bind("127.0.0.1:0")
             .unwrap()
             .local_addr()
@@ -365,6 +371,7 @@ impl Bridge {
             .env("PMT_SIDECAR_PORT", port.to_string())
             .env("PMT_SIDECAR_TOKEN", &token)
             .env("PMT_SIDECAR_NETWORK", network.join(","))
+            .envs(env.iter().copied())
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .spawn()

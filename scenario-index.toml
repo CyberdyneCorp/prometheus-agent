@@ -5397,3 +5397,9 @@ capabilities = [
 
 [platform-adapters."Feishu and Yuanbao tools"]
 "Sticker search bounded" = ["crates/prometheus/tests/catalog_yuanbao.rs::a_sticker_search_over_fifty_fails_validation_naming_the_maximum"]
+
+[platform-adapters."Buzz Nostr adapter"]
+"Media hash mismatch" = ["crates/prometheus/tests/catalog_buzz.rs::an_attachment_whose_digest_differs_is_discarded_and_the_agent_told"]
+
+[platform-adapters."Photon iMessage adapter"]
+"Inbound attachment metadata" = ["crates/prometheus/tests/catalog_photon.rs::a_photo_arrives_as_a_marker_naming_the_file_and_type_without_bytes"]

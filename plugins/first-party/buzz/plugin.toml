@@ -1,0 +1,30 @@
+# First-party catalog adapter: Buzz, Block's Nostr community relay (spec:
+# platform-adapters, Buzz Nostr adapter). The sidecar holds the relay
+# WebSocket (socket bridge) and runs the Buzz CLI, which sends everything;
+# the private key reaches the CLI only through its environment. Configure
+# `[gateway.platforms.buzz]` options `relay_url` (wss://...), `channels`
+# (channel ids to watch) and optionally `name` (the bot's mention name),
+# `transport` (auto, websocket, poll; default auto), `poll_interval_secs`
+# (4), `cli_path` (buzz), `reply_in_thread` (true) and `attachment_hosts`
+# (extra HTTPS hosts inbound media may come from); `prometheus secrets set
+# BUZZ_PRIVATE_KEY` (nsec1... or hex). Grant the relay host
+# (`prometheus grants add plugin:buzz@<digest> net.connect:<relay>:443`).
+manifest_version = 1
+id = "buzz"
+version = "1.0.0"
+kind = "wasm"
+description = "Buzz (Nostr) community channels and DMs, sent through the Buzz CLI."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["127.0.0.1"]
+secrets = ["BUZZ_PRIVATE_KEY"]
+subprocess = true
+
+[sidecar]
+runtime = "node"
+command = "sidecar/buzz.mjs"
+lockfile = "sidecar/package-lock.json"
+secrets = ["BUZZ_PRIVATE_KEY"]

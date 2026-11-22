@@ -85,6 +85,8 @@ pub enum GatewayCommand {
     },
     /// Telegram bot maintenance.
     Telegram(super::telegram_cmd::TelegramArgs),
+    /// Photon iMessage setup and status.
+    Photon(super::photon_cmd::PhotonArgs),
     /// Replay synthetic messages through a platform's admission and mention
     /// gating, offline and without credentials; exits 1 when a check fails.
     Selftest(super::selftest_cmd::SelftestArgs),
@@ -178,6 +180,7 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Resume { platform } => super::platform_cmd::run(platform, false, ctx),
         GatewayCommand::Selftest(args) => super::selftest_cmd::run(args, ctx),
         GatewayCommand::Telegram(args) => super::telegram_cmd::run(args, ctx),
+        GatewayCommand::Photon(args) => super::photon_cmd::run(args, ctx),
     }
 }
 

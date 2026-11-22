@@ -132,11 +132,49 @@ pub fn factory() -> AdapterFactory {
         options["access"] = access_of(&setup.config);
         let mut adapter =
             PluginAdapter::read(Arc::clone(&plugin.instance), &setup.platform, &options)?;
-        adapter.sidecar = sidecar_of(setup, plugin);
+        adapter.sidecar = sidecar_of(&setup.scope, plugin);
         adapter.profile_dir = setup.scope.dir().to_path_buf();
         adapter.media = Arc::new(Inbox::granted(Arc::clone(&plugin.grants)));
         Ok(Arc::new(adapter) as Arc<dyn Adapter>)
     })
+}
+
+/// Installs the runtime and packages of the sidecar of the enabled adapter
+/// plugin providing `platform` (a setup command does it ahead of the
+/// first connect).
+///
+/// # Errors
+///
+/// No enabled plugin provides the platform, it declares no sidecar, or
+/// the install failed.
+pub async fn prepare_sidecar(
+    scope: &pmt_config::ProfileScope,
+    platform: &str,
+) -> Result<(), Error> {
+    let plugins = super::current(scope, RECHECK).current();
+    let sidecar = plugins
+        .plugins
+        .iter()
+        .find(|p| p.manifest.adapter_platform().as_deref() == Some(platform))
+        .and_then(|plugin| sidecar_of(scope, plugin))
+        .ok_or_else(|| {
+            Error::new(
+                &codes::PLUGINS_LOAD,
+                format!(
+                    "no enabled adapter plugin of profile '{}' runs a sidecar for '{platform}'",
+                    scope.name()
+                ),
+            )
+            .with_hint(format!(
+                "prometheus plugins install {platform}, then prometheus plugins enable {platform}"
+            ))
+        })?;
+    if sidecar.spec.declaration.runtime == pmt_plugins::manifest::sidecar::Runtime::Node {
+        sidecar::prepare_node(&sidecar.spec, &scope.config().network)
+            .await
+            .map_err(|e| Error::new(&codes::PLUGINS_LOAD, e.message))?;
+    }
+    Ok(())
 }
 
 /// The platform table's allowlists, handed to the plugin as
@@ -153,7 +191,10 @@ fn access_of(config: &pmt_config::schema::PlatformConfig) -> Value {
 }
 
 /// What starts `plugin`'s sidecar, when it declares one.
-fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) -> Option<Sidecar> {
+fn sidecar_of(
+    scope: &pmt_config::ProfileScope,
+    plugin: &pmt_plugins::load::LoadedPlugin,
+) -> Option<Sidecar> {
     let declaration = plugin.manifest.sidecar.clone()?;
     let Some(dir) = plugin.dir.clone() else {
         tracing::warn!(
@@ -167,8 +208,8 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
     let reads_home = declaration.reads_home;
     Some(Sidecar {
         spec: sidecar::Spec {
-            home: setup.scope.home().to_path_buf(),
-            profile: setup.scope.name().as_str().to_owned(),
+            home: scope.home().to_path_buf(),
+            profile: scope.name().as_str().to_owned(),
             plugin: plugin.manifest.id.clone(),
             plugin_dir: dir,
             declaration,
@@ -176,10 +217,9 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
             node: None,
             network: sidecar::granted_network(&grants),
             confinement: super::sidecar_sandbox::Confinement {
-                sandbox: setup.scope.config().security.sandbox.clone(),
-                home: setup.scope.home().to_path_buf(),
-                data: setup
-                    .scope
+                sandbox: scope.config().security.sandbox.clone(),
+                home: scope.home().to_path_buf(),
+                data: scope
                     .dir()
                     .join("plugin-data")
                     .join(&plugin.manifest.id)
@@ -189,7 +229,7 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
             },
         },
         names,
-        scope: setup.scope.clone(),
+        scope: scope.clone(),
         running: Mutex::default(),
     })
 }

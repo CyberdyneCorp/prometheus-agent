@@ -95,8 +95,16 @@ fn every_socket_adapter_ships_the_same_bridge() {
         "weixin",
         "qqbot",
         "yuanbao",
+        "buzz",
+        "photon",
     ] {
-        for file in ["bridge.mjs", "package.json", "package-lock.json"] {
+        // Photon's sidecar builds on the bridge but pins its own packages.
+        let files: &[&str] = if plugin == "photon" {
+            &["bridge.mjs"]
+        } else {
+            &["bridge.mjs", "package.json", "package-lock.json"]
+        };
+        for file in files {
             let shipped = std::fs::read(root.join(plugin).join("sidecar").join(file)).unwrap();
             let source = std::fs::read(canonical.join(file)).unwrap();
             assert!(

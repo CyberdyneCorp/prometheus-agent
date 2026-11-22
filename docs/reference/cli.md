@@ -31728,6 +31728,7 @@ Commands:
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
+  photon          Photon iMessage setup and status
   selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 
@@ -33337,6 +33338,171 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway telegram help help
 ```
 
+## `prometheus gateway photon`
+
+```text
+Photon iMessage setup and status
+
+Usage: prometheus gateway photon [OPTIONS] <COMMAND>
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway photon setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus gateway photon setup [OPTIONS] --phone <PHONE>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --phone <PHONE>
+          Your phone number in E.164 form (`+15551234567`): the number that texts the agent
+
+      --no-install
+          Leave installing the sidecar's runtime to the adapter's first connect (an offline machine, say)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway photon status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus gateway photon status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway photon help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway photon help [COMMAND]
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway photon help setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus gateway photon help setup
+```
+
+## `prometheus gateway photon help status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus gateway photon help status
+```
+
+## `prometheus gateway photon help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway photon help help
+```
+
 ## `prometheus gateway selftest`
 
 ```text
@@ -33409,6 +33575,7 @@ Commands:
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
+  photon          Photon iMessage setup and status
   selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 ```
@@ -33676,6 +33843,34 @@ Commands:
 Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
 
 Usage: prometheus gateway help telegram logout
+```
+
+## `prometheus gateway help photon`
+
+```text
+Photon iMessage setup and status
+
+Usage: prometheus gateway help photon [COMMAND]
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+```
+
+## `prometheus gateway help photon setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus gateway help photon setup
+```
+
+## `prometheus gateway help photon status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus gateway help photon status
 ```
 
 ## `prometheus gateway help selftest`
@@ -43638,6 +43833,7 @@ Commands:
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
+  photon          Photon iMessage setup and status
   selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
 ```
 
@@ -43904,6 +44100,34 @@ Commands:
 Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
 
 Usage: prometheus help gateway telegram logout
+```
+
+## `prometheus help gateway photon`
+
+```text
+Photon iMessage setup and status
+
+Usage: prometheus help gateway photon [COMMAND]
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+```
+
+## `prometheus help gateway photon setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus help gateway photon setup
+```
+
+## `prometheus help gateway photon status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus help gateway photon status
 ```
 
 ## `prometheus help gateway selftest`

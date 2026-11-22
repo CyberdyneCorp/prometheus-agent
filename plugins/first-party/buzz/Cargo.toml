@@ -1,0 +1,15 @@
+[package]
+name = "first-party-buzz"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+adapter-kit = { path = "../adapter-kit" }
+serde_json.workspace = true
+# BIP-340 Schnorr signatures of the NIP-42 AUTH event (pure Rust, no RNG
+# needed: the auxiliary data is derived).
+k256 = { version = "0.13.4", default-features = false, features = ["schnorr"] }

@@ -189,7 +189,13 @@ function find(id) {
   return conn ? [conn, null] : [null, [404, { error: `no connection ${id}` }]];
 }
 
-const routes = {
+// GET routes a sidecar built on this module adds, each answering on the
+// raw response (Photon's NDJSON inbound stream); none of the bridge's own.
+export const getRoutes = {};
+
+// The POST routes; a sidecar that imports this module may add its own
+// (an answer may be a promise).
+export const routes = {
   "/open": (body) => open(body),
   "/send": (body) => {
     const [conn, missing] = find(body.id);
@@ -226,18 +232,19 @@ function answer(res, status, body) {
 
 const server = http.createServer((req, res) => {
   if (req.headers.authorization !== `Bearer ${TOKEN}` || !TOKEN) return answer(res, 401, { error: "unauthorized" });
+  if (req.method === "GET" && getRoutes[req.url]) return getRoutes[req.url](req, res);
   const route = req.method === "POST" ? routes[req.url] : undefined;
   if (!route) return answer(res, 404, { error: "not found" });
   let raw = "";
   req.setEncoding("utf8");
   req.on("data", (chunk) => (raw += chunk));
   req.on("end", () => {
-    try {
-      const [status, body] = route(raw ? JSON.parse(raw) : {});
-      answer(res, status, body);
-    } catch (error) {
-      answer(res, 400, { error: String(error.message || error) });
-    }
+    Promise.resolve()
+      .then(() => route(raw ? JSON.parse(raw) : {}))
+      .then(
+        ([status, body]) => answer(res, status, body),
+        (error) => answer(res, 400, { error: String(error.message || error) }),
+      );
   });
 });
 

@@ -1,0 +1,21 @@
+{
+  "name": "prometheus-photon-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Photon Spectrum bridge of the Prometheus photon adapter plugin: inbound iMessage as NDJSON, sends over loopback HTTP.",
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "spectrum-ts": "12.10.1"
+  },
+  "overrides": {
+    "undici": "7.30.0",
+    "protobufjs": "8.8.0",
+    "@opentelemetry/otlp-transformer": "0.223.0",
+    "@opentelemetry/otlp-exporter-base": "0.223.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.223.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.223.0",
+    "@opentelemetry/core": "2.12.0"
+  }
+}
