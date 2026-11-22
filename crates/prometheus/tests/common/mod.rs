@@ -345,6 +345,8 @@ pub mod catalog;
 #[cfg(feature = "gateway")]
 pub mod catalog_crypt;
 #[cfg(feature = "gateway")]
+pub mod catalog_feishu;
+#[cfg(feature = "gateway")]
 pub mod catalog_jwt;
 #[cfg(feature = "gateway")]
 pub mod catalog_ws;

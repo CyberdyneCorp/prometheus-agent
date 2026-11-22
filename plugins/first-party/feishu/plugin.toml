@@ -1,0 +1,36 @@
+# First-party catalog adapter: Feishu and Lark (spec: platform-adapters,
+# Feishu and Lark adapter; Feishu document comments and meeting
+# invitations). Create the app with `prometheus gateway setup feishu`
+# (scan the QR code with Feishu or Lark: the app secret goes to the
+# secrets store as FEISHU_APP_SECRET, the app id to `options.app_id`), or
+# configure `[gateway.platforms.feishu]` option `app_id` and `prometheus
+# secrets set FEISHU_APP_SECRET` by hand.
+#
+# Options: `domain` (feishu | lark), `connection_mode` (websocket, the
+# default: the socket bridge sidecar holds Feishu's long connection, no
+# public URL needed | webhook: events at `/p/<profile>/feishu/` on the
+# shared listener, verified with the secrets FEISHU_VERIFICATION_TOKEN and
+# FEISHU_ENCRYPT_KEY), `dm_policy` (pairing | open | allowlist | disabled)
+# with `allow_from`, `group_policy` (allowlist, the default | open |
+# disabled) with `group_allow_from`, `admins`, `require_mention` (true),
+# per-chat `group_rules.<chat_id> = {policy, allowlist, blacklist,
+# require_mention}`. Document comment rules live in
+# `<profile>/plugin-data/feishu/files/comment_rules.json`; see `prometheus
+# gateway feishu comment-rules status`.
+manifest_version = 1
+id = "feishu"
+version = "1.0.0"
+kind = "wasm"
+description = "Feishu and Lark bots: chats, cards, document comments and meeting invitations."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["open.feishu.cn", "open.larksuite.com", "msg-frontier.feishu.cn", "msg-frontier.larksuite.com", "127.0.0.1"]
+secrets = ["FEISHU_APP_SECRET", "FEISHU_ENCRYPT_KEY", "FEISHU_VERIFICATION_TOKEN"]
+
+[sidecar]
+runtime = "node"
+command = "sidecar/bridge.mjs"
+lockfile = "sidecar/package-lock.json"

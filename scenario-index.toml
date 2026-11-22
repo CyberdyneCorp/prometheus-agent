@@ -2277,7 +2277,7 @@ capabilities = [
 "Webhook payload cannot execute" = ["crates/pmt-tools/tests/surfaces.rs::webhook_payload_cannot_execute", "crates/prometheus/tests/gateway_webhooks.rs::a_route_without_toolsets_runs_read_only_and_answers_the_caller"]
 
 [tool-system."Platform bundles"]
-"Feishu tools stay on Feishu" = { tests = ["crates/pmt-tools/tests/surfaces.rs::feishu_tools_stay_on_feishu"], note = "the Feishu adapter and its tools are M3 (task 78.5); the bundle mechanism is proven with test toolsets `feishu_doc`/`feishu_drive` registered for platform `feishu`" }
+"Feishu tools stay on Feishu" = { tests = ["crates/pmt-tools/tests/surfaces.rs::feishu_tools_stay_on_feishu", "crates/prometheus/tests/catalog_feishu_docs.rs::a_profile_without_feishu_has_no_feishu_tool_and_feishu_brings_its_bundle"], note = "the bundle mechanism is proven with test toolsets `feishu_doc`/`feishu_drive` registered for platform `feishu`; the second test registers the real Feishu contributor (task 78.5) and finds its tools in `platform-feishu` only when Feishu is enabled" }
 "Plugin platform bundle" = ["crates/pmt-tools/tests/surfaces.rs::plugin_platform_bundle"]
 
 [tool-system."Disabling a bundle never strips core"]
@@ -5321,7 +5321,7 @@ capabilities = [
 "Migration installs adapter" = { tests = ["crates/prometheus/tests/migrate_catalog_adapters.rs::a_hermes_mattermost_profile_gets_the_catalog_adapter_disabled_with_secret_refs"], note = "the mattermost adapter plugin is published in a catalog signed with the debug builds' test key (the release-key signing of first-party plugins is a known gap)" }
 
 [platform-adapters."Platform-contributed toolsets"]
-"Toolset absent elsewhere" = ["crates/pmt-tools/tests/platform_tools.rs::a_profile_without_the_platform_has_none_of_its_tools", "crates/pmt-tools/tests/platform_tools.rs::an_enabled_platform_brings_its_tools_into_its_bundle"]
+"Toolset absent elsewhere" = ["crates/pmt-tools/tests/platform_tools.rs::a_profile_without_the_platform_has_none_of_its_tools", "crates/pmt-tools/tests/platform_tools.rs::an_enabled_platform_brings_its_tools_into_its_bundle", "crates/prometheus/tests/catalog_feishu_docs.rs::a_profile_without_feishu_has_no_feishu_tool_and_feishu_brings_its_bundle"]
 
 # Group 78.2 (partial): Telegram local Bot API server
 # (crates/pmt-adapters-telegram/tests/local_api.rs against the Bot API
@@ -5413,6 +5413,12 @@ capabilities = [
 
 [platform-adapters."Home Assistant adapter and toolset"]
 "Dangerous domain blocked" = ["crates/prometheus/tests/catalog_homeassistant.rs::a_service_of_a_blocked_domain_is_refused_naming_it"]
+
+[platform-adapters."Feishu and Lark adapter"]
+"Empty group allowlist" = ["crates/prometheus/tests/catalog_feishu.rs::a_group_message_under_an_empty_allowlist_is_dropped_with_one_warning"]
+
+[platform-adapters."Feishu document comments and meeting invitations"]
+"Unauthorized commenter" = ["crates/prometheus/tests/catalog_feishu_docs.rs::a_commenter_outside_the_document_allowlist_starts_no_turn"]
 
 [platform-adapters."WeCom smart robot adapter"]
 "Per-group sender allowlist" = ["crates/prometheus/tests/catalog_wecom.rs::a_sender_outside_the_group_allowlist_is_not_admitted"]

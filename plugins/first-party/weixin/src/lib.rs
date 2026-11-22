@@ -360,12 +360,12 @@ impl Guest for Adapter {
     fn start(options: String) -> Result<(), String> {
         let options: Value = serde_json::from_str(&options).map_err(|e| e.to_string())?;
         let token = host::secret(TOKEN).ok_or(format!(
-            "secret {TOKEN} is not set (log in with `prometheus setup gateway weixin`)"
+            "secret {TOKEN} is not set (log in with `prometheus gateway setup weixin`)"
         ))?;
         let account = options["account_id"]
             .as_str()
             .filter(|a| !a.is_empty())
-            .ok_or("options.account_id is required (set by `prometheus setup gateway weixin`)")?
+            .ok_or("options.account_id is required (set by `prometheus gateway setup weixin`)")?
             .to_owned();
         let group = Policy::option(&options, "group_policy", Policy::Disabled)?;
         if group != Policy::Disabled {

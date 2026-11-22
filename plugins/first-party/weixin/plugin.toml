@@ -1,7 +1,7 @@
 # First-party catalog adapter: Weixin, a personal WeChat account over
 # Tencent's iLink bot API (spec: platform-adapters, Weixin personal WeChat
 # adapter). The socket bridge sidecar holds the 35-second long poll so the
-# adapter never blocks on it. Log in with `prometheus setup gateway weixin`
+# adapter never blocks on it. Log in with `prometheus gateway setup weixin`
 # (scan the QR code with WeChat; the account token goes to the secrets
 # store as WEIXIN_TOKEN and the account id to `options.account_id`).
 # Options: `dm_policy` (default open), `allow_from`, `group_policy`

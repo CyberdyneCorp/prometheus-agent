@@ -49,6 +49,13 @@ pub fn append_line(path: &str, line: &str, keep: usize) {
     }
 }
 
+/// The plugin's file `path` (under its data directory's `files/`), when
+/// it exists and is readable.
+#[must_use]
+pub fn read_file(path: &str) -> Option<Vec<u8>> {
+    state::read_file(path).ok()
+}
+
 /// Keys of the plugin's profile state.
 #[must_use]
 pub fn keys() -> Vec<String> {

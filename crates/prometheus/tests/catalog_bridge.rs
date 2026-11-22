@@ -91,6 +91,7 @@ fn every_socket_adapter_ships_the_same_bridge() {
         "mattermost",
         "simplex",
         "dingtalk",
+        "feishu",
         "wecom",
         "weixin",
         "qqbot",

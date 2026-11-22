@@ -8,7 +8,9 @@
 
 pub(crate) mod devices_cmd;
 mod enroll_cmd;
+mod feishu_cmd;
 mod gateway_cmd;
+mod gateway_setup_cmd;
 mod health;
 mod host;
 mod inventory;
@@ -34,6 +36,7 @@ mod turn;
 mod update_chat;
 mod update_rpc;
 mod watchdog;
+mod weixin_cmd;
 mod whatsapp_cloud_cmd;
 mod whatsapp_cmd;
 

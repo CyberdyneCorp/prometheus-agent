@@ -31730,6 +31730,8 @@ Commands:
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
   photon          Photon iMessage setup and status
+  setup           Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+  feishu          Feishu and Lark document comment rules
   selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 
@@ -33614,6 +33616,608 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway photon help help
 ```
 
+## `prometheus gateway setup`
+
+```text
+Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+
+Usage: prometheus gateway setup [OPTIONS] <PLATFORM>
+
+Arguments:
+  <PLATFORM>
+          The platform
+
+          Possible values:
+          - feishu: Feishu or Lark: create the bot app
+          - weixin: Weixin (personal WeChat): log the account in
+
+Options:
+      --domain <DOMAIN>
+          Feishu only: create the app on `feishu` or `lark` (a Lark account scanning a Feishu code is detected and switches it)
+
+          [possible values: feishu, lark]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus gateway feishu`
+
+```text
+Feishu and Lark document comment rules
+
+Usage: prometheus gateway feishu [OPTIONS] <COMMAND>
+
+Commands:
+  comment-rules  Document comment access rules
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus gateway feishu comment-rules [OPTIONS] <COMMAND>
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway feishu comment-rules status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway feishu comment-rules check [OPTIONS] <DOCUMENT> <USER>
+
+Arguments:
+  <DOCUMENT>
+          The document as `<file_type>:<file_token>` (`docx:doxcn...`)
+
+  <USER>
+          The commenter's open id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway feishu comment-rules pairing [OPTIONS] <COMMAND>
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu comment-rules pairing add [OPTIONS] <USER>
+
+Arguments:
+  <USER>
+          Their open id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu comment-rules pairing remove [OPTIONS] <USER>
+
+Arguments:
+  <USER>
+          Their open id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu comment-rules pairing list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules pairing help [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway feishu comment-rules pairing help add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu comment-rules pairing help add
+```
+
+## `prometheus gateway feishu comment-rules pairing help remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu comment-rules pairing help remove
+```
+
+## `prometheus gateway feishu comment-rules pairing help list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu comment-rules pairing help list
+```
+
+## `prometheus gateway feishu comment-rules pairing help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules pairing help help
+```
+
+## `prometheus gateway feishu comment-rules help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules help [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway feishu comment-rules help status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway feishu comment-rules help status
+```
+
+## `prometheus gateway feishu comment-rules help check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway feishu comment-rules help check
+```
+
+## `prometheus gateway feishu comment-rules help pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway feishu comment-rules help pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus gateway feishu comment-rules help pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu comment-rules help pairing add
+```
+
+## `prometheus gateway feishu comment-rules help pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu comment-rules help pairing remove
+```
+
+## `prometheus gateway feishu comment-rules help pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu comment-rules help pairing list
+```
+
+## `prometheus gateway feishu comment-rules help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules help help
+```
+
+## `prometheus gateway feishu help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu help [COMMAND]
+
+Commands:
+  comment-rules  Document comment access rules
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway feishu help comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus gateway feishu help comment-rules [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+```
+
+## `prometheus gateway feishu help comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway feishu help comment-rules status
+```
+
+## `prometheus gateway feishu help comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway feishu help comment-rules check
+```
+
+## `prometheus gateway feishu help comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway feishu help comment-rules pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus gateway feishu help comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu help comment-rules pairing add
+```
+
+## `prometheus gateway feishu help comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu help comment-rules pairing remove
+```
+
+## `prometheus gateway feishu help comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu help comment-rules pairing list
+```
+
+## `prometheus gateway feishu help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu help help
+```
+
 ## `prometheus gateway selftest`
 
 ```text
@@ -33688,6 +34292,8 @@ Commands:
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
   photon          Photon iMessage setup and status
+  setup           Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+  feishu          Feishu and Lark document comment rules
   selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 ```
@@ -34002,6 +34608,91 @@ Usage: prometheus gateway help photon setup
 Print what is configured and each registered number's iMessage line
 
 Usage: prometheus gateway help photon status
+```
+
+## `prometheus gateway help setup`
+
+```text
+Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+
+Usage: prometheus gateway help setup
+```
+
+## `prometheus gateway help feishu`
+
+```text
+Feishu and Lark document comment rules
+
+Usage: prometheus gateway help feishu [COMMAND]
+
+Commands:
+  comment-rules  Document comment access rules
+```
+
+## `prometheus gateway help feishu comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus gateway help feishu comment-rules [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+```
+
+## `prometheus gateway help feishu comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway help feishu comment-rules status
+```
+
+## `prometheus gateway help feishu comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway help feishu comment-rules check
+```
+
+## `prometheus gateway help feishu comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway help feishu comment-rules pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus gateway help feishu comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway help feishu comment-rules pairing add
+```
+
+## `prometheus gateway help feishu comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway help feishu comment-rules pairing remove
+```
+
+## `prometheus gateway help feishu comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway help feishu comment-rules pairing list
 ```
 
 ## `prometheus gateway help selftest`
@@ -44275,6 +44966,8 @@ Commands:
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
   photon          Photon iMessage setup and status
+  setup           Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+  feishu          Feishu and Lark document comment rules
   selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
 ```
 
@@ -44588,6 +45281,91 @@ Usage: prometheus help gateway photon setup
 Print what is configured and each registered number's iMessage line
 
 Usage: prometheus help gateway photon status
+```
+
+## `prometheus help gateway setup`
+
+```text
+Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+
+Usage: prometheus help gateway setup
+```
+
+## `prometheus help gateway feishu`
+
+```text
+Feishu and Lark document comment rules
+
+Usage: prometheus help gateway feishu [COMMAND]
+
+Commands:
+  comment-rules  Document comment access rules
+```
+
+## `prometheus help gateway feishu comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus help gateway feishu comment-rules [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+```
+
+## `prometheus help gateway feishu comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus help gateway feishu comment-rules status
+```
+
+## `prometheus help gateway feishu comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus help gateway feishu comment-rules check
+```
+
+## `prometheus help gateway feishu comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus help gateway feishu comment-rules pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus help gateway feishu comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus help gateway feishu comment-rules pairing add
+```
+
+## `prometheus help gateway feishu comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus help gateway feishu comment-rules pairing remove
+```
+
+## `prometheus help gateway feishu comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus help gateway feishu comment-rules pairing list
 ```
 
 ## `prometheus help gateway selftest`

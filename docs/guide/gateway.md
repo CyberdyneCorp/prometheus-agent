@@ -557,7 +557,7 @@ Other platforms arrive as first-party adapter plugins from the plugin
 catalog (`prometheus plugins install <id>`, then `prometheus plugins
 enable <id>`); each passes the conformance kit against a mock of its
 platform. Adapters that hold a socket (IRC, Home Assistant, ntfy,
-Mattermost, DingTalk, SimpleX, WeCom, Weixin, QQ Bot, Yuanbao, Buzz) run a small
+Mattermost, DingTalk, Feishu, SimpleX, WeCom, Weixin, QQ Bot, Yuanbao, Buzz) run a small
 Node sidecar, the socket bridge, which connects only to the hosts the
 plugin was granted; a server other than the declared default is granted
 with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
@@ -641,6 +641,41 @@ credential stores stay unreadable either way.
   only when listed in `allow_groups`. Receiving files needs a grant on the
   daemon's files folder (`fs.read:<folder>/**`); files are sent by path.
 
+- `feishu` (Feishu, or Lark with `domain = "lark"`): create the bot app
+  with `prometheus gateway setup feishu` (scan the QR code with the Feishu
+  or Lark app; the secret is stored as `FEISHU_APP_SECRET`, the app id and
+  domain as options), or set `app_id` and the secret by hand.
+  `connection_mode = "websocket"` (the default) holds Feishu's long
+  connection through the bridge sidecar; `"webhook"` takes events at
+  `/p/<profile>/feishu/`, checked with the secrets
+  `FEISHU_VERIFICATION_TOKEN` and `FEISHU_ENCRYPT_KEY` (signature
+  `sha256(timestamp + nonce + key + body)`, encrypted bodies, 401 on a
+  mismatch, 1 MB bodies, 120 requests a minute per source, a warning after
+  25 failures in a row). `dm_policy` (`pairing` by default) with
+  `allow_from`; `group_policy` (`allowlist` by default, `open`,
+  `disabled`) with `group_allow_from`, `admins`, `require_mention`
+  (true) and per-chat `group_rules.<chat_id> = {policy, allowlist,
+  blacklist, require_mention}` (`policy` also `blacklist` or
+  `admin_only`); an empty group allowlist drops group messages with one
+  warning per chat. Quick messages from one sender are joined (0.6 s, up to
+  8 messages or 4000 characters; `batch_delay_ms = 0` turns it off), files
+  wait 0.8 s for their caption. Markdown goes out as a rich post (plain
+  text when Feishu refuses it), approvals as cards whose presses count once.
+  Document comments that mention the bot become turns in chat
+  `comment:<type>:<token>:<comment>:<whole|local>` carrying the document
+  text and the thread (last 20 messages of whole-document comments, 12 of
+  a selection's); the reply goes into the thread in 4000-character pieces.
+  Who may comment is set in `<profile>/plugin-data/feishu/files/comment_rules.json`
+  (`{"policy": "pairing", "allow_from": [..], "documents": {"docx:<token>":
+  {..}, "*": {..}}}`: the exact document rule, else `*`, else the top
+  level; policy `allowlist` or `pairing`); `prometheus gateway feishu
+  comment-rules status`, `check <type:token> <open_id>` and `pairing
+  add|remove|list` manage it. Meeting invitations with an inviter and a
+  meeting number reach the inviter's direct chat. The `feishu_doc`
+  (`feishu_doc_read`) and `feishu_drive` (`feishu_drive_list_comments`,
+  `feishu_drive_list_comment_replies` with pages of at most 100,
+  `feishu_drive_reply_comment`, `feishu_drive_add_comment`) toolsets call
+  the Open API with the app's credentials and are only in Feishu sessions.
 - `wecom` (WeCom smart robot, no public URL): `bot_id`, secret
   `WECOM_BOT_SECRET`, and optionally `websocket_url`,
   `stream_keepalive_secs` (120), `dm_policy` (`open`, `allowlist`,
@@ -661,9 +696,10 @@ credential stores stay unreadable either way.
   `account_id` and secret `WEIXIN_TOKEN`; `dm_policy` (open), `allow_from`,
   `group_policy` (disabled; a warning when enabled), `group_allow_from`.
   The per-peer context token is kept across restarts; an expired session
-  pauses polling for 10 minutes; media is AES-128-ECB both ways. The QR
-  login (`prometheus gateway setup weixin`) is not available yet: obtain
-  the token with another iLink client and store it.
+  pauses polling for 10 minutes; media is AES-128-ECB both ways. Log in
+  with `prometheus gateway setup weixin`: scan the QR code with WeChat and
+  confirm; the token is stored as `WEIXIN_TOKEN` and the account id as
+  `options.account_id` (an expired code is refreshed up to three times).
 - `qqbot`: `app_id`, secret `QQBOT_CLIENT_SECRET`, and optionally
   `dm_policy`, `group_policy`, `allow_from`, `group_allow_from` and
   `keyboards = true` (approvals as message keyboards; numbered text

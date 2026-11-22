@@ -90,6 +90,11 @@ pub enum GatewayCommand {
     Telegram(super::telegram_cmd::TelegramArgs),
     /// Photon iMessage setup and status.
     Photon(super::photon_cmd::PhotonArgs),
+    /// Create (Feishu, Lark) or log in (Weixin) a platform account by
+    /// scanning a QR code; the credential goes to the secrets store.
+    Setup(super::gateway_setup_cmd::GatewaySetupArgs),
+    /// Feishu and Lark document comment rules.
+    Feishu(super::feishu_cmd::FeishuArgs),
     /// Replay synthetic messages through a platform's admission and mention
     /// gating, offline and without credentials; exits 1 when a check fails.
     Selftest(super::selftest_cmd::SelftestArgs),
@@ -185,6 +190,8 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Selftest(args) => super::selftest_cmd::run(args, ctx),
         GatewayCommand::Telegram(args) => super::telegram_cmd::run(args, ctx),
         GatewayCommand::Photon(args) => super::photon_cmd::run(args, ctx),
+        GatewayCommand::Setup(args) => super::gateway_setup_cmd::run(args, ctx),
+        GatewayCommand::Feishu(args) => super::feishu_cmd::run(args, ctx),
     }
 }
 

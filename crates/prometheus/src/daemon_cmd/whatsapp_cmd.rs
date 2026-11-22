@@ -244,7 +244,7 @@ fn fresh_session(dir: &Path) -> Result<(), Error> {
 
 /// The QR code of `data` as terminal text (two modules per character
 /// row, with the quiet zone).
-fn qr_text(data: &str) -> Result<String, Error> {
+pub(super) fn qr_text(data: &str) -> Result<String, Error> {
     let code = qrcode::QrCode::new(data.as_bytes()).map_err(|e| {
         Error::new(
             &codes::GATEWAY_DELIVERY_FAILED,
