@@ -172,6 +172,11 @@ impl BotFramework {
     }
 
     fn post_with(&self, activity: &Value, token: Option<String>) -> u16 {
+        self.post_raw(activity.to_string().as_bytes(), token)
+    }
+
+    /// Status of a POST of `body` as it is (`token` as its bearer).
+    fn post_raw(&self, body: &[u8], token: Option<String>) -> u16 {
         let prefix = self
             .state
             .lock()
@@ -184,12 +189,7 @@ impl BotFramework {
         if let Some(auth) = &auth {
             headers.push(("authorization", auth));
         }
-        catalog::post(
-            &format!("{prefix}/api/messages"),
-            &headers,
-            activity.to_string().as_bytes(),
-        )
-        .0
+        catalog::post(&format!("{prefix}/api/messages"), &headers, body).0
     }
 
     /// Status of a POST declaring a `length`-byte body (sending only its
@@ -439,6 +439,11 @@ async fn an_activity_without_a_valid_jwt_is_refused_and_admits_nothing() {
     claims["serviceurl"] = json!("https://evil.example");
     let elsewhere = catalog_jwt::token(KID, &claims);
     assert_eq!(mock.post_with(&activity, Some(elsewhere)), 401);
+    // The token is checked before the body is parsed: a non-JSON body
+    // without one is unauthorized, not malformed.
+    assert_eq!(mock.post_raw(b"not an activity", None), 401);
+    let signed = catalog_jwt::token(KID, &mock.claims());
+    assert_eq!(mock.post_raw(b"not an activity", Some(signed)), 400);
     assert!(link.wait_for(1).await.is_empty());
     // A body over 1 MiB is refused before it is read.
     assert_eq!(mock.declare_body(1_100_000), 413);

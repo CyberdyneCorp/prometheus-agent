@@ -757,11 +757,16 @@ credential stores stay unreadable either way.
   `summary_prompt`, `renew_within_minutes` (60), `extend_minutes` (4200)
   and `renew_check_secs` (300). `prometheus plugins run teams_meetings
   subscribe|list|renew [<id>]|remove <id>|status|replay <meeting-id>`
-  manages it. Each meeting's transcript becomes one summary turn on the
-  profile's main route (a recording stands in, transcribed, only with
-  `use_recordings`); a meeting is summarized once, and `status` shows a
-  later notification for it as `duplicate`. Subscriptions are renewed
-  before they expire.
+  manages it. Each transcript of a meeting becomes one summary turn, in a
+  session of its own, on the profile's main route (a recording stands in,
+  transcribed, only with `use_recordings`). A transcript is summarized
+  once, keyed by meeting id and transcript (its `contentCorrelationId`,
+  which the recording of the same occurrence shares, else its id): `status`
+  shows a later notification for it as `duplicate`, while the next
+  occurrence of a recurring meeting brings a new transcript and its own
+  summary. A summary whose delivery fails for good, or that has not been
+  delivered within an hour, no longer blocks a later notification for the
+  same transcript. Subscriptions are renewed before they expire.
 - `google_chat`: Pub/Sub pull (`project_id`, `subscription`,
   `max_messages`, default 1) or `mode = "http"` callbacks at
   `/p/<profile>/google_chat/` (`audience` and `service_account_email`;

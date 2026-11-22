@@ -1,11 +1,15 @@
 //! The summary pipeline: a transcript notification becomes one summary
-//! turn per meeting (a message from `teams_meetings` in the chat
-//! `meeting:<id>` holding the prompt and the transcript), the agent's
-//! answer is delivered by the incoming webhook or into the meeting chat,
-//! and a meeting is summarized at most once: a later notification for it
-//! is a `duplicate`. Without a transcript, the recording stands in (as
-//! audio the gateway transcribes) only with `use_recordings = true`.
-//! Subscriptions are renewed by the ticker before they expire.
+//! turn (a message from `teams_meetings` in the chat `meeting:<id>:<key>`
+//! holding the prompt and the transcript), the agent's answer is
+//! delivered by the incoming webhook or into the meeting chat, and each
+//! transcript of a meeting is summarized at most once: a later
+//! notification for it is a `duplicate`. The key is the transcript's
+//! `contentCorrelationId`, which the recording of the same occurrence
+//! shares (so the two are summarized once together), else its id; a
+//! recurring meeting's next occurrence keeps its meeting id but brings a
+//! new key. Without a transcript, the recording stands in (as audio the
+//! gateway transcribes) only with `use_recordings = true`. Subscriptions
+//! are renewed by the ticker before they expire.
 
 use adapter_kit::message::{InFile, Inbound};
 use adapter_kit::{host, net, time};
@@ -19,9 +23,18 @@ pub(crate) const SENDER: &str = "teams_meetings";
 /// The most transcript text put in one turn.
 const TRANSCRIPT_CHARS: usize = 200_000;
 
-/// The chat of a meeting's summary turn.
-pub(crate) fn chat_of(meeting: &str) -> String {
-    format!("meeting:{meeting}")
+/// The chat of the summary turn of key `key` of `meeting` (its own
+/// session, so one summary never sees another's transcript).
+fn chat_of(meeting: &str, key: &str) -> String {
+    format!("meeting:{meeting}:{key}")
+}
+
+/// The meeting and key of a summary turn's chat. Graph ids are base64 or
+/// GUIDs, so neither holds a `:`.
+fn parse_chat(chat: &str) -> Option<(&str, &str)> {
+    chat.strip_prefix("meeting:")?
+        .split_once(':')
+        .filter(|(meeting, key)| !meeting.is_empty() && !key.is_empty())
 }
 
 fn turn_text(prompt: &str, body: &str) -> String {
@@ -40,24 +53,37 @@ impl Meetings {
             records::note(&receipt, "", "", "ignored");
             return;
         };
-        let status = match records::meeting(&found.meeting)["status"].as_str() {
-            Some("queued" | "summarized") => "duplicate",
-            _ if found.kind == "recordings" && !self.settings.use_recordings => "ignored",
-            _ => match self.summarize(&found, &receipt) {
+        if found.kind == "recordings" && !self.settings.use_recordings {
+            records::note(&receipt, &found.meeting, &found.id, "ignored");
+            return;
+        }
+        let key = self.key_of(&found);
+        let status = if records::held(&found.meeting, &key, time::now()) {
+            "duplicate"
+        } else {
+            match self.summarize(&found, &key, &receipt) {
                 Ok(()) => "queued",
                 Err(why) => {
                     host::warn(&format!("meeting {} not summarized: {why}", found.meeting));
                     "failed"
                 }
-            },
+            }
         };
-        records::note(&receipt, &found.meeting, &found.id, status);
+        records::note(&receipt, &found.meeting, &key, status);
+    }
+
+    /// The key `found` is summarized once under: its correlation id when
+    /// Graph tells it, else its own id.
+    fn key_of(&mut self, found: &Artifact) -> String {
+        self.graph
+            .correlation(&found.path)
+            .unwrap_or_else(|| found.id.clone())
     }
 
     /// Queues the summary turn of `found` (a transcript, or the recording
-    /// standing in for a missing one).
-    fn summarize(&mut self, found: &Artifact, receipt: &str) -> Result<(), String> {
-        let mut inbound = Inbound::text(receipt, &chat_of(&found.meeting), "dm", SENDER, "");
+    /// standing in for a missing one) under `key`.
+    fn summarize(&mut self, found: &Artifact, key: &str, receipt: &str) -> Result<(), String> {
+        let mut inbound = Inbound::text(receipt, &chat_of(&found.meeting, key), "dm", SENDER, "");
         inbound.sender_name = Some("Teams meetings".to_owned());
         let transcript = if found.kind == "transcripts" {
             self.graph
@@ -67,11 +93,10 @@ impl Meetings {
         } else {
             None
         };
-        let used = match transcript {
+        match transcript {
             Some(text) => {
                 let text: String = text.chars().take(TRANSCRIPT_CHARS).collect();
                 inbound.text = turn_text(&self.settings.prompt, &text);
-                found.clone()
             }
             None if self.settings.use_recordings => {
                 let recording = if found.kind == "recordings" {
@@ -90,13 +115,15 @@ impl Meetings {
                 inbound
                     .attachments
                     .push(InFile::bytes("audio", &name, bytes));
-                recording
             }
             None => return Err("the transcript is not available".to_owned()),
-        };
-        records::store_meeting(
+        }
+        records::mark(
             &found.meeting,
-            &json!({"status": "queued", "artifact": used.id, "path": found.meeting_path, "delivered": 0}),
+            key,
+            "queued",
+            time::now(),
+            Some(&found.meeting_path),
         );
         self.inbox.push(inbound);
         Ok(())
@@ -111,48 +138,56 @@ impl Meetings {
                 || format!("communications/onlineMeetings/{meeting}"),
                 str::to_owned,
             );
-            let latest = self.graph.latest(&path, "transcripts");
             let receipt = format!("replay:{meeting}:{}", adapter_kit::clock::now_ms());
-            let status = match latest {
-                Ok(Some(found)) => match self.summarize(&found, &receipt) {
-                    Ok(()) => "queued",
-                    Err(_) => "failed",
-                },
-                _ => "failed",
+            let (key, status) = match self.graph.latest(&path, "transcripts") {
+                Ok(Some(found)) => {
+                    let key = self.key_of(&found);
+                    let status = match self.summarize(&found, &key, &receipt) {
+                        Ok(()) => "queued",
+                        Err(_) => "failed",
+                    };
+                    (key, status)
+                }
+                _ => ("replay".to_owned(), "failed"),
             };
-            records::note(&receipt, &meeting, "replay", status);
+            records::note(&receipt, &meeting, &key, status);
         }
     }
 
-    /// Delivers a summary of `chat` (`meeting:<id>`).
+    /// Delivers a summary of `chat` (`meeting:<id>:<key>`). A permanent
+    /// failure marks the key `failed`, so a later notification retries it.
     pub(crate) fn deliver(&mut self, chat: &str, text: &str) -> Result<String, String> {
-        let meeting = chat
-            .strip_prefix("meeting:")
-            .ok_or("permanent: teams_meetings only delivers meeting summaries")?;
-        let mut record = records::meeting(meeting);
-        let id = match self.settings.delivery.clone() {
+        let (meeting, key) =
+            parse_chat(chat).ok_or("permanent: teams_meetings only delivers meeting summaries")?;
+        let sent = self.send_summary(meeting, text);
+        let status = match &sent {
+            Ok(_) => "summarized",
+            Err(why) if why.starts_with("permanent:") => "failed",
+            Err(_) => return sent,
+        };
+        records::mark(meeting, key, status, time::now(), None);
+        records::settle_notes(meeting, key, status);
+        sent
+    }
+
+    fn send_summary(&mut self, meeting: &str, text: &str) -> Result<String, String> {
+        let record = records::meeting(meeting);
+        match self.settings.delivery.clone() {
             Delivery::Webhook(secret) => {
                 let url = host::secret(&secret)
                     .ok_or_else(|| format!("permanent: secret {secret} is not set"))?;
                 net::json("POST", &url, &[], &json!({"text": text}))?;
                 let n = record["delivered"].as_u64().unwrap_or(0) + 1;
-                format!("summary-{meeting}-{n}")
+                Ok(format!("summary-{meeting}-{n}"))
             }
             Delivery::Graph => {
                 let path = record["path"].as_str().map_or_else(
                     || format!("communications/onlineMeetings/{meeting}"),
                     str::to_owned,
                 );
-                self.graph.post_to_chat(&path, text)?
+                self.graph.post_to_chat(&path, text)
             }
-        };
-        if record.is_object() {
-            record["status"] = json!("summarized");
-            record["delivered"] = json!(record["delivered"].as_u64().unwrap_or(0) + 1);
-            records::store_meeting(meeting, &record);
         }
-        records::settle_notes(meeting, "summarized");
-        Ok(id)
     }
 
     /// Now, in epoch seconds (asking Graph once when no answer told it yet).
@@ -207,5 +242,19 @@ impl Meetings {
         }
         records::store_subscriptions(&subs);
         lines
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_summary_chat_names_its_meeting_and_key() {
+        let chat = chat_of("MSo1N2Y5", "c0ffee-01");
+        assert_eq!(parse_chat(&chat), Some(("MSo1N2Y5", "c0ffee-01")));
+        assert_eq!(parse_chat("meeting:M1"), None);
+        assert_eq!(parse_chat("meeting::T1"), None);
+        assert_eq!(parse_chat("dm:M1:T1"), None);
     }
 }

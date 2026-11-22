@@ -1,7 +1,7 @@
 //! The `teams_meetings` catalog plugin (spec: platform-adapters, Teams
 //! meeting summary pipeline; Catalog adapter set) against a mock Microsoft
 //! Graph and incoming webhook: the conformance suite (a transcript
-//! notification in, the summary out), one summary per meeting, the
+//! notification in, the summary out), one summary per meeting transcript, the
 //! renewal ticker, the recording fallback, delivery into the meeting chat
 //! and the `prometheus plugins run teams_meetings` commands run by the
 //! real binary on the same profile.
@@ -112,6 +112,14 @@ fn meeting_route(state: &mut State, rest: &str) -> Reply {
             let value: Vec<Value> = meeting.2.iter().map(|(r, _)| json!({"id": r})).collect();
             Reply::json(200, &json!({"value": value}))
         }
+        [_, "transcripts", t] if meeting.1.iter().any(|(id, _)| id == t) => Reply::json(
+            200,
+            &json!({"id": t, "contentCorrelationId": correlation(t)}),
+        ),
+        [_, "recordings", r] if meeting.2.iter().any(|(id, _)| id == r) => Reply::json(
+            200,
+            &json!({"id": r, "contentCorrelationId": correlation(r)}),
+        ),
         [_, "transcripts", t, "content"] => match meeting.1.iter().find(|(id, _)| id == t) {
             Some((_, vtt)) => Reply {
                 status: 200,
@@ -130,6 +138,12 @@ fn meeting_route(state: &mut State, rest: &str) -> Reply {
         },
         _ => Reply::status(404),
     }
+}
+
+/// The `contentCorrelationId` of transcript `T<n>` or recording `R<n>`:
+/// `C<n>`, so a meeting occurrence's transcript and recording share it.
+fn correlation(artifact: &str) -> String {
+    format!("C{}", &artifact[1..])
 }
 
 fn webhook(state: &mut State, request: &Request) -> Reply {
@@ -232,6 +246,17 @@ impl Graph {
         id
     }
 
+    /// Adds a transcript of `text` to `meeting` (a later occurrence of a
+    /// recurring meeting, which keeps its id): the transcript's id.
+    fn add_transcript(&self, meeting: &str, text: &str) -> String {
+        let id = format!("T{}", self.next.fetch_add(1, Ordering::Relaxed));
+        let vtt = format!("WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n{text}\n");
+        let mut state = self.state.lock().unwrap();
+        let entry = state.meetings.iter_mut().find(|m| m.0 == meeting).unwrap();
+        entry.1.push((id.clone(), vtt));
+        id
+    }
+
     /// Posts a notification for `resource`: its receipt id.
     fn notify(&self, resource: &str) -> String {
         let n = format!("n{}", self.next.fetch_add(1, Ordering::Relaxed));
@@ -260,17 +285,23 @@ impl Graph {
     }
 
     fn transcript_of(meeting: &str) -> String {
-        format!(
-            "communications/onlineMeetings('{meeting}')/transcripts('T{}')",
-            &meeting[1..]
-        )
+        Graph::transcript(meeting, &format!("T{}", &meeting[1..]))
+    }
+
+    fn transcript(meeting: &str, id: &str) -> String {
+        format!("communications/onlineMeetings('{meeting}')/transcripts('{id}')")
+    }
+
+    /// The chat of the summary turn of `meeting`'s first transcript.
+    fn chat_of(meeting: &str) -> String {
+        format!("meeting:{meeting}:C{}", &meeting[1..])
     }
 }
 
 impl MockPlatform for Graph {
     fn dm(&self) -> (String, String) {
         let latest = self.state.lock().unwrap().latest_meeting.clone();
-        (format!("meeting:{latest}"), "teams_meetings".to_owned())
+        (Graph::chat_of(&latest), "teams_meetings".to_owned())
     }
 
     fn inject(&self, text: &str) -> String {
@@ -392,7 +423,7 @@ async fn a_second_notification_for_a_summarized_transcript_is_a_duplicate() {
     mock.notify(&resource);
     let got = link.wait_for(1).await;
     assert_eq!(got.len(), 1, "{got:?}");
-    assert_eq!(got[0].chat_id, format!("meeting:{meeting}"));
+    assert_eq!(got[0].chat_id, Graph::chat_of(&meeting));
     assert_eq!(got[0].text, "Ada: Ship on Friday.");
     adapter
         .send(&Outgoing::text(
@@ -423,6 +454,107 @@ async fn a_second_notification_for_a_summarized_transcript_is_a_duplicate() {
     let got = link.wait_for(2).await;
     assert_eq!(got.len(), 2, "{got:?}");
     assert_eq!(got[1].text, "Ada: Ship on Friday.");
+    adapter.disconnect().await;
+}
+
+/// "Summarized at most once" is per meeting AND transcript: a recurring
+/// meeting's next occurrence keeps the meeting id but brings a new
+/// transcript, which is summarized in its own turn, once.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_transcript_of_a_summarized_meeting_is_summarized_once_more() {
+    let mock = Graph::start();
+    let (kit, _root) = install(&mock, &mock.options());
+    let (adapter, link) = connected(&mock, &kit).await;
+    let meeting = mock.meeting(Some("<v Ada>Week one.</v>"), None);
+    mock.notify(&Graph::transcript_of(&meeting));
+    let got = link.wait_for(1).await;
+    adapter
+        .send(&Outgoing::text(&got[0].chat_id, None, "Summary one."))
+        .await
+        .unwrap();
+    let second = mock.add_transcript(&meeting, "<v Ada>Week two.</v>");
+    let resource = Graph::transcript(&meeting, &second);
+    mock.notify(&resource);
+    let got = link.wait_for(2).await;
+    assert_eq!(got.len(), 2, "{got:?}");
+    assert_eq!(got[1].text, "Ada: Week two.");
+    assert_eq!(
+        got[1].chat_id,
+        format!("meeting:{meeting}:C{}", &second[1..]),
+        "each transcript has a session of its own"
+    );
+    adapter
+        .send(&Outgoing::text(&got[1].chat_id, None, "Summary two."))
+        .await
+        .unwrap();
+    // The second transcript, notified again, is now the duplicate.
+    let again = mock.notify(&resource);
+    assert_eq!(link.wait_for(3).await.len(), 2);
+    assert_eq!(
+        mock.state.lock().unwrap().webhook,
+        ["Summary one.", "Summary two."]
+    );
+    let status = cli(kit.setup().scope.home(), &["status"]);
+    let entry = status
+        .lines()
+        .find(|l| l.contains(&again))
+        .unwrap_or_else(|| panic!("{status}"));
+    assert!(entry.ends_with("duplicate"), "{entry}");
+    adapter.disconnect().await;
+}
+
+/// The recording of an occurrence shares its transcript's correlation id,
+/// so with `use_recordings` the two notifications make one summary.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_recording_of_a_summarized_transcript_is_a_duplicate() {
+    let mock = Graph::start();
+    let mut options = mock.options();
+    options["use_recordings"] = json!(true);
+    let (kit, _root) = install(&mock, &options);
+    let (adapter, link) = connected(&mock, &kit).await;
+    let meeting = mock.meeting(Some("Hello"), Some(b"recorded audio"));
+    mock.notify(&Graph::transcript_of(&meeting));
+    assert_eq!(link.wait_for(1).await.len(), 1);
+    let recording = mock.notify(&format!(
+        "communications/onlineMeetings('{meeting}')/recordings('R{}')",
+        &meeting[1..]
+    ));
+    assert_eq!(link.wait_for(2).await.len(), 1);
+    let status = cli(kit.setup().scope.home(), &["status"]);
+    let entry = status
+        .lines()
+        .find(|l| l.contains(&recording))
+        .unwrap_or_else(|| panic!("{status}"));
+    assert!(entry.ends_with("duplicate"), "{entry}");
+    adapter.disconnect().await;
+}
+
+/// A summary whose delivery failed for good no longer holds its transcript:
+/// the next notification for it runs the summary again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_summary_that_failed_to_deliver_is_retried_by_the_next_notification() {
+    let mock = Graph::start();
+    let (kit, _root) = install(&mock, &mock.options());
+    let (adapter, link) = connected(&mock, &kit).await;
+    let meeting = mock.meeting(Some("<v Ada>Retry me.</v>"), None);
+    let resource = Graph::transcript_of(&meeting);
+    mock.notify(&resource);
+    let got = link.wait_for(1).await;
+    mock.fail_next(Failure::Forbidden);
+    let refused = adapter
+        .send(&Outgoing::text(&got[0].chat_id, None, "Lost summary."))
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
+    let status = cli(kit.setup().scope.home(), &["status"]);
+    assert!(status.contains(&format!("{meeting}  failed")), "{status}");
+    mock.notify(&resource);
+    let got = link.wait_for(2).await;
+    assert_eq!(got.len(), 2, "{got:?}");
+    adapter
+        .send(&Outgoing::text(&got[1].chat_id, None, "Delivered summary."))
+        .await
+        .unwrap();
+    assert_eq!(mock.state.lock().unwrap().webhook, ["Delivered summary."]);
     adapter.disconnect().await;
 }
 

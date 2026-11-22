@@ -154,6 +154,16 @@ impl Graph {
             .and_then(|id| artifact(&format!("{meeting_path}/{kind}/{id}"))))
     }
 
+    /// The `contentCorrelationId` of a transcript or recording: the id a
+    /// meeting occurrence's transcript and recording share.
+    pub(crate) fn correlation(&mut self, path: &str) -> Option<String> {
+        let item = self.json("GET", path, None).ok()?;
+        item["contentCorrelationId"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned)
+    }
+
     /// A recording's bytes.
     pub(crate) fn recording(&mut self, path: &str) -> Result<Vec<u8>, String> {
         self.call("GET", &format!("{path}/content"), None)

@@ -44,23 +44,25 @@ impl Auth {
         }
     }
 
-    /// The claims of a request's `Authorization: Bearer` token for an
-    /// activity from `service_url`.
-    pub(crate) fn verify(&mut self, authorization: &str, service_url: &str) -> Result<(), String> {
+    /// The claims of a request's `Authorization: Bearer` token, checked
+    /// before the body is even parsed.
+    pub(crate) fn verify(&mut self, authorization: &str) -> Result<Value, String> {
         let token = authorization
             .strip_prefix("Bearer ")
             .ok_or("no bearer token")?;
-        let claims = self.keys.verify(token, &[ISSUER], &self.client_id)?;
-        match claims["serviceurl"].as_str() {
-            Some(claimed) if claimed.trim_end_matches('/') != service_url.trim_end_matches('/') => {
-                Err("the token names another service URL".to_owned())
-            }
-            _ => Ok(()),
-        }
+        self.keys.verify(token, &[ISSUER], &self.client_id)
     }
 
     /// `Bearer <token>` for the Bot Connector.
     pub(crate) fn bearer(&mut self) -> Result<String, String> {
         self.token.bearer()
     }
+}
+
+/// Whether verified `claims` admit an activity from `service_url` (a token
+/// naming another service URL does not).
+pub(crate) fn names_service(claims: &Value, service_url: &str) -> bool {
+    claims["serviceurl"]
+        .as_str()
+        .is_none_or(|claimed| claimed.trim_end_matches('/') == service_url.trim_end_matches('/'))
 }

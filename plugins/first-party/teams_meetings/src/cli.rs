@@ -132,12 +132,13 @@ fn status() -> String {
     }
     out.push_str("meetings:\n");
     for (id, record) in records::meetings() {
-        let _ = writeln!(
-            out,
-            "  {id}  {}  artifact {}",
-            record["status"].as_str().unwrap_or("-"),
-            record["artifact"].as_str().unwrap_or("-")
-        );
+        let Some(artifacts) = record["artifacts"].as_object() else {
+            continue;
+        };
+        for (key, entry) in artifacts {
+            let status = entry["status"].as_str().unwrap_or("-");
+            let _ = writeln!(out, "  {id}  {status}  artifact {key}");
+        }
     }
     out.push_str("notifications:\n");
     for note in records::notifications() {

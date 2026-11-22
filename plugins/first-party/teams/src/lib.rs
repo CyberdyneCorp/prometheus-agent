@@ -84,16 +84,25 @@ fn start(options: &Value) -> Result<Teams, String> {
     })
 }
 
+fn refused(why: &str) -> HttpResponse {
+    host::warn(&format!("refused a Teams activity: {why}"));
+    respond(401, "text/plain", "unauthorized")
+}
+
 /// One request to the messaging endpoint.
 fn receive(teams: &mut Teams, request: &HttpRequest) -> HttpResponse {
+    // Unauthenticated requests learn nothing, not even whether the body parsed.
+    let authorization = adapter_kit::header(request, "authorization").unwrap_or_default();
+    let claims = match teams.auth.verify(authorization) {
+        Ok(claims) => claims,
+        Err(why) => return refused(&why),
+    };
     let Ok(activity) = serde_json::from_slice::<Value>(&request.body) else {
         return respond(400, "text/plain", "not an activity");
     };
-    let authorization = adapter_kit::header(request, "authorization").unwrap_or_default();
     let service = activity["serviceUrl"].as_str().unwrap_or_default();
-    if let Err(why) = teams.auth.verify(authorization, service) {
-        host::warn(&format!("refused a Teams activity: {why}"));
-        return respond(401, "text/plain", "unauthorized");
+    if !auth::names_service(&claims, service) {
+        return refused("the token names another service URL");
     }
     match activity["type"].as_str() {
         Some("message") => teams.activity(&activity),
