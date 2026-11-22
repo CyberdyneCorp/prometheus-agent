@@ -722,6 +722,6 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 81. M3 Exit criteria
 
-- [ ] 81.1 M3 exit: the desktop app and the dashboard attach to one daemon and show the same live session, and an ACP editor fixture completes a prompt round trip on the same daemon (spec: desktop-app, spec: web-dashboard, spec: acp-adapter)
-- [ ] 81.2 M3 exit: the offline self-improvement demo adopts a harness proposal, writes an experience entry, and a later session receives the lesson, with the answer-free tripwire test green (spec: harness-evolution, spec: experience-library, spec: replay-and-evaluation)
+- [x] 81.1 M3 exit: the desktop app and the dashboard attach to one daemon and show the same live session, and an ACP editor fixture completes a prompt round trip on the same daemon (spec: desktop-app, spec: web-dashboard, spec: acp-adapter)
+- [x] 81.2 M3 exit: the offline self-improvement demo adopts a harness proposal, writes an experience entry, and a later session receives the lesson, with the answer-free tripwire test green (spec: harness-evolution, spec: experience-library, spec: replay-and-evaluation)
 - [ ] 81.3 M3 exit: a kanban board dispatches two workers that complete dependent tasks, a bot group chat on the desktop settles after one round, an A2A peer completes a remote run, computer use drives a mock desktop under approval, a pet reacts in the TUI, and a catalog adapter passes the conformance kit; every M3 scenario across specs maps to a passing test in the scenario index; `openspec validate --all --strict` and `scripts/check` are green on main (spec: kanban, spec: bot-mode, spec: agent-interop, spec: computer-use, spec: pets, spec: platform-adapters)

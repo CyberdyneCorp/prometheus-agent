@@ -74,11 +74,11 @@ capabilities = [
     "workspace-architecture",
 ]
 
-# M3 (task groups 61-81) is being implemented: its indexed scenarios are
-# checked, unindexed ones are pending. Each area adds its capabilities
-# here; drop `partial` when M3 is complete (task 81.x).
+# M3 (task groups 61-81): every scenario is indexed. The Discord voice
+# channel scenarios (task 77.2) are deferred to a follow-up change. The
+# exit tests (crates/prometheus/tests/m3_exit/, task 81) chain the M3
+# surfaces end to end and are listed on the scenarios they also prove.
 [milestones.M3]
-partial = true
 capabilities = [
     "acp-adapter",
     "agent-interop",
@@ -1833,7 +1833,7 @@ capabilities = [
 "Push to a private address" = ["crates/prometheus/tests/a2a_server.rs::push_urls_obey_the_egress_policy_and_rates_are_limited"]
 
 [agent-interop."Outbound A2A tools"]
-"Call a configured researcher" = ["crates/prometheus/tests/agent_interop.rs::a2a_tools_call_a_configured_agent_and_refuse_unknown_names"]
+"Call a configured researcher" = ["crates/prometheus/tests/m3_exit/a2a.rs::an_a2a_peer_completes_a_remote_run", "crates/prometheus/tests/agent_interop.rs::a2a_tools_call_a_configured_agent_and_refuse_unknown_names"]
 "Unknown agent name" = ["crates/prometheus/tests/agent_interop.rs::a2a_tools_call_a_configured_agent_and_refuse_unknown_names"]
 
 [agent-interop."Peer gateway registry"]
@@ -4212,7 +4212,7 @@ capabilities = [
 "Link with a prompt payload" = ["apps/desktop/src-tauri/src/app_tests.rs::a_deep_link_with_a_prompt_payload_opens_an_empty_draft", "crates/pmt-desktop/src/deeplink.rs::a_prompt_payload_is_dropped", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
 
 [desktop-app."Sessions are created with desktop source"]
-"New chat" = ["crates/prometheus/tests/desktop_protocol.rs::a_desktop_chat_is_created_with_desktop_source", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
+"New chat" = ["crates/prometheus/tests/m3_exit/clients.rs::desktop_dashboard_and_an_acp_editor_share_one_daemon", "crates/prometheus/tests/desktop_protocol.rs::a_desktop_chat_is_created_with_desktop_source", "crates/prometheus/tests/desktop_e2e.rs::the_desktop_attaches_through_the_bundled_binary"]
 
 [desktop-app."Gone-session verdict"]
 "Resume during reconnect" = { tests = ["crates/prometheus/tests/desktop_e2e.rs::the_desktop_reconnects_and_keeps_its_session"], note = "desktop-reconnect.spec.ts: with the daemon stopped the window stays on the session with Retry; a -32003 answer while connected opens a fresh draft" }
@@ -4461,7 +4461,7 @@ capabilities = [
 "No credentials yet" = ["crates/prometheus/tests/acp/sessions.rs::without_a_credential_only_setup_is_offered_and_it_fails"]
 
 [acp-adapter."New session on the daemon"]
-"Successful creation" = ["crates/prometheus/tests/acp/sessions.rs::a_new_session_is_an_acp_daemon_session_in_the_editor_cwd"]
+"Successful creation" = ["crates/prometheus/tests/m3_exit/clients.rs::desktop_dashboard_and_an_acp_editor_share_one_daemon", "crates/prometheus/tests/acp/sessions.rs::a_new_session_is_an_acp_daemon_session_in_the_editor_cwd"]
 
 [acp-adapter."Load and resume replay the logical session"]
 "Reopen after compression" = ["crates/prometheus/tests/acp/sessions.rs::loading_a_compressed_session_attaches_its_continuation", "crates/prometheus/tests/acp/sessions.rs::resume_reattaches_and_an_unattached_session_is_not_found"]
@@ -4549,7 +4549,7 @@ capabilities = [
 "Manual move outside the table" = { tests = ["crates/pmt-kanban/tests/store.rs::a_manual_move_outside_the_table_is_refused", "crates/pmt-kanban/src/workflow.rs::a_drag_from_triage_to_running_names_the_actor"], note = "the board refuses the move with kanban.illegal_transition (a Conflict: HTTP 409 on the dashboard API, whose /api/kanban routes arrive with task 61.7)" }
 
 [kanban."Task creation"]
-"Child of an open parent waits" = ["crates/pmt-kanban/tests/store.rs::a_child_of_an_open_parent_waits", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
+"Child of an open parent waits" = ["crates/prometheus/tests/m3_exit/kanban.rs::the_daemon_dispatches_two_workers_through_dependent_tasks", "crates/pmt-kanban/tests/store.rs::a_child_of_an_open_parent_waits", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
 "Relative dir workspace rejected at creation" = ["crates/pmt-kanban/tests/store.rs::creation_validates_before_writing_anything", "crates/prometheus/tests/kanban_cli.rs::creation_from_the_cli_validates_and_gates"]
 
 [kanban."Idempotent create"]
@@ -4803,7 +4803,7 @@ capabilities = [
 "Verdict does not reach the library" = { tests = ["crates/prometheus/tests/evolve_engine.rs::eval_results_reach_the_user_only", "crates/prometheus/tests/evolve_engine.rs::a_user_suite_compares_the_base_and_the_proposed_harness"], note = "a_user_suite_compares_the_base_and_the_proposed_harness runs a user suite through the eval engine on the base version and on the proposal materialised as a temporary harness (scores 0 vs 100, no version written); the test reviews with --eval smoke, adopts (the mock reflector's lesson becomes an experience entry), runs the next job of the domain, whose evidence snapshot holds that entry, and finds every stage accepted (no tripwire hit) and no file under <profile>/evolve or <profile>/experience holding the verdict canary" }
 
 [experience-library."Library layout"]
-"Entry created" = ["crates/pmt-evolve/tests/engine/library.rs::an_adopted_proposal_with_a_lesson_becomes_an_entry", "crates/prometheus/tests/experience_cli.rs::a_mock_job_distils_a_lesson_that_adoption_files_in_its_domain"]
+"Entry created" = ["crates/prometheus/tests/m3_exit/self_improvement.rs::the_demo_adopts_a_lesson_that_a_later_session_receives_answer_free", "crates/pmt-evolve/tests/engine/library.rs::an_adopted_proposal_with_a_lesson_becomes_an_entry", "crates/prometheus/tests/experience_cli.rs::a_mock_job_distils_a_lesson_that_adoption_files_in_its_domain"]
 
 [experience-library."Domain names"]
 "Slash in domain" = ["crates/pmt-evolve/src/experience/domain.rs::slashes_spaces_and_case_are_normalised"]
@@ -5134,7 +5134,7 @@ capabilities = [
 
 [bot-mode."Group chats"]
 "Rooms do not spin" = ["crates/prometheus/tests/bot_rooms.rs::a_room_of_chatty_bots_stops_at_its_bounds"]
-"Silent round settles" = ["crates/prometheus/tests/bot_rooms.rs::a_fully_silent_round_settles_the_room"]
+"Silent round settles" = ["crates/prometheus/tests/m3_exit/bots.rs::a_bot_group_chat_on_the_desktop_settles_after_a_silent_round", "crates/prometheus/tests/bot_rooms.rs::a_fully_silent_round_settles_the_room"]
 
 [bot-mode."Room stop directives and held members"]
 "Stop word in prose" = ["crates/prometheus/src/bot_host/rooms.rs::a_stop_word_holds_only_next_to_the_mention"]
@@ -5158,7 +5158,7 @@ capabilities = [
 "Forged call outside a bot chat" = ["crates/prometheus/tests/bot_messages.rs::only_a_bot_chat_has_message_agent"]
 
 [computer-use."computer_use tool actions"]
-"Background click" = ["crates/pmt-tools/src/computer_use/tests.rs::a_click_lands_in_the_target_window_in_the_background", "crates/prometheus/tests/computer_use.rs::capture_click_and_type_drive_the_desktop_under_approval"]
+"Background click" = ["crates/prometheus/tests/m3_exit/computer_use.rs::computer_use_drives_a_mock_desktop_under_approval", "crates/pmt-tools/src/computer_use/tests.rs::a_click_lands_in_the_target_window_in_the_background", "crates/prometheus/tests/computer_use.rs::capture_click_and_type_drive_the_desktop_under_approval"]
 "Stale element" = ["crates/pmt-tools/src/computer_use/tests.rs::an_element_missing_from_the_latest_capture_is_stale"]
 
 [computer-use."Capture modes and payload budget"]
@@ -5220,6 +5220,14 @@ capabilities = [
 "Hands-free request" = ["crates/prometheus/tests/wake_line.rs::a_hands_free_request_opens_a_session_is_answered_aloud_and_listening_resumes", "crates/prometheus/tests/wake_line.rs::the_tui_answers_a_hands_free_request", "crates/pmt-voice/tests/wake.rs::a_wake_phrase_is_answered_aloud_then_listening_resumes"]
 "Refuses without TTS" = ["crates/prometheus/tests/wake_line.rs::wake_refuses_to_arm_without_tts_and_names_what_is_missing", "crates/pmt-voice/src/wake/command.rs::arming_names_the_missing_tts_provider"]
 
+[voice-mode."Discord voice channel sessions"]
+"Spoken question answered in voice" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
+"Join without being in voice" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
+
+[voice-mode."Voice channel echo suppression, access control and rebinding"]
+"Unauthorized speaker ignored" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
+"No self-echo" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
+
 [voice-mode."Wake engines and false-trigger control"]
 "Ambient spike ignored" = { tests = ["crates/pmt-voice/tests/wake.rs::an_ambient_spike_does_not_fire_but_a_held_phrase_does", "crates/pmt-voice/src/wake/engine.rs::one_spiking_frame_does_not_fire_but_three_in_a_row_do"], note = "a stand-in worker speaks the engine protocol and scores one spiking frame, a quiet one, then three held frames; the real openWakeWord driver sends the same scores" }
 "Explicit engine not silently swapped" = ["crates/prometheus/tests/wake_line.rs::an_explicit_engine_is_not_swapped_for_another", "crates/pmt-voice/src/wake/engine.rs::a_named_engine_is_never_swapped"]
@@ -5271,14 +5279,14 @@ capabilities = [
 "Selected but disabled" = ["crates/prometheus/tests/pets_cli.rs::the_doctor_names_the_first_missing_item"]
 
 [pets."Pet slash command"]
-"Adopt from the TUI" = ["crates/prometheus/tests/pets_tui.rs::pet_slug_adopts_an_installed_pet_without_a_turn"]
+"Adopt from the TUI" = ["crates/prometheus/tests/m3_exit/pets.rs::a_pet_reacts_in_the_tui", "crates/prometheus/tests/pets_tui.rs::pet_slug_adopts_an_installed_pet_without_a_turn"]
 
 [pets."Generating a pet"]
 "No reference-capable backend" = ["crates/prometheus/tests/pets_cli.rs::hatching_without_a_reference_capable_backend_spends_nothing", "crates/prometheus/tests/pets_line.rs::the_in_process_line_interface_runs_pet_commands_here"]
 "Hatched pet is a normal pet" = { tests = ["crates/prometheus/tests/pets_daemon.rs::a_pet_hatched_through_the_daemon_is_installed_like_a_gallery_pet", "crates/pmt-pets/src/hatch/mod.rs::a_hatched_pet_is_installed_and_selectable"], note = "against the OpenAI Images API (wiremock): four drafts, then nine rows each with the chosen draft as reference; the packed atlas installs and is adopted with pets.set" }
 
 [pets."Affection reactions"]
-"Thank-you message" = ["crates/prometheus/tests/pets_tui.rs::a_thank_you_plays_the_heart", "crates/prometheus/tests/pets_daemon.rs::an_affectionate_message_is_stored_as_sent", "crates/pmt-pets/src/affection.rs::thanks_and_good_bot_are_affection"]
+"Thank-you message" = ["crates/prometheus/tests/m3_exit/pets.rs::a_pet_reacts_in_the_tui", "crates/prometheus/tests/pets_tui.rs::a_thank_you_plays_the_heart", "crates/prometheus/tests/pets_daemon.rs::an_affectionate_message_is_stored_as_sent", "crates/pmt-pets/src/affection.rs::thanks_and_good_bot_are_affection"]
 
 [pets."Desktop pet and pop-out overlay"]
 "Prompt from the overlay" = { tests = ["crates/prometheus/tests/pets_e2e.rs::the_desktop_pet_pops_out_and_prompts_through_the_main_window"], note = "desktop-pet.spec.ts: Shift+click opens the overlay window (no WebSocket of its own); with the main window hidden, a prompt typed on the pet is submitted on the main window's connection to the most recent session and no window is brought back; the mail badge shows for the turn that finished while hidden" }
