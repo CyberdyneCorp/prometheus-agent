@@ -11,6 +11,7 @@
 //! lockfile = "sidecar/package-lock.json" # node: the hash-pinned package set
 //! secrets = ["PHOTON_TOKEN"]             # declared secrets it receives
 //! ready_timeout_secs = 30
+//! reads_home = false                     # its children read the user's home (a CLI's own login)
 //! ```
 
 use std::path::{Component, Path};
@@ -45,6 +46,10 @@ pub struct SidecarDeclaration {
     pub secrets: Vec<String>,
     /// Seconds it has to accept connections on its port.
     pub ready_timeout_secs: u64,
+    /// The OS sandbox lets it (and what it starts) read the user's home,
+    /// credential stores excepted: for a sidecar that runs a platform CLI
+    /// which keeps its own login there (Raft).
+    pub reads_home: bool,
 }
 
 const KEYS: &[&str] = &[
@@ -54,6 +59,7 @@ const KEYS: &[&str] = &[
     "lockfile",
     "secrets",
     "ready_timeout_secs",
+    "reads_home",
 ];
 
 fn relative(key: &str, text: &str) -> Result<String, Error> {
@@ -152,6 +158,11 @@ pub fn parse(
         lockfile,
         secrets,
         ready_timeout_secs,
+        reads_home: match table.get("reads_home") {
+            None => false,
+            Some(Value::Boolean(on)) => *on,
+            Some(_) => return Err(invalid("sidecar.reads_home must be a boolean".to_owned())),
+        },
     }))
 }
 

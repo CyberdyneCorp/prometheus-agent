@@ -133,6 +133,7 @@ pub fn factory() -> AdapterFactory {
         let mut adapter =
             PluginAdapter::read(Arc::clone(&plugin.instance), &setup.platform, &options)?;
         adapter.sidecar = sidecar_of(setup, plugin);
+        adapter.profile_dir = setup.scope.dir().to_path_buf();
         adapter.media = Arc::new(Inbox::granted(Arc::clone(&plugin.grants)));
         Ok(Arc::new(adapter) as Arc<dyn Adapter>)
     })
@@ -163,6 +164,7 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
     };
     let grants = plugin.grants.current();
     let names = sidecar::granted_secrets(&declaration, &grants);
+    let reads_home = declaration.reads_home;
     Some(Sidecar {
         spec: sidecar::Spec {
             home: setup.scope.home().to_path_buf(),
@@ -173,6 +175,18 @@ fn sidecar_of(setup: &AdapterSetup, plugin: &pmt_plugins::load::LoadedPlugin) ->
             secrets: Vec::new(),
             node: None,
             network: sidecar::granted_network(&grants),
+            confinement: super::sidecar_sandbox::Confinement {
+                sandbox: setup.scope.config().security.sandbox.clone(),
+                home: setup.scope.home().to_path_buf(),
+                data: setup
+                    .scope
+                    .dir()
+                    .join("plugin-data")
+                    .join(&plugin.manifest.id)
+                    .join("sidecar"),
+                reads_home,
+                grants,
+            },
         },
         names,
         scope: setup.scope.clone(),
@@ -239,6 +253,13 @@ struct PluginAdapter {
     /// locks across homes): the values of the options the descriptor's
     /// `credential_options` names (IRC: server and nickname).
     credential: Option<String>,
+    /// The descriptor's `tool_ops`: its platform's host tools call it
+    /// ([`super::adapter_tools`]).
+    tool_ops: bool,
+    /// The owning profile's directory (where its tools look it up).
+    profile_dir: std::path::PathBuf,
+    /// Its registration with [`super::adapter_tools`] while connected.
+    tool_token: Mutex<Option<u64>>,
 }
 
 /// The credential identity of `options` for the option keys `keys` (a
@@ -291,6 +312,9 @@ impl PluginAdapter {
             instance,
             descriptor,
             credential,
+            tool_ops: value["tool_ops"] == true,
+            profile_dir: std::path::PathBuf::new(),
+            tool_token: Mutex::default(),
             options: options.to_string(),
             call,
             link: Mutex::default(),
@@ -516,6 +540,15 @@ impl Adapter for PluginAdapter {
                 }
             }
             *lock(&self.link) = Some(Arc::clone(&link));
+            if self.tool_ops {
+                let token = super::adapter_tools::connected(
+                    &self.profile_dir,
+                    &self.descriptor.platform,
+                    Arc::clone(&self.instance),
+                    self.call.clone(),
+                );
+                *lock(&self.tool_token) = Some(token);
+            }
             let task = pmt_core::spawn::spawn(poll(
                 Arc::clone(&self.instance),
                 self.call.clone(),
@@ -536,6 +569,13 @@ impl Adapter for PluginAdapter {
                 task.abort();
             }
             lock(&self.link).take();
+            if let Some(token) = lock(&self.tool_token).take() {
+                super::adapter_tools::disconnected(
+                    &self.profile_dir,
+                    &self.descriptor.platform,
+                    token,
+                );
+            }
             self.stop_sidecar();
             if let Err(err) = self.blocking(Instance::adapter_stop).await {
                 tracing::warn!(plugin = %self.instance.id(), "the adapter's stop failed: {}", err.message());

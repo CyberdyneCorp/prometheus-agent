@@ -505,9 +505,18 @@ Other platforms arrive as first-party adapter plugins from the plugin
 catalog (`prometheus plugins install <id>`, then `prometheus plugins
 enable <id>`); each passes the conformance kit against a mock of its
 platform. Adapters that hold a socket (IRC, Home Assistant, ntfy,
-Mattermost, DingTalk, SimpleX) run a small Node sidecar, the socket bridge, which connects only to the hosts the
+Mattermost, DingTalk, SimpleX, WeCom, Weixin, QQ Bot, Yuanbao) run a small
+Node sidecar, the socket bridge, which connects only to the hosts the
 plugin was granted; a server other than the declared default is granted
 with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
+Every sidecar runs under the OS sandbox: it reads the system toolchain,
+its plugin's files and runtime and the plugin's `fs.read` grants, writes
+only its data directory (`<profile>/plugin-data/<id>/sidecar`, also its
+`TMPDIR`) and the plugin's `fs.write` grants, connects only on the ports of
+the plugin's `net.connect` grants, and starts processes only with a
+`process.spawn` grant. A sidecar that runs a platform CLI keeping its own
+login in the user's home declares `[sidecar] reads_home = true` (Raft);
+credential stores stay unreadable either way.
 
 - `sms` (Twilio): set `account_sid`, `phone_number` and `public_url` (the
   exact webhook URL configured in Twilio, which it signs) and the secret
@@ -540,7 +549,8 @@ with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
   wake hint becomes a content-free notice and the agent reads and answers
   with the Raft CLI. A hint carrying `text`, `body`, `content` or
   `messages`, or sent with an earlier start's token, is refused. The
-  bridge child is not yet confined by the OS sandbox.
+  bridge child runs inside the sidecar's OS sandbox (it may read the home,
+  where the Raft CLI keeps its login, but no credential store).
 - `ntfy`: `topic`, and optionally `server_url` (`https://ntfy.sh`),
   `publish_topic` (the topic) and `markdown`; secret `NTFY_TOKEN` for a
   protected topic. The topic is the only identity: list it in
@@ -579,10 +589,51 @@ with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
   only when listed in `allow_groups`. Receiving files needs a grant on the
   daemon's files folder (`fs.read:<folder>/**`); files are sent by path.
 
+- `wecom` (WeCom smart robot, no public URL): `bot_id`, secret
+  `WECOM_BOT_SECRET`, and optionally `websocket_url`,
+  `stream_keepalive_secs` (120), `dm_policy` (`open`, `allowlist`,
+  `pairing`, `disabled`), `allow_from`, `group_policy`, `group_allow_from`
+  and per-group sender allowlists `groups = {G1 = {allow_from = [..]}}`.
+  Replies stream into one native message that edits update; after 330 s
+  later parts go out as new messages. Inbound media is decrypted with its
+  message's key; outbound media over WeCom's limits (image 10 MB, voice
+  2 MB, video 10 MB) goes as a file with a notice, over 20 MB not at all.
+  Grant the media hosts the bot downloads from.
+- `wecom_callback` (self-built WeCom apps): `apps = [{name, corp_id,
+  agent_id}, ...]` (up to 4) and, for the n-th app, secrets
+  `WECOM_CALLBACK_CORP_SECRET_<n>`, `WECOM_CALLBACK_TOKEN_<n>` and
+  `WECOM_CALLBACK_AES_KEY_<n>`. Callbacks arrive on the shared listener,
+  are acknowledged at once, and are answered through the app the user
+  wrote to (users are `<corp_id>:<user_id>`); text is split at 2048 bytes.
+- `weixin` (a personal WeChat account over the iLink bot API): option
+  `account_id` and secret `WEIXIN_TOKEN`; `dm_policy` (open), `allow_from`,
+  `group_policy` (disabled; a warning when enabled), `group_allow_from`.
+  The per-peer context token is kept across restarts; an expired session
+  pauses polling for 10 minutes; media is AES-128-ECB both ways. The QR
+  login (`prometheus gateway setup weixin`) is not available yet: obtain
+  the token with another iLink client and store it.
+- `qqbot`: `app_id`, secret `QQBOT_CLIENT_SECRET`, and optionally
+  `dm_policy`, `group_policy`, `allow_from`, `group_allow_from` and
+  `keyboards = true` (approvals as message keyboards; numbered text
+  otherwise, answered by the number). A voice message with QQ's own
+  transcript arrives as that text, without the clip; files over 10 MB are
+  uploaded in parts.
+- `yuanbao`: `app_id`, secret `YUANBAO_APP_SECRET`, and optionally
+  `dm_policy`, `group_policy` (`open` by default), `allow_from`,
+  `group_allow_from`. Chats are `direct:<account>` and
+  `group:<group code>`; forwarded chat history arrives as its senders'
+  lines; media is fetched only from public HTTPS URLs. The `yuanbao`
+  toolset (`yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`,
+  `yb_search_sticker` with at most 50 results, `yb_send_sticker`) acts
+  through the adapter, so it works in the process that runs the gateway.
+
 Adapter plugins exchange files with the host as base64 (inbound files the
 plugin downloaded under its own grants, or a local file inside its
 `fs_read` grant), and ask the host for edits, reactions and typing through
-the same `send` call.
+the same `send` call. A plugin may also name an attachment by a bare
+reference the gateway passes on: a `geo:` URI for a location, or an
+http(s) URL; anything else (a local path above all) is dropped, since
+local files must come through the grant-checked path.
 
 ## Who may talk to the agent
 

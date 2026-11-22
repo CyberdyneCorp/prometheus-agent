@@ -16,6 +16,8 @@
 //! senders outside the daemon. An exit the adapter did not ask for puts it
 //! in `retrying` with code `sidecar_exited`, so the gateway reconnects it
 //! with its backoff (starting the sidecar again); disconnecting stops it.
+//! It runs under the OS sandbox ([`super::sidecar_sandbox`]): the
+//! plugin's own files, runtime and grants, nothing of the daemon's.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -46,6 +48,8 @@ pub(crate) struct Spec {
     /// optional `:port`): a sidecar that opens connections for the plugin
     /// (the catalog adapters' socket bridge) holds it to the same grant.
     pub network: Vec<String>,
+    /// What the OS sandbox lets it do.
+    pub confinement: super::sidecar_sandbox::Confinement,
 }
 
 /// A running sidecar; dropping it stops the process.
@@ -167,7 +171,15 @@ pub(crate) async fn start(
     let port = free_port().map_err(|e| failed(format!("no loopback port: {e}")))?;
     let token = new_token();
     let (program, args) = command_line(spec, port)?;
-    let mut command = tokio::process::Command::new(&program);
+    let confined = super::sidecar_sandbox::command(
+        &spec.confinement,
+        &program,
+        &spec.plugin_dir,
+        &runtime_dirs(spec),
+        port,
+    )
+    .map_err(|why| failed(format!("the sidecar cannot run sandboxed: {why}")))?;
+    let mut command = tokio::process::Command::from(confined);
     command
         .args(&args)
         .current_dir(&spec.plugin_dir)
@@ -201,8 +213,28 @@ pub(crate) async fn start(
     })
 }
 
+/// What runs a Node sidecar besides the plugin's files: the managed Node
+/// installation and the plugin's installed packages.
+fn runtime_dirs(spec: &Spec) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if spec.declaration.runtime == Runtime::Node {
+        // `<install>/bin/node`: the whole installation (its libraries).
+        if let Some(install) = spec
+            .node
+            .as_deref()
+            .and_then(Path::parent)
+            .and_then(Path::parent)
+        {
+            dirs.push(install.to_path_buf());
+        }
+        dirs.push(modules_dir(&spec.home, &spec.plugin));
+    }
+    dirs
+}
+
 /// Its whole environment: the port, the token, `PATH` (and `NODE_PATH`
-/// for Node) and its granted secrets; nothing inherited from the daemon.
+/// for Node), `TMPDIR` (its data directory, the one place it writes) and
+/// its granted secrets; nothing inherited from the daemon.
 fn environment(spec: &Spec, port: u16, token: &str) -> Vec<(String, std::ffi::OsString)> {
     let mut env: Vec<(String, std::ffi::OsString)> = vec![
         ("PMT_SIDECAR_PORT".to_owned(), port.to_string().into()),
@@ -215,6 +247,10 @@ fn environment(spec: &Spec, port: u16, token: &str) -> Vec<(String, std::ffi::Os
     if let Some(path) = std::env::var_os("PATH") {
         env.push(("PATH".to_owned(), path));
     }
+    env.push((
+        "TMPDIR".to_owned(),
+        spec.confinement.data.clone().into_os_string(),
+    ));
     if spec.declaration.runtime == Runtime::Node {
         env.push((
             "NODE_PATH".to_owned(),
@@ -440,10 +476,18 @@ mod tests {
                 lockfile: None,
                 secrets: vec!["PHOTON_TOKEN".into()],
                 ready_timeout_secs: 30,
+                reads_home: false,
             },
             secrets: vec![("PHOTON_TOKEN".into(), "t0k".into())],
             node: None,
             network: vec!["api.photon.example:443".into()],
+            confinement: crate::plugins_host::sidecar_sandbox::Confinement {
+                sandbox: pmt_config::schema::SandboxConfig::default(),
+                home: home.to_path_buf(),
+                grants: CapabilitySet::parse(["net.connect:api.photon.example:443"]).unwrap(),
+                data: home.join("profiles/default/plugin-data/photon/sidecar"),
+                reads_home: false,
+            },
         }
     }
 
@@ -462,6 +506,7 @@ mod tests {
                 "PMT_SIDECAR_TOKEN",
                 "PMT_SIDECAR_NETWORK",
                 "PATH",
+                "TMPDIR",
                 "PHOTON_TOKEN"
             ]
         );
@@ -596,6 +641,44 @@ mod tests {
         );
         drop(running);
         assert!(!file.exists(), "the run file goes with the sidecar");
+    }
+
+    /// The sidecar runs under the OS sandbox: a file outside the plugin's
+    /// grants is unreadable to it, its own data directory is writable.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_sidecar_cannot_read_outside_its_grants() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let home =
+            tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap();
+        let outside =
+            tempfile::tempdir_in(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target")).unwrap();
+        let secret = outside.path().join("secret.txt");
+        std::fs::write(&secret, "hunter2\n").unwrap();
+        let mut spec = spec(home.path());
+        // A shell builtin reads the file (the sandbox lets it spawn no
+        // process, so nothing here forks), records
+        // what happened in its data directory, then serves the port.
+        let script = spec.plugin_dir.join("bin/probe.sh");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nif read -r line < '{secret}'; then echo \"read:$line\" > \"$TMPDIR/probe\"; else echo denied > \"$TMPDIR/probe\"; fi\nexec '{exe}' --http \"127.0.0.1:$PMT_SIDECAR_PORT\"\n",
+                secret = secret.display(),
+                exe = spec.plugin_dir.join(&spec.declaration.command).display(),
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        spec.declaration.command = "bin/probe.sh".into();
+        spec.declaration.args = Vec::new();
+        let link = Arc::new(Link::default());
+        let running = start(&spec, Arc::clone(&link) as Arc<dyn AdapterLink>)
+            .await
+            .unwrap();
+        let probe = std::fs::read_to_string(spec.confinement.data.join("probe")).unwrap();
+        assert_eq!(probe.trim(), "denied");
+        drop(running);
     }
 
     #[tokio::test]

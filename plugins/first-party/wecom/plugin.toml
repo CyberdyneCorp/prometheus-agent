@@ -1,0 +1,28 @@
+# First-party catalog adapter: WeCom smart robot (spec: platform-adapters,
+# WeCom smart robot adapter). The socket bridge sidecar holds the AI Bot
+# WebSocket (no public URL); replies stream as native `stream` messages.
+# Configure `[gateway.platforms.wecom]` option `bot_id` and optionally
+# `websocket_url` (default wss://openws.work.weixin.qq.com),
+# `stream_keepalive_secs` (default 120), `dm_policy` (open, allowlist,
+# pairing, disabled; default open), `allow_from`, `group_policy` (default
+# open), `group_allow_from` and per-group sender allowlists
+# `groups = {<group id> = {allow_from = [..]}}`; `prometheus secrets set
+# WECOM_BOT_SECRET`. Grant the media hosts the bot downloads from
+# (`prometheus grants add plugin:wecom@<digest> net.connect:<host>:443`).
+manifest_version = 1
+id = "wecom"
+version = "1.0.0"
+kind = "wasm"
+description = "WeCom AI Bot (smart robot) over its WebSocket, with streamed replies and encrypted media."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["openws.work.weixin.qq.com", "127.0.0.1"]
+secrets = ["WECOM_BOT_SECRET"]
+
+[sidecar]
+runtime = "node"
+command = "sidecar/bridge.mjs"
+lockfile = "sidecar/package-lock.json"

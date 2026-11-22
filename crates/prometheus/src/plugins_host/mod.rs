@@ -17,6 +17,7 @@
 
 pub mod adapter;
 mod adapter_media;
+pub mod adapter_tools;
 pub mod approvals;
 pub mod bridge;
 pub mod catalog;
@@ -34,6 +35,7 @@ mod ports;
 pub mod providers;
 pub mod reload;
 mod sidecar;
+mod sidecar_sandbox;
 pub mod subagents;
 pub mod terminal;
 

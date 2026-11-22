@@ -4173,9 +4173,11 @@ dependencies = [
 name = "prometheus"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "argon2",
  "async-openai",
  "base64 0.23.1",
+ "cbc",
  "clap",
  "crossterm",
  "expectrl",

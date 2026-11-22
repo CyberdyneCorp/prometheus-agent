@@ -22,6 +22,7 @@ pub mod bindings {
 
 pub mod bridge;
 pub mod clock;
+pub mod crypt;
 pub mod host;
 pub mod message;
 pub mod net;

@@ -21,6 +21,13 @@ pub fn hmac_sha1(key: &[u8], data: &[u8]) -> Vec<u8> {
     mac.finalize().into_bytes().to_vec()
 }
 
+/// SHA-1 of `data` (signatures some platforms still make with it).
+#[must_use]
+pub fn sha1(data: &[u8]) -> Vec<u8> {
+    use sha1::Digest as _;
+    sha1::Sha1::digest(data).to_vec()
+}
+
 /// SHA-256 of `data`.
 #[must_use]
 pub fn sha256(data: &[u8]) -> Vec<u8> {

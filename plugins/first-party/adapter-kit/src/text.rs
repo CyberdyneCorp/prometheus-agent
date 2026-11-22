@@ -123,6 +123,33 @@ fn percent_decode(text: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// The text of the first `<tag>` element in a flat XML document (the
+/// platform callback envelopes): CDATA unwrapped, the five predefined
+/// entities decoded. Nothing else of XML is interpreted (no DTDs, no
+/// external or custom entities), so a hostile body cannot expand.
+#[must_use]
+pub fn xml_field(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = start + xml[start..].find(&close)?;
+    let inner = xml[start..end].trim();
+    if let Some(cdata) = inner
+        .strip_prefix("<![CDATA[")
+        .and_then(|c| c.strip_suffix("]]>"))
+    {
+        return Some(cdata.to_owned());
+    }
+    Some(
+        inner
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&amp;", "&"),
+    )
+}
+
 /// Encodes form pairs (`application/x-www-form-urlencoded`).
 #[must_use]
 pub fn form_encode(pairs: &[(&str, &str)]) -> String {
@@ -180,6 +207,15 @@ mod tests {
             strip_markdown("# Title\n**bold** [site](https://x.y)"),
             "Title\nbold site (https://x.y)"
         );
+    }
+
+    #[test]
+    fn xml_fields_unwrap_cdata_and_entities() {
+        let xml =
+            "<xml><ToUserName><![CDATA[corp<1>]]></ToUserName><Content>a &amp; b</Content></xml>";
+        assert_eq!(xml_field(xml, "ToUserName").as_deref(), Some("corp<1>"));
+        assert_eq!(xml_field(xml, "Content").as_deref(), Some("a & b"));
+        assert_eq!(xml_field(xml, "MsgId"), None);
     }
 
     #[test]

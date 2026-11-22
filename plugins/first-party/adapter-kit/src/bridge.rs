@@ -7,7 +7,11 @@
 //!
 //! - `POST /open {"url", "headers"?}`: `ws://`/`wss://` (WebSocket),
 //!   `tcp://host:port`/`tls://host:port` (newline-framed), `http(s)://`
-//!   (a streamed GET read line by line); answers `{"id"}`.
+//!   (a streamed GET read line by line); answers `{"id"}`. With `"whole":
+//!   true` (and `method`, `body`) an http(s) URL is one request (a long
+//!   poll) whose answer arrives as a single frame `{"status", "body"}`.
+//!   With `"binary": true` a WebSocket's binary frames cross as base64
+//!   both ways.
 //! - `POST /send {"id", "data"}`: a text frame (WebSocket) or raw text.
 //! - `POST /recv {"id", "max"}`: `{"frames": [..], "open", "error"}`
 //!   without waiting.
@@ -90,6 +94,48 @@ impl Bridge {
             .map(|(k, v)| ((*k).to_owned(), json!(v)))
             .collect();
         let answer = self.call("/open", &json!({"url": url, "headers": headers}))?;
+        answer["id"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| "the bridge answered no connection id".to_owned())
+    }
+
+    /// Opens a WebSocket whose binary frames cross as base64 (received
+    /// frames are base64; [`Self::send`] takes base64).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::open`].
+    pub fn open_binary(&self, url: &str) -> Result<String, String> {
+        let answer = self.call("/open", &json!({"url": url, "binary": true}))?;
+        answer["id"]
+            .as_str()
+            .map(str::to_owned)
+            .ok_or_else(|| "the bridge answered no connection id".to_owned())
+    }
+
+    /// Starts one HTTP request whose whole answer arrives later as a
+    /// single frame `{"status", "body"}` (a long poll that must not block
+    /// the adapter); the connection's id.
+    ///
+    /// # Errors
+    ///
+    /// The bridge refused (an ungranted host).
+    pub fn request(
+        &self,
+        method: &str,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> Result<String, String> {
+        let headers: serde_json::Map<String, Value> = headers
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), json!(v)))
+            .collect();
+        let answer = self.call(
+            "/open",
+            &json!({"url": url, "headers": headers, "method": method, "body": body, "whole": true}),
+        )?;
         answer["id"]
             .as_str()
             .map(str::to_owned)

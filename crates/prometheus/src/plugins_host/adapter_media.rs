@@ -11,7 +11,9 @@
 //! daemon saved (`path`, read here only inside the plugin's `fs_read`
 //! grant), both kept until the gateway opens them through its size cap
 //! and cache, or as a bare platform reference the gateway passes on as it
-//! is (`location`).
+//! is (`location`): a `geo:` URI for a location pin or an http(s) URL,
+//! never a local path, which would let a plugin name a host file outside
+//! its `fs_read` grant.
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -143,7 +145,14 @@ impl Inbox {
             let data = data.or_else(|| item["path"].as_str().and_then(|p| self.read_granted(p)));
             let location = match (data, item["location"].as_str()) {
                 (Some(bytes), _) => self.keep(bytes),
-                (None, Some(location)) if !location.is_empty() => location.to_owned(),
+                (None, Some(location)) if passes_through(kind, location) => location.to_owned(),
+                (None, Some(location)) => {
+                    tracing::warn!(
+                        location,
+                        "an adapter plugin named an attachment that is neither its bytes, a granted path, a geo: URI nor an http(s) URL; the attachment is dropped"
+                    );
+                    continue;
+                }
                 _ => continue,
             };
             let mut attachment = Attachment::new(kind, &location);
@@ -172,6 +181,18 @@ impl Inbox {
             chunks: Box::pin(futures_util::stream::iter([Ok(bytes)])),
         })
     }
+}
+
+/// Whether a bare `location` may reach the gateway as it is: a `geo:` URI
+/// for a location pin, or an http(s) URL for anything else. Everything
+/// else (a filesystem path above all) is refused, because the gateway
+/// would open a local path with the daemon's own rights.
+fn passes_through(kind: MediaKind, location: &str) -> bool {
+    let lower = location.trim_start().to_ascii_lowercase();
+    if kind.is_location() {
+        return lower.starts_with("geo:");
+    }
+    lower.starts_with("https://") || lower.starts_with("http://")
 }
 
 /// The state a failed poll puts the adapter in: `fatal: <code>: <why>`
@@ -233,9 +254,11 @@ mod tests {
             {"kind": "document", "location": "https://cdn.example/f"},
             {"kind": "nonsense", "location": "x"},
             {"kind": "voice"},
+            {"kind": "location", "location": "geo:48.85,2.35"},
         ]});
         let attachments = inbox.attachments(&message);
-        assert_eq!(attachments.len(), 2);
+        assert_eq!(attachments.len(), 3);
+        assert_eq!(attachments[2].location, "geo:48.85,2.35");
         assert_eq!(attachments[0].name.as_deref(), Some("a.png"));
         let mut stream = inbox.open(&attachments[0]).unwrap();
         assert_eq!(stream.declared_len, Some(5));
@@ -245,5 +268,22 @@ mod tests {
             inbox.open(&attachments[1]).unwrap_err(),
             SendError::Unsupported
         );
+    }
+
+    #[test]
+    fn a_bare_local_path_never_reaches_the_gateway() {
+        // A plugin must not get a host file read by naming it as a
+        // platform reference: local files come through `path`, which is
+        // checked against the fs_read grant (here there is none).
+        let inbox = Inbox::default();
+        let message = json!({"attachments": [
+            {"kind": "voice", "location": "/Users/x/secret.ogg"},
+            {"kind": "document", "location": "file:///etc/passwd"},
+            {"kind": "image", "location": "../../secret.png"},
+            {"kind": "location", "location": "/etc/hosts"},
+            {"kind": "live_location", "location": "https://maps.example/p"},
+            {"kind": "voice", "path": "/Users/x/secret.ogg"},
+        ]});
+        assert!(inbox.attachments(&message).is_empty());
     }
 }

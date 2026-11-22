@@ -21,7 +21,7 @@ use super::catalog::{Handler, Reply, Request};
 /// One accepted socket, as the mock answers on it.
 #[derive(Clone)]
 pub struct Socket {
-    tx: mpsc::UnboundedSender<String>,
+    tx: mpsc::UnboundedSender<Message>,
     /// The upgrade request's path and query.
     pub path: String,
 }
@@ -29,11 +29,17 @@ pub struct Socket {
 impl Socket {
     /// Sends a text frame.
     pub fn send(&self, frame: impl Into<String>) {
-        let _ = self.tx.send(frame.into());
+        let _ = self.tx.send(Message::text(frame.into()));
+    }
+
+    /// Sends a binary frame.
+    pub fn send_binary(&self, frame: Vec<u8>) {
+        let _ = self.tx.send(Message::binary(frame));
     }
 }
 
-/// Called with each text frame the adapter sends on a socket.
+/// Called with each frame the adapter sends on a socket (a binary one
+/// base64-encoded).
 pub type OnFrame = Arc<dyn Fn(&Socket, &str) + Send + Sync>;
 /// Called once per accepted socket (with its upgrade path); `false`
 /// refuses it (closed at once).
@@ -102,6 +108,16 @@ impl WsServer {
         !live.is_empty()
     }
 
+    /// Sends binary `frame` on every live socket; whether there was one.
+    pub fn broadcast_binary(&self, frame: &[u8]) -> bool {
+        let mut live = self.live.lock().unwrap();
+        live.retain(|s| !s.tx.is_closed());
+        for socket in live.iter() {
+            socket.send_binary(frame.to_vec());
+        }
+        !live.is_empty()
+    }
+
     /// How many sockets are open.
     pub fn open_sockets(&self) -> usize {
         let mut live = self.live.lock().unwrap();
@@ -125,7 +141,7 @@ async fn websocket(
     let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else {
         return;
     };
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
     let handle = Socket { tx, path };
     if !on_open(&handle) {
         let _ = socket.close(None).await;
@@ -138,15 +154,22 @@ async fn websocket(
     loop {
         tokio::select! {
             out = rx.recv() => match out {
-                Some(frame) => { let _ = socket.send(Message::text(frame)).await; }
+                Some(frame) => { let _ = socket.send(frame).await; }
                 None => break,
             },
             incoming = socket.next() => {
                 let Some(Ok(message)) = incoming else { break };
-                let Message::Text(text) = message else { continue };
+                let text = match message {
+                    Message::Text(text) => text.as_str().to_owned(),
+                    Message::Binary(bytes) => {
+                        use base64::Engine as _;
+                        base64::engine::general_purpose::STANDARD.encode(&bytes)
+                    }
+                    _ => continue,
+                };
                 let Some(tx) = weak.upgrade() else { break };
                 let path = String::new();
-                on_frame(&Socket { tx, path }, text.as_str());
+                on_frame(&Socket { tx, path }, &text);
             }
         }
     }

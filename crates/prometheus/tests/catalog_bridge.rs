@@ -47,6 +47,39 @@ fn the_bridge_needs_its_token_and_connects_only_to_granted_hosts() {
     assert_eq!(frames, [json!("echo hello")]);
 }
 
+/// A long poll through the bridge: one POST whose whole answer is one
+/// frame, so the adapter never blocks on it.
+#[test]
+fn a_whole_request_answers_one_frame_with_status_and_body() {
+    let api = catalog::MockHttp::start(std::sync::Arc::new(|request: &catalog::Request| {
+        catalog::Reply::json(
+            200,
+            &json!({"method": request.method, "got": request.json()}),
+        )
+    }));
+    let bridge = Bridge::start(&[api.host()]);
+    let (status, answer) = bridge.call(
+        "/open",
+        &json!({"url": format!("{}/poll", api.base()), "method": "POST", "body": "{\"a\":1}",
+            "headers": {"content-type": "application/json"}, "whole": true}),
+    );
+    assert_eq!(status, 200, "{answer}");
+    let id = answer["id"].as_str().unwrap().to_owned();
+    let mut frames = Vec::new();
+    for _ in 0..100 {
+        let (_, received) = bridge.call("/recv", &json!({"id": id}));
+        frames.extend(received["frames"].as_array().cloned().unwrap_or_default());
+        if !frames.is_empty() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let frame: serde_json::Value = serde_json::from_str(frames[0].as_str().unwrap()).unwrap();
+    assert_eq!(frame["status"], 200);
+    let body: serde_json::Value = serde_json::from_str(frame["body"].as_str().unwrap()).unwrap();
+    assert_eq!(body, json!({"method": "POST", "got": {"a": 1}}));
+}
+
 #[test]
 fn every_socket_adapter_ships_the_same_bridge() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/first-party");
@@ -58,6 +91,10 @@ fn every_socket_adapter_ships_the_same_bridge() {
         "mattermost",
         "simplex",
         "dingtalk",
+        "wecom",
+        "weixin",
+        "qqbot",
+        "yuanbao",
     ] {
         for file in ["bridge.mjs", "package.json", "package-lock.json"] {
             let shipped = std::fs::read(root.join(plugin).join("sidecar").join(file)).unwrap();

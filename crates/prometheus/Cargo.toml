@@ -211,6 +211,9 @@ tokio-rustls.workspace = true
 # the ES256-signed ID tokens of their fake OpenID Connect provider.
 tokio-tungstenite.workspace = true
 ring.workspace = true
+# The encrypted callbacks and media of the WeCom and Weixin mocks.
+aes.workspace = true
+cbc.workspace = true
 # Password hashes of the dashboard's password sign-in tests.
 argon2 = { workspace = true, features = ["password-hash"] }
 

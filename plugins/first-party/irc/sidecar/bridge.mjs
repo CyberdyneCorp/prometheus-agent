@@ -1,8 +1,9 @@
 // The socket bridge of the catalog adapter plugins (spec: platform-adapters,
 // Supervised sidecar adapters; Catalog adapter set). The WASM sandbox holds
 // no sockets, so this sidecar keeps the adapter's long-lived connections
-// (WebSocket, newline-framed TCP/TLS, streamed HTTP read line by line) and
-// buffers what arrives until the adapter's next poll fetches it.
+// (WebSocket, newline-framed TCP/TLS, streamed HTTP read line by line, and
+// long-poll HTTP requests answered as one frame) and buffers what arrives
+// until the adapter's next poll fetches it.
 //
 // It serves 127.0.0.1:$PMT_SIDECAR_PORT, answers only requests bearing
 // $PMT_SIDECAR_TOKEN, and connects only to hosts in $PMT_SIDECAR_NETWORK
@@ -70,18 +71,21 @@ function failed(conn, error) {
   if (error && !conn.error) conn.error = String(error.message || error);
 }
 
-function openWebSocket(conn, url, headers) {
+// With `binary`, binary frames cross as base64 both ways (protobuf
+// protocols); otherwise they are read as UTF-8 text.
+function openWebSocket(conn, url, headers, binary) {
   const socket = new WebSocket(url, { headers });
   socket.binaryType = "arraybuffer";
   socket.addEventListener("message", (event) => {
-    const data = typeof event.data === "string" ? event.data : Buffer.from(event.data).toString("utf8");
-    push(conn, data);
+    if (typeof event.data === "string") return push(conn, event.data);
+    push(conn, Buffer.from(event.data).toString(binary ? "base64" : "utf8"));
   });
   socket.addEventListener("close", (event) => {
     failed(conn, event.code === 1000 ? null : `closed with ${event.code} ${event.reason || ""}`.trim());
   });
   socket.addEventListener("error", (event) => failed(conn, event.message || "websocket error"));
-  conn.send = (data) => {
+  conn.send = (text) => {
+    const data = binary ? Buffer.from(text, "base64") : text;
     if (socket.readyState === WebSocket.CONNECTING) {
       socket.addEventListener("open", () => socket.send(data), { once: true });
     } else {
@@ -114,6 +118,23 @@ function openSocket(conn, { parsed, host, port }) {
   conn.close = () => stream.end();
 }
 
+// One HTTP request (a long poll) whose whole answer becomes a single frame,
+// `{"status", "body"}`, after which the connection closes.
+async function openRequest(conn, url, headers, method, body) {
+  const controller = new AbortController();
+  conn.close = () => controller.abort();
+  conn.send = () => {
+    throw new Error("a request connection takes no frames");
+  };
+  try {
+    const response = await fetch(url, { method, headers, body, signal: controller.signal });
+    push(conn, JSON.stringify({ status: response.status, body: await response.text() }));
+    failed(conn, null);
+  } catch (error) {
+    failed(conn, controller.signal.aborted ? null : error);
+  }
+}
+
 async function openStream(conn, url, headers) {
   const controller = new AbortController();
   conn.close = () => controller.abort();
@@ -143,7 +164,7 @@ async function openStream(conn, url, headers) {
   }
 }
 
-function open({ url, headers = {} }) {
+function open({ url, headers = {}, method, body, whole = false, binary = false }) {
   const where = target(url);
   if (!permitted(GRANTS, where.host, where.port)) {
     return [403, { error: `the plugin may not connect to ${where.host}:${where.port}` }];
@@ -152,8 +173,9 @@ function open({ url, headers = {} }) {
   const id = `c${nextId++}`;
   connections.set(id, conn);
   const kind = where.parsed.protocol;
-  if (kind === "ws:" || kind === "wss:") openWebSocket(conn, url, headers);
+  if (kind === "ws:" || kind === "wss:") openWebSocket(conn, url, headers, binary);
   else if (kind === "tcp:" || kind === "tls:") openSocket(conn, where);
+  else if ((kind === "http:" || kind === "https:") && whole) openRequest(conn, url, headers, method || "GET", body);
   else if (kind === "http:" || kind === "https:") openStream(conn, url, headers);
   else {
     connections.delete(id);

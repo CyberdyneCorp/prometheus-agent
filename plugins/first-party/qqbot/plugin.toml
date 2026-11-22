@@ -1,0 +1,26 @@
+# First-party catalog adapter: QQ Bot (spec: platform-adapters, QQ Bot
+# adapter). The official QQ Bot API v2: events over its WebSocket gateway
+# (held by the socket bridge sidecar), replies over REST. Configure
+# `[gateway.platforms.qqbot]` option `app_id` and optionally `dm_policy`,
+# `group_policy` (open, allowlist, disabled), `allow_from`,
+# `group_allow_from` and `keyboards = true` when the bot may send message
+# keyboards (approvals as buttons; numbered text otherwise);
+# `prometheus secrets set QQBOT_CLIENT_SECRET`. Grant the media hosts the
+# bot downloads from and uploads to.
+manifest_version = 1
+id = "qqbot"
+version = "1.0.0"
+kind = "wasm"
+description = "QQ bots (C2C, group @-mentions, guilds) over the official QQ Bot API v2."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["bots.qq.com", "api.sgroup.qq.com", "*.qq.com", "127.0.0.1"]
+secrets = ["QQBOT_CLIENT_SECRET"]
+
+[sidecar]
+runtime = "node"
+command = "sidecar/bridge.mjs"
+lockfile = "sidecar/package-lock.json"
