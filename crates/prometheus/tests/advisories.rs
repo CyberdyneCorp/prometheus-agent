@@ -28,7 +28,7 @@ fn logs_mentioning(home: &Path, needle: &str) -> usize {
 }
 
 /// A home with an MCP server pinned to a compromised package version.
-fn pinned_home() -> tempfile::TempDir {
+fn pinned_home() -> common::TestHome {
     let home = temp_home();
     ok(&run(home.path(), &["config", "show"]));
     common::append_config(

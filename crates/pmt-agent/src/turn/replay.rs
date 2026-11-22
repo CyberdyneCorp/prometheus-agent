@@ -10,13 +10,14 @@
 //! is rewritten at most once per batch and the cached prefix breaks only
 //! then. A retired image becomes `[image]`. Each kept image is re-encoded
 //! deterministically within `vision.embed_target_bytes`, so it is
-//! byte-identical on every send.
+//! byte-identical on every send. Images of tool rows (screenshots) follow
+//! the screenshot budget instead ([`super::screenshots`]).
 
 use std::collections::HashMap;
 
 use pmt_core::id::MessageId;
 use pmt_providers::request::Part;
-use pmt_store::{Message, Store};
+use pmt_store::{Message, Role, Store};
 use pmt_tools::vision::budget::clamp_target;
 use pmt_tools::vision::routing::{Inline, inline};
 
@@ -46,14 +47,23 @@ pub(super) struct Replay {
     /// The current turn's user row: always sent in full.
     current: Option<MessageId>,
     target: u64,
+    /// Which tool rows' screenshots are retired.
+    screenshots: super::screenshots::Retired,
 }
 
 impl Replay {
-    /// The replay of `rows` keeping `keep` older images.
-    pub(super) fn of(rows: &[Message], keep: u32, current: Option<MessageId>, target: u64) -> Self {
+    /// The replay of `rows` keeping `keep` older user images, with the
+    /// `screenshots` retirement.
+    pub(super) fn of(
+        rows: &[Message],
+        keep: u32,
+        current: Option<MessageId>,
+        target: u64,
+        screenshots: super::screenshots::Retired,
+    ) -> Self {
         let mut first = HashMap::new();
         let mut total = 0;
-        for row in rows {
+        for row in rows.iter().filter(|row| row.role == Role::User) {
             let count = transcript::images_of(row).len();
             if count > 0 && Some(row.id) != current {
                 first.insert(row.id, total);
@@ -65,12 +75,16 @@ impl Replay {
             cutoff: cutoff(total, usize::try_from(keep).unwrap_or(usize::MAX)),
             current,
             target: clamp_target(target),
+            screenshots,
         }
     }
 
     /// The parts of `row`'s images: pixels within the embed budget,
     /// descriptions, notes, or the retired placeholder.
     pub(super) fn parts(&self, store: &Store, row: &Message) -> Vec<Part> {
+        if row.role == Role::Tool {
+            return self.screenshots(store, row);
+        }
         let start = (Some(row.id) != self.current)
             .then(|| self.first.get(&row.id).copied())
             .flatten();
@@ -89,6 +103,23 @@ impl Replay {
                     };
                 }
                 self.pixels(store, &image)
+            })
+            .collect()
+    }
+
+    /// A tool row's images: pixels, or the placeholder once retired.
+    fn screenshots(&self, store: &Store, row: &Message) -> Vec<Part> {
+        let retired = self.screenshots.covers(row.id);
+        transcript::images_of(row)
+            .into_iter()
+            .map(|image| {
+                if retired {
+                    Part::Text {
+                        text: super::screenshots::RETIRED.to_owned(),
+                    }
+                } else {
+                    self.pixels(store, &image)
+                }
             })
             .collect()
     }

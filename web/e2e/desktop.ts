@@ -13,6 +13,10 @@ const DIST = fileURLToPath(new URL("../../apps/desktop/dist/", import.meta.url))
 /** The frames each socket of the page sent, in order. */
 export type Sockets = string[][];
 
+/** The open desktop pages by window label: a `pet_relay` the shell
+ *  accepted is delivered to the other page as the Tauri app emits it. */
+const windows = new Map<string, Page>();
+
 /** Opens the desktop page as window `label`; resolves once connected (the
  *  quick-ask panel, `#quick-ask`, once its question box shows). */
 export async function openDesktop(page: Page, label = "main", hash = "", harness = env("PMT_DESKTOP_HARNESS")): Promise<Sockets> {
@@ -21,6 +25,11 @@ export async function openDesktop(page: Page, label = "main", hash = "", harness
   await page.context().grantPermissions(["local-network-access"], { origin: ORIGIN });
   // The shell installs the annotate agent in every frame of the webview.
   await page.addInitScript({ content: readFileSync(`${DIST}annotate.js`, "utf8") });
+  windows.set(label, page);
+  await page.exposeBinding("__deliver", async (_source, to: string, name: string, payload: unknown) => {
+    const target = windows.get(to);
+    if (target && !target.isClosed()) await emit(target, name, payload);
+  });
   await page.addInitScript((windowLabel: string) => {
     // The shell's bridge exists in the app's own document only.
     if (window.top !== window) return;
@@ -28,10 +37,15 @@ export async function openDesktop(page: Page, label = "main", hash = "", harness
     const w = window as unknown as Record<string, unknown>;
     w.__TAURI__ = {
       core: {
-        invoke: async (_command: string, args: { request: unknown }) => {
+        invoke: async (_command: string, args: { request: { command?: string; args?: { to?: string; message?: unknown } } }) => {
           const res = await fetch(`/__shell?window=${windowLabel}`, { method: "POST", body: JSON.stringify(args.request) });
           const answer = (await res.json()) as { ok?: unknown; err?: string };
           if (answer.err !== undefined) throw answer.err;
+          const request = args.request;
+          if (request.command === "pet_relay" && request.args?.to) {
+            const deliver = w.__deliver as (to: string, name: string, payload: unknown) => Promise<void>;
+            await deliver(request.args.to, "pet-message", request.args.message);
+          }
           return answer.ok;
         },
       },
@@ -77,6 +91,7 @@ export async function openDesktop(page: Page, label = "main", hash = "", harness
   });
   await page.goto(`${ORIGIN}/index.html${hash}`);
   if (hash === "#quick-ask") await expect(page.getByLabel("Quick question")).toBeVisible({ timeout: 60_000 });
+  else if (hash === "#pet") await expect(page.locator(".pet-overlay")).toBeVisible({ timeout: 60_000 });
   else await expect(page.locator(".connection")).toHaveText(/Connected/, { timeout: 60_000 });
   return sockets;
 }

@@ -88,6 +88,9 @@ pub struct RouteTraits {
     /// The model's context window in tokens, when known (tool search
     /// sizes its threshold by it).
     pub context_window: Option<u64>,
+    /// Whether the main model takes images (`None`: unknown);
+    /// `computer_use` offers a text-only model only `ax` captures.
+    pub image_input: Option<bool>,
 }
 
 impl RouteTraits {
@@ -100,6 +103,7 @@ impl RouteTraits {
             family: ModelFamily::of(provider, model),
             auxiliary: BTreeSet::new(),
             context_window: None,
+            image_input: None,
         }
     }
 
@@ -107,6 +111,13 @@ impl RouteTraits {
     #[must_use]
     pub fn with_context_window(mut self, tokens: Option<u64>) -> Self {
         self.context_window = tokens;
+        self
+    }
+
+    /// The same traits for a model that does (or does not) take images.
+    #[must_use]
+    pub fn with_image_input(mut self, images: bool) -> Self {
+        self.image_input = Some(images);
         self
     }
 }

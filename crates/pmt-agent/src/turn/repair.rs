@@ -34,14 +34,22 @@ pub fn wire_with(rows: &[Row], images: &dyn Fn(&Row) -> Vec<Part>) -> Vec<Messag
         repair.row(row, images);
     }
     repair.close_calls();
+    repair.flush_tool_images();
     repair.out
 }
+
+/// What introduces the images tool results returned, sent as a user-role
+/// message after the results (nothing may come between a call batch's
+/// results).
+pub use pmt_providers::request::TOOL_IMAGES;
 
 #[derive(Default)]
 struct Repair {
     out: Vec<Message>,
     /// Call ids of the newest assistant row still waiting for a result.
     open: Vec<String>,
+    /// Images of the current run of tool results, sent after it.
+    tool_images: Vec<Part>,
 }
 
 impl Repair {
@@ -52,8 +60,21 @@ impl Repair {
         if row.role == Role::User {
             message.parts.extend(images(row));
         }
+        if row.role != Role::Tool {
+            self.close_calls();
+            self.flush_tool_images();
+        }
         match row.role {
-            Role::Tool => self.result(row, message),
+            Role::Tool => {
+                let kept = self
+                    .open
+                    .iter()
+                    .any(|open| Some(open.as_str()) == row.tool_call_id.as_deref());
+                self.result(row, message);
+                if kept {
+                    self.tool_images.extend(images(row));
+                }
+            }
             Role::User => {
                 self.close_calls();
                 match self.out.last_mut() {
@@ -84,6 +105,20 @@ impl Repair {
                 tracing::debug!(row = %row.id, call = id, "repair: dropped a tool result without its call");
             }
         }
+    }
+
+    /// Sends the images of the run of tool results that just ended.
+    fn flush_tool_images(&mut self) {
+        if self.tool_images.is_empty() {
+            return;
+        }
+        let mut parts = vec![Part::text(TOOL_IMAGES.to_owned())];
+        parts.append(&mut self.tool_images);
+        self.out.push(Message {
+            role: WireRole::User,
+            parts,
+            cache_breakpoint: false,
+        });
     }
 
     /// Answers every call still open with a stub result.

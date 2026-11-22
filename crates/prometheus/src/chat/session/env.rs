@@ -120,6 +120,8 @@ pub type Denials =
 pub struct Attached {
     /// Detaches the environment when dropped.
     pub attachment: Attachment,
+    /// The session's computer use (its yolo state binds to the gate).
+    pub computer_use: Option<Arc<pmt_tools::computer_use::ComputerUseSession>>,
     /// The session's `browser_exec` (its browsers close at session end).
     pub browser: Option<Arc<BrowserExec>>,
     /// The session's terminal (skills pass their declared secrets to it).
@@ -224,15 +226,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         .ok()
         .map(Arc::new)
     });
-    if let Some(terminal) = &terminal {
-        inputs.processes.bind(terminal);
-    }
-    let editor = remote.is_none() && inputs.session.source == pmt_store::Source::Acp;
-    if let Some(terminal) = terminal.as_ref().filter(|_| editor) {
-        // An ACP session's editor may run its foreground commands (spec:
-        // acp-adapter, Editor terminal delegation); the daemon decides.
-        terminal.delegate_for(inputs.session_id);
-    }
+    bind_terminal(inputs, terminal.as_ref(), remote.is_none());
     let (file_backend, sync) = remote
         .as_ref()
         .map(|r| remote_parts(inputs, r, terminal.as_ref()))
@@ -248,7 +242,9 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         snapshots.as_ref(),
         lsp.as_ref(),
     );
+    let computer_use = computer_use(inputs)?;
     let env = SessionEnv {
+        computer_use: computer_use.clone(),
         files: Some(Arc::new(files)),
         lsp,
         terminal: terminal.clone(),
@@ -260,6 +256,7 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
     Ok(Attached {
         media: media(inputs, commands.as_ref(), fetcher),
         attachment: Environments::process().attach(inputs.session_id, env),
+        computer_use,
         browser,
         terminal,
         sync,
@@ -271,6 +268,46 @@ pub fn attach(inputs: &EnvInputs<'_>) -> Result<Attached, Error> {
         previewer,
         downgrades,
     })
+}
+
+/// Binds the background processes to `terminal` and lets an ACP
+/// session's editor run its foreground commands (spec: acp-adapter, Editor
+/// terminal delegation; the daemon decides) when the terminal is `local`.
+fn bind_terminal(inputs: &EnvInputs<'_>, terminal: Option<&Arc<Terminal>>, local: bool) {
+    let Some(terminal) = terminal else {
+        return;
+    };
+    inputs.processes.bind(terminal);
+    if local && inputs.session.source == pmt_store::Source::Acp {
+        terminal.delegate_for(inputs.session_id);
+    }
+}
+
+/// The session's computer use, over `cua` or the profile's plugin backend;
+/// a bounded profile without a readable capability manifest fails the
+/// session (spec: computer-use, Permission modes are fixed per runtime).
+fn computer_use(
+    inputs: &EnvInputs<'_>,
+) -> Result<Option<Arc<pmt_tools::computer_use::ComputerUseSession>>, Error> {
+    let scope = inputs.config.get();
+    let config = &scope.config().computer_use;
+    crate::computer_use::check_session_start(config)?;
+    let plugin = (config.backend != pmt_config::schema::CUA_BACKEND)
+        .then(|| {
+            crate::computer_use::backend::plugin_backend(
+                &config.backend,
+                inputs.plugins,
+                &inputs.plugin_call,
+            )
+        })
+        .flatten();
+    Ok(crate::computer_use::session_part(
+        inputs.scope,
+        inputs.session_id,
+        inputs.image_input,
+        inputs.launch,
+        plugin,
+    ))
 }
 
 /// The session's command parts: its sandbox and child environment with

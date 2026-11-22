@@ -318,6 +318,22 @@ bench:<plugin id>` (see [Benchmark adapters](eval.md#benchmark-adapters)):
 reaches only the directory of the call in progress, and `requests` is its
 request to the host. `plugins/samples/bench` is a complete one.
 
+A `computer-use-backend` plugin is a desktop the
+[`computer_use`](../reference/tools.md#computer_use) tool drives in place of
+the local `cua-driver`, typically a remote machine or a hosted desktop
+service reached through `http`. `name()` is what `computer_use.backend`
+selects (never `cua`), `check()` answers its readiness (`prometheus
+computer-use status` shows it; an error makes the tool unavailable),
+`launch(spec)` starts a runtime in the permission mode the host fixed
+(`standard`, `bounded` with the capability manifest's contents, or
+`unrestricted` only while `/yolo` is on), and `call(runtime, tool,
+arguments)` answers the same driver tools and JSON arguments `cua-driver`
+takes (`list_windows`, `get_window_state`, `click`, `type_text`...) with
+text, a JSON object and images. Approvals, hard-blocked keys, capture
+budgets and screenshot retention stay the host's. `stop(runtime)` ends a
+runtime when its session ends or its mode must change.
+`plugins/samples/computer-use-backend` is a complete one.
+
 A `provider` plugin registers named providers (image generation, web
 search, text-to-speech...) that config selects by name, such as
 `web.search_backend = "<name>"`. Its `models` interface (provider world

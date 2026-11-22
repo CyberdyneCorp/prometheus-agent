@@ -88,6 +88,7 @@ impl Tui<'_> {
         // logs: they never move a watermark.
         match event.event.as_str() {
             "session.presence" => return self.on_presence(&event.data),
+            "achievement.unlocked" => return self.on_achievement(&event.data),
             "subagent.event" => return self.on_child_event(&event.data),
             _ => {}
         }
@@ -138,6 +139,7 @@ impl Tui<'_> {
     fn on_session_event(&mut self, data: &Value) {
         let text = |key: &str| data["payload"][key].as_str().unwrap_or_default().to_owned();
         let payload = &data["payload"];
+        self.pet_event(data);
         match data["type"].as_str() {
             Some("user.message") => {
                 let author = payload["author"]["client_id"].as_str();
@@ -192,6 +194,9 @@ impl Tui<'_> {
             return;
         }
         self.voice_turn_finished(finished);
+        self.pet
+            .tracker
+            .turn_ended(finished.error.is_some(), std::time::Instant::now());
         if let Some(answer) = &finished.final_response
             && self.app.transcript.last_answer() != Some(answer.as_str())
         {
@@ -373,6 +378,7 @@ impl Tui<'_> {
             Done::Completed(start, completions) => self.completed(start, &completions),
             Done::Switched(Ok((session, attached)), prompt) => {
                 self.switched(session, &attached, prompt).await;
+                self.wake_session_ready();
             }
             Done::Branched(Ok((session, attached)), restore) => {
                 self.switched(session, &attached, None).await;
@@ -391,6 +397,9 @@ impl Tui<'_> {
             Done::Restored(Ok(output)) => self.notice(output),
             Done::Children(list) => self.children_listed(list),
             Done::Languages(listed) => self.languages_listed(listed),
+            Done::PetGallery(listed) => self.pet_gallery(listed),
+            Done::PetInstalled(installed) => self.pet_installed(installed),
+            Done::Hatch(step) => self.hatched(step),
             Done::LanguageSet(set) => self.language_set(set),
         }
     }

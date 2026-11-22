@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 const BIWEEKLY: &str = "RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TH;BYHOUR=12;BYMINUTE=0";
 
 /// A home whose auxiliary `schedule` model answers `reply` to everything.
-fn home_translating(reply: &str) -> tempfile::TempDir {
+fn home_translating(reply: &str) -> common::TestHome {
     let home = mock_home();
     let profile = home.path().join("profiles/default");
     std::fs::write(

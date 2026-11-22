@@ -44,7 +44,7 @@ fn kinds(home: &Path, id: &str) -> Vec<String> {
         .collect()
 }
 
-fn worker_home(rules: &str) -> tempfile::TempDir {
+fn worker_home(rules: &str) -> common::TestHome {
     let home = mock_home();
     std::fs::write(home.path().join("profiles/default/mock.toml"), rules).unwrap();
     common::append_config(home.path(), "\n[providers.mock]\nscript = \"mock.toml\"\n");

@@ -13,7 +13,7 @@ fn report(path: &Path) -> serde_json::Value {
 
 /// A home whose `ollama` provider points at a closed port, failing at
 /// once.
-fn unreachable_home() -> tempfile::TempDir {
+fn unreachable_home() -> common::TestHome {
     let home = mock_home();
     for (key, value) in [
         ("providers.ollama.base_url", "http://127.0.0.1:9/v1"),

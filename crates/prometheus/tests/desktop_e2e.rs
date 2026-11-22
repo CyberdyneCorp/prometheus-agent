@@ -75,3 +75,49 @@ fn the_language_switcher_mirrors_the_window_for_arabic() {
     let language = ok(&run(home.path(), &["config", "get", "display.language"]));
     assert_eq!(language.trim().trim_matches('"'), "en", "switched back");
 }
+
+/// The Bots pane (spec: bot-mode). Scenario: Title follows the bot to a
+/// second desktop. Scenario: Deterministic default face (two windows draw
+/// the identical face). Roster hiding and sections, creating, duplicating
+/// and deleting bots, and routines whose schedule picker writes strings
+/// `prometheus cron` accepts: the routines the pane added are ordinary
+/// jobs of the bot's profile, delivered into its Bot Chat.
+#[test]
+fn the_bots_pane_manages_bots_and_their_routines() {
+    let home = mock_home();
+    ok(&run(
+        home.path(),
+        &["config", "set", "gateway.multiplex", "true"],
+    ));
+    for bot in ["scribe", "research"] {
+        ok(&run(home.path(), &["profile", "create", bot]));
+    }
+    drive(home.path(), "desktop-bots.spec.ts");
+    let jobs = ok(&run(
+        home.path(),
+        &["-p", "scribe", "--json", "cron", "list"],
+    ));
+    let jobs: serde_json::Value = serde_json::from_str(&jobs).expect("cron list --json");
+    let listed = jobs["jobs"].as_array().expect("jobs");
+    let named = |name: &str| {
+        listed
+            .iter()
+            .find(|j| j["name"] == format!("[bot:scribe] {name}"))
+            .unwrap_or_else(|| panic!("{name} in {jobs}"))
+    };
+    let digest = named("morning digest").to_string();
+    assert!(
+        digest.contains("0 8 * * *") && digest.contains("bot_chat"),
+        "{digest}"
+    );
+    assert_eq!(named("standup")["state"], "paused", "{jobs}");
+    assert!(
+        listed.iter().all(|j| j["name"] != "[bot:scribe] pulse"),
+        "removed routine still listed: {jobs}"
+    );
+    let profiles = ok(&run(home.path(), &["profile", "list"]));
+    assert!(
+        profiles.contains("scout") && !profiles.contains("scout-2"),
+        "{profiles}"
+    );
+}

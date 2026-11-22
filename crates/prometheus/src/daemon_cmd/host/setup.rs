@@ -340,3 +340,20 @@ pub(super) fn record(factory: &Factory, live: &Live) -> Result<RunRecord, Error>
     record.turn();
     Ok(record)
 }
+
+/// The setup of the chat policy frozen with a gateway session, which keeps
+/// shaping it after a daemon restart (spec: messaging-gateway, Per-chat
+/// policies).
+pub(super) fn frozen_policy(
+    profile: &super::Profile,
+    row: &pmt_store::Session,
+) -> Option<pmt_rpc::contracts::SessionSetup> {
+    let pmt_store::Origin::Gateway { platform, .. } = &row.origin else {
+        return None;
+    };
+    let text = profile.store.session_policy(row.id).ok().flatten()?;
+    let policy: pmt_config::schema::ChatPolicy = serde_json::from_str(&text).ok()?;
+    Some(pmt_gateway::messaging::policy::session_setup(
+        &policy, platform,
+    ))
+}

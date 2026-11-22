@@ -20,6 +20,7 @@ mod masked;
 mod overlays;
 mod panes;
 mod paste;
+mod pet;
 mod presence;
 mod recent;
 mod review;

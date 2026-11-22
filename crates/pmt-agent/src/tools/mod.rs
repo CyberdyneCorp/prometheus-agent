@@ -4,6 +4,7 @@
 //! session state they need lives.
 
 pub mod a2a;
+pub mod bots;
 pub mod clarify;
 pub mod connections;
 pub mod cron;
@@ -24,6 +25,7 @@ use pmt_tools::ToolResult;
 use serde_json::Value;
 
 pub use a2a::A2aPort;
+pub use bots::BotPort;
 pub use clarify::Clarifier;
 pub use cron::CronPort;
 pub use delegation::{CodePort, DelegationPort};
@@ -49,6 +51,7 @@ pub struct AgentTools {
     cron: Option<Arc<dyn CronPort>>,
     kanban: Option<Arc<dyn KanbanPort>>,
     a2a: Option<Arc<dyn A2aPort>>,
+    bots: Option<Arc<dyn BotPort>>,
     desktop: Option<Arc<dyn DesktopPort>>,
 }
 
@@ -80,6 +83,7 @@ impl AgentTools {
             cron: None,
             kanban: None,
             a2a: None,
+            bots: None,
             desktop: None,
         })
     }
@@ -141,6 +145,13 @@ impl AgentTools {
     #[must_use]
     pub fn with_a2a(mut self, port: Arc<dyn A2aPort>) -> Self {
         self.a2a = Some(port);
+        self
+    }
+
+    /// Runs `message_agent` through `port`.
+    #[must_use]
+    pub fn with_bots(mut self, port: Arc<dyn BotPort>) -> Self {
+        self.bots = Some(port);
         self
     }
 
@@ -220,6 +231,10 @@ impl AgentTools {
             name if a2a::handles(name) => match &self.a2a {
                 Some(port) => port.call(name, arguments).await,
                 None => ToolResult::error(a2a::NO_A2A),
+            },
+            pmt_tools::agent_level_bots::MESSAGE_AGENT => match &self.bots {
+                Some(port) => port.message_agent(self.session, arguments).await,
+                None => ToolResult::error(bots::NO_BOTS),
             },
             name if desktop::handles(name) => match &self.desktop {
                 Some(port) => port.call(name, arguments, cancel).await,

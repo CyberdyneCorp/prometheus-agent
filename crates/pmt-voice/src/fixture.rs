@@ -6,7 +6,9 @@
 //! Directory layout: `device` names the input device (no file: no
 //! device); `mic-*.wav` are the recordings, used once each in name order
 //! (renamed to `*.used`, so the order holds across processes), followed
-//! by endless room silence; `played.log` gets one line per clip played.
+//! by endless room silence; `barge-*.wav` are what the microphone hears
+//! while replies generate and play (the barge-in monitor; silence when
+//! none is left); `played.log` gets one line per clip played.
 
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -34,13 +36,19 @@ impl FixtureMicrophone {
 
     /// The next unused recording, marked used.
     fn next_recording(&self) -> Result<Vec<i16>, String> {
+        self.next("mic-")
+    }
+
+    /// The next unused `<prefix>*.wav`, marked used; empty when none is
+    /// left.
+    fn next(&self, prefix: &str) -> Result<Vec<i16>, String> {
         let mut names: Vec<PathBuf> = std::fs::read_dir(&self.dir)
             .map_err(|e| e.to_string())?
             .filter_map(|entry| entry.ok().map(|e| e.path()))
             .filter(|path| {
                 path.file_name()
                     .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.starts_with("mic-"))
+                    .is_some_and(|n| n.starts_with(prefix))
                     && path
                         .extension()
                         .is_some_and(|e| e.eq_ignore_ascii_case("wav"))
@@ -73,6 +81,17 @@ impl Microphone for FixtureMicrophone {
     fn open(&self) -> BoxFuture<'_, Result<Box<dyn Capture>, String>> {
         Box::pin(async move {
             let samples = self.next_recording()?;
+            Ok(Box::new(Fixture { samples, at: 0 }) as Box<dyn Capture>)
+        })
+    }
+
+    fn host_api(&self) -> String {
+        "recorded fixtures".to_owned()
+    }
+
+    fn monitor(&self) -> BoxFuture<'_, Result<Box<dyn Capture>, String>> {
+        Box::pin(async move {
+            let samples = self.next("barge-")?;
             Ok(Box::new(Fixture { samples, at: 0 }) as Box<dyn Capture>)
         })
     }

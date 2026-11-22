@@ -84,6 +84,7 @@ impl Factory {
         )?;
         super::media::prime(&id.to_string()).await;
         let gate = self.gate(id, None, None)?.gate;
+        super::opening::bind_computer_use(&environment, &gate);
         // No one can answer a prompt: a call that needs approval is denied.
         let mut approvals = self.scope.config().approvals.clone();
         approvals.single_query_mode = UnattendedApproval::Deny;

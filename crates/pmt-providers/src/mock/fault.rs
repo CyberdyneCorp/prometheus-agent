@@ -26,6 +26,7 @@ pub(super) fn error(fault: Fault) -> ProviderError {
         }
         Fault::ServerError { status } => (status, "server_error", "mock: server error"),
         Fault::AuthError => (401, "authentication_error", "mock: invalid credential"),
+        Fault::Quota => (402, "insufficient_quota", "mock: quota exhausted"),
         Fault::ContextOverflow => (
             400,
             "invalid_request_error",

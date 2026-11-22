@@ -28,6 +28,7 @@ pub mod a2a;
 pub mod api;
 pub mod automation;
 pub mod blobs;
+pub mod bot_messages;
 pub mod bot_relay;
 pub mod compaction;
 pub mod compression_state;
@@ -73,6 +74,7 @@ pub mod rebind;
 pub mod recover;
 pub mod retention;
 pub mod rewind;
+pub mod rooms;
 pub mod search;
 pub mod sessions;
 pub mod skill_ledger;
@@ -128,7 +130,7 @@ pub use usage_query::UsageFilter;
 /// The newest `state.db` schema version this build reads and writes
 /// (`store_meta.schema_version`); every embedded migration bumps it, and a
 /// newer store opens read-only. Reported by `prometheus version --json`.
-pub const SCHEMA_VERSION: u32 = 44;
+pub const SCHEMA_VERSION: u32 = 45;
 
 #[cfg(test)]
 mod tests {

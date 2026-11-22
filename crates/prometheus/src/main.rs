@@ -339,6 +339,8 @@ fn workspace(command: &Command, ctx: &Context<'_>) -> Result<u8, Error> {
         Command::Vault { command } => prometheus::vault_cmd::run(command, ctx),
         Command::Files { command } => prometheus::files_cmd::run(command, ctx),
         Command::Themes { command } => prometheus::themes_cmd::run(command, ctx),
+        Command::Pets { command } => prometheus::pets_cmd::run(command, ctx),
+        Command::Achievements(args) => prometheus::achievements_cmd::run(args, ctx),
         Command::Console => prometheus::console_cmd::run(ctx),
         Command::Webhooks { command } => prometheus::webhooks_cmd::run(command, ctx),
         _ => unreachable!("run() dispatches every other command itself"),

@@ -13,7 +13,7 @@ use common::{command, ok, run, run_with_stdin, stderr, stdout, temp_home};
 use serde_json::Value;
 
 /// A home whose default profile talks to the mock provider.
-fn mock_home() -> tempfile::TempDir {
+fn mock_home() -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

@@ -17,6 +17,7 @@ mod isolation;
 mod media;
 mod observability;
 mod system;
+mod voice;
 mod wsl;
 
 use std::fmt::Write as _;
@@ -46,6 +47,7 @@ pub const GROUPS: &[&str] = &[
     "network",
     "providers",
     "security",
+    "voice",
 ];
 
 /// What the checks of one run need.
@@ -233,6 +235,7 @@ async fn run_group(group: &str, inputs: &Inputs<'_>) -> Result<Vec<Check>, Error
         "network" => system::network(inputs).await,
         "providers" => groups::providers(inputs).await?,
         "security" => system::security(inputs),
+        "voice" => voice::checks(inputs).await,
         _ => Vec::new(),
     })
 }

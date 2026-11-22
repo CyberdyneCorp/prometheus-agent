@@ -8,9 +8,12 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
+base64.workspace = true
 pmt-config.workspace = true
 # Tracked spawning (task dumps).
 pmt-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "fs"] }
 tracing.workspace = true
 

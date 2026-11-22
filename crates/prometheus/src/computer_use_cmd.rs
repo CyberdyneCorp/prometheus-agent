@@ -1,6 +1,9 @@
-//! `prometheus computer-use screen status|start|stop [--force]|install
-//! [-y]` (spec: execution-environments, Bot screen; Bot screen takeover
-//! lease): the profile's bot screen.
+//! `prometheus computer-use` (spec: computer-use, Computer-use CLI and
+//! doctor; Platform prerequisites): `install [--upgrade]`, `status`,
+//! `doctor`, `permissions status|grant`, and `screen
+//! status|start|stop [--force]|install [-y]` (spec:
+//! execution-environments, Bot screen; Bot screen takeover lease), the
+//! profile's bot screen.
 
 use std::fmt::Write as _;
 
@@ -17,6 +20,30 @@ use crate::screen::{self, install};
 /// `prometheus computer-use` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ComputerUseCommand {
+    /// Install the pinned `cua-driver` runtime.
+    Install {
+        /// Replace an installed driver with this build's pinned version.
+        #[arg(long)]
+        upgrade: bool,
+    },
+    /// The backend, driver, permission mode, overlay and prerequisites.
+    Status,
+    /// Run the driver's health report as a per-check matrix (exit 1 when a
+    /// check is degraded or failed, 69 when the driver cannot be reached).
+    Doctor {
+        /// Run only this check (repeatable).
+        #[arg(long = "include", value_name = "CHECK")]
+        include: Vec<String>,
+        /// Skip this check (repeatable).
+        #[arg(long = "skip", value_name = "CHECK")]
+        skip: Vec<String>,
+    },
+    /// The platform grants the driver needs.
+    Permissions {
+        /// The permissions subcommand.
+        #[command(subcommand)]
+        command: PermissionsCommand,
+    },
     /// The bot screen: the virtual desktop the agent's headed browsers act
     /// on.
     Screen {
@@ -24,6 +51,15 @@ pub enum ComputerUseCommand {
         #[command(subcommand)]
         command: ScreenCommand,
     },
+}
+
+/// `prometheus computer-use permissions` subcommands.
+#[derive(Debug, Subcommand)]
+pub enum PermissionsCommand {
+    /// List each grant (exit 1 when one is missing).
+    Status,
+    /// Open the system settings pane of each missing grant (macOS).
+    Grant,
 }
 
 /// `prometheus computer-use screen` subcommands.
@@ -58,7 +94,10 @@ pub enum ScreenCommand {
 ///
 /// `screen.unavailable`, `screen.human_has_control`, `home.io`.
 pub fn run(command: &ComputerUseCommand, ctx: &Context<'_>) -> Result<u8, Error> {
-    let ComputerUseCommand::Screen { command } = command;
+    let command = match command {
+        ComputerUseCommand::Screen { command } => command,
+        other => return crate::computer_use_cli::run(other, ctx),
+    };
     if let ScreenCommand::Install { yes } = command {
         return install_packages(*yes);
     }

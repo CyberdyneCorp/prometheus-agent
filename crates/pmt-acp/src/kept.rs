@@ -96,6 +96,7 @@ mod tests {
                 run_budget_secs: None,
                 input_id: None,
                 author: None,
+                voice: false,
             },
             instance: "i1".into(),
         }

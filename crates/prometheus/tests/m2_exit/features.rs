@@ -85,7 +85,7 @@ text = "sent through the connector"
 
 /// A home on `llamacpp/qwen-x` with the stub llama-server installed as
 /// the engine and `qwen-x` in the model library.
-fn local_home() -> tempfile::TempDir {
+fn local_home() -> crate::common::TestHome {
     let home = temp_home();
     let h = home.path();
     ok(&run(h, &["config", "set", "model.provider", "llamacpp"]));

@@ -199,7 +199,7 @@ mod tests {
         let err = RuntimeIndex::embedded().pin("java").unwrap_err();
         assert_eq!(
             err.message(),
-            "unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda)"
+            "unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda|cua-driver)"
         );
         assert_eq!(err.exit_code(), 2);
     }

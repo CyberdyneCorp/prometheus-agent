@@ -29,7 +29,7 @@ fn snapshot(name: &str, actual: &str) {
 }
 
 /// A profile with the mock model configured.
-fn configured_home() -> tempfile::TempDir {
+fn configured_home() -> common::TestHome {
     let home = temp_home();
     ok(&run(
         home.path(),

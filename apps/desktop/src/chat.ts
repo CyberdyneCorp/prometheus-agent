@@ -6,7 +6,7 @@
 // above the composer, the model picker and the status bar. Each session
 // keeps its distance from the bottom when the window leaves it.
 
-import type { ApprovalRequestParams, ClarifyRequestParams, Decision, Envelope, FsFile, Reaction, TranscriptMessage } from "../../../schema/rpc";
+import type { ApprovalRequestParams, ClarifyRequestParams, Decision, Envelope, FsFile, Reaction, TranscriptMessage, TurnFinished } from "../../../schema/rpc";
 import { approvalCard } from "../../../web/src/components/approval";
 import { clarifyCard } from "../../../web/src/components/clarify";
 import { h, notice } from "../../../web/src/lib/dom";
@@ -67,10 +67,19 @@ export class ChatView {
   decorate: ((text: string) => Promise<string>) | null = null;
   /** `/journey` (`/learning`, `/memory-graph`): the window opens the graph. */
   onJourney: () => void = () => {};
+  /** `/pet …` and `/hatch …`: the window's pet runs them (no turn). */
+  /** `/pet` or `/hatch` typed here (`sessionId`: the chat, billed for a hatch). */
+  onPet: (name: string, args: string, sessionId: string | null) => void = () => {};
+  /** A message the user sent, as typed (the pet's heart reaction). */
+  onSent: (text: string) => void = () => {};
   private cwd: string | null = null;
   /** The open session's live output reached this window since the last
    *  turn ended. */
   private live = false;
+  /** Spoken turns waiting for their answer, by turn id. */
+  private readonly spoken = new Map<string, (reply: string | null) => void>();
+  /** Answers of turns that ended before their submit was acknowledged. */
+  private readonly early = new Map<string, string | null>();
 
   constructor(setup: ChatSetup) {
     this.client = setup.client;
@@ -226,7 +235,16 @@ export class ChatView {
 
   /** A turn of the open session ended: one the window joined midway
    *  (after a relaunch) renders whole from the store. */
-  async turnFinished(sessionId: string): Promise<void> {
+  async turnFinished(sessionId: string, finished?: TurnFinished): Promise<void> {
+    const waiting = finished ? this.spoken.get(finished.turn_id) : undefined;
+    if (finished && waiting) {
+      this.spoken.delete(finished.turn_id);
+      waiting(finished.final_response ?? null);
+    } else if (finished) {
+      this.early.set(finished.turn_id, finished.final_response ?? null);
+      // Only the last few are kept: a spoken turn is acknowledged at once.
+      for (const id of [...this.early.keys()].slice(0, -8)) this.early.delete(id);
+    }
     if (sessionId !== this.sessionId) return;
     const joinedMidway = !this.live;
     this.live = false;
@@ -269,6 +287,7 @@ export class ChatView {
       const sessionId = this.sessionId ?? "";
       this.drafts.sending(sessionId, { text, images });
       const sent = this.decorate ? await this.decorate(text) : text;
+      this.onSent(text);
       this.transcript.message("user", sent);
       await this.client.call("prompt.submit", { session_id: sessionId, text: sent, files: [], images: images.map((i) => (i.data ? { data: i.data } : { path: i.path ?? "" })) });
       // The chat is a session once its first prompt was admitted.
@@ -279,6 +298,36 @@ export class ChatView {
       this.composer.putBack({ text, images });
       this.problems.replaceChildren(notice((err as Error).message, "error"));
     }
+  }
+
+  /** A spoken message (spec: voice-mode, Desktop voice controls): sent as
+   *  `voice` so the turn runs on the voice route; resolves with the
+   *  answer once the turn ends (`null`: none). */
+  async voiceTurn(text: string): Promise<string | null> {
+    await this.ensureSession();
+    const sessionId = this.sessionId ?? "";
+    this.transcript.message("user", text);
+    const submitted = await this.client.call<{ turn_id: string }>("prompt.submit", { session_id: sessionId, text, files: [], voice: true });
+    this.el.dataset.session = sessionId;
+    this.onSubmitted(sessionId);
+    if (this.early.has(submitted.turn_id)) {
+      const reply = this.early.get(submitted.turn_id) ?? null;
+      this.early.delete(submitted.turn_id);
+      return reply;
+    }
+    return new Promise((resolve) => this.spoken.set(submitted.turn_id, resolve));
+  }
+
+  /** The chat's session, created when it is still a draft. */
+  async session(): Promise<string> {
+    await this.ensureSession();
+    this.el.dataset.session = this.sessionId ?? "";
+    return this.sessionId ?? "";
+  }
+
+  /** Interrupts the open session's turn (a spoken stop phrase). */
+  async interrupt(): Promise<void> {
+    if (this.sessionId) await this.client.call("session.interrupt", { session_id: this.sessionId });
   }
 
   /** Creates the draft's session, with desktop source, on the model this
@@ -315,14 +364,23 @@ export class ChatView {
       this.onJourney();
       return true;
     }
+    // The pet is the window's own: client-side, never a turn.
+    if (["pet", "hatch", "generate-pet"].includes(head)) {
+      this.onPet(head, text.slice(1 + head.length).trim(), this.sessionId);
+      return true;
+    }
     if (!catalog.some((e) => e.name === head || (e.aliases ?? []).includes(head))) return false;
     const refused = refusal(catalog, text);
     if (refused) {
       this.problems.replaceChildren(notice(refused, "warn"));
       return true;
     }
-    if (head === "new") {
-      this.draft();
+    if (["new", "reset"].includes(head)) {
+      // The daemon compresses a canonical Bot Chat in place; any other
+      // session is left for a new draft (spec: bot-mode, Canonical Bot Chat).
+      const kept = this.sessionId ? await this.client.call<Dispatched>("command.dispatch", { session_id: this.sessionId, name: "new", args: "" }) : null;
+      if (kept && kept.type !== "refused") this.problems.replaceChildren(notice(kept.notice ?? "Compressed", "info"));
+      else this.draft();
       return true;
     }
     const args = text.slice(1 + head.length).trim();

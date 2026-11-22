@@ -7,7 +7,8 @@
 //! user (a backend sign-in) is pointed to, never done silently.
 //!
 //! Steps are declared by single-purpose toolsets (`browser` installs the
-//! browser engine, `search` needs a web backend); a composite toolset
+//! browser engine, `computer_use` the computer-use driver, `search` needs
+//! a web backend); a composite toolset
 //! (`core`, a platform bundle) has the steps of every declaring toolset
 //! whose tools it includes.
 
@@ -87,7 +88,7 @@ impl Facts<'_> {
 }
 
 /// The toolsets that declare setup steps.
-const DECLARING: &[&str] = &["browser", "search"];
+const DECLARING: &[&str] = &["browser", "computer_use", "search"];
 
 /// The pending steps `toolset` itself declares.
 fn declared(toolset: &str, facts: &Facts<'_>) -> Vec<Step> {
@@ -104,6 +105,19 @@ fn declared(toolset: &str, facts: &Facts<'_>) -> Vec<Step> {
                 steps.push(Step::Runtime("cpython"));
             }
             steps
+        }
+        "computer_use" => {
+            let cu = &facts.config.computer_use;
+            let managed = cu.backend == pmt_config::schema::CUA_BACKEND && cu.driver_path.is_none();
+            let runtime = crate::computer_use::binary::RUNTIME;
+            if managed
+                && facts.store.pinned(runtime).is_ok()
+                && facts.store.installed(runtime).is_none()
+            {
+                vec![Step::Runtime(runtime)]
+            } else {
+                Vec::new()
+            }
         }
         "search" => {
             let resolved = pmt_tools::web::select::resolve(

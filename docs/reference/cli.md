@@ -32,6 +32,8 @@ Commands:
   kanban         Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees      Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects       Projects: named workspaces spanning folders, the active project, archive and restore
+  pets           Pets: the gallery, installed pets, which one shows and how big, a terminal preview, the doctor and generating one
+  achievements   Achievements computed from this profile's session history
   themes         Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
   console        A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
   webhooks       Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
@@ -131,6 +133,9 @@ Options:
 
   -r, --resume <REF>
           Resume a session by id, id prefix, title or `latest`
+
+      --bot-chat
+          Open the profile's canonical Bot Chat (created when it has none), as the desktop's bot roster does
 
   -c, --continue [<NAME>]
           Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
@@ -273,32 +278,35 @@ Options:
   -r, --resume <REF>
           Resume a session by id, id prefix, title or `latest`
 
-  -c, --continue [<NAME>]
-          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+      --bot-chat
+          Open the profile's canonical Bot Chat (created when it has none), as the desktop's bot roster does
 
   -v, --verbose...
           More detail; repeatable
 
+  -c, --continue [<NAME>]
+          Resume the most recent CLI session started in this directory, or with NAME the newest session of the lineage titled NAME
+
       --no-color
           No colour (also when `NO_COLOR` is set or stdout is not a terminal)
-
-  -z, --oneshot [<PROMPT>]
-          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
 
   -q, --quiet
           Only the answer: no banner, spinner or tool previews
 
+  -z, --oneshot [<PROMPT>]
+          Run one prompt non-interactively and print only the answer (the prompt from this flag, `--prompt-file` or stdin)
+
       --query <TEXT>
           Start an interactive session with TEXT as its first message, sent verbatim (never run as a slash command)
-
-      --prompt-file <PATH>
-          Read the prompt verbatim from PATH (`-` for stdin)
 
       --safe-mode
           Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
 
       --accept-hooks
           Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+      --prompt-file <PATH>
+          Read the prompt verbatim from PATH (`-` for stdin)
 
       --image <PATH>
           Attach a local image (PNG, JPEG, GIF, WebP; at most 20 MiB) to the first prompt (repeatable)
@@ -17566,6 +17574,607 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus projects help help
 ```
 
+## `prometheus pets`
+
+```text
+Pets: the gallery, installed pets, which one shows and how big, a terminal preview, the doctor and generating one
+
+Usage: prometheus pets [OPTIONS] <COMMAND>
+
+Commands:
+  list     List gallery pets (`pets.gallery_url`) whose slug or name contains QUERY, or the installed ones with `--installed` [alias: ls]
+  install  Download a gallery pet over HTTPS, validate its atlas and install it under `<profile>/pets/<slug>/`
+  select   Show an installed pet (a picker on a terminal when SLUG is omitted)
+  off      Hide the pet (`pets.enabled = false`)
+  remove   Delete an installed pet (hiding it when it was the one shown)
+  scale    Set the size on every surface (0.1-3.0; out-of-range values are clamped)
+  show     Animate a pet in this terminal until Ctrl+C
+  doctor   Check what showing a pet needs; prints `ready` and exits 0, else exits 1 naming the first missing item
+  hatch    Generate a pet from a description with the profile's image backend (asks before each paid step)
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets list`
+
+```text
+List gallery pets (`pets.gallery_url`) whose slug or name contains QUERY, or the installed ones with `--installed`
+
+Usage: prometheus pets list [OPTIONS] [QUERY]
+
+Arguments:
+  [QUERY]
+          Filter by slug or name
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --limit <LIMIT>
+          At most this many
+
+          [default: 50]
+
+      --installed
+          The installed pets instead of the gallery
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets install`
+
+```text
+Download a gallery pet over HTTPS, validate its atlas and install it under `<profile>/pets/<slug>/`
+
+Usage: prometheus pets install [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The gallery slug
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --select
+          Show it from now on (`pets.slug`, `pets.enabled = true`)
+
+      --force
+          Replace an installed pet of that slug
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets select`
+
+```text
+Show an installed pet (a picker on a terminal when SLUG is omitted)
+
+Usage: prometheus pets select [OPTIONS] [SLUG]
+
+Arguments:
+  [SLUG]
+          The installed pet
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets off`
+
+```text
+Hide the pet (`pets.enabled = false`)
+
+Usage: prometheus pets off [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets remove`
+
+```text
+Delete an installed pet (hiding it when it was the one shown)
+
+Usage: prometheus pets remove [OPTIONS] <SLUG>
+
+Arguments:
+  <SLUG>
+          The installed pet
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets scale`
+
+```text
+Set the size on every surface (0.1-3.0; out-of-range values are clamped)
+
+Usage: prometheus pets scale [OPTIONS] <FACTOR>
+
+Arguments:
+  <FACTOR>
+          The factor of the native 192x208 cell
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets show`
+
+```text
+Animate a pet in this terminal until Ctrl+C
+
+Usage: prometheus pets show [OPTIONS] [SLUG]
+
+Arguments:
+  [SLUG]
+          The installed pet (default: the active one)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --state <STATE>
+          The animation state (idle, wave, run, failed, review, jump, waiting)
+
+      --cycle
+          Go through every state in turn
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --once
+          Play the animation once and exit
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+      --mode <MODE>
+          The render mode (auto, kitty, iterm, sixel, unicode)
+
+      --scale <FACTOR>
+          The scale (default `pets.scale`)
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets doctor`
+
+```text
+Check what showing a pet needs; prints `ready` and exits 0, else exits 1 naming the first missing item
+
+Usage: prometheus pets doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets hatch`
+
+```text
+Generate a pet from a description with the profile's image backend (asks before each paid step)
+
+Usage: prometheus pets hatch [OPTIONS] <DESCRIPTION>...
+
+Arguments:
+  <DESCRIPTION>...
+          What the pet looks like
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus pets help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pets help [COMMAND]
+
+Commands:
+  list     List gallery pets (`pets.gallery_url`) whose slug or name contains QUERY, or the installed ones with `--installed`
+  install  Download a gallery pet over HTTPS, validate its atlas and install it under `<profile>/pets/<slug>/`
+  select   Show an installed pet (a picker on a terminal when SLUG is omitted)
+  off      Hide the pet (`pets.enabled = false`)
+  remove   Delete an installed pet (hiding it when it was the one shown)
+  scale    Set the size on every surface (0.1-3.0; out-of-range values are clamped)
+  show     Animate a pet in this terminal until Ctrl+C
+  doctor   Check what showing a pet needs; prints `ready` and exits 0, else exits 1 naming the first missing item
+  hatch    Generate a pet from a description with the profile's image backend (asks before each paid step)
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus pets help list`
+
+```text
+List gallery pets (`pets.gallery_url`) whose slug or name contains QUERY, or the installed ones with `--installed`
+
+Usage: prometheus pets help list
+```
+
+## `prometheus pets help install`
+
+```text
+Download a gallery pet over HTTPS, validate its atlas and install it under `<profile>/pets/<slug>/`
+
+Usage: prometheus pets help install
+```
+
+## `prometheus pets help select`
+
+```text
+Show an installed pet (a picker on a terminal when SLUG is omitted)
+
+Usage: prometheus pets help select
+```
+
+## `prometheus pets help off`
+
+```text
+Hide the pet (`pets.enabled = false`)
+
+Usage: prometheus pets help off
+```
+
+## `prometheus pets help remove`
+
+```text
+Delete an installed pet (hiding it when it was the one shown)
+
+Usage: prometheus pets help remove
+```
+
+## `prometheus pets help scale`
+
+```text
+Set the size on every surface (0.1-3.0; out-of-range values are clamped)
+
+Usage: prometheus pets help scale
+```
+
+## `prometheus pets help show`
+
+```text
+Animate a pet in this terminal until Ctrl+C
+
+Usage: prometheus pets help show
+```
+
+## `prometheus pets help doctor`
+
+```text
+Check what showing a pet needs; prints `ready` and exits 0, else exits 1 naming the first missing item
+
+Usage: prometheus pets help doctor
+```
+
+## `prometheus pets help hatch`
+
+```text
+Generate a pet from a description with the profile's image backend (asks before each paid step)
+
+Usage: prometheus pets help hatch
+```
+
+## `prometheus pets help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus pets help help
+```
+
+## `prometheus achievements`
+
+```text
+Achievements computed from this profile's session history
+
+Usage: prometheus achievements [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --unlocked
+          Only the badges with a tier
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus themes`
 
 ```text
@@ -19120,7 +19729,181 @@ The bot screen: the virtual desktop the agent's headed browsers act on and the d
 Usage: prometheus computer-use [OPTIONS] <COMMAND>
 
 Commands:
-  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  install      Install the pinned `cua-driver` runtime
+  status       The backend, driver, permission mode, overlay and prerequisites
+  doctor       Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+  permissions  The platform grants the driver needs
+  screen       The bot screen: the virtual desktop the agent's headed browsers act on
+  help         Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use install`
+
+```text
+Install the pinned `cua-driver` runtime
+
+Usage: prometheus computer-use install [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --upgrade
+          Replace an installed driver with this build's pinned version
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use status`
+
+```text
+The backend, driver, permission mode, overlay and prerequisites
+
+Usage: prometheus computer-use status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use doctor`
+
+```text
+Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+
+Usage: prometheus computer-use doctor [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --include <CHECK>
+          Run only this check (repeatable)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --skip <CHECK>
+          Skip this check (repeatable)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use permissions`
+
+```text
+The platform grants the driver needs
+
+Usage: prometheus computer-use permissions [OPTIONS] <COMMAND>
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
   help    Print this message or the help of the given subcommand(s)
 
 Options:
@@ -19153,6 +19936,121 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus computer-use permissions status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus computer-use permissions status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use permissions grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus computer-use permissions grant [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus computer-use permissions help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use permissions help [COMMAND]
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use permissions help status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus computer-use permissions help status
+```
+
+## `prometheus computer-use permissions help grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus computer-use permissions help grant
+```
+
+## `prometheus computer-use permissions help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus computer-use permissions help help
 ```
 
 ## `prometheus computer-use screen`
@@ -19473,8 +20371,64 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus computer-use help [COMMAND]
 
 Commands:
-  screen  The bot screen: the virtual desktop the agent's headed browsers act on
-  help    Print this message or the help of the given subcommand(s)
+  install      Install the pinned `cua-driver` runtime
+  status       The backend, driver, permission mode, overlay and prerequisites
+  doctor       Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+  permissions  The platform grants the driver needs
+  screen       The bot screen: the virtual desktop the agent's headed browsers act on
+  help         Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus computer-use help install`
+
+```text
+Install the pinned `cua-driver` runtime
+
+Usage: prometheus computer-use help install
+```
+
+## `prometheus computer-use help status`
+
+```text
+The backend, driver, permission mode, overlay and prerequisites
+
+Usage: prometheus computer-use help status
+```
+
+## `prometheus computer-use help doctor`
+
+```text
+Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+
+Usage: prometheus computer-use help doctor
+```
+
+## `prometheus computer-use help permissions`
+
+```text
+The platform grants the driver needs
+
+Usage: prometheus computer-use help permissions [COMMAND]
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
+```
+
+## `prometheus computer-use help permissions status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus computer-use help permissions status
+```
+
+## `prometheus computer-use help permissions grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus computer-use help permissions grant
 ```
 
 ## `prometheus computer-use help screen`
@@ -37559,6 +38513,8 @@ Commands:
   kanban         Kanban boards shared by every profile: tasks, dependencies, the dispatcher, workers, review, notifications, export and import
   worktrees      Git worktrees of sessions and subagents: list, sweep and restore archived trees
   projects       Projects: named workspaces spanning folders, the active project, archive and restore
+  pets           Pets: the gallery, installed pets, which one shows and how big, a terminal preview, the doctor and generating one
+  achievements   Achievements computed from this profile's session history
   themes         Themes: list them, use one, set a colour, spinner or branding key of the custom theme, show the one in use
   console        A console that runs only read-mostly prometheus commands (status, doctor, logs, sessions list/show/export, config show/get/validate, usage, version, update --check, daemon status/restart, gateway status), never a shell
   webhooks       Webhook routes kept in the profile's state: subscribe (prints the route URL and, once, its signing secret), list, remove and test
@@ -40243,6 +41199,105 @@ Bind a project to a kanban board (omit the board to unbind)
 Usage: prometheus help projects bind-board
 ```
 
+## `prometheus help pets`
+
+```text
+Pets: the gallery, installed pets, which one shows and how big, a terminal preview, the doctor and generating one
+
+Usage: prometheus help pets [COMMAND]
+
+Commands:
+  list     List gallery pets (`pets.gallery_url`) whose slug or name contains QUERY, or the installed ones with `--installed`
+  install  Download a gallery pet over HTTPS, validate its atlas and install it under `<profile>/pets/<slug>/`
+  select   Show an installed pet (a picker on a terminal when SLUG is omitted)
+  off      Hide the pet (`pets.enabled = false`)
+  remove   Delete an installed pet (hiding it when it was the one shown)
+  scale    Set the size on every surface (0.1-3.0; out-of-range values are clamped)
+  show     Animate a pet in this terminal until Ctrl+C
+  doctor   Check what showing a pet needs; prints `ready` and exits 0, else exits 1 naming the first missing item
+  hatch    Generate a pet from a description with the profile's image backend (asks before each paid step)
+```
+
+## `prometheus help pets list`
+
+```text
+List gallery pets (`pets.gallery_url`) whose slug or name contains QUERY, or the installed ones with `--installed`
+
+Usage: prometheus help pets list
+```
+
+## `prometheus help pets install`
+
+```text
+Download a gallery pet over HTTPS, validate its atlas and install it under `<profile>/pets/<slug>/`
+
+Usage: prometheus help pets install
+```
+
+## `prometheus help pets select`
+
+```text
+Show an installed pet (a picker on a terminal when SLUG is omitted)
+
+Usage: prometheus help pets select
+```
+
+## `prometheus help pets off`
+
+```text
+Hide the pet (`pets.enabled = false`)
+
+Usage: prometheus help pets off
+```
+
+## `prometheus help pets remove`
+
+```text
+Delete an installed pet (hiding it when it was the one shown)
+
+Usage: prometheus help pets remove
+```
+
+## `prometheus help pets scale`
+
+```text
+Set the size on every surface (0.1-3.0; out-of-range values are clamped)
+
+Usage: prometheus help pets scale
+```
+
+## `prometheus help pets show`
+
+```text
+Animate a pet in this terminal until Ctrl+C
+
+Usage: prometheus help pets show
+```
+
+## `prometheus help pets doctor`
+
+```text
+Check what showing a pet needs; prints `ready` and exits 0, else exits 1 naming the first missing item
+
+Usage: prometheus help pets doctor
+```
+
+## `prometheus help pets hatch`
+
+```text
+Generate a pet from a description with the profile's image backend (asks before each paid step)
+
+Usage: prometheus help pets hatch
+```
+
+## `prometheus help achievements`
+
+```text
+Achievements computed from this profile's session history
+
+Usage: prometheus help achievements
+```
+
 ## `prometheus help themes`
 
 ```text
@@ -40493,7 +41548,63 @@ The bot screen: the virtual desktop the agent's headed browsers act on and the d
 Usage: prometheus help computer-use [COMMAND]
 
 Commands:
-  screen  The bot screen: the virtual desktop the agent's headed browsers act on
+  install      Install the pinned `cua-driver` runtime
+  status       The backend, driver, permission mode, overlay and prerequisites
+  doctor       Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+  permissions  The platform grants the driver needs
+  screen       The bot screen: the virtual desktop the agent's headed browsers act on
+```
+
+## `prometheus help computer-use install`
+
+```text
+Install the pinned `cua-driver` runtime
+
+Usage: prometheus help computer-use install
+```
+
+## `prometheus help computer-use status`
+
+```text
+The backend, driver, permission mode, overlay and prerequisites
+
+Usage: prometheus help computer-use status
+```
+
+## `prometheus help computer-use doctor`
+
+```text
+Run the driver's health report as a per-check matrix (exit 1 when a check is degraded or failed, 69 when the driver cannot be reached)
+
+Usage: prometheus help computer-use doctor
+```
+
+## `prometheus help computer-use permissions`
+
+```text
+The platform grants the driver needs
+
+Usage: prometheus help computer-use permissions [COMMAND]
+
+Commands:
+  status  List each grant (exit 1 when one is missing)
+  grant   Open the system settings pane of each missing grant (macOS)
+```
+
+## `prometheus help computer-use permissions status`
+
+```text
+List each grant (exit 1 when one is missing)
+
+Usage: prometheus help computer-use permissions status
+```
+
+## `prometheus help computer-use permissions grant`
+
+```text
+Open the system settings pane of each missing grant (macOS)
+
+Usage: prometheus help computer-use permissions grant
 ```
 
 ## `prometheus help computer-use screen`
@@ -43431,6 +44542,9 @@ With `--json` a command prints exactly one JSON document on stdout (JSON Lines f
 | `prometheus.profile_info.v1` | `prometheus profile info` |
 | `prometheus.egress_status.v1` | `prometheus egress status` |
 | `prometheus.screen_status.v1` | `prometheus computer-use screen status` |
+| `prometheus.computer_use_status.v1` | `prometheus computer-use status` |
+| `prometheus.computer_use_doctor.v1` | `prometheus computer-use doctor` |
+| `prometheus.computer_use_permissions.v1` | `prometheus computer-use permissions status` |
 | `prometheus.security_scan.v1` | `prometheus security scan` |
 | `prometheus.sessions.v1` | `prometheus sessions list` |
 | `prometheus.session.v1` | `prometheus sessions show` |

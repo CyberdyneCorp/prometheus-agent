@@ -17,7 +17,7 @@ use super::explain::Previewer;
 use super::guardian::{Breaker, Guardian, GuardianVerdict};
 use super::hooks::{ApprovalHooks, TransportOutcome, TransportRequest, choice_name};
 use super::review::EditReview;
-use super::rules::{PLUGIN_RULE_PREFIX, literal};
+use super::rules::literal;
 use super::selfterm::{Daemon, Guarded};
 use super::{Context, Finding, Floors, Policy, Verdict, evaluate};
 use crate::descriptor::{PathClaim, RegisteredTool};
@@ -368,7 +368,7 @@ impl CommandGate {
         request: &GateRequest<'_>,
         escalation: &Escalation,
     ) -> GateVerdict {
-        let key = format!("{PLUGIN_RULE_PREFIX}{}", escalation.rule_key);
+        let key = escalation.approval_key();
         // A once-only rule (a spend limit) asks whatever the mode, YOLO or
         // earlier approvals say, and is never remembered.
         if !escalation.once_only && (self.bypassing() || self.allow_rules().contains(&key)) {

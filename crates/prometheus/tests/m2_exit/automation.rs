@@ -121,7 +121,7 @@ fn repo(home: &Path) -> PathBuf {
 
 /// A mock home serving the API, with MoA presets on mock models,
 /// worktree isolation for children and the script above.
-fn automation_home() -> (tempfile::TempDir, PathBuf) {
+fn automation_home() -> (crate::common::TestHome, PathBuf) {
     let home = mock_home();
     let work = repo(home.path());
     std::fs::write(

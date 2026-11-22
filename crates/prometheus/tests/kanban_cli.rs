@@ -36,7 +36,7 @@ fn status(home: &Path, id: &str) -> String {
 }
 
 /// A mock home whose default profile plays `rules`.
-fn worker_home(rules: &str) -> tempfile::TempDir {
+fn worker_home(rules: &str) -> common::TestHome {
     let home = mock_home();
     std::fs::write(home.path().join("profiles/default/mock.toml"), rules).unwrap();
     common::append_config(home.path(), "\n[providers.mock]\nscript = \"mock.toml\"\n");

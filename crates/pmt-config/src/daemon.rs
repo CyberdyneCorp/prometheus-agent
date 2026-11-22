@@ -324,6 +324,7 @@ pub const RUNTIME_NAMES: &[&str] = &[
     "bws",
     "op",
     "lightpanda",
+    "cua-driver",
 ];
 
 /// The `[runtimes]` section (spec: distribution-and-update, Lazy runtime
@@ -700,7 +701,7 @@ mod tests {
         assert_eq!(err.exit_code(), 78);
         assert!(
             err.message().contains(
-                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda)"
+                "runtimes.exclude: unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda|cua-driver)"
             ),
             "{err}"
         );

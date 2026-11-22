@@ -457,7 +457,7 @@ impl DaemonHost {
     /// messaging-gateway, Profiles served by one daemon): each opens in
     /// its own scope; `standalone` ones and ones that fail to load (logged)
     /// are left out. Returns the names now served.
-    fn open_new_profiles(&self) -> Vec<String> {
+    pub(super) fn open_new_profiles(&self) -> Vec<String> {
         let Ok(launch) = self.profile(&self.launch_profile) else {
             return Vec::new();
         };

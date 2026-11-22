@@ -326,7 +326,7 @@ fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
 
 /// A home whose default profile uses `llamacpp/qwen-x`, with the stub as
 /// the installed engine and `qwen-x` in the library.
-fn local_home() -> tempfile::TempDir {
+fn local_home() -> common::TestHome {
     let home = temp_home();
     let h = home.path();
     ok(&common::run(

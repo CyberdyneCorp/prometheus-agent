@@ -616,6 +616,10 @@ pub struct AuxiliaryTask {
     /// mapping (one level deep), e.g. an OpenRouter `provider` block.
     #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub extra_body: BTreeMap<String, serde_json::Value>,
+    /// Reasoning effort of this task's calls; read by `voice_chat` (unset:
+    /// `none`, or the model's lowest accepted effort).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningLevel>,
 }
 
 /// The `[fallback]` section.

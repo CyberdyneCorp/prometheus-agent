@@ -12,7 +12,7 @@ use std::path::Path;
 use common::{mock_home, ok, run, stderr, stdout};
 use serde_json::{Value, json};
 
-fn cron_home(rules: &str) -> tempfile::TempDir {
+fn cron_home(rules: &str) -> common::TestHome {
     let home = mock_home();
     std::fs::write(home.path().join("profiles/default/mock.toml"), rules).unwrap();
     common::append_config(

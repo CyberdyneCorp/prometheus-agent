@@ -33,7 +33,7 @@ pub fn enable(home: &Path, profile: &str, extra: &str) {
 
 /// A mock home whose default profile serves the API with `extra` config
 /// (the port is known once the daemon runs: [`port`]).
-pub fn home(extra: &str) -> tempfile::TempDir {
+pub fn home(extra: &str) -> super::TestHome {
     let home = mock_home();
     enable(home.path(), "default", extra);
     listen(home.path(), "");

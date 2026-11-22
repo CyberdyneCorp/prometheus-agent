@@ -76,6 +76,7 @@ fn card_fill(arguments: &Value) -> Option<Escalation> {
         rule_key: CARD_RULE.to_owned(),
         reason: format!("fill payment card {handle} into the current page"),
         once_only: true,
+        builtin: false,
     })
 }
 

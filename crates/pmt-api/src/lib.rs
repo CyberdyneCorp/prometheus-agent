@@ -54,8 +54,8 @@ use tracing::Instrument as _;
 
 pub use a2a::A2aServer;
 pub use host::{
-    ApiHost, ApiImage, ApiTurn, Catalog, JobsCall, ModelChoice, ModelOptions, NewApiSession, Push,
-    image_extension,
+    ApiHost, ApiImage, ApiTurn, BotsCall, Catalog, JobsCall, ModelChoice, ModelOptions,
+    NewApiSession, Push, image_extension,
 };
 
 /// What every request handler shares.

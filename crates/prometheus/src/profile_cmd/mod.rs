@@ -301,7 +301,7 @@ fn delete(home: &Home, name: &str, yes: bool) -> Result<u8, Error> {
 /// `target`: every entry keeps its id, store, tier and pin; changes still
 /// waiting for approval stay behind (spec: configuration-and-profiles,
 /// Profile lifecycle commands).
-fn clone_memory(
+pub(crate) fn clone_memory(
     home: &Home,
     source: &ProfileName,
     target: &pmt_config::ProfileDir,

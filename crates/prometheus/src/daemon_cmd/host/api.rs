@@ -348,6 +348,7 @@ impl pmt_api::ApiHost for DaemonHost {
                     run_budget_secs: None,
                     input_id: None,
                     author: None,
+                    voice: false,
                 };
                 Box::pin(self.submit_turn(
                     &profile,
@@ -408,6 +409,14 @@ impl pmt_api::ApiHost for DaemonHost {
             let profile = self.profile(profile)?;
             Ok(super::api_profile::jobs(&self.launch, &profile, &call))
         })
+    }
+
+    fn api_bots<'a>(
+        &'a self,
+        profile: &'a str,
+        call: pmt_api::BotsCall,
+    ) -> HostFuture<'a, (u16, Value)> {
+        Box::pin(self.bots_api(profile, call))
     }
 
     fn api_catalog<'a>(

@@ -317,6 +317,7 @@ async fn every_sample_plugin_compiles_and_imports_only_the_host_interfaces() {
         "terminal-backend",
         "ui-panel",
         "delegation-router",
+        "computer-use-backend",
     ] {
         let bytes = pmt_plugins::testkit::component(&format!("sample-{world}"));
         let component = runtime.compile(world, &bytes).unwrap();

@@ -299,6 +299,7 @@ impl Session<'_> {
             run_budget_secs: None,
             input_id: None,
             author: None,
+            voice: false,
         };
         let admitted = self
             .client

@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""A stand-in cua-driver (the computer-use driver), for tests only.
+
+It speaks the subset of the driver contract Prometheus uses: `manifest`,
+`--version`, `status`/`serve`/`stop` with `--socket`, `permissions status
+--json` and `mcp` (an MCP server over stdio, newline-delimited JSON-RPC)
+offering a one-window desktop. Prometheus hands the driver a sanitized
+environment, so the stand-in reads its settings from `fake.json` beside
+itself and appends every invocation and tool call to `log.jsonl` there."""
+
+import base64
+import json
+import os
+import signal
+import sys
+import time
+
+HERE = os.path.dirname(os.path.realpath(sys.argv[0]))
+try:
+    with open(os.path.join(HERE, "fake.json")) as f:
+        SETTINGS = json.load(f)
+except FileNotFoundError:
+    SETTINGS = {}
+VERSION = SETTINGS.get("version", "0.21.0")
+# A 1x1 PNG.
+PNG = base64.b64encode(bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f"
+    "15c4890000000d4944415478da636460f85f0f0002870180eb47ba920000000049454e44ae426082"
+)).decode()
+
+
+def log(entry):
+    entry["env"] = {k: os.environ.get(k) for k in (
+        "DISPLAY", "XAUTHORITY", "CUA_DRIVER_RS_TELEMETRY_ENABLED", "OPENAI_API_KEY")}
+    with open(os.path.join(HERE, "log.jsonl"), "a") as out:
+        out.write(json.dumps(entry) + "\n")
+
+
+def flag(args, name):
+    return args[args.index(name) + 1] if name in args else None
+
+
+def manifest():
+    socket = {"name": "--socket"}
+    return {
+        "binary_version": VERSION,
+        "mcp_invocation": {"command": "cua-driver", "args": ["mcp"]},
+        "subcommands": [
+            {"name": "mcp", "args": [socket, {"name": "--embedded"}, {"name": "--no-overlay"}]},
+            {"name": "serve", "args": [socket, {"name": "--permission-mode"}, {"name": "--capability-manifest"},
+                                       {"name": "--approve-capability-manifest"}, {"name": "--embedded"}]},
+            {"name": "stop", "args": [socket]},
+        ],
+    }
+
+
+def call(name, arguments):
+    display = os.environ.get("DISPLAY", "")
+    if name == "list_windows":
+        return {"windows": [{"pid": 11, "window_id": 101, "app_name": "Fake App",
+                             "title": "on display " + display, "z_index": 1}]}, []
+    if name == "get_window_state":
+        elements = [{"element_index": i, "role": "AXButton", "label": "Button %d" % i,
+                     "frame": {"x": i, "y": i, "w": 10, "h": 10}} for i in (1, 2)]
+        return {"elements": elements, "window_title": "on display " + display}, [PNG]
+    if name == "health_report":
+        return SETTINGS.get("health", {"schema_version": "1", "overall": "ok", "checks": [
+            {"name": "tcc_accessibility", "status": "pass", "message": "granted"},
+            {"name": "tcc_screen_recording", "status": "pass", "message": "granted"},
+            {"name": "capture", "status": "pass", "message": "captured 1 display"},
+        ]}), []
+    return {"message": name + " ok"}, []
+
+
+def mcp(args):
+    log({"argv": ["mcp"] + args})
+    for line in sys.stdin:
+        if not line.strip():
+            continue
+        request = json.loads(line)
+        method, rid = request.get("method"), request.get("id")
+        if rid is None:
+            continue
+        if method == "initialize":
+            result = {"protocolVersion": request["params"].get("protocolVersion", "2025-06-18"),
+                      "capabilities": {"tools": {}}, "serverInfo": {"name": "fake-cua-driver", "version": VERSION}}
+        elif method == "tools/list":
+            names = ["start_session", "end_session", "set_config", "set_agent_cursor_enabled", "list_apps",
+                     "list_windows", "get_window_state", "click", "double_click", "drag", "scroll", "type_text",
+                     "press_key", "hotkey", "set_value", "bring_to_front", "health_report"]
+            result = {"tools": [{"name": n, "inputSchema": {"type": "object"}} for n in names]}
+        elif method == "tools/call":
+            params = request["params"]
+            log({"call": params["name"], "arguments": params.get("arguments", {})})
+            structured, images = call(params["name"], params.get("arguments", {}))
+            content = [{"type": "text", "text": json.dumps(structured)}]
+            content += [{"type": "image", "data": i, "mimeType": "image/png"} for i in images]
+            result = {"content": content, "structuredContent": structured, "isError": False}
+        else:
+            result = {}
+        sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": rid, "result": result}) + "\n")
+        sys.stdout.flush()
+
+
+def serve(args):
+    log({"argv": ["serve"] + args})
+    socket = flag(args, "--socket")
+    open(socket, "w").close()
+
+    def stop(*_):
+        if os.path.exists(socket):
+            os.remove(socket)
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    while os.path.exists(socket):
+        time.sleep(0.05)
+
+
+def main():
+    args = sys.argv[1:]
+    verb = args[0] if args else ""
+    if verb == "manifest":
+        print(json.dumps(manifest()))
+    elif verb == "--version":
+        print("cua-driver " + VERSION)
+    elif verb == "status":
+        socket = flag(args, "--socket")
+        if socket and os.path.exists(socket):
+            return 0
+        print("daemon is not running")
+        return 1
+    elif verb == "stop":
+        log({"argv": args})
+        socket = flag(args, "--socket")
+        if socket and os.path.exists(socket):
+            os.remove(socket)
+    elif verb == "serve":
+        serve(args[1:])
+    elif verb == "permissions":
+        print(json.dumps({"accessibility": SETTINGS.get("accessibility", True),
+                          "screen_recording": SETTINGS.get("screen_recording", True)}))
+    elif verb == "mcp":
+        mcp(args[1:])
+    else:
+        sys.stderr.write("fake cua-driver: unsupported " + verb + "\n")
+        return 2
+    return 0
+
+
+sys.exit(main())

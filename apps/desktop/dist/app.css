@@ -119,6 +119,19 @@ footer.bottom { display: flex; justify-content: space-between; padding: 0 28px; 
 .page .plugin-frame { min-height: 60vh; }
 .pairing-qr { width: 240px; height: 240px; background: #fff; }
 .preview { width: 100%; min-height: 50vh; border: 1px solid var(--line); }
+/* Achievements (spec: pets): one card per badge, coloured by tier. */
+.achievements-page .badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.badge { padding: 10px 12px; border: 1px solid var(--line, #ccc); border-radius: 8px; }
+.badge h3 { margin: 0 0 4px; font-size: 15px; }
+.badge .tier { margin: 0; font-weight: 600; text-transform: capitalize; }
+.badge .what, .badge .category { margin: 4px 0 0; font-size: 12px; opacity: 0.8; }
+.badge.tier-locked { opacity: 0.6; }
+.badge.tier-copper { border-color: #b87333; }
+.badge.tier-silver { border-color: #a8a9ad; }
+.badge.tier-gold { border-color: #d4af37; }
+.badge.tier-diamond { border-color: #6ec6e6; }
+.badge.tier-olympian { border-color: #9b59b6; }
+.scan-state[data-scanning="true"]::before { content: "⟳ "; }
 /* The desktop window's layout on top of the dashboard's styles. */
 /* The terminal pane's bundled monospace font (JetBrains Mono, SIL OFL 1.1:
    fonts/JetBrainsMono-OFL.txt), used when desktop.terminal_font_family is
@@ -274,3 +287,78 @@ body { font-family: var(--ui-font,) system-ui, -apple-system, "Segoe UI", sans-s
 .screen-pane[data-control="other"] .screen-canvas {
   cursor: not-allowed;
 }
+.bots .bot-tools { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+.bots .bot-section ul { list-style: none; margin: 0; padding: 0; }
+.bots .bot-section li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 2px 0; }
+.bots .bot-section li[data-hidden="true"] { opacity: 0.6; }
+.bots button[name="open-bot"] { display: inline-flex; align-items: center; gap: 0.4rem; }
+.bots .bot-unread { background: var(--accent); color: #fff; border-radius: 9px; padding: 0 6px; font-size: 0.8em; }
+.bots .bot-active { color: #2f9e44; }
+.bots .bot-preview { flex: 1 1 100%; color: var(--muted, #868e96); font-size: 0.85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bots form { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
+.routines .schedule-picker { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+
+/* Voice controls (spec: voice-mode, Desktop voice controls). */
+.chat[data-read-aloud="false"] button[name="read-aloud"] {
+  display: none;
+}
+.message .read-aloud {
+  margin-left: 0.5rem;
+  font-size: 0.8em;
+}
+.read-aloud[aria-pressed="true"],
+button[name="voice-chat"][aria-pressed="true"],
+button[name="dictate"][aria-pressed="true"] {
+  outline: 2px solid currentColor;
+}
+.voice-pill {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 0.85em;
+}
+.wake .wake-ear {
+  border-radius: 999px;
+  background: transparent;
+  border: 1px dashed currentColor;
+}
+/* Solid while the wake listener is armed. */
+.wake[data-state="armed"] .wake-ear,
+.wake[data-state="busy"] .wake-ear {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+.wake[data-state="error"] .wake-ear {
+  border-style: solid;
+  border-color: var(--bad);
+}
+.wake-hint {
+  margin-left: 0.4rem;
+  font-size: 0.8em;
+  color: var(--bad);
+}
+/* Pets (spec: pets): the floating pet, achievement toasts, the pop-out
+   overlay window (#pet, transparent) and the pet dialogs. */
+.floating-pet { position: fixed; right: 16px; bottom: 72px; z-index: 8; cursor: pointer; transition: right 1.2s ease-in-out; }
+.floating-pet[hidden] { display: none; }
+.pet-sprite { display: block; image-rendering: pixelated; }
+.pet-heart { position: absolute; top: -6px; left: -10px; color: #e03131; font-size: 18px; animation: pet-heart 1s ease-out infinite; }
+.pet-heart[hidden] { display: none; }
+@keyframes pet-heart { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-14px); opacity: 0.2; } }
+.achievement-toasts { position: fixed; top: 48px; right: 16px; z-index: 12; display: flex; flex-direction: column; gap: 8px; }
+.achievement-toast { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--accent, #d9480f); border-radius: var(--radius); box-shadow: 0 8px 30px rgb(0 0 0 / 25%); }
+.achievement-toast > button { grid-row: 1 / span 2; grid-column: 2; }
+html[data-window="pet"], html[data-window="pet"] body { background: transparent; overflow: hidden; }
+.pet-overlay { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; user-select: none; }
+.pet-body { position: relative; cursor: grab; }
+.pet-bubble { padding: 2px 8px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
+.pet-bubble[hidden], .pet-mail[hidden], .pet-composer[hidden] { display: none; }
+.pet-mail { position: absolute; top: -4px; right: -4px; padding: 0 4px; border-radius: 8px; background: #e03131; color: #fff; font-size: 12px; }
+.pet-composer input { width: 180px; }
+.pets-dialog, .hatch-dialog { position: fixed; inset: 15% 20% auto; z-index: 11; max-height: 70vh; overflow: auto; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 30px rgb(0 0 0 / 25%); }
+.pets-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pets-list li { display: flex; justify-content: space-between; gap: 8px; }
+.hatch-drafts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.hatch-drafts img { width: 100%; image-rendering: pixelated; }

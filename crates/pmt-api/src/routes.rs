@@ -87,6 +87,9 @@ async fn endpoint(shared: &Arc<Shared>, caller: &auth::Caller, path: &str, req: 
         (Method::GET, ["api", "agents"]) => discovery::agents(shared, caller).await,
         (_, ["api", "sessions", rest @ ..]) => sessions_api::route(shared, caller, rest, req).await,
         (_, ["api", "jobs", rest @ ..]) => discovery::jobs(shared, caller, rest, req).await,
+        (_, ["api", area @ ("bots" | "rooms"), rest @ ..]) => {
+            discovery::bots(shared, caller, (area, rest), req).await
+        }
         _ => not_found("the route"),
     }
 }

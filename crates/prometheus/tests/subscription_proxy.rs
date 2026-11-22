@@ -32,7 +32,7 @@ fn scope(home: &Path) -> ProfileScope {
 
 /// A home whose `nous` provider is the mock at `upstream` and holds a
 /// Nous sign-in with access token `nous-live-token`.
-fn signed_in(upstream: &str) -> tempfile::TempDir {
+fn signed_in(upstream: &str) -> common::TestHome {
     let home = temp_home();
     ok(&run(home.path(), &["config", "path"]));
     std::fs::write(

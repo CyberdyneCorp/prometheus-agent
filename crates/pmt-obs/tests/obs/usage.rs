@@ -272,3 +272,33 @@ fn a_breakdown_by_purpose_sums_to_the_total() {
         [("2026-05-01", 1), ("2026-05-02", 2), ("2026-05-04", 2)]
     );
 }
+
+/// A metered call priced per image: its estimate is recorded as an
+/// estimated cost, an unknown one stays unknown, and a subscription call
+/// is still a subscription row whatever the estimate.
+#[test]
+fn a_per_image_estimate_is_recorded_as_estimated() {
+    let dir = temp_dir();
+    let store = store(dir.path());
+    let rec = recorder(&store);
+    let session = root(&store);
+    let call = |billing: &str| Call {
+        billing_source: billing.to_owned(),
+        purpose_detail: Some("pets.hatch".to_owned()),
+        ..Call::new(session, "tool.image_generate", "openai", "gpt-image-1")
+    };
+    let priced = rec
+        .record_estimated(call("api_key:openai"), Some(0.042))
+        .unwrap();
+    assert_eq!(priced.cost_status, CostStatus::Estimated);
+    assert_eq!(priced.cost_usd, Some(0.042));
+    assert_eq!(priced.purpose_detail.as_deref(), Some("pets.hatch"));
+    let unknown = rec.record_estimated(call("api_key:openai"), None).unwrap();
+    assert_eq!(unknown.cost_status, CostStatus::Unknown);
+    assert_eq!(unknown.cost_usd, None);
+    let plan = rec
+        .record_estimated(call("subscription:openai-codex"), Some(0.042))
+        .unwrap();
+    assert_eq!(plan.cost_status, CostStatus::Subscription);
+    assert_eq!(store.usage_events(session).unwrap().len(), 3);
+}

@@ -23,14 +23,14 @@ use pmt_core::cancel::CancelToken;
 use pmt_core::error::Error;
 use pmt_core::id::SessionId;
 use pmt_gateway::{Author, Link};
-use pmt_rpc::contracts::{Admission, SubmitParams, Submitted, TurnEnded};
+use pmt_rpc::contracts::{Admission, SubmitParams, Submitted, TurnEnded, TurnError, TurnFinished};
 use pmt_store::EndReason;
 
 use tracing::Instrument as _;
 
 use super::automation::Follow;
 use super::crash::AfterCrash;
-use super::{DaemonHost, Loaded, Profile, finished, session_id, setup};
+use super::{DaemonHost, Loaded, Profile, session_id, setup};
 
 /// An input waiting for its turn.
 pub(super) struct Queued {
@@ -49,6 +49,9 @@ pub(super) struct Queued {
     /// A client's input as its queue lists and keeps it (`None` for a
     /// lane's, automation's or a resumed crash's turn).
     pub(super) entry: Option<super::queue::Saved>,
+    /// A spoken message: the turn runs on the voice route (spec:
+    /// voice-mode, Voice turn model and reasoning).
+    pub(super) voice: bool,
 }
 
 impl DaemonHost {
@@ -116,6 +119,7 @@ impl DaemonHost {
             resume: None,
             api,
             entry,
+            voice: params.voice,
         };
         if job.entry.is_some() && session.queue_blocks_input() {
             // A lost turn blocks the queue and a pause holds it: the new
@@ -431,6 +435,7 @@ fn automated(wakeup: pmt_automation::arbiter::Wakeup, link: Link) -> Queued {
         resume: None,
         api: None,
         entry: None,
+        voice: false,
     }
 }
 
@@ -467,6 +472,30 @@ fn next_job(
         session.busy.store(false, Ordering::Release);
     }
     (next, in_chat)
+}
+
+/// Puts `session` on its voice route for a spoken message's turn; a
+/// failure (an unresolvable voice route) is shown and the turn runs on the
+/// session's route.
+async fn voice_turn(
+    session: &Loaded,
+    link: &Link,
+) -> Option<crate::chat::session::voice_route::VoiceTurn> {
+    let factory = &session.factory;
+    match crate::chat::session::voice_route::begin(&factory.models, &factory.store, &session.live)
+        .await
+    {
+        Ok(turn) => {
+            if let Some(notice) = &turn.notice {
+                super::commands::notice(link, notice);
+            }
+            Some(turn)
+        }
+        Err(err) => {
+            super::commands::notice(link, &format!("voice route: {}", err.message()));
+            None
+        }
+    }
 }
 
 /// Runs one turn, then its automation boundary, and emits its
@@ -506,6 +535,11 @@ async fn run_one(
         tracing::warn!(session = %id, error = %err, "gateway session hygiene failed");
     }
     let applied = job.api.as_ref().map(|api| api.begin(session));
+    let voice = if job.voice {
+        voice_turn(session, &job.link).await
+    } else {
+        None
+    };
     let outcome = if let Some((unfinished, choice)) = job.resume {
         let resume = super::crash::decide(&job.link, &unfinished, choice).await;
         agent
@@ -519,6 +553,9 @@ async fn run_one(
     session.interrupt.lock().expect("interrupt poisoned").take();
     if let Some(applied) = applied {
         applied.end(session);
+    }
+    if let Some(voice) = voice {
+        voice.end(&session.live);
     }
     // A `/model --once` or `/moa` route ends with its turn, whatever the
     // turn's outcome (spec: mixture-of-agents, One-shot /moa command).
@@ -550,7 +587,29 @@ async fn run_one(
     ended.report = serde_json::to_value(record.report(&Ok(0))).ok();
     super::turn_results::record(&ended);
     job.link.emit::<TurnEnded>(&ended);
+    super::pets::rescan_after_turn(&scope, &session.factory.store, &job.link);
     session.current.lock().expect("current poisoned").take();
     session.queue_running(None, &job.link);
     wakeup
+}
+
+fn finished(turn_id: String, outcome: Result<pmt_agent::turn::TurnResult, Error>) -> TurnFinished {
+    match outcome {
+        Ok(result) => TurnFinished {
+            turn_id,
+            exit_reason: result.exit_reason.as_str().to_owned(),
+            final_response: result.final_response,
+            error: result.error.as_ref().map(TurnError::of),
+            usage: serde_json::to_value(result.usage).ok(),
+            report: None,
+        },
+        Err(err) => TurnFinished {
+            turn_id,
+            exit_reason: "error".to_owned(),
+            final_response: None,
+            error: Some(TurnError::of(&err)),
+            usage: None,
+            report: None,
+        },
+    }
 }

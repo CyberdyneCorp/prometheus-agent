@@ -36,6 +36,7 @@ pmt-mcp = { path = "crates/pmt-mcp" }
 pmt-media = { path = "crates/pmt-media" }
 pmt-net = { path = "crates/pmt-net" }
 pmt-obs = { path = "crates/pmt-obs" }
+pmt-pets = { path = "crates/pmt-pets" }
 pmt-plugins = { path = "crates/pmt-plugins" }
 pmt-providers = { path = "crates/pmt-providers" }
 pmt-pybridge = { path = "crates/pmt-pybridge" }

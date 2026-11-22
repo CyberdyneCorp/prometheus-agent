@@ -10,6 +10,9 @@
   api_server  (25 tools)
     The core tools without speech, clarify and computer use, for API server callers
     tools: web_search, web_extract, terminal, process, read_file, write_file, patch, search_files, vision_analyze, image_generate, skills_list, skill_view, skill_manage, browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile, todo, memory, session_search, execute_code, delegate_task, cronjob, manage_connections
+  bot  (1 tool)  [default-off]
+    Message other bots (canonical Bot Chats only)
+    tools: message_agent
   browser  (5 tools)
     Browser automation
     tools: browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile

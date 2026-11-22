@@ -78,6 +78,7 @@ macro_rules! event {
 
 mod acp;
 mod automation;
+mod bots;
 mod chat;
 mod cron;
 mod desktop;
@@ -94,7 +95,9 @@ mod manage;
 mod messaging;
 mod moa;
 mod observability;
+mod pets;
 mod review;
+mod rooms;
 mod screen;
 mod security;
 mod terminal;
@@ -102,10 +105,12 @@ mod tui;
 mod turn;
 mod ui;
 mod upkeep;
+mod voice;
 mod workspace;
 mod worktree;
 pub use acp::*;
 pub use automation::*;
+pub use bots::*;
 pub use chat::*;
 pub use cron::*;
 pub use desktop::*;
@@ -122,7 +127,9 @@ pub use manage::*;
 pub use messaging::*;
 pub use moa::*;
 pub use observability::*;
+pub use pets::*;
 pub use review::*;
+pub use rooms::*;
 pub use screen::*;
 pub use security::*;
 pub use terminal::*;
@@ -130,6 +137,7 @@ pub use tui::*;
 pub use turn::*;
 pub use ui::*;
 pub use upkeep::*;
+pub use voice::*;
 pub use workspace::*;
 pub use worktree::*;
 
@@ -854,6 +862,11 @@ pub struct SubmitParams {
     /// rpc.forged_author`.
     #[serde(default)]
     pub author: Option<Value>,
+    /// A spoken message of a voice conversation: the turn runs on the
+    /// `[auxiliary.voice_chat]` route and reasoning (spec: voice-mode,
+    /// Voice turn model and reasoning).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub voice: bool,
 }
 
 /// An image attached to a prompt: a file the daemon reads (checked like

@@ -187,7 +187,7 @@ capability keys are `network`, `fs_read`, `fs_write`, `secrets`, `llm`,
 The plugin interface is a set of WIT packages in `wit/`, one per world
 (`tool`, `hook`, `provider`, `platform-adapter`, `memory-provider`,
 `context-engine`, `terminal-backend`, `ui-panel`, `delegation-router`,
-`bench`) plus
+`bench`, `computer-use-backend`) plus
 `wit/host`, the host interfaces every world imports: `log`, `state` (data
 under `<profile>/plugin-data/<id>/`), `http`, `secrets`, `llm`, `tools`,
 `events`, `config` (`plugins.entries.<id>.*`) and `session`; `tool` (1.2)

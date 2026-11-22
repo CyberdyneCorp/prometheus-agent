@@ -19,6 +19,7 @@ wasmtime::component::bindgen!({
         "../../wit/platform-adapter",
         "../../wit/ui-panel",
         "../../wit/bench",
+        "../../wit/computer-use-backend",
     ],
     inline: "
         package prometheus:runtime;
@@ -33,6 +34,7 @@ wasmtime::component::bindgen!({
             include prometheus:platform-adapter/platform-adapter@1.0.0;
             include prometheus:ui-panel/ui-panel@1.0.0;
             include prometheus:bench/bench@1.0.0;
+            include prometheus:computer-use-backend/computer-use-backend@1.0.0;
         }
     ",
     world: "prometheus:runtime/plugin-host",

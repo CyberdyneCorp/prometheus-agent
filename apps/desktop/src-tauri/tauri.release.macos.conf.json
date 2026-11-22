@@ -6,6 +6,7 @@
     "macOS": {
       "minimumSystemVersion": "12.0",
       "hardenedRuntime": true,
+      "entitlements": "Entitlements.plist",
       "files": {
         "Resources/install.json": "../../../target/desktop-package/install-desktop.json"
       }

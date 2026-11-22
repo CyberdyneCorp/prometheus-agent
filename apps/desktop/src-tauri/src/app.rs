@@ -11,7 +11,7 @@ use pmt_desktop::connections::service::ConnectionsConfig;
 use pmt_desktop::connections::ssh::SshPrograms;
 use pmt_desktop::{Request, Shell, ShellConfig, deeplink, ensure, navigation};
 use serde_json::Value;
-use tauri::webview::NewWindowResponse;
+use tauri::webview::{NewWindowResponse, PermissionKind, PermissionResponse};
 use tauri::{
     AppHandle, Emitter as _, Manager as _, Runtime, State, WebviewUrl, WebviewWindowBuilder,
 };
@@ -50,7 +50,11 @@ pub(crate) fn run(launch: Launch) {
     let app = with_shell(builder)
         .setup(move |app| {
             let version = app.package_info().version.to_string();
-            let native = TauriNative::new(app.handle().clone(), launch.update_target());
+            let native = TauriNative::new(
+                app.handle().clone(),
+                launch.update_target(),
+                launch.home.clone(),
+            );
             let mut shell = Shell::new(shell_config(&launch), Arc::new(native))
                 .with_options(launch.options.clone())
                 .with_updater(launch.updater(&version))
@@ -191,6 +195,7 @@ pub(crate) fn open_extra<R: Runtime>(app: &AppHandle<R>, fragment: &str) -> taur
     .inner_size(900.0, 700.0)
     .on_navigation(|url| navigation::allow_navigation(url) || navigation::is_panel(url))
     .on_new_window(|url, _| new_window(&url))
+    .on_permission_request(|_, kind| permission(kind))
     .initialization_script_for_all_frames(ANNOTATE_AGENT)
     .build()?;
     Ok(())
@@ -202,10 +207,24 @@ fn open_main<R: Runtime>(app: &AppHandle<R>, shell: &Arc<Shell>) -> tauri::Resul
         .inner_size(1100.0, 760.0)
         .on_navigation(|url| navigation::allow_navigation(url) || navigation::is_panel(url))
         .on_new_window(|url, _| new_window(&url))
+        .on_permission_request(|_, kind| permission(kind))
         .initialization_script_for_all_frames(ANNOTATE_AGENT)
         .build()?;
     crate::tray::watch_main(&window, Arc::clone(shell));
     Ok(())
+}
+
+/// What the webview may use (spec: voice-mode, Desktop voice controls):
+/// the microphone, for dictation, voice conversations and the wake ear
+/// (the OS still asks the user once). Cross-origin frames (plugin panels,
+/// the preview) are refused by the page's permissions policy before this
+/// is asked; everything else keeps the webview's default.
+pub(crate) fn permission(kind: PermissionKind) -> PermissionResponse {
+    if kind == PermissionKind::Microphone {
+        PermissionResponse::Allow
+    } else {
+        PermissionResponse::Default
+    }
 }
 
 /// The preview's annotate agent (spec: desktop-app, Annotate mode in the

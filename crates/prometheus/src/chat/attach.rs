@@ -221,6 +221,8 @@ pub async fn prepare(
             media_type: image.data.mime.clone(),
             name: image.name.clone(),
             description,
+            pixels: image.data.dimensions().ok(),
+            bytes: u64::try_from(image.data.bytes.len()).ok(),
         });
     }
     Ok(refs)

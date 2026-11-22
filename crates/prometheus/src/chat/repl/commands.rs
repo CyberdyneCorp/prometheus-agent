@@ -120,6 +120,9 @@ impl Repl {
                 return Flow::Exit;
             }
             "handoff" => return self.handoff(args).await,
+            "new" if self.in_bot_chat() => {
+                return Box::pin(self.session_reply("compress", "")).await;
+            }
             "new" => self.new_session(None, None).await,
             "clear" => {
                 self.input.print("\x1b[2J\x1b[H");
@@ -127,12 +130,24 @@ impl Repl {
             }
             "stop" if args.trim() == "all" => Ok(self.stop_all()),
             "stop" => Ok(pmt_i18n::t!(self.strings(), "cli.nothing_running")),
-            "fork" => self.fork(args).await,
+            "fork" => Box::pin(self.fork(args)).await,
             "resume" => self.resume(args).await,
             "prompt" => return self.compose(args).await,
             "snapshot" => self.snapshot(args).await,
             "voice" => {
                 self.voice_command(args).await;
+                return Flow::Continue;
+            }
+            "wake" => {
+                self.wake_command(args).await;
+                return Flow::Continue;
+            }
+            "pet" => {
+                self.pet_command(args);
+                return Flow::Continue;
+            }
+            "hatch" => {
+                self.hatch_command(args, self.live().id);
                 return Flow::Continue;
             }
             "retry" | "learn" | "tools" | "model" | "moa" | "plan" => {
@@ -178,6 +193,17 @@ impl Repl {
 
     /// A shared command that may send a message or change the session's
     /// tools or model (it runs with the session in place).
+    /// The session is a canonical Bot Chat: `/new` compresses it (spec:
+    /// bot-mode, Canonical Bot Chat).
+    fn in_bot_chat(&self) -> bool {
+        self.live.as_ref().is_some_and(|live| {
+            self.factory
+                .store
+                .session(live.id)
+                .is_ok_and(|row| row.bot_chat)
+        })
+    }
+
     async fn session_reply(&mut self, name: &str, args: &str) -> Flow {
         let Some(live) = self.live.take() else {
             return Flow::Continue;
@@ -207,6 +233,13 @@ impl Repl {
     /// also run while a turn works (`immediate` busy policy) or need only
     /// shared access to the session.
     pub(super) async fn immediate(&mut self, name: &str, args: &str, live: &Live) {
+        // The pet commands show their own outcome; during a turn they run
+        // as they do between turns (`/hatch`'s answers included).
+        match name {
+            "pet" => return self.pet_command(args),
+            "hatch" => return self.hatch_command(args, live.id),
+            _ => {}
+        }
         let result = match name {
             "queue" => super::queue::parse(args)
                 .and_then(|action| super::queue::apply(&self.strings(), &mut self.queue, action)),

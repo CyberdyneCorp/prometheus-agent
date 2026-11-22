@@ -319,12 +319,12 @@ impl<'a> Turn<'a> {
             Some(steer) => format!("{}\n\n{}", steer.text, input.text),
             None => input.text,
         };
-        let mut row = transcript::user_row(
-            &text,
-            input.prefix.as_deref(),
-            &input.additions,
-            &input.images,
-        );
+        let mut additions = input.additions;
+        if let Some(notes) = &setup.turn_notes {
+            additions.extend(notes.before_turn(&setup.session.to_string(), &text));
+        }
+        let mut row =
+            transcript::user_row(&text, input.prefix.as_deref(), &additions, &input.images);
         let author = input.author.clone();
         for (key, value) in [
             ("author", input.author),
@@ -556,11 +556,13 @@ impl<'a> Turn<'a> {
             rows.retain(|r| keep.contains(&r.id) || Some(r.id) == current);
         }
         let vision = &self.config.vision;
+        let retired = super::screenshots::retired(&setup.store, setup.session, &rows);
         let replay = super::replay::Replay::of(
             &rows,
             vision.replay_recent_images,
             self.user_row,
             vision.embed_target_bytes,
+            retired,
         );
         let mut cache =
             CacheControl::for_session(&self.config.prompt_cache, &setup.session.to_string());

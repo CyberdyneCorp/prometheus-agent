@@ -21,8 +21,12 @@ create-missing = false
 # same methods and errors in prose). The generated configuration key table
 # is left out for the same reason (`prometheus config explain <key>` and the
 # guides describe every key). The Hermes parity table is a project
-# page, not user documentation, and stays out of the index too.
+# page, not user documentation, and stays out of the index too. The
+# generated CLI reference, the largest page by far and growing with every
+# command, is left out as well: `prometheus <command> --help` prints the same
+# text, and the guides quote every command they explain.
 [output.html.search.chapter]
+"reference/cli.md" = { enable = false }
 "reference/rpc.md" = { enable = false }
 "reference/error-codes.md" = { enable = false }
 "reference/configuration.md" = { enable = false }

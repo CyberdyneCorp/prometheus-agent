@@ -41,6 +41,10 @@ impl Repl {
             }
         };
         input.additions.append(&mut self.shell_context);
+        // A thank-you plays the heart; the message goes as typed.
+        if let Some(pet) = &self.pet {
+            pet.sent(&input.text);
+        }
         self.run_input(input).await;
     }
 
@@ -80,11 +84,13 @@ impl Repl {
             options.deltas = Arc::new(super::voice::Spoken(Arc::clone(mouth)));
         }
         let interrupt = options.interrupt.clone();
+        let voice = self.voice_turn(&live, &interrupt).await;
         let prompt = self.prompt();
         self.input.request(&prompt);
         self.input.set_busy(true);
         self.running = true;
         let started = std::time::Instant::now();
+        self.pet_turn_started(None);
         let result = {
             // Boxed: the turn's state machine is large.
             let turn = Box::pin(async {
@@ -105,16 +111,25 @@ impl Repl {
         };
         self.input.set_busy(false);
         self.running = false;
+        self.pet_turn_ended(match &result {
+            Ok(done) => done.error.is_some(),
+            Err(_) => true,
+        });
         let calls = self.end_progress();
         let outcome = super::automation::Outcome::of(origin.as_deref(), &result);
         self.after_turn(&live, result, started.elapsed(), calls)
             .await;
         self.automation_after(&live, outcome).await;
+        self.achievements_after_turn();
         if let Some(plan) = live.tools.end_plan() {
             self.notice(&crate::chat::commands::planning::finished(
                 &self.strings(),
                 &plan,
             ));
+        }
+        if let Some((turn, watcher)) = voice {
+            watcher.abort();
+            turn.end(&live);
         }
         if let Some(back) = live.model.end_turn() {
             let route = format!(
@@ -130,6 +145,42 @@ impl Repl {
         }
         self.spacer();
         self.live = Some(live);
+    }
+
+    /// A voice turn about to run: its route and reasoning (spec:
+    /// voice-mode, Voice turn model and reasoning), and a watcher that
+    /// interrupts it when the user speaks over the reply.
+    async fn voice_turn(
+        &mut self,
+        live: &Live,
+        interrupt: &Interrupt,
+    ) -> Option<(
+        crate::chat::session::voice_route::VoiceTurn,
+        tokio::task::JoinHandle<()>,
+    )> {
+        let cut = self.voice_cut.clone()?;
+        let turn = match crate::chat::session::voice_route::begin(
+            &self.factory.models,
+            &self.factory.store,
+            live,
+        )
+        .await
+        {
+            Ok(turn) => turn,
+            Err(err) => {
+                self.error(&err);
+                return None;
+            }
+        };
+        if let Some(notice) = &turn.notice {
+            self.notice(notice);
+        }
+        let interrupt = interrupt.clone();
+        let watcher = pmt_core::spawn::spawn(async move {
+            cut.cancelled().await;
+            interrupt.stop(Issuer::User);
+        });
+        Some((turn, watcher))
     }
 
     /// Awaits `turn` while serving input and prompts.
@@ -165,7 +216,10 @@ impl Repl {
                     self.ask(Pending::Clarify { prompt, answers: Vec::new() });
                 }
                 Some(text) = self.to_post.recv() => self.notice(&text),
-                Some(progress) = recv(&mut self.progress) => self.on_progress(progress),
+                Some(progress) = recv(&mut self.progress) => {
+                    self.pet_progress(&progress);
+                    self.on_progress(progress);
+                }
                 Some(ask) = self.memory.recv() => {
                     self.say(Role::Notice, &ask.preview);
                     self.ask(Pending::Memory(ask.reply));
@@ -182,6 +236,7 @@ impl Repl {
                     self.ask(Pending::Secret(ask.reply));
                 }
             }
+            self.pet_sync_waiting();
         }
     }
 
@@ -229,6 +284,10 @@ impl Repl {
             Event::Line(text) => {
                 if let Some(pending) = self.pending.take() {
                     self.answer_now(pending, &text);
+                } else if self.hatch.is_some() {
+                    // `/hatch` started during this turn asks its questions
+                    // now, as it does between turns.
+                    self.hatch_answer(&text).await;
                 } else if text.trim_start().starts_with('!') {
                     self.notice(self.strings().get("cli.shell_busy"));
                 } else if text.trim_start().starts_with('/') {

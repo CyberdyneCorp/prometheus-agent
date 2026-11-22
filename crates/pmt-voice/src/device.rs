@@ -20,6 +20,21 @@ pub trait Microphone: Send + Sync {
     fn devices(&self) -> BoxFuture<'_, Vec<String>>;
     /// Starts recording from the first device.
     fn open(&self) -> BoxFuture<'_, Result<Box<dyn Capture>, String>>;
+    /// Starts the capture that listens while a reply generates and plays
+    /// (barge-in); the same device as [`Microphone::open`].
+    fn monitor(&self) -> BoxFuture<'_, Result<Box<dyn Capture>, String>> {
+        self.open()
+    }
+    /// Starts recording from device `index` of [`Microphone::devices`]
+    /// (`wake.input_device`).
+    fn open_at(&self, index: usize) -> BoxFuture<'_, Result<Box<dyn Capture>, String>> {
+        let _ = index;
+        self.open()
+    }
+    /// The audio backend recording goes through, for diagnostics.
+    fn host_api(&self) -> String {
+        "unknown".to_owned()
+    }
 }
 
 /// One running recording; dropping it stops the device.

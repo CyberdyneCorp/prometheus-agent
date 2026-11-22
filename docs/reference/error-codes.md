@@ -95,6 +95,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `egress.proxy_start` | `unavailable` | 69 | The egress proxy did not start: its listener did not bind within 5 seconds (or the proxy exited before serving), the credential source is missing mapped secrets, or a proxy of the profile is already running. |
 | `screen.human_has_control` | `conflict` | 75 | A person took the profile's bot screen over (`screen.takeover`): the browser and `computer_use` tools wait until it is handed back (`screen.handback`), the lease expires unused, or `prometheus computer-use screen stop --force` clears it. A call that started before the takeover has its result voided. |
 | `screen.unavailable` | `unavailable` | 69 | The bot screen cannot start: too little free memory (`bot_desktop.min_free_memory_bytes`), a terminal backend that cannot host a display (`bot_desktop.placement`), a host that is not Linux, or Xvnc / Xfce not installed (`prometheus computer-use screen install`). |
+| `computer_use.unavailable` | `unavailable` | 69 | The computer-use driver cannot be used: `cua-driver` is not installed (`prometheus computer-use install`), its version is outside the supported contract, it did not start, or a platform prerequisite is missing (`prometheus computer-use doctor`). |
+| `computer_use.identity` | `config` | 78 | A private computer-use runtime (bounded, or unrestricted under `/yolo`) is launched on macOS only through a `CuaDriver.app` bundle whose code signature has the official identifier and team; set `computer_use.allow_unsigned_driver = true` only for a local driver build. |
+| `computer_use.manifest` | `config` | 78 | `computer_use.permission_mode = "bounded"` needs a readable `computer_use.capability_manifest`; the session refuses to start rather than run the driver unbounded. |
 | `profile.distribution_invalid` | `invalid_input` | 65 | A profile distribution has no valid `distribution.toml` (name, version, prometheus_requires, owned, secrets_required) or an unreadable `mcp.toml` / `cron.toml`. |
 | `profile.distribution_incompatible` | `config` | 78 | The distribution's `prometheus_requires` range does not include this Prometheus version; install a compatible version of the distribution or of Prometheus. |
 | `profile.distribution_fetch` | `unavailable` | 69 | The distribution's git repository could not be cloned (network, URL or credentials). |
@@ -494,6 +497,12 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `kanban.invalid_archive` | `invalid_input` | 65 | The file is not a board archive written by `prometheus kanban boards export`, or its format version is newer than this build reads. |
 | `peer.invalid_name` | `usage` | 2 | A peer name must match `^[a-z][a-z0-9-]{0,31}$`: 1-32 characters, lowercase letters, digits or `-`, starting with a letter. |
 | `peer.not_found` | `not_found` | 66 | No `[peers.<name>]` entry has this name, or the peer serves no such agent; `prometheus gateway peer list` shows the registered peers. |
+| `room.not_found` | `not_found` | 66 | No group chat (room) of this home has this id; `prometheus rpc call groups.list` lists them. |
+| `room.name_taken` | `conflict` | 75 | Room names are unique in a home; pick another name or rename the other room. |
+| `room.not_authority` | `conflict` | 75 | Only the room authority writes the room log; send to the authority named in the message, or promote this gateway after fencing the old one. |
+| `room.confirmation_required` | `usage` | 2 | `groups.promote` changes which gateway owns the room log; pass `confirm: true` once the old authority is fenced (stopped or demoted). |
+| `room.replica_incomplete` | `conflict` | 75 | This gateway's copy of the room log is behind the authority's (`last_seq < latest_seq`); run `groups.replicate` first, or pass `force_incomplete: true` to promote it anyway. |
+| `room.member_refused` | `permission_denied` | 77 | The member's gateway refused the room authority: it has not issued a room grant (`groups.grant`), or the grant was revoked. |
 | `proxy.not_logged_in` | `auth` | 78 | The subscription proxy forwards with the profile's own sign-in of the provider, and there is none (or it needs attention); sign in with `prometheus auth add <provider>`. |
 | `proxy.lan_refused` | `permission_denied` | 77 | `prometheus gateway proxy start --host` names a non-loopback address without `--allow-lan`; with it, LAN clients must present the `PMT_PROXY_CLIENT_KEY` bearer. |
 | `peer.unreachable` | `unavailable` | 69 | The peer's API server did not answer: check that its daemon runs with `api_server.enabled`, that `daemon.toml [api_server] listen` is reachable from this machine and that the URL in `[peers.<name>]` is right. |
@@ -523,3 +532,9 @@ Every error has exactly one kind; the kind fixes the exit code.
 | `eval.bench_failed` | `unavailable` | 69 | A benchmark adapter (`bench:<name>`) could not be started, answered with an error or broke the adapter protocol; the message names the method. |
 | `eval.io` | `io` | 74 | A file of an eval suite or run (`<profile>/evals/`) or a trajectory dataset could not be read or written. |
 | `session.read_only` | `permission_denied` | 77 | The session is read-only: an imported Hermes A2A conversation whose peer binding cannot be proven is kept for reading (`prometheus sessions show`) but never attached to a live A2A conversation; `prometheus doctor` lists them. |
+| `pet.not_found` | `not_found` | 66 | No installed pet (`<profile>/pets/<slug>/`) or gallery pet has that slug; `prometheus pets list` shows the gallery and `prometheus pets list --installed` the installed ones. |
+| `pet.invalid_atlas` | `invalid_input` | 65 | A pet atlas is not a PNG or WebP image of at most 8 MiB measuring 1536x1872 pixels (8 columns by 9 rows of 192x208 cells); nothing was installed. |
+| `pet.exists` | `conflict` | 75 | A pet with that slug is installed already; `--force` replaces it. |
+| `pet.gallery` | `unavailable` | 69 | The pet gallery (`pets.gallery_url`) or a pet's atlas could not be downloaded (network failure, an HTTP error, a non-HTTPS URL or an unreadable manifest). |
+| `pet.no_image_backend` | `config` | 78 | Pet generation needs an image backend that takes reference images (`pets.image_provider`, else the configured image generation provider); configure one with `prometheus tools`. Nothing was spent. |
+| `pet.generation_failed` | `provider` | 69 | The image backend failed while generating a pet's drafts or animation rows; the message names the step. Nothing was installed. |

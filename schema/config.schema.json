@@ -1031,6 +1031,17 @@
             "null"
           ]
         },
+        "reasoning_effort": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasoningLevel"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Reasoning effort of this task's calls; read by `voice_chat` (unset:\n`none`, or the model's lowest accepted effort)."
+        },
         "timeout_secs": {
           "description": "Timeout; unset uses the task default (120 s for `vision` and\n`compression`, 30 s for `approval` and `title`, 600 s for `curator`\nand `evolution`).",
           "format": "uint64",
@@ -1204,16 +1215,42 @@
       "additionalProperties": false,
       "description": "The `[bot_mode]` section.",
       "properties": {
+        "enabled": {
+          "default": true,
+          "description": "The profile appears as a bot (rosters, bot messages, the bot\nprotocol); `false` leaves its profile, sessions, routines and room\nhistory untouched but refuses incoming bot messages with\n`missing_config`.",
+          "type": "boolean"
+        },
         "envelope_ttl_secs": {
           "default": 900,
-          "description": "Envelopes still queued (never drained by a courier) after this many\nseconds fail with `queued_expired` (`0`: never).",
+          "description": "Bot messages still queued after this many seconds fail with\n`queued_expired` when drained (`0`: never).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
+        "max_hops": {
+          "default": 4,
+          "description": "Consecutive bot-originated hops after which a chain of bot messages\nis cut with `hop_limit`.",
+          "format": "uint32",
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "protocol": {
+          "default": true,
+          "description": "Canonical Bot Chats get the bot-messaging protocol section and the\n`message_agent` tool.",
+          "type": "boolean"
+        },
         "relay_turn_timeout_secs": {
           "default": 600,
           "description": "Seconds a relayed bot message's turn may take on the target before\nit fails.",
+          "format": "uint64",
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "turn_wait_secs": {
+          "default": 120,
+          "description": "Seconds a bot message waits for a busy target before it fails with\n`target_busy`.",
           "format": "uint64",
           "maximum": 86400,
           "minimum": 1,
@@ -1504,6 +1541,26 @@
       "description": "A capability string of the closed vocabulary (`pmt_core::capability`);\nvalidation refuses any other string with `unknown capability '<s>'`.",
       "type": "string",
       "x-capability": true
+    },
+    "CaptureMode": {
+      "description": "What a capture returns.",
+      "oneOf": [
+        {
+          "const": "som",
+          "description": "A screenshot with numbered element overlays plus the elements.",
+          "type": "string"
+        },
+        {
+          "const": "vision",
+          "description": "Pixels only.",
+          "type": "string"
+        },
+        {
+          "const": "ax",
+          "description": "Accessibility elements only, no image.",
+          "type": "string"
+        }
+      ]
     },
     "ChatPolicy": {
       "additionalProperties": false,
@@ -2070,6 +2127,99 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "ComputerUseConfig": {
+      "additionalProperties": false,
+      "description": "The `[computer_use]` section.",
+      "properties": {
+        "allow_unsigned_driver": {
+          "default": false,
+          "description": "Launch private runtimes through a driver bundle that is not signed\nby the official identity (macOS; local driver builds only).",
+          "type": "boolean"
+        },
+        "autostart": {
+          "default": false,
+          "description": "Register a per-logon driver task on Windows so a service session\n(Session 0) can drive the interactive desktop.",
+          "type": "boolean"
+        },
+        "ax_max_elements": {
+          "default": 200,
+          "description": "Bound on the driver's accessibility walk per capture (`0`: the\ndriver's default). At most 100 elements reach the model; the rest\nare written to a session cache file named in the result.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "backend": {
+          "default": "cua",
+          "description": "The computer-use backend: `cua` (the pinned `cua-driver`) or a\nbackend an installed plugin registers.",
+          "type": "string"
+        },
+        "capability_manifest": {
+          "default": null,
+          "description": "The reviewed capability manifest a `bounded` runtime is launched\nwith (required for `bounded`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capture_after_mode": {
+          "$ref": "#/$defs/CaptureMode",
+          "default": "som",
+          "description": "The capture mode of `capture_after`."
+        },
+        "driver_path": {
+          "default": null,
+          "description": "A driver binary to use instead of the managed `cua-driver` runtime\n(never repaired or replaced).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver_telemetry": {
+          "default": false,
+          "description": "Leave the driver's own telemetry on (it is disabled in the\ndriver's environment otherwise).",
+          "type": "boolean"
+        },
+        "max_image_dimension": {
+          "default": 1456,
+          "description": "The longest image edge of a capture, in pixels (`0`: no cap).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "native_wayland": {
+          "default": false,
+          "description": "Use native Wayland input on Linux instead of `XWayland`.",
+          "type": "boolean"
+        },
+        "overlay": {
+          "$ref": "#/$defs/Overlay",
+          "default": "auto",
+          "description": "The driver's agent cursor overlay: `auto` (off on macOS, headless\nor WSL Linux, containers and Linux X11), `on` or `off`."
+        },
+        "permission_mode": {
+          "$ref": "#/$defs/ComputerUsePermission",
+          "default": "standard",
+          "description": "The driver runtime's permission mode: `standard` (the driver asks\nthrough Prometheus' approvals) or `bounded` (a reviewed capability\nmanifest is the boundary). `unrestricted` is never a config value:\nonly `/yolo` launches it, for that session."
+        }
+      },
+      "type": "object",
+      "x-apply": "next_session"
+    },
+    "ComputerUsePermission": {
+      "description": "The permission modes config may choose.",
+      "oneOf": [
+        {
+          "const": "standard",
+          "description": "The driver's actions pass Prometheus' approval gate.",
+          "type": "string"
+        },
+        {
+          "const": "bounded",
+          "description": "A reviewed `computer_use.capability_manifest` bounds the runtime.",
+          "type": "string"
+        }
+      ]
     },
     "ConnectorsConfig": {
       "additionalProperties": false,
@@ -3000,6 +3150,29 @@
           "type": "string"
         }
       ]
+    },
+    "DiscussionConfig": {
+      "additionalProperties": false,
+      "description": "`[hosted_rooms.discussion]`.",
+      "properties": {
+        "max_messages": {
+          "default": 10,
+          "description": "Member messages one user message produces at most.",
+          "format": "uint32",
+          "maximum": 100,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_rounds": {
+          "default": 3,
+          "description": "Serial rounds one user message drives at most.",
+          "format": "uint32",
+          "maximum": 20,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
     },
     "DisplayConfig": {
       "additionalProperties": false,
@@ -4872,6 +5045,22 @@
       },
       "type": "object",
       "x-apply": "next_session"
+    },
+    "HostedRoomsConfig": {
+      "additionalProperties": false,
+      "description": "The `[hosted_rooms]` section: group chats (rooms) this home drives.",
+      "properties": {
+        "discussion": {
+          "$ref": "#/$defs/DiscussionConfig",
+          "default": {
+            "max_messages": 10,
+            "max_rounds": 3
+          },
+          "description": "The bounds of one user message's discussion."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "HudConfig": {
       "additionalProperties": false,
@@ -7313,6 +7502,18 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "OpenWakeWordConfig": {
+      "additionalProperties": false,
+      "description": "`[wake.openwakeword]`.",
+      "properties": {
+        "model": {
+          "default": "hey_jarvis",
+          "description": "A built-in model name or an absolute `.onnx`/`.tflite` path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "OpenaiRuntime": {
       "description": "`model.openai_runtime`.",
       "oneOf": [
@@ -7479,6 +7680,26 @@
       },
       "type": "object"
     },
+    "Overlay": {
+      "description": "The agent cursor overlay setting.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Decided by the platform.",
+          "type": "string"
+        },
+        {
+          "const": "on",
+          "description": "Always shown.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never shown.",
+          "type": "string"
+        }
+      ]
+    },
     "PeerGateway": {
       "additionalProperties": false,
       "description": "One `[peers.<name>]` entry: another gateway's API server.",
@@ -7504,6 +7725,95 @@
         "key_secret"
       ],
       "type": "object"
+    },
+    "PetRenderMode": {
+      "description": "`pets.render_mode`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The richest protocol the terminal is known to speak, else\nhalf-blocks.",
+          "type": "string"
+        },
+        {
+          "const": "kitty",
+          "description": "The kitty graphics protocol (kitty, `Ghostty`, `WezTerm`).",
+          "type": "string"
+        },
+        {
+          "const": "iterm",
+          "description": "iTerm2 inline images.",
+          "type": "string"
+        },
+        {
+          "const": "sixel",
+          "description": "DEC sixel graphics.",
+          "type": "string"
+        },
+        {
+          "const": "unicode",
+          "description": "Truecolor Unicode half-blocks.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Never draw the pet in a terminal.",
+          "type": "string"
+        }
+      ]
+    },
+    "PetsConfig": {
+      "additionalProperties": false,
+      "description": "The `[pets]` section.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Show the pet on the line interface, the TUI and the desktop app.",
+          "type": "boolean"
+        },
+        "gallery_url": {
+          "default": "https://petdex.dev/api/manifest",
+          "description": "The gallery `prometheus pets list` and `install` read.",
+          "type": "string"
+        },
+        "image_provider": {
+          "default": "",
+          "description": "The image backend `/hatch` uses (empty: the first configured one\nthat takes reference images).",
+          "type": "string"
+        },
+        "render_mode": {
+          "$ref": "#/$defs/PetRenderMode",
+          "default": "auto",
+          "description": "How terminals draw it (`auto` picks the richest graphics protocol\nthe terminal speaks)."
+        },
+        "roam": {
+          "default": false,
+          "description": "On the desktop, the pet wanders while the agent is idle.",
+          "type": "boolean"
+        },
+        "scale": {
+          "default": 0.33,
+          "description": "The size, as a fraction of the native 192x208 pixel cell, on every\nsurface.",
+          "format": "double",
+          "maximum": 3.0,
+          "minimum": 0.1,
+          "type": "number"
+        },
+        "slug": {
+          "default": "",
+          "description": "The installed pet shown (empty: the first installed one).",
+          "type": "string"
+        },
+        "unicode_cols": {
+          "default": 0,
+          "description": "Terminal columns of a half-block pet (0: derived from `scale`).",
+          "format": "uint32",
+          "maximum": 200,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
     },
     "PhraseMode": {
       "description": "How a status phrase file combines with the built-in phrases.",
@@ -8272,6 +8582,18 @@
           "type": "string"
         }
       ]
+    },
+    "PorcupineConfig": {
+      "additionalProperties": false,
+      "description": "`[wake.porcupine]`.",
+      "properties": {
+        "keyword": {
+          "default": "jarvis",
+          "description": "A built-in keyword or an absolute `.ppn` path.",
+          "type": "string"
+        }
+      },
+      "type": "object"
     },
     "PreferCredential": {
       "description": "Credential preference.",
@@ -9096,6 +9418,40 @@
       },
       "type": "object"
     },
+    "RealtimeVoiceConfig": {
+      "additionalProperties": false,
+      "description": "`[voice.realtime]`.",
+      "properties": {
+        "base_url": {
+          "default": "https://api.openai.com/v1",
+          "description": "The provider's API base URL (the daemon creates the call there with\nthe profile's key).",
+          "type": "string"
+        },
+        "instructions": {
+          "description": "Extra instructions for the voice layer (the agent keeps its own\nsystem prompt).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "default": "gpt-realtime",
+          "description": "The realtime model.",
+          "type": "string"
+        },
+        "provider": {
+          "default": "openai",
+          "description": "The realtime provider (`openai`; its key stays on the daemon).",
+          "type": "string"
+        },
+        "voice": {
+          "default": "marin",
+          "description": "The voice it speaks with.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "ReasoningLevel": {
       "description": "Reasoning effort levels, in increasing order.",
       "oneOf": [
@@ -9888,6 +10244,20 @@
       "required": [
         "command"
       ],
+      "type": "object"
+    },
+    "SherpaConfig": {
+      "additionalProperties": false,
+      "description": "`[wake.sherpa]`.",
+      "properties": {
+        "model_dir": {
+          "description": "A keyword-spotting model directory (unset: the default model,\ndownloaded once into the profile's models directory).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "ShutdownConfig": {
@@ -11930,6 +12300,21 @@
       "type": "object",
       "x-apply": "next_session"
     },
+    "VoiceChatMode": {
+      "description": "`voice.chat_mode`.",
+      "oneOf": [
+        {
+          "const": "chained",
+          "description": "Record, transcribe, run the turn, speak the reply.",
+          "type": "string"
+        },
+        {
+          "const": "realtime",
+          "description": "A full-duplex realtime voice model (desktop only).",
+          "type": "string"
+        }
+      ]
+    },
     "VoiceConfig": {
       "additionalProperties": false,
       "description": "`[gateway.voice]`.",
@@ -11961,14 +12346,42 @@
           "description": "Turn spoken replies on whenever voice mode starts.",
           "type": "boolean"
         },
+        "barge_in": {
+          "default": true,
+          "description": "Keep the microphone live while a reply generates and plays:\nspeaking interrupts it.",
+          "type": "boolean"
+        },
+        "barge_in_threshold_multiplier": {
+          "default": 3.0,
+          "description": "How far above the quiet room's level (calibrated at turn start)\nspeech must rise to interrupt a reply.",
+          "format": "double",
+          "maximum": 10.0,
+          "minimum": 1.0,
+          "type": "number"
+        },
         "beep_enabled": {
           "default": true,
           "description": "Play a start beep (880 Hz) and an end double beep (660 Hz) around\neach recording.",
           "type": "boolean"
         },
+        "chat_mode": {
+          "$ref": "#/$defs/VoiceChatMode",
+          "default": "chained",
+          "description": "`chained` (record, transcribe, turn, speak) or `realtime` (one\nfull-duplex realtime voice session on the desktop that hands work\nto the agent)."
+        },
+        "client_direct": {
+          "default": true,
+          "description": "A desktop attached to a remote daemon talks to cloud speech\nproviders itself, so audio never crosses the daemon link.",
+          "type": "boolean"
+        },
         "hallucination_filter": {
           "default": true,
           "description": "Drop transcripts that are known silence hallucinations (\"thanks\nfor watching\", one phrase repeated).",
+          "type": "boolean"
+        },
+        "keep_recordings": {
+          "default": false,
+          "description": "Keep recordings under `cache/voice/` after transcription (they\nthen expire after `gateway.media.cache_max_age_secs`); off deletes\neach as soon as it is transcribed.",
           "type": "boolean"
         },
         "max_recording_secs": {
@@ -11985,6 +12398,16 @@
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
+        },
+        "realtime": {
+          "$ref": "#/$defs/RealtimeVoiceConfig",
+          "default": {
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-realtime",
+            "provider": "openai",
+            "voice": "marin"
+          },
+          "description": "The realtime voice session of `chat_mode = \"realtime\"`."
         },
         "record_key": {
           "$ref": "#/$defs/KeyChord",
@@ -12026,6 +12449,11 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "stt_streaming": {
+          "default": false,
+          "description": "Transcribe while the user speaks when the STT provider streams\n(partial text shown live); a failed stream falls back to\ntranscribing the whole recording.",
+          "type": "boolean"
         }
       },
       "type": "object",
@@ -12077,6 +12505,161 @@
         {
           "const": "always",
           "description": "Always.",
+          "type": "string"
+        }
+      ]
+    },
+    "WakeCapture": {
+      "description": "`wake.capture`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Client capture when the desktop arms with `client_capture`, else\nlocal.",
+          "type": "string"
+        },
+        {
+          "const": "local",
+          "description": "The microphone of the host running the engine.",
+          "type": "string"
+        },
+        {
+          "const": "client",
+          "description": "PCM frames an attached client sends (`wake.feed`).",
+          "type": "string"
+        }
+      ]
+    },
+    "WakeConfig": {
+      "additionalProperties": false,
+      "description": "The `[wake]` section.",
+      "properties": {
+        "capture": {
+          "$ref": "#/$defs/WakeCapture",
+          "default": "auto",
+          "description": "Where the wake audio is captured."
+        },
+        "confirmation_frames": {
+          "default": 3,
+          "description": "Consecutive over-threshold frames before `openwakeword` fires.",
+          "format": "uint32",
+          "maximum": 10,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "enabled": {
+          "default": false,
+          "description": "Listen for the wake phrase (`/wake on|off` writes it).",
+          "type": "boolean"
+        },
+        "engine": {
+          "$ref": "#/$defs/WakeEngine",
+          "default": "auto",
+          "description": "The detection engine; `auto` takes the first one this host\nsupports (`openwakeword`, `sherpa`, `porcupine`)."
+        },
+        "input_device": {
+          "description": "The input device: an index or an unambiguous name substring\n(unset: the default device).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openwakeword": {
+          "$ref": "#/$defs/OpenWakeWordConfig",
+          "default": {
+            "model": "hey_jarvis"
+          },
+          "description": "`openwakeword` settings."
+        },
+        "phrase": {
+          "default": "hey prometheus",
+          "description": "The wake phrase: what `sherpa` listens for, a label for the\nmodel-keyed engines.",
+          "type": "string"
+        },
+        "porcupine": {
+          "$ref": "#/$defs/PorcupineConfig",
+          "default": {
+            "keyword": "jarvis"
+          },
+          "description": "`porcupine` settings (access key: secret `PORCUPINE_ACCESS_KEY`)."
+        },
+        "profile_routing": {
+          "default": true,
+          "description": "With `sherpa`, also listen for the phrases of the other profiles\nwith wake enabled.",
+          "type": "boolean"
+        },
+        "sensitivity": {
+          "default": 0.6,
+          "description": "Stricter when higher, for every engine.",
+          "format": "double",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        "sherpa": {
+          "$ref": "#/$defs/SherpaConfig",
+          "default": {},
+          "description": "`sherpa` settings."
+        },
+        "start_new_session": {
+          "default": true,
+          "description": "A wake opens a new session; off continues the current one.",
+          "type": "boolean"
+        },
+        "surface": {
+          "$ref": "#/$defs/WakeSurface",
+          "default": "auto",
+          "description": "Which local surface owns the microphone (`auto`: the first to arm)."
+        }
+      },
+      "type": "object",
+      "x-apply": "live"
+    },
+    "WakeEngine": {
+      "description": "`wake.engine`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The first supported engine, in the order below.",
+          "type": "string"
+        },
+        {
+          "const": "openwakeword",
+          "description": "openWakeWord models (free, on-device).",
+          "type": "string"
+        },
+        {
+          "const": "sherpa",
+          "description": "sherpa-onnx keyword spotting (any typed phrase).",
+          "type": "string"
+        },
+        {
+          "const": "porcupine",
+          "description": "Picovoice Porcupine (needs an access key).",
+          "type": "string"
+        }
+      ]
+    },
+    "WakeSurface": {
+      "description": "`wake.surface`.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "The first eligible local surface to arm.",
+          "type": "string"
+        },
+        {
+          "const": "cli",
+          "description": "The line interface.",
+          "type": "string"
+        },
+        {
+          "const": "tui",
+          "description": "The terminal UI.",
+          "type": "string"
+        },
+        {
+          "const": "gui",
+          "description": "The desktop app.",
           "type": "string"
         }
       ]
@@ -12887,10 +13470,14 @@
     "bot_mode": {
       "$ref": "#/$defs/BotModeConfig",
       "default": {
+        "enabled": true,
         "envelope_ttl_secs": 900,
-        "relay_turn_timeout_secs": 600
+        "max_hops": 4,
+        "protocol": true,
+        "relay_turn_timeout_secs": 600,
+        "turn_wait_secs": 120
       },
-      "description": "How bot messages travel between bots (the desktop relay's bounds)."
+      "description": "Bot Mode: the profile as a bot, its protocol and how bot messages\ntravel between bots."
     },
     "browser": {
       "$ref": "#/$defs/BrowserConfig",
@@ -12989,6 +13576,24 @@
         "threshold_tokens": 0
       },
       "description": "Context compression."
+    },
+    "computer_use": {
+      "$ref": "#/$defs/ComputerUseConfig",
+      "default": {
+        "allow_unsigned_driver": false,
+        "autostart": false,
+        "ax_max_elements": 200,
+        "backend": "cua",
+        "capability_manifest": null,
+        "capture_after_mode": "som",
+        "driver_path": null,
+        "driver_telemetry": false,
+        "max_image_dimension": 1456,
+        "native_wayland": false,
+        "overlay": "auto",
+        "permission_mode": "standard"
+      },
+      "description": "The desktop driver of the `computer_use` tool."
     },
     "connectors": {
       "$ref": "#/$defs/ConnectorsConfig",
@@ -13345,6 +13950,16 @@
       },
       "description": "Shell hooks and outbound webhooks."
     },
+    "hosted_rooms": {
+      "$ref": "#/$defs/HostedRoomsConfig",
+      "default": {
+        "discussion": {
+          "max_messages": 10,
+          "max_rounds": 3
+        }
+      },
+      "description": "Group chats (rooms) this home drives."
+    },
     "image_gen": {
       "$ref": "#/$defs/ImageGenConfig",
       "default": {
@@ -13563,6 +14178,20 @@
       "description": "Peer gateways reached over their API server, keyed by name.",
       "type": "object",
       "x-apply": "next_session"
+    },
+    "pets": {
+      "$ref": "#/$defs/PetsConfig",
+      "default": {
+        "enabled": false,
+        "gallery_url": "https://petdex.dev/api/manifest",
+        "image_provider": "",
+        "render_mode": "auto",
+        "roam": false,
+        "scale": 0.33,
+        "slug": "",
+        "unicode_cols": 0
+      },
+      "description": "The optional animated mascot of the interactive surfaces."
     },
     "plugins": {
       "$ref": "#/$defs/PluginsConfig",
@@ -14078,10 +14707,21 @@
       "$ref": "#/$defs/VoiceModeConfig",
       "default": {
         "auto_tts": false,
+        "barge_in": true,
+        "barge_in_threshold_multiplier": 3.0,
         "beep_enabled": true,
+        "chat_mode": "chained",
+        "client_direct": true,
         "hallucination_filter": true,
+        "keep_recordings": false,
         "max_recording_secs": 120,
         "no_speech_timeout_secs": 15,
+        "realtime": {
+          "base_url": "https://api.openai.com/v1",
+          "model": "gpt-realtime",
+          "provider": "openai",
+          "voice": "marin"
+        },
         "record_key": "ctrl+b",
         "silence_duration_ms": 3000,
         "silence_threshold": 200,
@@ -14092,9 +14732,32 @@
           "goodbye",
           "cancel",
           "that's all"
-        ]
+        ],
+        "stt_streaming": false
       },
-      "description": "Voice conversations on the CLI, TUI and desktop."
+      "description": "Voice conversations on the CLI, TUI and desktop (boxed: read by the\nvoice surfaces only, kept out of every future that holds a\nconfiguration)."
+    },
+    "wake": {
+      "$ref": "#/$defs/WakeConfig",
+      "default": {
+        "capture": "auto",
+        "confirmation_frames": 3,
+        "enabled": false,
+        "engine": "auto",
+        "openwakeword": {
+          "model": "hey_jarvis"
+        },
+        "phrase": "hey prometheus",
+        "porcupine": {
+          "keyword": "jarvis"
+        },
+        "profile_routing": true,
+        "sensitivity": 0.6,
+        "sherpa": {},
+        "start_new_session": true,
+        "surface": "auto"
+      },
+      "description": "The on-device wake word listener (boxed: rarely read, kept out of\nevery future that holds a configuration)."
     },
     "web": {
       "$ref": "#/$defs/WebConfig",

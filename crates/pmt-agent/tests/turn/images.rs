@@ -36,6 +36,8 @@ async fn an_attached_image_is_sent_as_pixels_and_replayed() {
             media_type: "image/png".into(),
             name: "shot.png".into(),
             description: None,
+            pixels: None,
+            bytes: None,
         }],
         ..TurnInput::text("describe")
     };
@@ -59,6 +61,8 @@ fn attach(profile: &Profile, name: &str) -> ImageRef {
         media_type: "image/png".into(),
         name: name.into(),
         description: None,
+        pixels: None,
+        bytes: None,
     }
 }
 

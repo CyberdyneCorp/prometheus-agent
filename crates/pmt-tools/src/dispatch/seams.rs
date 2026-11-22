@@ -54,13 +54,18 @@ pub enum PreDecision {
 /// tool's own ([`crate::ToolDescriptor::approval`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Escalation {
-    /// The rule key; approvals record it as `plugin_rule:<key>`.
+    /// The rule key; approvals record it as `plugin_rule:<key>`, or as is
+    /// for a [`Escalation::builtin`] rule.
     pub rule_key: String,
     /// Why the rule wants a human to look.
     pub reason: String,
     /// Ask every time, in every approval mode and under YOLO, offering
     /// only a one-time approval (an MCP spend limit).
     pub once_only: bool,
+    /// `rule_key` is a built-in tool's own approval key
+    /// (`computer_use:<action>:<mode>`), recorded without the plugin
+    /// prefix.
+    pub builtin: bool,
 }
 
 impl Escalation {
@@ -72,6 +77,32 @@ impl Escalation {
             rule_key: rule_key.into(),
             reason: reason.into(),
             once_only: false,
+            builtin: false,
+        }
+    }
+
+    /// A built-in tool's rule: `key` is what `session` and `always`
+    /// decisions record, exactly.
+    #[must_use]
+    pub fn builtin(key: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self {
+            builtin: true,
+            ..Self::new(key, reason)
+        }
+    }
+
+    /// What the approval records: `plugin_rule:<key>`, or the key of a
+    /// built-in rule.
+    #[must_use]
+    pub fn approval_key(&self) -> String {
+        if self.builtin {
+            self.rule_key.clone()
+        } else {
+            format!(
+                "{}{}",
+                crate::approval::rules::PLUGIN_RULE_PREFIX,
+                self.rule_key
+            )
         }
     }
 }

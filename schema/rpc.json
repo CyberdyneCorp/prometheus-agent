@@ -1,5 +1,131 @@
 {
   "$defs": {
+    "AchievementBadge": {
+      "additionalProperties": false,
+      "description": "One badge.",
+      "properties": {
+        "category": {
+          "description": "Its group.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Exactly what it counts.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The achievement id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "next_threshold": {
+          "description": "The count it needs.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "next_tier": {
+          "description": "The next tier.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tier": {
+          "description": "The highest tier unlocked (`copper`, `silver`, `gold`, `diamond`,\n`olympian`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unlocked_at": {
+          "description": "When the shown tier unlocked (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "value": {
+          "description": "The current count.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "description",
+        "category",
+        "value"
+      ],
+      "type": "object"
+    },
+    "AchievementUnlocked": {
+      "additionalProperties": false,
+      "description": "`achievement.unlocked` payload.",
+      "properties": {
+        "id": {
+          "description": "The achievement.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "tier": {
+          "description": "The tier reached.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "id",
+        "tier"
+      ],
+      "type": "object"
+    },
+    "Achievements": {
+      "additionalProperties": false,
+      "description": "`achievements.list` result: what is known now; a scan runs in the\nbackground while `scanning`.",
+      "properties": {
+        "badges": {
+          "description": "The badges.",
+          "items": {
+            "$ref": "#/$defs/AchievementBadge"
+          },
+          "type": "array"
+        },
+        "scanned_at": {
+          "description": "When the last scan finished.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scanning": {
+          "description": "A scan runs.",
+          "type": "boolean"
+        },
+        "sessions": {
+          "description": "Sessions analysed so far.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "badges",
+        "sessions",
+        "scanning"
+      ],
+      "type": "object"
+    },
     "Ack": {
       "additionalProperties": false,
       "description": "`{\"ok\": true}`.",
@@ -964,6 +1090,155 @@
       },
       "type": "object"
     },
+    "BotAvatar": {
+      "description": "A bot's avatar.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The default soft-body face, derived from the bot's name unless a\nseed is locked.",
+          "properties": {
+            "kind": {
+              "const": "blob",
+              "type": "string"
+            },
+            "seed": {
+              "description": "A locked seed (the name's own seed otherwise).",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "silhouette": {
+              "description": "One of [`SILHOUETTES`] (derived from the seed otherwise).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "One of 7 shapes in one of 10 colours.",
+          "properties": {
+            "color": {
+              "description": "One of [`COLOURS`].",
+              "type": "string"
+            },
+            "kind": {
+              "const": "geometric",
+              "type": "string"
+            },
+            "shape": {
+              "description": "One of [`SHAPES`].",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "shape",
+            "color"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An uploaded image, stored content-addressed in the profile's blobs.",
+          "properties": {
+            "blob": {
+              "description": "The image's SHA-256 (set by the daemon).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "data": {
+              "description": "Base64 bytes: upload only, never returned (`bot.avatar.get`\nreads the picture).",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "image",
+              "type": "string"
+            },
+            "mime": {
+              "description": "`image/png`, `image/jpeg` or `image/webp`.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "mime"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "An image made by the profile's image-generation backend (update\nonly: it is stored as `image`).",
+          "properties": {
+            "kind": {
+              "const": "generated",
+              "type": "string"
+            },
+            "prompt": {
+              "description": "What to draw.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "prompt"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A pets-gallery companion.",
+          "properties": {
+            "id": {
+              "description": "The companion id.",
+              "type": "string"
+            },
+            "kind": {
+              "const": "pet",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "BotAvatarPicture": {
+      "additionalProperties": false,
+      "description": "`bot.avatar.get` result: the picture of an `image` avatar.",
+      "properties": {
+        "data": {
+          "description": "The image, base64.",
+          "type": "string"
+        },
+        "mime": {
+          "description": "`image/png`, `image/jpeg` or `image/webp`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime",
+        "data"
+      ],
+      "type": "object"
+    },
     "BotChat": {
       "additionalProperties": false,
       "description": "`bot.chat.ensure` result.",
@@ -980,6 +1255,416 @@
       "required": [
         "session_id",
         "created"
+      ],
+      "type": "object"
+    },
+    "BotCreateParams": {
+      "additionalProperties": false,
+      "description": "`bot.create` params.",
+      "properties": {
+        "clone_from": {
+          "default": null,
+          "description": "Clone config, skills, `SOUL.md` and memory from this profile.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "copy_api_keys": {
+          "default": null,
+          "description": "Copy the source's static API keys (never OAuth or single-use\nlogins); default true.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "description": {
+          "default": null,
+          "description": "What it does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "empty": {
+          "default": false,
+          "description": "No bundled skills.",
+          "type": "boolean"
+        },
+        "mcp_servers": {
+          "default": [],
+          "description": "MCP servers to keep enabled.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "model": {
+          "default": null,
+          "description": "Pin this model (`provider/model` or a model name).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "default": "",
+          "description": "The new bot's profile name.",
+          "type": "string"
+        },
+        "on": {
+          "default": null,
+          "description": "A registered peer (or desktop connection) to create the bot on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": "",
+          "description": "The profile asking (the window's): it must be granted.",
+          "type": "string"
+        },
+        "skills": {
+          "default": [],
+          "description": "Skills to enable (the others stay as the profile has them).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "soul": {
+          "default": null,
+          "description": "The bot's `SOUL.md`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "default": null,
+          "description": "Its title.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "toolsets": {
+          "default": [],
+          "description": "`tools.enabled_toolsets`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "BotCreated": {
+      "additionalProperties": false,
+      "description": "`bot.create` / `bot.duplicate` result.",
+      "properties": {
+        "copied_secrets": {
+          "default": [],
+          "description": "The secrets copied from the source.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "device": {
+          "description": "The machine it lives on (`local` or the peer).",
+          "type": "string"
+        },
+        "handle": {
+          "description": "Its roster handle.",
+          "type": "string"
+        },
+        "introduction": {
+          "default": null,
+          "description": "Its introduction (the Bot Chat's first message).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "The new bot's profile.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "Its canonical Bot Chat.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "handle",
+        "session_id",
+        "device"
+      ],
+      "type": "object"
+    },
+    "BotDeleteParams": {
+      "additionalProperties": false,
+      "description": "`bot.delete` params.",
+      "properties": {
+        "confirm": {
+          "default": false,
+          "description": "Must be true.",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "The bot.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "BotDeleted": {
+      "additionalProperties": false,
+      "description": "`bot.delete` result.",
+      "properties": {
+        "profile": {
+          "description": "The deleted profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "BotDone": {
+      "additionalProperties": false,
+      "description": "An empty result.",
+      "type": "object"
+    },
+    "BotDuplicateParams": {
+      "additionalProperties": false,
+      "description": "`bot.duplicate` params.",
+      "properties": {
+        "name": {
+          "description": "The copy's profile name.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The bot to duplicate.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "name"
+      ],
+      "type": "object"
+    },
+    "BotMeta": {
+      "additionalProperties": false,
+      "description": "A bot's metadata.",
+      "properties": {
+        "avatar": {
+          "$ref": "#/$defs/BotAvatar",
+          "default": {
+            "kind": "blob"
+          },
+          "description": "Its avatar."
+        },
+        "description": {
+          "default": null,
+          "description": "What it does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "groups": {
+          "default": [],
+          "description": "The rooms it is a member of (read only).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "hidden": {
+          "default": false,
+          "description": "Left out of the default roster and toasts (still reachable).",
+          "type": "boolean"
+        },
+        "section": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BotSection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its roster section."
+        },
+        "title": {
+          "default": null,
+          "description": "The bot's title (the profile name when unset).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "BotMetaParams": {
+      "additionalProperties": false,
+      "description": "`bot.meta.get` params.",
+      "properties": {
+        "profile": {
+          "description": "The bot.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "BotMetaUpdateParams": {
+      "additionalProperties": false,
+      "description": "`bot.meta.update` params: each key of `changes` (`title`,\n`description`, `avatar`, `hidden`, `section`) replaces that field;\n`null` clears it.",
+      "properties": {
+        "changes": {
+          "additionalProperties": true,
+          "description": "The fields to change.",
+          "type": "object"
+        },
+        "profile": {
+          "description": "The bot.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "changes"
+      ],
+      "type": "object"
+    },
+    "BotRoutine": {
+      "additionalProperties": false,
+      "description": "One routine: a scheduled job of the bot named `[bot:<name>] <routine>`.",
+      "properties": {
+        "job_id": {
+          "description": "The job id (`prometheus -p <bot> cron ...` takes it).",
+          "type": "string"
+        },
+        "last_status": {
+          "default": null,
+          "description": "How the last run ended.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "next_run_at": {
+          "default": null,
+          "description": "The next run (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "routine": {
+          "description": "The routine's name (after the `[bot:<name>]` prefix).",
+          "type": "string"
+        },
+        "schedule": {
+          "description": "The schedule string.",
+          "type": "string"
+        },
+        "state": {
+          "description": "`active`, `paused`, ...",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "routine",
+        "schedule",
+        "state"
+      ],
+      "type": "object"
+    },
+    "BotRoutines": {
+      "additionalProperties": false,
+      "description": "`bot.routines.list` result.",
+      "properties": {
+        "routines": {
+          "description": "The bot's routines.",
+          "items": {
+            "$ref": "#/$defs/BotRoutine"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "routines"
+      ],
+      "type": "object"
+    },
+    "BotSection": {
+      "additionalProperties": false,
+      "description": "A roster section heading, stored on each member.",
+      "properties": {
+        "id": {
+          "description": "Stable id.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Heading.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "BotSectionDeleteParams": {
+      "additionalProperties": false,
+      "description": "`bot.sections.delete` params.",
+      "properties": {
+        "profile": {
+          "description": "The profile asking (the window's).",
+          "type": "string"
+        },
+        "section_id": {
+          "description": "The section.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "section_id"
+      ],
+      "type": "object"
+    },
+    "BotSectionDeleted": {
+      "additionalProperties": false,
+      "description": "`bot.sections.delete` result.",
+      "properties": {
+        "moved": {
+          "description": "The bots moved to unassigned.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "moved"
       ],
       "type": "object"
     },
@@ -1254,6 +1939,72 @@
           "type": "string"
         }
       ]
+    },
+    "ClientSpeech": {
+      "additionalProperties": false,
+      "description": "How a client reaches one speech provider.",
+      "properties": {
+        "api_key": {
+          "description": "The credential (direct only): kept in memory for the voice session\nonly.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_url": {
+          "description": "The API base URL (direct only).",
+          "type": "string"
+        },
+        "extra": {
+          "additionalProperties": true,
+          "description": "Extra request fields (direct only): form fields of a transcription,\nJSON body fields of a speech request.",
+          "type": "object"
+        },
+        "language": {
+          "description": "The spoken language (transcription).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "description": "Its model.",
+          "type": "string"
+        },
+        "path": {
+          "description": "`direct` (the client calls the provider), `relay` (through the\ndaemon: `voice.transcribe`, `voice.speak`) or `none`.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "The provider id.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why the relay path (or none).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "strip_tags": {
+          "description": "Drop `[bracketed]` audio tags from the text before speaking it.",
+          "type": "boolean"
+        },
+        "voice": {
+          "description": "The voice (speech).",
+          "type": "string"
+        },
+        "wire": {
+          "description": "The request shape the client speaks (direct only): `openai` (the\nOpenAI transcription and speech APIs and their compatible\nendpoints), `elevenlabs`, `gemini` or `minimax`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "provider",
+        "model"
+      ],
+      "type": "object"
     },
     "CommandCatalog": {
       "additionalProperties": false,
@@ -3476,6 +4227,99 @@
       ],
       "type": "object"
     },
+    "HatchAnswerParams": {
+      "additionalProperties": false,
+      "description": "`pets.hatch.answer` params.",
+      "properties": {
+        "answer": {
+          "description": "The answer (`y`, a draft number, `remix <tweak>`, `retry`,\n`cancel`).",
+          "type": "string"
+        },
+        "flow": {
+          "description": "The flow `pets.hatch.start` opened.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "flow",
+        "answer"
+      ],
+      "type": "object"
+    },
+    "HatchStartParams": {
+      "additionalProperties": false,
+      "description": "`pets.hatch.start` params.",
+      "properties": {
+        "description": {
+          "description": "What the pet looks like.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session whose usage ledger the paid image calls go to (the\nchat `/hatch` was typed in); absent, a hidden session is made for\nthe flow on its first paid call.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "description"
+      ],
+      "type": "object"
+    },
+    "HatchStep": {
+      "additionalProperties": false,
+      "description": "One step of a generate flow.",
+      "properties": {
+        "done": {
+          "description": "The flow is over.",
+          "type": "boolean"
+        },
+        "drafts": {
+          "description": "The drafts to pick from, as PNG `data:` URLs.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "failed": {
+          "default": false,
+          "description": "It failed.",
+          "type": "boolean"
+        },
+        "flow": {
+          "description": "The flow.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The pet installed.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "What to show (a question while `done` is false).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow",
+        "text",
+        "done"
+      ],
+      "type": "object"
+    },
     "HealthChanged": {
       "additionalProperties": false,
       "description": "`health.changed` payload.",
@@ -4760,6 +5604,297 @@
       ],
       "type": "object"
     },
+    "PetGallery": {
+      "additionalProperties": false,
+      "description": "`pets.gallery` result.",
+      "properties": {
+        "pets": {
+          "description": "The gallery's pets.",
+          "items": {
+            "$ref": "#/$defs/PetInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "pets"
+      ],
+      "type": "object"
+    },
+    "PetGalleryParams": {
+      "additionalProperties": false,
+      "description": "`pets.gallery` params.",
+      "properties": {
+        "limit": {
+          "description": "At most this many (default 100).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "The profile (its `pets.gallery_url`).",
+          "type": "string"
+        },
+        "query": {
+          "default": "",
+          "description": "Only pets whose slug or name contains this.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetInfo": {
+      "additionalProperties": false,
+      "description": "One installed or gallery pet.",
+      "properties": {
+        "author": {
+          "description": "Who made it.",
+          "type": "string"
+        },
+        "installed": {
+          "description": "Installed in the profile.",
+          "type": "boolean"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "Its slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "installed"
+      ],
+      "type": "object"
+    },
+    "PetInstallParams": {
+      "additionalProperties": false,
+      "description": "`pets.install` params.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "select": {
+          "default": false,
+          "description": "Show it from now on.",
+          "type": "boolean"
+        },
+        "slug": {
+          "description": "The gallery slug.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "slug"
+      ],
+      "type": "object"
+    },
+    "PetRow": {
+      "additionalProperties": false,
+      "description": "One state's row of the atlas.",
+      "properties": {
+        "frames": {
+          "description": "Its frames (0: the state shows the idle row).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "row": {
+          "description": "The row.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "row",
+        "frames"
+      ],
+      "type": "object"
+    },
+    "PetSetParams": {
+      "additionalProperties": false,
+      "description": "`pets.set` params: the `[pets]` keys to change (validated; the scale is\nclamped to 0.1-3.0).",
+      "properties": {
+        "enabled": {
+          "description": "Show or hide the pet (on without a slug: the first installed).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "roam": {
+          "description": "Wander while the agent is idle (desktop).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "scale": {
+          "description": "The size on every surface.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "slug": {
+          "description": "Adopt this installed pet (and show it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetSprite": {
+      "additionalProperties": false,
+      "description": "`pets.sprite` result: the validated atlas and each state's row and\nframe count.",
+      "properties": {
+        "atlas": {
+          "description": "The atlas as a `data:` URL (PNG or WebP).",
+          "type": "string"
+        },
+        "frame_height": {
+          "description": "A cell's height in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_width": {
+          "description": "A cell's width in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Its name.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The pet.",
+          "type": "string"
+        },
+        "states": {
+          "additionalProperties": {
+            "$ref": "#/$defs/PetRow"
+          },
+          "description": "The atlas row and the frame count of each state (`idle`, `wave`,\n`run`, `failed`, `review`, `jump`, `waiting`).",
+          "type": "object"
+        }
+      },
+      "required": [
+        "slug",
+        "name",
+        "atlas",
+        "frame_width",
+        "frame_height",
+        "states"
+      ],
+      "type": "object"
+    },
+    "PetSpriteParams": {
+      "additionalProperties": false,
+      "description": "`pets.sprite` params.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        },
+        "slug": {
+          "description": "The pet (default: the active one).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetsProfileParams": {
+      "additionalProperties": false,
+      "description": "A profile.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "PetsState": {
+      "additionalProperties": false,
+      "description": "`pets.state` result: the `[pets]` keys and the installed pets.",
+      "properties": {
+        "active": {
+          "description": "The pet shown (the configured one if installed, else the first).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "description": "`pets.enabled`.",
+          "type": "boolean"
+        },
+        "installed": {
+          "description": "The installed pets.",
+          "items": {
+            "$ref": "#/$defs/PetInfo"
+          },
+          "type": "array"
+        },
+        "notice": {
+          "description": "The line to show for the change just made, when there was one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "roam": {
+          "description": "`pets.roam`.",
+          "type": "boolean"
+        },
+        "scale": {
+          "description": "`pets.scale`.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "required": [
+        "enabled",
+        "scale",
+        "roam",
+        "installed"
+      ],
+      "type": "object"
+    },
     "PlatformSupport": {
       "additionalProperties": false,
       "description": "The daemon's build target and its support tier.",
@@ -5425,6 +6560,34 @@
       ],
       "type": "object"
     },
+    "RealtimeUsage": {
+      "additionalProperties": false,
+      "description": "Token counts of one realtime response, as the provider reported them.",
+      "properties": {
+        "cached_tokens": {
+          "default": 0,
+          "description": "Input tokens read from the provider's cache.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "input_tokens": {
+          "default": 0,
+          "description": "Input tokens (audio and text).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "default": 0,
+          "description": "Output tokens (audio and text).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "RelayConnection": {
       "additionalProperties": false,
       "description": "One connection an attached desktop holds, with its agents.",
@@ -5640,6 +6803,51 @@
       ],
       "type": "object"
     },
+    "ReplicaState": {
+      "additionalProperties": false,
+      "description": "`groups.replica_state` result.",
+      "properties": {
+        "authority_epoch": {
+          "description": "Its lineage.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "authority_gateway_id": {
+          "description": "The authority.",
+          "type": "string"
+        },
+        "last_seq": {
+          "description": "The last entry this gateway holds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "latest_seq": {
+          "description": "The last entry the authority reported.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "role": {
+          "description": "`authority`, `replica` or `demoted`.",
+          "type": "string"
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "last_seq",
+        "latest_seq",
+        "role",
+        "authority_gateway_id",
+        "authority_epoch"
+      ],
+      "type": "object"
+    },
     "RepoRow": {
       "additionalProperties": false,
       "description": "A repository offered for project creation.",
@@ -5820,6 +7028,771 @@
       ],
       "type": "object"
     },
+    "Room": {
+      "additionalProperties": false,
+      "description": "A room.",
+      "properties": {
+        "authority_epoch": {
+          "description": "The authority's lineage.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "authority_gateway_id": {
+          "description": "The gateway that owns the log.",
+          "type": "string"
+        },
+        "detect_stop_directives": {
+          "description": "`stop`/`halt`/`pause` next to a mention holds that member.",
+          "type": "boolean"
+        },
+        "latest_seq": {
+          "description": "The last log entry.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "members": {
+          "description": "The members.",
+          "items": {
+            "$ref": "#/$defs/RoomMember"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Unique display name.",
+          "type": "string"
+        },
+        "needs_you": {
+          "description": "A member asked for the user (`@user`).",
+          "type": "boolean"
+        },
+        "picture": {
+          "default": null,
+          "description": "A picture (data URL or blob reference).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "description": "`authority`, `replica` or `demoted`.",
+          "type": "string"
+        },
+        "room_id": {
+          "description": "Stable id.",
+          "type": "string"
+        },
+        "running": {
+          "description": "A discussion is running.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "room_id",
+        "name",
+        "detect_stop_directives",
+        "members",
+        "role",
+        "authority_gateway_id",
+        "authority_epoch",
+        "latest_seq",
+        "needs_you",
+        "running"
+      ],
+      "type": "object"
+    },
+    "RoomAuthority": {
+      "additionalProperties": false,
+      "description": "`groups.promote` result: the new authority and lineage. The old writer\nmust already be fenced; pass these to its `groups.demote`.",
+      "properties": {
+        "authority_epoch": {
+          "description": "Its lineage.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "authority_gateway_id": {
+          "description": "The authority now.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "authority_gateway_id",
+        "authority_epoch"
+      ],
+      "type": "object"
+    },
+    "RoomCapabilities": {
+      "additionalProperties": false,
+      "description": "`groups.capabilities` result.",
+      "properties": {
+        "driver": {
+          "description": "This daemon drives the room's discussions itself (every member\nlives here, or it is the authority of a hosted room).",
+          "type": "boolean"
+        },
+        "hosted": {
+          "description": "Members on other gateways take part.",
+          "type": "boolean"
+        },
+        "max_messages": {
+          "description": "`hosted_rooms.discussion.max_messages`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "max_rounds": {
+          "description": "`hosted_rooms.discussion.max_rounds`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "driver",
+        "hosted",
+        "max_rounds",
+        "max_messages"
+      ],
+      "type": "object"
+    },
+    "RoomCreateParams": {
+      "additionalProperties": false,
+      "description": "`groups.create` params.",
+      "properties": {
+        "detect_stop_directives": {
+          "default": null,
+          "description": "Default true.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "members": {
+          "description": "2 to 6 members: profiles of this home, or `<peer>/<agent>`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Unique display name.",
+          "type": "string"
+        },
+        "picture": {
+          "default": null,
+          "description": "A picture.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "members"
+      ],
+      "type": "object"
+    },
+    "RoomDeleteParams": {
+      "additionalProperties": false,
+      "description": "`groups.delete` params.",
+      "properties": {
+        "confirm": {
+          "default": false,
+          "description": "Must be true.",
+          "type": "boolean"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id"
+      ],
+      "type": "object"
+    },
+    "RoomDemoteParams": {
+      "additionalProperties": false,
+      "description": "`groups.demote` params (all required): fences this gateway as an old\nwriter. It adopts the newer lineage and refuses further room writes;\nfence the old writer like this (or stop its daemon) before promoting a\nreplacement.",
+      "properties": {
+        "observed_epoch": {
+          "description": "Its lineage.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "observed_gateway_id": {
+          "description": "The new authority.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "observed_gateway_id",
+        "observed_epoch"
+      ],
+      "type": "object"
+    },
+    "RoomDone": {
+      "additionalProperties": false,
+      "description": "An empty result.",
+      "type": "object"
+    },
+    "RoomEntry": {
+      "additionalProperties": false,
+      "description": "One room log entry.",
+      "properties": {
+        "at": {
+          "description": "When (RFC 3339).",
+          "type": "string"
+        },
+        "author": {
+          "default": null,
+          "description": "`user`, a member, or `room`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "data": {
+          "default": null,
+          "description": "Details (outcome, failure reason, round)."
+        },
+        "kind": {
+          "description": "`message`, `turn.started`, `turn.settled`, `pass`, `held`,\n`released`, `settled`, `stopped`, `authority.lost`, ...",
+          "type": "string"
+        },
+        "seq": {
+          "description": "Its sequence number.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "default": null,
+          "description": "Its text.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "seq",
+        "kind",
+        "at"
+      ],
+      "type": "object"
+    },
+    "RoomGrant": {
+      "additionalProperties": false,
+      "description": "`groups.grant` result.",
+      "properties": {
+        "token": {
+          "description": "The grant token (shown once; give it to the authority's owner).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "token"
+      ],
+      "type": "object"
+    },
+    "RoomGrantParams": {
+      "additionalProperties": false,
+      "description": "`groups.grant` params: lets a room authority drive a member of this\nhome.",
+      "properties": {
+        "authority": {
+          "description": "The authority's gateway id.",
+          "type": "string"
+        },
+        "member": {
+          "description": "The member (a profile of this home).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        },
+        "scopes": {
+          "description": "`post`, `stop`, `approve`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "room_id",
+        "authority",
+        "member",
+        "scopes"
+      ],
+      "type": "object"
+    },
+    "RoomLog": {
+      "additionalProperties": false,
+      "description": "`groups.log` result: one page of the log.",
+      "properties": {
+        "activity": {
+          "default": [],
+          "description": "The member error summary (`<member> hit an error — <first line>`).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "entries": {
+          "description": "The page.",
+          "items": {
+            "$ref": "#/$defs/RoomEntry"
+          },
+          "type": "array"
+        },
+        "latest_seq": {
+          "description": "The last entry of the log.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "room": {
+          "$ref": "#/$defs/Room",
+          "description": "The room (with its members)."
+        }
+      },
+      "required": [
+        "room",
+        "entries",
+        "latest_seq"
+      ],
+      "type": "object"
+    },
+    "RoomLogParams": {
+      "additionalProperties": false,
+      "description": "`groups.log` params.",
+      "properties": {
+        "after_seq": {
+          "default": 0,
+          "description": "Entries after this one.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "limit": {
+          "default": null,
+          "description": "At most this many (default 200).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id"
+      ],
+      "type": "object"
+    },
+    "RoomMember": {
+      "additionalProperties": false,
+      "description": "A room member.",
+      "properties": {
+        "gateway": {
+          "default": null,
+          "description": "The peer gateway it lives on (none: this home).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "held": {
+          "description": "Held by a stop directive: no turns until mentioned again.",
+          "type": "boolean"
+        },
+        "member": {
+          "description": "Its handle in the room (`<profile>`, or `<peer>/<agent>`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Its profile on its own machine.",
+          "type": "string"
+        },
+        "reason": {
+          "default": null,
+          "description": "Why it is unreachable (a failure reason code).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`ok` or `unreachable`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "profile",
+        "held",
+        "state"
+      ],
+      "type": "object"
+    },
+    "RoomMemberGrantParams": {
+      "additionalProperties": false,
+      "description": "`groups.member_grant` params: the authority keeps a member gateway's\ngrant.",
+      "properties": {
+        "member": {
+          "description": "The remote member (`<peer>/<agent>`).",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        },
+        "token": {
+          "description": "The token its gateway issued.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "member",
+        "token"
+      ],
+      "type": "object"
+    },
+    "RoomMemberParams": {
+      "additionalProperties": false,
+      "description": "`groups.compress_member` params.",
+      "properties": {
+        "member": {
+          "description": "The member.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "member"
+      ],
+      "type": "object"
+    },
+    "RoomParams": {
+      "additionalProperties": false,
+      "description": "Params naming a room.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id"
+      ],
+      "type": "object"
+    },
+    "RoomPostParams": {
+      "additionalProperties": false,
+      "description": "`groups.post` params: a user message to the room.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The message.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "RoomPosted": {
+      "additionalProperties": false,
+      "description": "`groups.post` result.",
+      "properties": {
+        "held": {
+          "default": [],
+          "description": "The members a stop directive in it holds now.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "seq": {
+          "description": "The message's log entry.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq"
+      ],
+      "type": "object"
+    },
+    "RoomPromoteParams": {
+      "additionalProperties": false,
+      "description": "`groups.promote` params: makes this gateway the room authority.\nFence the old writer first (stop its daemon, or have it run\n`groups.demote`): promotion never merges diverged histories, so an old\nwriter still accepting messages forks the room.",
+      "properties": {
+        "confirm": {
+          "default": false,
+          "description": "Must be true.",
+          "type": "boolean"
+        },
+        "force_incomplete": {
+          "default": false,
+          "description": "Promote a replica that is missing entries.",
+          "type": "boolean"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "default": null,
+          "description": "Why (kept in the log).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id"
+      ],
+      "type": "object"
+    },
+    "RoomReplicateParams": {
+      "additionalProperties": false,
+      "description": "`groups.replicate` params.",
+      "properties": {
+        "from": {
+          "description": "The authority, a registered peer.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile whose peer registry names the authority.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "from"
+      ],
+      "type": "object"
+    },
+    "RoomRevokeParams": {
+      "additionalProperties": false,
+      "description": "`groups.revoke` params.",
+      "properties": {
+        "authority": {
+          "description": "The authority.",
+          "type": "string"
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id",
+        "authority"
+      ],
+      "type": "object"
+    },
+    "RoomUpdateParams": {
+      "additionalProperties": false,
+      "description": "`groups.update` params: rename (history and sessions stay), picture,\nstop directive detection.",
+      "properties": {
+        "detect_stop_directives": {
+          "default": null,
+          "description": "Stop directive detection.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "default": null,
+          "description": "A new unique name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "picture": {
+          "default": null,
+          "description": "A new picture.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "room_id": {
+          "description": "The room.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "room_id"
+      ],
+      "type": "object"
+    },
+    "Rooms": {
+      "additionalProperties": false,
+      "description": "`groups.list` result.",
+      "properties": {
+        "rooms": {
+          "description": "Every room.",
+          "items": {
+            "$ref": "#/$defs/Room"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "rooms"
+      ],
+      "type": "object"
+    },
+    "RoomsParams": {
+      "additionalProperties": false,
+      "description": "`groups.list` params.",
+      "properties": {
+        "profile": {
+          "default": null,
+          "description": "The profile asking (the window's).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "Roster": {
       "additionalProperties": false,
       "description": "`bot.roster.list` result.",
@@ -5855,12 +7828,16 @@
           "type": "boolean"
         },
         "avatar": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BotAvatar"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "default": null,
-          "description": "An avatar reference.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "description": "Its avatar (a `BotAvatar`)."
         },
         "description": {
           "default": null,
@@ -5896,10 +7873,67 @@
       ],
       "type": "object"
     },
+    "RosterChat": {
+      "additionalProperties": false,
+      "description": "A local bot's Bot Chat as the roster shows it.",
+      "properties": {
+        "active": {
+          "default": false,
+          "description": "It owns a running turn, wrote within the last 90 seconds, or has a\nworker heartbeat.",
+          "type": "boolean"
+        },
+        "hidden": {
+          "default": false,
+          "description": "Hidden from the default roster.",
+          "type": "boolean"
+        },
+        "last_message_at": {
+          "default": null,
+          "description": "When that message was written (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "preview": {
+          "default": null,
+          "description": "The latest message of its Bot Chat, shortened.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "section": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BotSection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Its section."
+        },
+        "unread": {
+          "default": 0,
+          "description": "Messages since the Bot Chat was last read.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "RosterParams": {
       "additionalProperties": false,
       "description": "`bot.roster.list` params.",
       "properties": {
+        "include_hidden": {
+          "default": false,
+          "description": "Also list hidden bots.",
+          "type": "boolean"
+        },
         "include_remote": {
           "default": false,
           "description": "Also list registered peers' agents and the agents attached desktops\nreported for their other connections.",
@@ -5927,6 +7961,17 @@
         "agent": {
           "$ref": "#/$defs/RosterAgent",
           "description": "The agent."
+        },
+        "chat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RosterChat"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A local bot's Bot Chat and presentation."
         },
         "device": {
           "description": "`local`, the peer's name or the connection's label.",
@@ -7114,6 +9159,10 @@
         "text": {
           "description": "The prompt.",
           "type": "string"
+        },
+        "voice": {
+          "description": "A spoken message of a voice conversation: the turn runs on the\n`[auxiliary.voice_chat]` route and reasoning (spec: voice-mode,\nVoice turn model and reasoning).",
+          "type": "boolean"
         }
       },
       "required": [
@@ -7982,6 +10031,417 @@
       ],
       "type": "object"
     },
+    "VoiceClientConfig": {
+      "additionalProperties": false,
+      "description": "`voice.client_config` result.",
+      "properties": {
+        "chat_mode": {
+          "description": "`voice.chat_mode` (`chained` or `realtime`).",
+          "type": "string"
+        },
+        "client_direct": {
+          "description": "`voice.client_direct`.",
+          "type": "boolean"
+        },
+        "listen": {
+          "$ref": "#/$defs/VoiceListening",
+          "description": "How the client listens."
+        },
+        "stt": {
+          "$ref": "#/$defs/ClientSpeech",
+          "description": "Speech-to-text."
+        },
+        "tts": {
+          "$ref": "#/$defs/ClientSpeech",
+          "description": "Text-to-speech."
+        }
+      },
+      "required": [
+        "client_direct",
+        "chat_mode",
+        "stt",
+        "tts",
+        "listen"
+      ],
+      "type": "object"
+    },
+    "VoiceClientConfigParams": {
+      "additionalProperties": false,
+      "description": "`voice.client_config` params.",
+      "properties": {
+        "credentials": {
+          "default": false,
+          "description": "Include the credentials of direct providers: asked only right\nbefore the client calls one, so a key is held for that voice\naction alone (and never while a realtime session runs).",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "VoiceListening": {
+      "additionalProperties": false,
+      "description": "How the client listens in a voice conversation (the `[voice]`\nsettings the CLI and TUI use).",
+      "properties": {
+        "barge_in": {
+          "description": "Speaking over a reply interrupts it.",
+          "type": "boolean"
+        },
+        "barge_in_threshold_multiplier": {
+          "description": "How far above the quiet room's level speech must rise to\ninterrupt.",
+          "format": "double",
+          "type": "number"
+        },
+        "max_recording_secs": {
+          "description": "The longest recording.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "no_speech_timeout_secs": {
+          "description": "A recording without speech by then ends untranscribed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_duration_ms": {
+          "description": "Quiet after confirmed speech that ends the recording.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_threshold": {
+          "description": "Input level (RMS, 0-32767) above which audio counts as speech.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "speech_confirm_ms": {
+          "description": "How long the level must stay above the threshold to confirm speech.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stop_phrases": {
+          "description": "Utterances that end the conversation instead of being sent.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "silence_threshold",
+        "speech_confirm_ms",
+        "silence_duration_ms",
+        "no_speech_timeout_secs",
+        "max_recording_secs",
+        "stop_phrases",
+        "barge_in",
+        "barge_in_threshold_multiplier"
+      ],
+      "type": "object"
+    },
+    "VoiceRealtimeCall": {
+      "additionalProperties": false,
+      "description": "`voice.realtime.start` result: what the client needs to connect, never\nthe key.",
+      "properties": {
+        "call_id": {
+          "description": "The provider's call id.",
+          "type": "string"
+        },
+        "model": {
+          "description": "The realtime model.",
+          "type": "string"
+        },
+        "sdp": {
+          "description": "The provider's SDP answer.",
+          "type": "string"
+        },
+        "tool": {
+          "description": "The tool through which the voice hands work to the agent.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "sdp",
+        "model",
+        "tool"
+      ],
+      "type": "object"
+    },
+    "VoiceRealtimeStartParams": {
+      "additionalProperties": false,
+      "description": "`voice.realtime.start` params: the desktop's WebRTC offer.",
+      "properties": {
+        "profile": {
+          "description": "The profile whose `[voice.realtime]` settings and key are used.",
+          "type": "string"
+        },
+        "sdp": {
+          "description": "The client's SDP offer.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session the agent works in (its usage rows go there).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "sdp"
+      ],
+      "type": "object"
+    },
+    "VoiceRealtimeUsageParams": {
+      "additionalProperties": false,
+      "description": "`voice.realtime.usage` params: one response of a realtime call.",
+      "properties": {
+        "call_id": {
+          "description": "The call (`voice.realtime.start`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile that created the call.",
+          "type": "string"
+        },
+        "response_id": {
+          "description": "The provider's response id (a repeated one is recorded once).",
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/$defs/RealtimeUsage",
+          "description": "Its tokens."
+        }
+      },
+      "required": [
+        "profile",
+        "call_id",
+        "response_id",
+        "usage"
+      ],
+      "type": "object"
+    },
+    "VoiceSpeakParams": {
+      "additionalProperties": false,
+      "description": "`voice.speak` params: read a message of a session aloud.",
+      "properties": {
+        "profile": {
+          "description": "The profile that owns the session (a bot speaks with its own\nvoice).",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session the text belongs to.",
+          "type": "string"
+        },
+        "text": {
+          "description": "What to say.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "session_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "VoiceSpoken": {
+      "additionalProperties": false,
+      "description": "`voice.speak` result.",
+      "properties": {
+        "audio": {
+          "description": "The audio, base64.",
+          "type": "string"
+        },
+        "mime": {
+          "description": "The audio's media type.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime",
+        "audio"
+      ],
+      "type": "object"
+    },
+    "VoiceTranscribeParams": {
+      "additionalProperties": false,
+      "description": "`voice.transcribe` params: a recording relayed through the daemon.",
+      "properties": {
+        "audio": {
+          "description": "The recording (WAV, Ogg, MP3 or `WebM`), base64.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile whose speech-to-text provider transcribes.",
+          "type": "string"
+        },
+        "session_id": {
+          "description": "The session the words go to (metered calls are billed to it).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "profile",
+        "audio"
+      ],
+      "type": "object"
+    },
+    "VoiceTranscript": {
+      "additionalProperties": false,
+      "description": "`voice.transcribe` result.",
+      "properties": {
+        "provider": {
+          "description": "The provider that transcribed it.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "provider"
+      ],
+      "type": "object"
+    },
+    "WakeArmParams": {
+      "additionalProperties": false,
+      "description": "`wake.arm` params.",
+      "properties": {
+        "client_capture": {
+          "default": false,
+          "description": "The client sends the audio (`wake.feed`) instead of the daemon\nopening its own microphone (used when `wake.capture = \"auto\"`).",
+          "type": "boolean"
+        },
+        "profile": {
+          "description": "The profile whose wake word listens.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "WakeArmed": {
+      "additionalProperties": false,
+      "description": "`wake.arm` result.",
+      "properties": {
+        "capture": {
+          "description": "`local` (the daemon's microphone) or `client` (`wake.feed`).",
+          "type": "string"
+        },
+        "engine": {
+          "description": "The engine listening.",
+          "type": "string"
+        },
+        "phrase": {
+          "description": "The phrase it listens for.",
+          "type": "string"
+        },
+        "start_new_session": {
+          "default": false,
+          "description": "`wake.start_new_session`: a request after the phrase opens a new\nsession instead of continuing the current one.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "engine",
+        "phrase",
+        "capture"
+      ],
+      "type": "object"
+    },
+    "WakeDetected": {
+      "additionalProperties": false,
+      "description": "`wake.detected` payload.",
+      "properties": {
+        "phrase": {
+          "description": "The phrase heard.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile the phrase wakes (another profile's under profile\nrouting: the desktop switches to it).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "phrase"
+      ],
+      "type": "object"
+    },
+    "WakeFeedParams": {
+      "additionalProperties": false,
+      "description": "`wake.feed` params: audio from the client's microphone.",
+      "properties": {
+        "pcm": {
+          "description": "16 kHz mono 16-bit little-endian PCM, base64.",
+          "type": "string"
+        },
+        "profile": {
+          "description": "The profile whose listener takes the audio.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "pcm"
+      ],
+      "type": "object"
+    },
+    "WakeProfileParams": {
+      "additionalProperties": false,
+      "description": "A profile's wake listener.",
+      "properties": {
+        "profile": {
+          "description": "The profile.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile"
+      ],
+      "type": "object"
+    },
+    "WakeState": {
+      "additionalProperties": false,
+      "description": "`wake.status` result (and the empty answer of `wake.feed` and\n`wake.disarm`).",
+      "properties": {
+        "armed": {
+          "description": "The daemon's listener for the profile is armed.",
+          "type": "boolean"
+        },
+        "error": {
+          "description": "Why the listener stopped or could not arm.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report": {
+          "description": "The `/wake status` report (phrase, engine, owner, capture, input\ndevice, audio host API, what is missing, a silent microphone).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "armed"
+      ],
+      "type": "object"
+    },
     "WorktreeArchiveInfo": {
       "additionalProperties": false,
       "description": "One archive.",
@@ -8301,8 +10761,10 @@
   },
   "events": {
     "achievement.unlocked": {
-      "declared": false,
       "owner": "pets",
+      "payload": {
+        "$ref": "#/$defs/AchievementUnlocked"
+      },
       "since": "1.0"
     },
     "adapter.state": {
@@ -8437,12 +10899,24 @@
       "since": "1.0"
     },
     "wake.detected": {
-      "declared": false,
       "owner": "voice-mode",
+      "payload": {
+        "$ref": "#/$defs/WakeDetected"
+      },
       "since": "1.0"
     }
   },
   "methods": {
+    "achievements.list": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetsProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Achievements"
+      },
+      "since": "1.0"
+    },
     "adapters.list": {
       "long": true,
       "owner": "desktop-app",
@@ -8534,6 +11008,16 @@
       },
       "since": "1.0"
     },
+    "bot.avatar.get": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotMetaParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotAvatarPicture"
+      },
+      "since": "1.0"
+    },
     "bot.chat.ensure": {
       "owner": "bot-mode",
       "params": {
@@ -8544,19 +11028,64 @@
       },
       "since": "1.0"
     },
-    "bot.create": {
-      "declared": false,
+    "bot.chat.read": {
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotMetaParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotDone"
+      },
+      "since": "1.0"
+    },
+    "bot.create": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotCreateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotCreated"
+      },
+      "since": "1.0"
+    },
+    "bot.delete": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotDeleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotDeleted"
+      },
+      "since": "1.0"
+    },
+    "bot.duplicate": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotDuplicateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotCreated"
+      },
       "since": "1.0"
     },
     "bot.meta.get": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotMetaParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotMeta"
+      },
       "since": "1.0"
     },
     "bot.meta.update": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotMetaUpdateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotMeta"
+      },
       "since": "1.0"
     },
     "bot.relay.deliver": {
@@ -8586,6 +11115,26 @@
       },
       "result": {
         "$ref": "#/$defs/Roster"
+      },
+      "since": "1.0"
+    },
+    "bot.routines.list": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotMetaParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotRoutines"
+      },
+      "since": "1.0"
+    },
+    "bot.sections.delete": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/BotSectionDeleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/BotSectionDeleted"
       },
       "since": "1.0"
     },
@@ -9004,23 +11553,173 @@
       "since": "1.0"
     },
     "groups.capabilities": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomCapabilities"
+      },
+      "since": "1.0"
+    },
+    "groups.compress_member": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomMemberParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomDone"
+      },
+      "since": "1.0"
+    },
+    "groups.create": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomCreateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Room"
+      },
+      "since": "1.0"
+    },
+    "groups.delete": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomDeleteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomDone"
+      },
+      "since": "1.0"
+    },
+    "groups.demote": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomDemoteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplicaState"
+      },
+      "since": "1.0"
+    },
+    "groups.get": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Room"
+      },
+      "since": "1.0"
+    },
+    "groups.grant": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomGrantParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomGrant"
+      },
+      "since": "1.0"
+    },
+    "groups.list": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomsParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Rooms"
+      },
       "since": "1.0"
     },
     "groups.log": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomLogParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomLog"
+      },
+      "since": "1.0"
+    },
+    "groups.member_grant": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomMemberGrantParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomDone"
+      },
+      "since": "1.0"
+    },
+    "groups.post": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomPostParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomPosted"
+      },
+      "since": "1.0"
+    },
+    "groups.promote": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomPromoteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomAuthority"
+      },
       "since": "1.0"
     },
     "groups.replica_state": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplicaState"
+      },
       "since": "1.0"
     },
     "groups.replicate": {
-      "declared": false,
       "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomReplicateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/ReplicaState"
+      },
+      "since": "1.0"
+    },
+    "groups.revoke": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomRevokeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomDone"
+      },
+      "since": "1.0"
+    },
+    "groups.stop": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomParams"
+      },
+      "result": {
+        "$ref": "#/$defs/RoomDone"
+      },
+      "since": "1.0"
+    },
+    "groups.update": {
+      "owner": "bot-mode",
+      "params": {
+        "$ref": "#/$defs/RoomUpdateParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Room"
+      },
       "since": "1.0"
     },
     "harness.diff": {
@@ -9309,6 +12008,80 @@
       },
       "result": {
         "$ref": "#/$defs/PairingApproved"
+      },
+      "since": "1.0"
+    },
+    "pets.gallery": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetGalleryParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetGallery"
+      },
+      "since": "1.0"
+    },
+    "pets.hatch.answer": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/HatchAnswerParams"
+      },
+      "result": {
+        "$ref": "#/$defs/HatchStep"
+      },
+      "since": "1.0"
+    },
+    "pets.hatch.start": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/HatchStartParams"
+      },
+      "result": {
+        "$ref": "#/$defs/HatchStep"
+      },
+      "since": "1.0"
+    },
+    "pets.install": {
+      "long": true,
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetInstallParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetsState"
+      },
+      "since": "1.0"
+    },
+    "pets.set": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetSetParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetsState"
+      },
+      "since": "1.0"
+    },
+    "pets.sprite": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetSpriteParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetSprite"
+      },
+      "since": "1.0"
+    },
+    "pets.state": {
+      "owner": "pets",
+      "params": {
+        "$ref": "#/$defs/PetsProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/PetsState"
       },
       "since": "1.0"
     },
@@ -9885,13 +12658,94 @@
       "since": "1.0"
     },
     "voice.client_config": {
-      "declared": false,
       "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceClientConfigParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceClientConfig"
+      },
+      "since": "1.0"
+    },
+    "voice.realtime.start": {
+      "long": true,
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceRealtimeStartParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceRealtimeCall"
+      },
+      "since": "1.0"
+    },
+    "voice.realtime.usage": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceRealtimeUsageParams"
+      },
+      "result": {
+        "$ref": "#/$defs/Ack"
+      },
+      "since": "1.0"
+    },
+    "voice.speak": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceSpeakParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceSpoken"
+      },
+      "since": "1.0"
+    },
+    "voice.transcribe": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/VoiceTranscribeParams"
+      },
+      "result": {
+        "$ref": "#/$defs/VoiceTranscript"
+      },
+      "since": "1.0"
+    },
+    "wake.arm": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeArmParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeArmed"
+      },
+      "since": "1.0"
+    },
+    "wake.disarm": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeState"
+      },
       "since": "1.0"
     },
     "wake.feed": {
-      "declared": false,
       "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeFeedParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeState"
+      },
+      "since": "1.0"
+    },
+    "wake.status": {
+      "owner": "voice-mode",
+      "params": {
+        "$ref": "#/$defs/WakeProfileParams"
+      },
+      "result": {
+        "$ref": "#/$defs/WakeState"
+      },
       "since": "1.0"
     },
     "worktree.list": {

@@ -234,6 +234,89 @@ impl Peer {
         .await
     }
 
+    /// `method` `path` of `agent` (`None`: the peer's default profile),
+    /// for the Bot Mode endpoints (`/api/bots`, `/api/rooms/...`).
+    ///
+    /// # Errors
+    ///
+    /// As the peer answers.
+    pub(crate) async fn call(
+        &self,
+        method: reqwest::Method,
+        agent: Option<&str>,
+        path: &str,
+        body: Option<&Value>,
+    ) -> Result<Value, PeerError> {
+        self.send(method, &self.url(agent, path), body, None).await
+    }
+
+    /// Starts a room authority's run of `body["member"]` on this peer,
+    /// under the room grant the peer issued (`X-Prometheus-Room-Grant`).
+    ///
+    /// # Errors
+    ///
+    /// As the peer answers: 403 ([`PeerError::KeyRejected`]) without a
+    /// valid grant.
+    pub(crate) async fn room_turn(
+        &self,
+        room: &str,
+        body: &Value,
+        grant: Option<String>,
+    ) -> Result<Value, PeerError> {
+        let url = self.url(None, &format!("/api/rooms/{room}/turns"));
+        let mut request = self
+            .http
+            .post(url)
+            .bearer_auth(self.key.expose())
+            .json(body);
+        if let Some(grant) = grant {
+            request = request.header("X-Prometheus-Room-Grant", grant);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| PeerError::Unreachable(e.to_string()))?;
+        match response.status().as_u16() {
+            200..=299 => Ok(response.json().await.unwrap_or(Value::Null)),
+            401 | 403 => Err(PeerError::KeyRejected),
+            status => Err(PeerError::Rejected(
+                status,
+                "the room run was refused".to_owned(),
+            )),
+        }
+    }
+
+    /// The state of a room run this peer started, under the same room
+    /// grant (`GET /api/rooms/<room>/turns/<run>`).
+    ///
+    /// # Errors
+    ///
+    /// As [`room_turn`](Self::room_turn).
+    pub(crate) async fn room_run(
+        &self,
+        room: &str,
+        run: &str,
+        grant: Option<&str>,
+    ) -> Result<Value, PeerError> {
+        let url = self.url(None, &format!("/api/rooms/{room}/turns/{run}"));
+        let mut request = self.http.get(url).bearer_auth(self.key.expose());
+        if let Some(grant) = grant {
+            request = request.header("X-Prometheus-Room-Grant", grant);
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| PeerError::Unreachable(e.to_string()))?;
+        match response.status().as_u16() {
+            200..=299 => Ok(response.json().await.unwrap_or(Value::Null)),
+            401 | 403 => Err(PeerError::KeyRejected),
+            status => Err(PeerError::Rejected(
+                status,
+                "the room run state was refused".to_owned(),
+            )),
+        }
+    }
+
     /// `GET /api/agents`.
     ///
     /// # Errors

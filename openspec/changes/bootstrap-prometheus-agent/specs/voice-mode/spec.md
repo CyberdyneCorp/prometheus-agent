@@ -241,7 +241,7 @@ When the desktop is attached to a remote daemon and `voice.client_direct = true`
 - **THEN** the desktop SHALL upload the audio to the daemon's transcription endpoint
 
 ### Requirement: Realtime full-duplex voice chat mode (upgrade)
-`voice.chat_mode` SHALL accept `chained` (default) or `realtime`; in `realtime` mode on the desktop a single full-duplex realtime voice model session (configured by `voice.realtime.provider`, `voice.realtime.model`, `voice.realtime.voice` and optional `voice.realtime.instructions`) SHALL handle listening, interruptions and speech, SHALL be created by the daemon so the client receives only a session id and connection answer and never the API key, and SHALL hand every substantive request to the Prometheus agent through a single delegated tool whose result it speaks; the voice-layer cost SHALL be recorded in the usage ledger separately from the agent turn, and CLI and TUI SHALL keep the chained loop.
+`voice.chat_mode` SHALL accept `chained` (default) or `realtime`; in `realtime` mode on the desktop a single full-duplex realtime voice model session (configured by `voice.realtime.provider`, `voice.realtime.model`, `voice.realtime.voice`, `voice.realtime.base_url` and optional `voice.realtime.instructions`) SHALL handle listening, interruptions and speech, SHALL be created by the daemon so the client receives only a session id and connection answer and never the API key, and SHALL hand every substantive request to the Prometheus agent through a single delegated tool whose result it speaks; the voice-layer cost SHALL be recorded in the usage ledger separately from the agent turn, and CLI and TUI SHALL keep the chained loop.
 **Milestone:** M3
 
 #### Scenario: Realtime voice delegates work

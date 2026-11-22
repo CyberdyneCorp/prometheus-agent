@@ -74,15 +74,26 @@ pub struct Transcript {
 
 /// A provider ready to run.
 #[derive(Debug, Clone)]
-struct Listener {
-    provider: String,
-    model: String,
-    language: Option<String>,
+pub(crate) struct Listener {
+    pub(crate) provider: String,
+    pub(crate) model: String,
+    pub(crate) language: Option<String>,
     /// Set only by a `pre_transcription` callback.
     prompt: Option<String>,
-    access: Access,
-    base_url: String,
+    pub(crate) access: Access,
+    pub(crate) base_url: String,
     timeout: Duration,
+}
+
+/// The built-in provider a transcription would use now (`stt.provider`,
+/// else the first available); `None` for a command or plugin provider or
+/// when none can run.
+pub(crate) fn builtin_listener(setup: &MediaSetup) -> Option<Listener> {
+    match setup.config().stt.provider.as_deref() {
+        Some(provider) if BUILTIN.contains(&provider) => listener(setup, provider).ok(),
+        Some(_) => None,
+        None => AUTO_ORDER.iter().find_map(|p| listener(setup, p).ok()),
+    }
 }
 
 /// The provider's API key secret.

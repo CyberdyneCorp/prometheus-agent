@@ -54,7 +54,7 @@ fn body(text: &str) -> Value {
     serde_json::from_str(inner).unwrap_or_else(|e| panic!("{e}: {text}"))
 }
 
-fn setup(extra: &str) -> tempfile::TempDir {
+fn setup(extra: &str) -> common::TestHome {
     let home = mock_home();
     pmt_pybridge::testkit::seed(home.path());
     append_config(

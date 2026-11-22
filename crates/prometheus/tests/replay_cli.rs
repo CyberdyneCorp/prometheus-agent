@@ -500,3 +500,45 @@ fn the_golden_gate_names_each_recording_a_layer_reorder_breaks() {
         failures[0].report
     );
 }
+
+/// A replay exposes the tools its recording exposed, whatever the
+/// replaying host offers: `computer_use` was unavailable when recording
+/// (no driver and lazy installs off) and is available to the replay's
+/// fresh home on a desktop session, yet a turn refused by its token
+/// budget replays with the recorded estimate.
+#[test]
+fn a_strict_replay_keeps_the_recorded_tool_surface_on_a_host_that_offers_more() {
+    let home = temp_home();
+    std::fs::write(
+        home.path().join("daemon.toml"),
+        "[runtimes]\nallow_lazy_install = false\n",
+    )
+    .unwrap();
+    let work = home.path().join("work");
+    std::fs::create_dir_all(&work).unwrap();
+    let script = home.path().join("s.toml");
+    std::fs::write(&script, READ_THEN_DONE).unwrap();
+    let out = command(home.path())
+        .current_dir(&work)
+        .args(["--set", "budgets.turn_tokens=600", "chat", "-z", "check"])
+        .args(["--provider", "mock", "--mock-script"])
+        .arg(&script)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(3), "{}", stderr(&out));
+    let file = export(home.path(), &newest_session(home.path()), &[]);
+    let out_dir = home.path().join("replayed");
+    let out = command(home.path())
+        .args(["replay", "run", file.to_str().unwrap(), "--out"])
+        .arg(&out_dir)
+        .env("DISPLAY", ":0")
+        .env("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null")
+        .env("SESSIONNAME", "Console")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let text = stdout(&out);
+    assert_eq!(out.status.code(), Some(0), "{text}\n{}", stderr(&out));
+    assert!(text.starts_with("replay matched"), "{text}");
+}

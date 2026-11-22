@@ -14,6 +14,7 @@
 //! that started it.
 
 pub mod cache;
+pub mod computer_use;
 pub mod connection;
 pub mod costs;
 pub mod handler;

@@ -1,0 +1,7 @@
+kitty @0.33: 6x3 cells, ESC_Ga=T,f=100,i=19375,p=1,q=2,C=1,c=6,r=3,m=0;iVB
+kitty @1: 16x9 cells, ESC_Ga=T,f=100,i=19375,p=1,q=2,C=1,c=16,r=9,m=1;iV
+iterm @0.33: 6x3 cells, ESC]1337;File=inline=1;size=3036;preserveAspectRat
+iterm @1: 16x9 cells, ESC]1337;File=inline=1;size=5516;preserveAspectRat
+sixel @0.33: 6x3 cells, ESCP0;1;0q"1;1;48;48#36;2;20;0;0#42;2;20;20;0#78;2
+sixel @1: 16x9 cells, ESCP0;1;0q"1;1;128;144#36;2;20;0;0#42;2;20;20;0#78
+kitty delete: ESC_Ga=d,d=I,i=19375,q=2ESC\

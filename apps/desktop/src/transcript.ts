@@ -46,6 +46,8 @@ export class DesktopTranscript extends Transcript {
   readonly frame: HTMLElement;
   /** Reads an image of the session through its connection (a data URL). */
   fetchImage: (path: string) => Promise<string> = () => Promise.reject(new Error("no session"));
+  /** Adds controls to an assistant message (read aloud). */
+  onAssistant: ((el: HTMLElement) => void) | null = null;
   /** Reveal in file tree, for a file a tool call named. */
   onReveal: ((path: string) => void) | null = null;
   /** The file each running tool call names. */
@@ -80,6 +82,7 @@ export class DesktopTranscript extends Transcript {
       ? h("details", { class: "completion" }, h("summary", {}, done.title), h("div", { class: "text" }, done.body))
       : super.message(role, text);
     if (done) this.add(el);
+    if (role === "assistant") this.onAssistant?.(el);
     if (role === "user" && !done) {
       el.dataset.prompt = String(this.nextPrompt++);
       if (!this.rendering) {

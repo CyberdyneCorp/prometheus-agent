@@ -177,10 +177,12 @@ impl<'a> Call<'a> {
             .iter()
             .filter(|m| m.role == Role::Assistant)
             .count();
+        // The tool images message after tool results is not the user's.
         let user = messages
             .iter()
             .rev()
             .filter(|m| m.role == Role::User)
+            .filter(|m| !matches!(m.parts.first(), Some(Part::Text { text }) if text == crate::request::TOOL_IMAGES))
             .find_map(|m| {
                 let texts: Vec<&str> = m
                     .parts

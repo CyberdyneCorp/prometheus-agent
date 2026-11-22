@@ -27,7 +27,7 @@ text = "learned"
 
 /// A home whose profile has one agent-created skill and two memory
 /// entries; the entries' ids.
-fn learned_home() -> (tempfile::TempDir, Vec<String>) {
+fn learned_home() -> (common::TestHome, Vec<String>) {
     let home = mock_home();
     let script = home.path().join("script.toml");
     std::fs::write(&script, SCRIPT).unwrap();

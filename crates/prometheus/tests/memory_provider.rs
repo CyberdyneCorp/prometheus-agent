@@ -55,7 +55,7 @@ fn install(home: &Path, profile: &str, id: &str, component: &str, world: &str) {
 }
 
 /// A mock home whose default profile runs the testing provider.
-fn provider_home(extra: &str) -> tempfile::TempDir {
+fn provider_home(extra: &str) -> common::TestHome {
     let home = mock_home();
     install(
         home.path(),

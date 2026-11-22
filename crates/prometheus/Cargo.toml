@@ -99,6 +99,7 @@ pmt-voice.workspace = true
 pmt-memory.workspace = true
 pmt-migrate.workspace = true
 pmt-net.workspace = true
+pmt-pets.workspace = true
 pmt-plugins.workspace = true
 pmt-pybridge.workspace = true
 pmt-obs.workspace = true

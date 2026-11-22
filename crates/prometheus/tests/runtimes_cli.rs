@@ -31,7 +31,7 @@ fn an_unknown_runtime_exits_2_naming_the_expected_ones() {
     assert_eq!(code(&out), 2);
     assert!(
         common::stderr(&out)
-            .contains("unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda)"),
+            .contains("unknown runtime 'java' (expected node|cpython|uv|chromium|doc-converter|bws|op|lightpanda|cua-driver)"),
         "{}",
         common::stderr(&out)
     );
@@ -176,7 +176,7 @@ fn version_verbose_prints_the_runtime_index_digest() {
 
 /// The browser's lazy install through the store, against a local origin.
 struct Origin {
-    _dir: tempfile::TempDir,
+    _dir: common::TestHome,
     root: PathBuf,
     server: MockServer,
     runtime: tokio::runtime::Runtime,

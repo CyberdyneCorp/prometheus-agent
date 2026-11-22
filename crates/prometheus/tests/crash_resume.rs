@@ -38,7 +38,7 @@ step = 2
 text = "nothing else"
 "#;
 
-fn home() -> tempfile::TempDir {
+fn home() -> common::TestHome {
     let home = common::mock_home();
     let script = home.path().join("mock.toml");
     std::fs::write(&script, SCRIPT).unwrap();

@@ -42,7 +42,7 @@ fn repo(home: &Path) -> PathBuf {
     work
 }
 
-fn isolated_home() -> tempfile::TempDir {
+fn isolated_home() -> common::TestHome {
     let home = mock_home();
     append_config(home.path(), "\n[delegation]\nworktree_isolation = true\n");
     home

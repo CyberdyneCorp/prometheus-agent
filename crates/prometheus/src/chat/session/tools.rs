@@ -326,7 +326,8 @@ pub async fn route_traits(model: &dyn pmt_agent::turn::model::ModelPort) -> Rout
 }
 
 /// [`route_traits`] with the auxiliary capabilities session `id` reaches
-/// (`video`: its `vision` route takes video, so `video_analyze` works).
+/// (`video`: its `vision` route takes video, so `video_analyze` works) and
+/// whether its model takes images.
 pub async fn session_route(
     model: &dyn pmt_agent::turn::model::ModelPort,
     id: pmt_core::id::SessionId,
@@ -339,6 +340,10 @@ pub async fn session_route(
         traits
             .auxiliary
             .insert(pmt_media::video::VIDEO_AUX.to_owned());
+    }
+    // `computer_use` offers a text-only model only `ax` captures.
+    if let Some(computer_use) = pmt_tools::computer_use::of_session(&id.to_string()) {
+        traits = traits.with_image_input(computer_use.setup().image_input);
     }
     traits
 }

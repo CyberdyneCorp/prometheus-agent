@@ -46,7 +46,7 @@ The system SHALL refuse, in every approval mode including yolo, `key` combinatio
 - **THEN** the action SHALL be refused with a hard-block reason
 
 ### Requirement: Permission modes are fixed per runtime
-The driver runtime SHALL be launched in `standard` mode when the session's approval mode is `manual` or `smart`, in `bounded` mode when `computer_use.permission_mode = "bounded"` with a reviewed `computer_use.capability_manifest`, and in `unrestricted` mode only while yolo is active for that session; `computer_use.permission_mode` SHALL accept only `standard` (default) or `bounded`; a bounded session whose manifest is missing or unreadable SHALL fail at session start with the path, never downgrading silently; the mode and manifest SHALL be immutable for a runtime, and disabling yolo, ending or resetting the session SHALL stop any private bounded or unrestricted runtime it launched; one session SHALL never change another session's runtime mode.
+The driver runtime SHALL be launched in `standard` mode when the session's approval mode is `manual` or `smart`, in `bounded` mode when `computer_use.permission_mode = "bounded"` with a reviewed `computer_use.capability_manifest`, and in `unrestricted` mode only while yolo is active for that session; `computer_use.permission_mode` SHALL accept only `standard` (default) or `bounded`; a session of a bounded profile whose manifest is missing or unreadable SHALL fail at session start with the path, whatever toolsets it selects, never downgrading silently; the mode and manifest SHALL be immutable for a runtime, and disabling yolo, ending or resetting the session SHALL stop any private bounded or unrestricted runtime it launched; one session SHALL never change another session's runtime mode.
 **Milestone:** M3
 
 #### Scenario: Unrestricted via config
@@ -54,13 +54,18 @@ The driver runtime SHALL be launched in `standard` mode when the session's appro
 - **WHEN** config is validated
 - **THEN** validation SHALL fail with exit code 78
 
+#### Scenario: Bounded manifest missing
+- **GIVEN** `computer_use.permission_mode = "bounded"` and a `computer_use.capability_manifest` path that does not exist
+- **WHEN** a session starts
+- **THEN** it SHALL fail with `computer_use.manifest` (exit code 78) naming the path, and no driver SHALL run
+
 #### Scenario: Yolo turned off
 - **GIVEN** a session that started an unrestricted runtime under `/yolo`
 - **WHEN** the user turns yolo off
 - **THEN** that runtime SHALL be stopped and the next action SHALL use a standard runtime
 
 ### Requirement: Driver runtime management and identity
-The computer-use driver SHALL be a hash-pinned managed runtime (`cua-driver`) installed lazily under the distribution runtime policy, or the binary in `computer_use.driver_path`; at the first action of a session the system SHALL check the driver's version against the supported contract and repair a managed install at most once per session, leave a user-specified binary unchanged while reporting the incompatibility, and on macOS launch private runtimes only through a driver bundle whose code signature matches the official identifier and team unless `computer_use.allow_unsigned_driver = true` (default false); the driver's own telemetry SHALL be disabled in its environment unless `computer_use.driver_telemetry = true` (default false).
+The computer-use driver SHALL be a hash-pinned managed runtime (`cua-driver`) installed lazily under the distribution runtime policy, or the binary in `computer_use.driver_path`; at the first action of a session the system SHALL check the driver's version against the supported contract and repair a managed install at most once per session, leave a user-specified binary unchanged while reporting the incompatibility, and on macOS launch private runtimes only through a driver bundle whose code signature is valid (code and resources unmodified) and matches the official identifier and team unless `computer_use.allow_unsigned_driver = true` (default false), which admits only an unsigned or intact ad-hoc signed build; the driver's own telemetry SHALL be disabled in its environment unless `computer_use.driver_telemetry = true` (default false).
 **Milestone:** M3
 
 #### Scenario: Unsigned bundle
@@ -68,14 +73,24 @@ The computer-use driver SHALL be a hash-pinned managed runtime (`cua-driver`) in
 - **WHEN** a bounded runtime is launched
 - **THEN** the launch SHALL fail naming the signature check
 
+#### Scenario: Modified bundle
+- **GIVEN** a driver bundle whose executable was changed after it was signed
+- **WHEN** a bounded runtime is launched, even with `computer_use.allow_unsigned_driver = true`
+- **THEN** the launch SHALL fail naming the signature check, because the signature is validated (`codesign --verify`), not only read
+
 ### Requirement: Backend selection and availability
-`computer_use.backend` SHALL name `cua` (default) or a computer-use backend registered by an installed plugin, and an unknown name SHALL fail config validation with exit code 78; the `computer_use` toolset SHALL be available only when the backend reports ready and the platform prerequisites pass, SHALL be excluded from the API-server and other non-interactive default toolsets, and SHALL not be part of the `coding` composite.
+`computer_use.backend` SHALL name `cua` (default) or a computer-use backend registered by an installed plugin (an enabled plugin implementing the `computer-use-backend` WIT world, which receives the same driver tool calls and runtime permission modes as `cua-driver` and reports its own readiness), and an unknown name SHALL fail config validation with exit code 78; the `computer_use` toolset SHALL be available only when the backend reports ready and the platform prerequisites pass, SHALL be excluded from the API-server and other non-interactive default toolsets, and SHALL not be part of the `coding` composite.
 **Milestone:** M3
 
 #### Scenario: Driver missing
 - **GIVEN** `runtimes.allow_lazy_install = false` and no driver installed
 - **WHEN** a session enables the `computer_use` toolset
 - **THEN** the tool SHALL be unavailable with `cua-driver is not installed and lazy installs are disabled`
+
+#### Scenario: Plugin backend
+- **GIVEN** an enabled plugin implementing `computer-use-backend` that registers backend `sample-desktop`, and `computer_use.backend = "sample-desktop"`
+- **WHEN** the agent captures the screen and clicks an element
+- **THEN** both actions SHALL reach that plugin's desktop under the normal approval rules, and once the plugin is disabled the tool SHALL be unavailable with `computer-use backend 'sample-desktop' is not installed or not enabled` and config validation SHALL fail with exit code 78
 
 ### Requirement: Which machine is driven
 The driver SHALL run where the session's screen lives, as resolved by `bot_desktop.placement` in `execution-environments`: on the gateway host for the `local` backend, inside the container or SSH host for those backends (the sandbox image must carry the driver), and refused for backends that cannot host a display unless `bot_desktop.placement = "gateway"`; the driver SHALL never act on the machine running a remote desktop client.

@@ -86,6 +86,7 @@ fn descriptor() -> ToolDescriptor {
         reason: "end the user's browser and every window it has open, so its profile can be copied"
             .to_owned(),
         once_only: true,
+        builtin: false,
     });
     d
 }

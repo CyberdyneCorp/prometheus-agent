@@ -145,6 +145,21 @@ impl Native for Recorder {
         let _ = self.record(format!("save {name}"));
         self.save_to.clone()
     }
+    fn pet_overlay(&self, open: bool) -> Result<bool, String> {
+        self.record(format!("pet_overlay {open}")).map(|()| open)
+    }
+    // The spec delivers relayed messages to the other page itself
+    // (`desktop.ts`), as the Tauri app emits them.
+    fn emit_to(&self, window: &str, event: &str, _payload: &Value) -> Result<(), String> {
+        self.record(format!("emit {window} {event}"))
+    }
+    fn drag_window(&self, window: &str) -> Result<(), String> {
+        self.record(format!("drag {window}"))
+    }
+    fn main_window(&self, toggle: bool) -> Result<bool, String> {
+        let action = if toggle { "toggle" } else { "show" };
+        self.record(format!("main_window {action}")).map(|()| true)
+    }
 }
 
 /// The running harness; its URL goes to the specs as
@@ -262,9 +277,25 @@ async fn serve(
                 Err(e) => respond(stream, &json!({"err": e})),
             };
         }
+        // The voice controls' AudioWorklet module: worklet fetches bypass
+        // Playwright's routing, so the voice specs map the webview origin
+        // here and the page's own assets are served from the dist.
+        "/voice-worklet.js" => {
+            let dist = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/desktop/dist");
+            let script = std::fs::read_to_string(dist.join("voice-worklet.js")).unwrap_or_default();
+            return respond_script(stream, &script);
+        }
         _ => json!({"err": "no such harness route"}),
     };
     respond(stream, &answer);
+}
+
+fn respond_script(mut stream: TcpStream, script: &str) {
+    let _ = write!(
+        stream,
+        "HTTP/1.1 200 OK\r\ncontent-type: text/javascript\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{script}",
+        script.len()
+    );
 }
 
 /// Runs one shell request for the window named in the query; the answer

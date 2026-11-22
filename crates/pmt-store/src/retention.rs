@@ -47,7 +47,7 @@ fn ms(duration: Duration) -> i64 {
 fn candidates(conn: &Connection, cutoff: i64) -> Result<HashSet<String>, Error> {
     let mut stmt = conn
         .prepare(
-            "SELECT id FROM sessions WHERE ended_at IS NOT NULL AND pinned = 0 \
+            "SELECT id FROM sessions WHERE ended_at IS NOT NULL AND pinned = 0 AND bot_chat = 0 \
              AND last_activity_at < ?1",
         )
         .map_err(sql)?;
@@ -182,7 +182,8 @@ impl Store {
 
     /// Marks lineage tips (sessions without a compression continuation)
     /// idle for longer than `idle` as `archived = "auto"`; pinned and
-    /// already archived sessions are left alone. Returns how many changed.
+    /// already archived sessions and canonical Bot Chats (spec: bot-mode,
+    /// Canonical Bot Chat) are left alone. Returns how many changed.
     ///
     /// # Errors
     ///
@@ -193,7 +194,7 @@ impl Store {
             let changed = tx
                 .execute(
                     "UPDATE sessions SET archived = 'auto' WHERE archived = 'none' AND pinned = 0 \
-                     AND last_activity_at < ?1 AND NOT EXISTS (SELECT 1 FROM sessions c \
+                     AND bot_chat = 0 AND last_activity_at < ?1 AND NOT EXISTS (SELECT 1 FROM sessions c \
                      WHERE c.parent_session_id = sessions.id AND c.lineage_kind = 'compression')",
                     [cutoff],
                 )
