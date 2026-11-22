@@ -365,12 +365,11 @@ fn start(options: &Value) -> Result<Feishu, String> {
         cards_sent: Vec::new(),
         reactions: Vec::new(),
     };
-    if matches!(feishu.mode, Mode::Webhook)
-        && feishu.keys.token.is_none()
-        && feishu.keys.encrypt.is_none()
-    {
-        host::warn(
-            "Feishu webhook mode without FEISHU_VERIFICATION_TOKEN or FEISHU_ENCRYPT_KEY: anyone who finds the route can post events",
+    if matches!(feishu.mode, Mode::Webhook) && feishu.keys.token.is_none() {
+        // Unverified events could carry any sender's open_id.
+        return Err(
+            "webhook mode needs the secret FEISHU_VERIFICATION_TOKEN (and FEISHU_ENCRYPT_KEY when the app encrypts events): without it anyone who finds the route could post events as any user"
+                .to_owned(),
         );
     }
     if let Mode::Socket(socket) = &mut feishu.mode {

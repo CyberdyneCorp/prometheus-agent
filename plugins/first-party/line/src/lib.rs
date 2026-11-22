@@ -10,7 +10,10 @@
 //! reply token that delivers it (no Push charge). LINE takes no binary
 //! uploads: sent files are served from `options.public_url` (HTTPS) under
 //! `/media/<token>/<name>`, links that live as long as the adapter holds
-//! them. Text goes out in bubbles of 4500 characters, five per API call.
+//! them. The token is an HMAC keyed with the channel secret over the start
+//! epoch (counted in the plugin's state, so a restart never repeats one),
+//! the file's sequence number, name and content: nobody without the
+//! secret can guess a link (the sandbox has no random source). Text goes out in bubbles of 4500 characters, five per API call.
 //! `allowed_users`, `allowed_groups` and `allowed_rooms` take `U`, `C` and
 //! `R` ids.
 
@@ -58,6 +61,8 @@ struct Line {
     /// Served files: (token, name, mime, bytes).
     served: Vec<(String, String, String, Vec<u8>)>,
     served_seq: u64,
+    /// This start's number (see the module comment).
+    epoch: u64,
 }
 
 static LINE: Mutex<Line> = Mutex::new(Line {
@@ -66,7 +71,31 @@ static LINE: Mutex<Line> = Mutex::new(Line {
     inbox: Vec::new(),
     served: Vec::new(),
     served_seq: 0,
+    epoch: 0,
 });
+
+/// The plugin state key counting starts.
+const EPOCH_KEY: &str = "media_epoch";
+
+/// The next start's number, recorded so the following start differs.
+fn next_epoch() -> u64 {
+    let epoch = host::load(EPOCH_KEY)
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0)
+        .wrapping_add(1);
+    host::store(EPOCH_KEY, &json!(epoch));
+    epoch
+}
+
+/// The unguessable link token of a served file.
+fn media_token(key: &str, epoch: u64, seq: u64, file: &message::OutFile) -> String {
+    let content = sign::hex(&sign::sha256(&file.data));
+    let mac = sign::hmac_sha256(
+        key.as_bytes(),
+        format!("{epoch}:{seq}:{}:{content}", file.name).as_bytes(),
+    );
+    sign::hex(&mac[..16])
+}
 
 fn auth() -> Result<String, String> {
     host::secret(TOKEN)
@@ -127,9 +156,9 @@ impl Line {
 
     fn serve(&mut self, file: &message::OutFile) -> Result<String, String> {
         let base = self.settings()?.public_url.clone();
+        let key = host::secret(SECRET).ok_or_else(|| format!("secret {SECRET} is not set"))?;
         self.served_seq += 1;
-        let digest = sign::sha256(format!("{}:{}", self.served_seq, file.name).as_bytes());
-        let token = sign::hex(&digest[..12]);
+        let token = media_token(&key, self.epoch, self.served_seq, file);
         let name = adapter_kit::text::percent_encode(&file.name);
         self.served.push((
             token.clone(),
@@ -443,6 +472,7 @@ impl Guest for Adapter {
         let mut line = lock()?;
         *line = Line::default();
         line.settings = Some(settings);
+        line.epoch = next_epoch();
         Ok(())
     }
 

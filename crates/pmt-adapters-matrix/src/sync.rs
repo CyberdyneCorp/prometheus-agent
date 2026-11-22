@@ -268,7 +268,9 @@ impl Run {
     /// Takes `/sync`'s room keys and tops up the one-time keys.
     async fn keys(&self, synced: &Value) {
         let Some(crypto) = &self.crypto else { return };
-        crypto.receive_to_device(&synced["to_device"]["events"]);
+        crypto
+            .receive_to_device(&synced["to_device"]["events"])
+            .await;
         if let Some(count) = synced["device_one_time_keys_count"]["signed_curve25519"].as_u64()
             && let Err(why) = crypto.top_up(count).await
         {

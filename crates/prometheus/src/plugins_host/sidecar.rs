@@ -476,7 +476,6 @@ mod tests {
                 lockfile: None,
                 secrets: vec!["PHOTON_TOKEN".into()],
                 ready_timeout_secs: 30,
-                reads_home: false,
             },
             secrets: vec![("PHOTON_TOKEN".into(), "t0k".into())],
             node: None,
@@ -486,7 +485,6 @@ mod tests {
                 home: home.to_path_buf(),
                 grants: CapabilitySet::parse(["net.connect:api.photon.example:443"]).unwrap(),
                 data: home.join("profiles/default/plugin-data/photon/sidecar"),
-                reads_home: false,
             },
         }
     }

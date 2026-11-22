@@ -4,9 +4,9 @@
 //! the plugin was granted and nothing of the daemon's:
 //!
 //! - read: the system toolchain, the plugin directory, the runtime that
-//!   runs it (the managed Node and the plugin's installed packages), the
-//!   plugin's granted `fs.read` paths and, when `[sidecar] reads_home`,
-//!   the user's home (a CLI it starts finds its own login there);
+//!   runs it (the managed Node and the plugin's installed packages) and
+//!   the plugin's granted `fs.read` paths (the user's home only through
+//!   an approved `fs.read:~/**`, for a CLI that keeps its login there);
 //!   credential stores stay denied either way;
 //! - write: its own data directory (`<profile>/plugin-data/<id>/sidecar`,
 //!   also its `TMPDIR`) and the plugin's granted `fs.write` paths;
@@ -34,8 +34,6 @@ pub(crate) struct Confinement {
     pub grants: CapabilitySet,
     /// Its writable data directory.
     pub data: PathBuf,
-    /// Its children may read the user's home.
-    pub reads_home: bool,
 }
 
 /// The parts of the plugin's grants a sidecar keeps: files, processes,
@@ -76,9 +74,6 @@ pub(crate) fn capabilities(
         read_tree(plugin_dir),
     ];
     all.extend(extra_reads.iter().map(|dir| read_tree(dir)));
-    if confinement.reads_home {
-        all.push(Capability::FsRead("~/**".to_owned()));
-    }
     all.extend(kept(&confinement.grants));
     all.into_iter().collect()
 }
@@ -116,28 +111,24 @@ pub(crate) fn command(
 mod tests {
     use super::*;
 
-    fn confinement(grants: &[&str], reads_home: bool) -> Confinement {
+    fn confinement(grants: &[&str]) -> Confinement {
         Confinement {
             sandbox: SandboxConfig::default(),
             home: PathBuf::from("/home"),
             grants: CapabilitySet::parse(grants).unwrap(),
             data: PathBuf::from("/data"),
-            reads_home,
         }
     }
 
     #[test]
     fn a_sidecar_keeps_its_plugin_grants_with_hosts_reduced_to_ports() {
         let set = capabilities(
-            &confinement(
-                &[
-                    "net.connect:api.example.com:443",
-                    "secrets.read:TOKEN",
-                    "fs.read:/srv/files/**",
-                    "llm.call",
-                ],
-                false,
-            ),
+            &confinement(&[
+                "net.connect:api.example.com:443",
+                "secrets.read:TOKEN",
+                "fs.read:/srv/files/**",
+                "llm.call",
+            ]),
             Path::new("/plugins/x"),
             &[PathBuf::from("/runtimes/node")],
             4100,
@@ -161,7 +152,7 @@ mod tests {
             );
         }
         let home = capabilities(
-            &confinement(&["process.spawn:*"], true),
+            &confinement(&["process.spawn:*", "fs.read:~/**"]),
             Path::new("/plugins/raft"),
             &[],
             1,
@@ -169,5 +160,21 @@ mod tests {
         let texts: Vec<String> = home.iter().map(ToString::to_string).collect();
         assert!(texts.iter().any(|t| t == "fs.read:~/**"), "{texts:?}");
         assert!(texts.iter().any(|t| t == "process.spawn:*"), "{texts:?}");
+    }
+
+    /// The home is readable only through an approved grant: a plugin
+    /// that declares it but was not granted it gets none of it.
+    #[test]
+    fn a_sidecar_without_the_home_grant_cannot_read_the_home() {
+        let set = capabilities(
+            &confinement(&["process.spawn:*"]),
+            Path::new("/plugins/raft"),
+            &[],
+            1,
+        );
+        assert!(
+            !set.iter().any(|c| c.to_string().starts_with("fs.read:~")),
+            "{set:?}"
+        );
     }
 }

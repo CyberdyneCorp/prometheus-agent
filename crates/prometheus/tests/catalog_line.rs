@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use common::catalog::{self, MockHttp, Reply, Request};
+use pmt_gateway::messaging::adapter::OutboundAttachment;
 use pmt_gateway::messaging::conformance::{
     Failure, MockFile, MockPlatform, MockSent, kind_of_name,
 };
@@ -405,4 +406,62 @@ async fn a_stale_reply_token_falls_back_to_push_and_allowlists_check_id_kinds() 
         .await
         .unwrap_err();
     assert!(err.message.contains("starting with C"), "{}", err.message);
+}
+
+/// The URLs of the files sent so far.
+fn media_urls(mock: &Line) -> Vec<String> {
+    mock.calls()
+        .into_iter()
+        .flat_map(|(_, _, messages)| messages)
+        .filter_map(|m| m["originalContentUrl"].as_str().map(str::to_owned))
+        .collect()
+}
+
+/// A served file's link cannot be guessed: it is keyed with the channel
+/// secret and differs after a restart even for the same file at the same
+/// position, and a token made of the sequence number and name alone
+/// (what an outsider could count through) finds nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn served_media_links_cannot_be_guessed() {
+    let mock = Line::start();
+    let (kit, _root) = install(&mock, 0);
+    let adapter = kit.adapter().unwrap();
+    let prefix = catalog::serve(Arc::clone(&adapter)).await;
+    mock.listen(&prefix);
+    let dir = catalog::scratch();
+    let path = dir.path().join("image.png");
+    std::fs::write(&path, b"PNG bytes").unwrap();
+    let mut out = Outgoing::text(USER, None, "here");
+    out.attachments
+        .push(OutboundAttachment::new(&path.display().to_string()));
+    for _ in 0..2 {
+        adapter
+            .connect(catalog::Link::new().dyn_link())
+            .await
+            .unwrap();
+        adapter.send(&out).await.unwrap();
+        adapter.disconnect().await;
+    }
+    let urls = media_urls(&mock);
+    assert_eq!(urls.len(), 2, "{urls:?}");
+    assert_ne!(urls[0], urls[1], "a restart repeated the link");
+    adapter
+        .connect(catalog::Link::new().dyn_link())
+        .await
+        .unwrap();
+    adapter.send(&out).await.unwrap();
+    let url = media_urls(&mock).pop().unwrap();
+    assert_eq!(mock.fetch(&url), b"PNG bytes");
+    let base = mock.state.lock().unwrap().adapter.clone().unwrap();
+    let get = |path: &str| catalog::request("GET", &format!("{base}{path}"), &[], b"").0;
+    let counted = ring::digest::digest(&ring::digest::SHA256, b"1:image.png");
+    let guess = counted.as_ref()[..12]
+        .iter()
+        .fold(String::new(), |mut out, b| {
+            use std::fmt::Write as _;
+            let _ = write!(out, "{b:02x}");
+            out
+        });
+    assert_eq!(get(&format!("/media/{guess}/image.png")), 404);
+    adapter.disconnect().await;
 }

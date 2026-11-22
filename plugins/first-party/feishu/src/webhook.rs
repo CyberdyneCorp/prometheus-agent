@@ -2,7 +2,8 @@
 //! route on the shared listener. Each request is checked in this order:
 //! the source's rate (120 per 60 s, else 429), the body (JSON, at most
 //! 1 MB, else 413/415/400), the encrypted envelope (decrypted with the
-//! encrypt key), the verification token (401 on mismatch), the URL
+//! encrypt key), the verification token (401 on mismatch, and 401 for
+//! everything when no token is set: the mode never runs open), the URL
 //! challenge (echoed only after the token passed), and the signature
 //! `sha256(timestamp + nonce + encrypt_key + body)` (401 on mismatch).
 //! A source that keeps failing (25 errors in a row within 6 hours) earns
@@ -168,14 +169,18 @@ impl Guard {
                 .ok_or((400, "encrypted body without an encrypt key"))?;
             payload = decrypt(key, envelope).map_err(|_| (400, "cannot decrypt the body"))?;
         }
-        if let Some(expected) = &keys.token {
-            let got = payload["header"]["token"]
-                .as_str()
-                .or(payload["token"].as_str())
-                .unwrap_or_default();
-            if got.is_empty() || !sign::same(got.as_bytes(), expected.as_bytes()) {
-                return Err((401, "invalid verification token"));
-            }
+        // Without a token nothing is verified: refuse rather than admit
+        // events from anyone who finds the route (start() refuses too).
+        let expected = keys
+            .token
+            .as_deref()
+            .ok_or((401, "no verification token is configured"))?;
+        let got = payload["header"]["token"]
+            .as_str()
+            .or(payload["token"].as_str())
+            .unwrap_or_default();
+        if got.is_empty() || !sign::same(got.as_bytes(), expected.as_bytes()) {
+            return Err((401, "invalid verification token"));
         }
         if payload["type"] == "url_verification" {
             let challenge = json!({"challenge": payload["challenge"]});
@@ -221,6 +226,20 @@ mod tests {
         assert!(signed(&ok, "k"));
         assert!(!signed(&ok, "other"));
         assert!(!signed(&request(body, &[]), "k"));
+    }
+
+    #[test]
+    fn without_a_verification_token_every_event_is_refused() {
+        let keys = Keys {
+            token: None,
+            encrypt: None,
+        };
+        let event = r#"{"schema":"2.0","header":{"event_type":"im.message.receive_v1"}}"#;
+        let checked = Guard::default().verify(&request(event, &[]), &keys);
+        assert_eq!(checked.err(), Some((401, "no verification token is configured")));
+        let challenge = r#"{"type":"url_verification","challenge":"c","token":"t"}"#;
+        let checked = Guard::default().verify(&request(challenge, &[]), &keys);
+        assert!(matches!(checked, Err((401, _))));
     }
 
     #[test]

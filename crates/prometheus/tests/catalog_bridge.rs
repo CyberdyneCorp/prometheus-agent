@@ -80,6 +80,71 @@ fn a_whole_request_answers_one_frame_with_status_and_body() {
     assert_eq!(body, json!({"method": "POST", "got": {"a": 1}}));
 }
 
+/// A redirect is followed only to a granted host: a granted host (or an
+/// open redirect on it) cannot lead the bridge anywhere else.
+#[test]
+fn a_redirect_to_an_ungranted_host_is_not_followed() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let contacted = std::sync::Arc::new(AtomicUsize::new(0));
+    let seen = std::sync::Arc::clone(&contacted);
+    let elsewhere = catalog::MockHttp::start(std::sync::Arc::new(move |_: &catalog::Request| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        catalog::Reply::json(200, &json!({"secret": "metadata"}))
+    }));
+    let target = format!("{}/latest/meta-data", elsewhere.base());
+    let granted =
+        catalog::MockHttp::start(std::sync::Arc::new(move |request: &catalog::Request| {
+            let to = if request.route() == "/same" {
+                "/final".to_owned()
+            } else if request.route() == "/final" {
+                return catalog::Reply::json(200, &json!({"followed": true}));
+            } else {
+                target.clone()
+            };
+            catalog::Reply {
+                status: 302,
+                headers: vec![("location".into(), to)],
+                body: Vec::new(),
+            }
+        }));
+    let bridge = Bridge::start(&[granted.host()]);
+    let frames = |path: &str| {
+        let (status, answer) = bridge.call(
+            "/open",
+            &json!({"url": format!("{}{path}", granted.base()), "whole": true}),
+        );
+        assert_eq!(status, 200, "{answer}");
+        let id = answer["id"].as_str().unwrap().to_owned();
+        for _ in 0..100 {
+            let (_, received) = bridge.call("/recv", &json!({"id": id}));
+            if !received["frames"].as_array().unwrap().is_empty() || received["open"] == false {
+                return received;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("no answer");
+    };
+    let refused = frames("/away");
+    assert_eq!(refused["frames"], json!([]), "{refused}");
+    assert!(
+        refused["error"]
+            .as_str()
+            .unwrap()
+            .contains("may not connect"),
+        "{refused}"
+    );
+    assert_eq!(
+        contacted.load(Ordering::SeqCst),
+        0,
+        "the ungranted host was contacted"
+    );
+    // A redirect within the granted host is followed.
+    let followed = frames("/same");
+    let frame: serde_json::Value =
+        serde_json::from_str(followed["frames"][0].as_str().unwrap()).unwrap();
+    assert_eq!(frame["status"], 200, "{followed}");
+}
+
 #[test]
 fn every_socket_adapter_ships_the_same_bridge() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/first-party");

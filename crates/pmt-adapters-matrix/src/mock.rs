@@ -208,9 +208,19 @@ impl MatrixMock {
         self.push_event("m.room.message", content)
     }
 
+    /// Delivers an encrypted event labelled as sent by `sender` (what a
+    /// malicious homeserver could do with another user's session).
+    pub fn push_encrypted_as(&self, sender: &str, content: &Value) -> String {
+        self.push_event_as(sender, "m.room.encrypted", content)
+    }
+
     fn push_event(&self, kind: &str, content: &Value) -> String {
+        self.push_event_as(USER, kind, content)
+    }
+
+    fn push_event_as(&self, sender: &str, kind: &str, content: &Value) -> String {
         let id = format!("${}", self.id());
-        let event = json!({"type": kind, "event_id": id, "sender": USER,
+        let event = json!({"type": kind, "event_id": id, "sender": sender,
                            "origin_server_ts": jiff::Timestamp::now().as_millisecond(),
                            "content": content});
         let mut state = self.lock();

@@ -77,15 +77,15 @@ impl OutboundRoom {
 /// A member's device with verified keys.
 #[derive(Debug, Clone)]
 pub(super) struct Member {
-    user: String,
-    device: String,
-    curve: Curve25519PublicKey,
-    ed: Ed25519PublicKey,
+    pub(super) user: String,
+    pub(super) device: String,
+    pub(super) curve: Curve25519PublicKey,
+    pub(super) ed: Ed25519PublicKey,
 }
 
 /// One device of a `keys/query` answer when its keys carry a valid
 /// self-signature.
-fn verified(user: &str, device: &str, keys: &Value) -> Option<Member> {
+pub(super) fn verified(user: &str, device: &str, keys: &Value) -> Option<Member> {
     if keys["user_id"] != user || keys["device_id"] != device {
         return None;
     }

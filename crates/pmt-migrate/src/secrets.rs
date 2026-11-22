@@ -168,10 +168,25 @@ fn plan_env(src: &Source<'_>, step: &mut SecretsStep) {
             continue;
         }
         match env::classify(&e.name, &known) {
-            Class::Secret => {
-                let i = push(step, entry(Disposition::Secret).to(&e.name));
-                step.writes.secret(&e.name, &e.value, i);
-            }
+            Class::Secret => match crate::catalog::secret(&e.name) {
+                // A catalog plugin reads it under its own name.
+                Some((adapter, secret)) if secret.plugin != e.name => {
+                    let i = push(
+                        step,
+                        entry(Disposition::Secret)
+                            .to(secret.plugin)
+                            .because(format!(
+                                "stored as {} for the {} catalog plugin",
+                                secret.plugin, adapter.id
+                            )),
+                    );
+                    step.writes.secret(secret.plugin, &e.value, i);
+                }
+                _ => {
+                    let i = push(step, entry(Disposition::Secret).to(&e.name));
+                    step.writes.secret(&e.name, &e.value, i);
+                }
+            },
             Class::Unclassified => {
                 let i = push(
                     step,

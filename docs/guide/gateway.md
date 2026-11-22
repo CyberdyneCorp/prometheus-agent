@@ -567,8 +567,11 @@ only its data directory (`<profile>/plugin-data/<id>/sidecar`, also its
 `TMPDIR`) and the plugin's `fs.write` grants, connects only on the ports of
 the plugin's `net.connect` grants, and starts processes only with a
 `process.spawn` grant. A sidecar that runs a platform CLI keeping its own
-login in the user's home declares `[sidecar] reads_home = true` (Raft);
-credential stores stay unreadable either way.
+login in the user's home asks for `fs_read = ["~/**"]` in `[capabilities]`
+(Raft), which the user approves like any other capability; credential
+stores stay unreadable either way. The approval screen also names the
+sidecar the plugin runs (its command, and whether it is a Node script or
+the plugin's own executable).
 
 - `sms` (Twilio): set `account_sid`, `phone_number` and `public_url` (the
   exact webhook URL configured in Twilio, which it signs) and the secret
@@ -648,7 +651,8 @@ credential stores stay unreadable either way.
   `connection_mode = "websocket"` (the default) holds Feishu's long
   connection through the bridge sidecar; `"webhook"` takes events at
   `/p/<profile>/feishu/`, checked with the secrets
-  `FEISHU_VERIFICATION_TOKEN` and `FEISHU_ENCRYPT_KEY` (signature
+  `FEISHU_VERIFICATION_TOKEN` (required: webhook mode refuses to start
+  without it) and `FEISHU_ENCRYPT_KEY` (signature
   `sha256(timestamp + nonce + key + body)`, encrypted bodies, 401 on a
   mismatch, 1 MB bodies, 120 requests a minute per source, a warning after
   25 failures in a row). `dm_policy` (`pairing` by default) with

@@ -40,6 +40,13 @@ pub(crate) struct Inbound {
     pub(crate) room_id: String,
     /// The sending device's Curve25519 key.
     pub(crate) sender_key: String,
+    /// The user who shared it: the only sender its events may name.
+    #[serde(default)]
+    pub(crate) sender: String,
+    /// The sharing device's Ed25519 key (checked against the user's
+    /// device list when the key arrived).
+    #[serde(default)]
+    pub(crate) ed25519: String,
     pub(crate) pickle: String,
 }
 

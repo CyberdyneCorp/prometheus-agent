@@ -18,33 +18,6 @@ use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
 use crate::writes;
 
-/// Hermes platforms Prometheus serves through catalog adapter plugins
-/// (spec: platform-adapters, Catalog adapter set).
-pub(crate) const CATALOG_ADAPTERS: &[&str] = &[
-    "whatsapp_cloud",
-    "msgraph_webhook",
-    "teams",
-    "google_chat",
-    "mattermost",
-    "dingtalk",
-    "feishu",
-    "wecom",
-    "wecom_callback",
-    "weixin",
-    "bluebubbles",
-    "photon",
-    "qqbot",
-    "yuanbao",
-    "line",
-    "sms",
-    "ntfy",
-    "irc",
-    "raft",
-    "buzz",
-    "simplex",
-    "homeassistant",
-];
-
 /// The planned plugins component.
 pub struct PluginsStep {
     entries: Vec<Entry>,
@@ -243,14 +216,6 @@ fn names(value: Option<&Value>) -> Vec<String> {
 /// counterpart is a catalog plugin.
 fn integrations(src: &Source<'_>, step: &mut PluginsStep) {
     let mut needed: Vec<(&str, &str)> = Vec::new();
-    let platform_used = |p: &str| {
-        src.get(&format!("platforms.{p}.enabled"))
-            .and_then(Value::as_bool)
-            == Some(true)
-    };
-    if src.env_value("HASS_TOKEN").is_some() || src.get("platforms.homeassistant").is_some() {
-        needed.push(("homeassistant", "Home Assistant"));
-    }
     let camofox = src.get("browser.cloud_provider").and_then(Value::as_str) == Some("camofox");
     if camofox || src.env_value("CAMOFOX_URL").is_some() {
         needed.push(("camofox", "the Camofox browser"));
@@ -260,16 +225,15 @@ fn integrations(src: &Source<'_>, step: &mut PluginsStep) {
             .unwrap_or(CAMOFOX_DEFAULT_URL);
         step.camofox_url = Some(url.to_owned());
     }
-    for adapter in CATALOG_ADAPTERS {
-        let via_env = src.env.iter().any(|e| {
-            e.name
-                .to_ascii_lowercase()
-                .starts_with(&format!("{adapter}_"))
-                && crate::env::secret_shaped(&e.name)
-        });
-        let builtin = src.host.known(Registry::Platform, adapter, None);
-        if !builtin && *adapter != "homeassistant" && (platform_used(adapter) || via_env) {
-            needed.push((adapter, "a messaging platform"));
+    for adapter in crate::catalog::ADAPTERS {
+        let builtin = src.host.known(Registry::Platform, adapter.id, None);
+        if !builtin && crate::catalog::used(src, adapter.id) {
+            let what = if adapter.id == "homeassistant" {
+                "Home Assistant"
+            } else {
+                "a messaging platform"
+            };
+            needed.push((adapter.id, what));
         }
     }
     for (id, what) in needed {

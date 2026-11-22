@@ -423,6 +423,9 @@ fn unsigned_screen(scope: &ProfileScope, staged: &Staged, why: &str) -> Result<(
     for capability in requested.iter() {
         let _ = writeln!(screen, "  - {}", describe(capability));
     }
+    if let Some(line) = manage::sidecar_line(manifest) {
+        let _ = writeln!(screen, "  - {line}");
+    }
     if !crate::prompt::stdin_is_tty() {
         eprint!("{screen}");
         return Ok(());

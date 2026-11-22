@@ -280,6 +280,20 @@ pub struct Device {
 }
 
 impl Device {
+    /// A device claiming to be `user`'s whose keys are in no device list
+    /// (an impostor a homeserver could run).
+    #[must_use]
+    pub fn unlisted(user: &str, device: &str) -> Self {
+        Self {
+            user: user.to_owned(),
+            id: device.to_owned(),
+            account: Account::new(),
+            sessions: Vec::new(),
+            outbound: GroupSession::new(MegolmConfig::version_1()),
+            inbound: BTreeMap::new(),
+        }
+    }
+
     /// A new device of `user`, its keys and 5 one-time keys published.
     pub fn publish(keys: &Keys, user: &str, device: &str) -> Self {
         let mut account = Account::new();

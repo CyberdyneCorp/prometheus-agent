@@ -319,7 +319,8 @@ fn flag(table: &Table, key: &str) -> Result<bool, Error> {
 
 /// `$plugin_data/x` -> `<plugin data>/x`, `$profile_home/x` -> the
 /// profile's home (the directory holding `plugin-data/`), `$tmp/x` -> the
-/// system temporary directory, `$workspace/x` -> `<workspace>/x`.
+/// system temporary directory, `$workspace/x` -> `<workspace>/x`; `~/x`
+/// (the user's home) and absolute paths stay as written.
 fn place(path: &str, plugin_data: &Path) -> Result<String, Error> {
     let slashed = |dir: &Path| dir.to_string_lossy().replace('\\', "/");
     if let Some(rest) = path.strip_prefix("$plugin_data") {
@@ -338,11 +339,12 @@ fn place(path: &str, plugin_data: &Path) -> Result<String, Error> {
     if let Some(rest) = path.strip_prefix("$workspace") {
         return Ok(format!("<workspace>{rest}"));
     }
-    if Path::new(path).is_absolute() {
+    // `~` is the user's home: shown as such when the user approves it.
+    if Path::new(path).is_absolute() || path == "~" || path.starts_with("~/") {
         return Ok(path.to_owned());
     }
     Err(invalid(format!(
-        "fs path '{path}' must start with $plugin_data, $profile_home, $tmp, $workspace or be absolute"
+        "fs path '{path}' must start with $plugin_data, $profile_home, $tmp, $workspace or ~, or be absolute"
     )))
 }
 

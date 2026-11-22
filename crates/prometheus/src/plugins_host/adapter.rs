@@ -231,7 +231,6 @@ fn sidecar_of(
     };
     let grants = plugin.grants.current();
     let names = sidecar::granted_secrets(&declaration, &grants);
-    let reads_home = declaration.reads_home;
     Some(Sidecar {
         spec: sidecar::Spec {
             home: scope.home().to_path_buf(),
@@ -250,7 +249,6 @@ fn sidecar_of(
                     .join("plugin-data")
                     .join(&plugin.manifest.id)
                     .join("sidecar"),
-                reads_home,
                 grants,
             },
         },

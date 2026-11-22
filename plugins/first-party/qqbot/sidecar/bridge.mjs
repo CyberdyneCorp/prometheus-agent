@@ -8,7 +8,8 @@
 // It serves 127.0.0.1:$PMT_SIDECAR_PORT, answers only requests bearing
 // $PMT_SIDECAR_TOKEN, and connects only to hosts in $PMT_SIDECAR_NETWORK
 // (the plugin's network grant: `host`, `*.suffix` or `*`, each with an
-// optional `:port`). No dependencies: Node 22+ has WebSocket and fetch.
+// optional `:port`), redirects included: an HTTP redirect is followed only
+// to a granted host. No dependencies: Node 22+ has WebSocket and fetch.
 
 import http from "node:http";
 import net from "node:net";
@@ -23,6 +24,8 @@ const GRANTS = (process.env.PMT_SIDECAR_NETWORK || "")
 // Frames kept per connection before the oldest are dropped (an adapter
 // that stopped polling must not grow the bridge without bound).
 const MAX_BUFFERED = 10000;
+// Redirects followed per request.
+const MAX_REDIRECTS = 5;
 
 const connections = new Map();
 let nextId = 1;
@@ -55,6 +58,41 @@ function target(url) {
   const host = parsed.hostname.replace(/^\[|\]$/g, "");
   const port = Number(parsed.port) || defaultPort(parsed.protocol);
   return { parsed, host, port };
+}
+
+// Headers that must not follow a redirect to another origin.
+const CREDENTIAL_HEADERS = ["authorization", "cookie", "proxy-authorization"];
+
+function withoutCredentials(headers) {
+  return Object.fromEntries(
+    Object.entries(headers || {}).filter(([name]) => !CREDENTIAL_HEADERS.includes(name.toLowerCase())),
+  );
+}
+
+// fetch, following redirects by hand so that each hop is checked against
+// the grant like the first URL (a granted host, or an open redirect on it,
+// must not lead the bridge to any other host the OS lets it reach).
+export async function guardedFetch(url, init, grants = GRANTS) {
+  let current = new URL(url);
+  let options = { ...init, redirect: "manual" };
+  for (let hop = 0; ; hop++) {
+    const response = await fetch(current, options);
+    const location = response.headers.get("location");
+    if (response.status < 300 || response.status > 399 || !location) return response;
+    await response.body?.cancel();
+    if (hop >= MAX_REDIRECTS) throw new Error(`more than ${MAX_REDIRECTS} redirects`);
+    const next = new URL(location, current);
+    const where = target(next.href);
+    if (!permitted(grants, where.host, where.port)) {
+      throw new Error(`redirected to ${where.host}:${where.port}, which the plugin may not connect to`);
+    }
+    if (next.origin !== current.origin) options = { ...options, headers: withoutCredentials(options.headers) };
+    const method = (options.method || "GET").toUpperCase();
+    if (response.status === 303 || ([301, 302].includes(response.status) && method === "POST")) {
+      options = { ...options, method: "GET", body: undefined };
+    }
+    current = next;
+  }
 }
 
 function record() {
@@ -127,7 +165,7 @@ async function openRequest(conn, url, headers, method, body) {
     throw new Error("a request connection takes no frames");
   };
   try {
-    const response = await fetch(url, { method, headers, body, signal: controller.signal });
+    const response = await guardedFetch(url, { method, headers, body, signal: controller.signal });
     push(conn, JSON.stringify({ status: response.status, body: await response.text() }));
     failed(conn, null);
   } catch (error) {
@@ -142,7 +180,7 @@ async function openStream(conn, url, headers) {
     throw new Error("a streamed HTTP connection is read-only");
   };
   try {
-    const response = await fetch(url, { headers, signal: controller.signal });
+    const response = await guardedFetch(url, { headers, signal: controller.signal });
     if (!response.ok) {
       failed(conn, `status ${response.status}`);
       return;

@@ -237,6 +237,29 @@ fn signed_post(url: &str, body: &str, key: &str) -> u16 {
     .0
 }
 
+/// Webhook mode never runs unauthenticated: without the verification
+/// token it does not start, so no forged event reaches the gateway.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_webhook_mode_does_not_start_without_the_verification_token() {
+    let mock = Feishu::start().await;
+    let (kit, _root) = mock.install(
+        None,
+        &json!({"connection_mode": "webhook", "batch_delay_ms": 0}),
+    );
+    catalog::secret(&kit, "FEISHU_ENCRYPT_KEY", ENCRYPT);
+    let err = kit
+        .adapter()
+        .unwrap()
+        .connect(catalog::Link::new().dyn_link())
+        .await
+        .unwrap_err();
+    assert!(
+        err.message.contains("FEISHU_VERIFICATION_TOKEN"),
+        "{}",
+        err.message
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_webhook_mode_checks_token_signature_size_and_rate() {
     let mock = Feishu::start().await;

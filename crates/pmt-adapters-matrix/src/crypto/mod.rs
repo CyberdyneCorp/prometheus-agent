@@ -4,9 +4,12 @@
 //! - this device's keys are uploaded once (signed with its Ed25519 key)
 //!   and its one-time keys kept topped up from `/sync`'s count;
 //! - Olm-encrypted to-device events bring the Megolm room keys other
-//!   devices share, which decrypt `m.room.encrypted` room events; an event
-//!   that cannot be decrypted is dropped (the caller warns once per room),
-//!   never passed on as ciphertext;
+//!   devices share, kept only when the Olm sender's Curve25519 and Ed25519
+//!   keys belong to a self-signed device of the user the event names; they
+//!   decrypt `m.room.encrypted` room events whose sender is that same user
+//!   (so a homeserver cannot relabel a session's messages as another
+//!   user's); an event that cannot be decrypted is dropped (the caller
+//!   warns once per room), never passed on as ciphertext;
 //! - sending into an encrypted room shares this device's Megolm session
 //!   with every member device first ([`outbound`]);
 //! - the store is [`store`]'s; secret storage and cross-signing are
@@ -380,24 +383,67 @@ impl Crypto {
     }
 
     /// Takes the room keys of `/sync`'s to-device events.
-    pub(crate) fn receive_to_device(&self, events: &Value) {
+    pub(crate) async fn receive_to_device(&self, events: &Value) {
         let mut changed = false;
         for event in events.as_array().into_iter().flatten() {
             if event["type"] != "m.room.encrypted" || event["content"]["algorithm"] != OLM {
                 continue;
             }
             let sender = event["sender"].as_str().unwrap_or_default();
-            match self.decrypt_olm(sender, &event["content"]) {
-                Ok(payload) => changed |= self.room_key(&payload, &event["content"]),
+            let content = &event["content"];
+            let shared = match self.decrypt_olm(sender, content) {
+                Ok(payload) if payload["type"] == "m.room_key" => {
+                    let device_key = content["sender_key"].as_str().unwrap_or_default();
+                    self.sender_device(sender, device_key, &payload)
+                        .await
+                        .map(|ed| (payload, ed))
+                }
+                Ok(_) => continue,
+                Err(why) => Err(format!("not decrypted: {why}")),
+            };
+            match shared {
+                Ok((payload, ed)) => changed |= self.room_key(&payload, content, sender, &ed),
                 Err(why) => tracing::warn!(
                     platform = crate::PLATFORM,
                     sender,
-                    "a to-device message was not decrypted: {why}"
+                    "a to-device room key was refused: {why}"
                 ),
             }
         }
         if changed {
             self.save_or_warn();
+        }
+    }
+
+    /// The Ed25519 key of `user`'s device that sent an Olm `payload` from
+    /// Curve25519 key `sender_key`: one of the user's self-signed devices
+    /// must hold both that key and the payload's `keys.ed25519`, or the
+    /// sender is not who the (untrusted) homeserver says.
+    async fn sender_device(
+        &self,
+        user: &str,
+        sender_key: &str,
+        payload: &Value,
+    ) -> Result<String, String> {
+        let claimed = payload["keys"]["ed25519"]
+            .as_str()
+            .ok_or("the payload names no Ed25519 key")?;
+        let answer = self
+            .api
+            .post("/keys/query", &json!({"device_keys": {user: []}}))
+            .await
+            .map_err(|e| format!("keys/query: {}", e.describe()))?;
+        let devices = answer["device_keys"][user].as_object();
+        let owned = devices.into_iter().flatten().any(|(device, keys)| {
+            outbound::verified(user, device, keys)
+                .is_some_and(|m| m.curve.to_base64() == sender_key && m.ed.to_base64() == claimed)
+        });
+        if owned {
+            Ok(claimed.to_owned())
+        } else {
+            Err(format!(
+                "its keys are not those of a verified device of {user}"
+            ))
         }
     }
 
@@ -446,7 +492,7 @@ impl Crypto {
     }
 
     /// Keeps the Megolm session an `m.room_key` payload shares.
-    fn room_key(&self, payload: &Value, content: &Value) -> bool {
+    fn room_key(&self, payload: &Value, content: &Value, sender: &str, ed25519: &str) -> bool {
         let key = &payload["content"];
         if payload["type"] != "m.room_key" || key["algorithm"] != MEGOLM {
             return false;
@@ -472,6 +518,8 @@ impl Crypto {
                 .as_str()
                 .unwrap_or_default()
                 .to_owned(),
+            sender: sender.to_owned(),
+            ed25519: ed25519.to_owned(),
             pickle: String::new(),
         };
         self.lock()
@@ -506,6 +554,11 @@ impl Crypto {
             .is_some_and(|k| k != entry.sender_key)
         {
             return Err("its sender key is not the one that shared the session".into());
+        }
+        // A session speaks only for the user who shared it (an empty
+        // sender, from an older store, matches nobody).
+        if event["sender"].as_str() != Some(entry.sender.as_str()) || entry.sender.is_empty() {
+            return Err("its sender is not the user who shared the session".into());
         }
         let decrypted = session.decrypt(&message).map_err(|e| e.to_string())?;
         let plaintext: Value =

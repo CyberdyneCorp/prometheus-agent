@@ -197,6 +197,49 @@ async fn an_event_that_cannot_be_decrypted_is_dropped_never_passed_on() {
     bot.disconnect().await;
 }
 
+/// A session speaks only for the user who shared it: the homeserver
+/// cannot relabel its events as another (allowlisted) user's.
+#[tokio::test]
+async fn a_session_decrypts_only_events_of_the_user_who_shared_it() {
+    let rig = Rig::new().await;
+    let keys = rig.mock.keys();
+    let mut phone = Device::publish(keys, USER, USER_DEVICE);
+    let bot = rig.adapter("", &[]);
+    let link = connected(&bot).await;
+    phone.share_room_key(keys, DM, BOT, BOT_DEVICE);
+    rig.mock.wake();
+    rig.mock
+        .push_encrypted_as("@admin:example.org", &phone.encrypt_text(DM, "relabelled"));
+    rig.mock.push_encrypted(&phone.encrypt_text(DM, "genuine"));
+    eventually(|| !link.texts().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(link.texts(), ["genuine"]);
+    bot.disconnect().await;
+}
+
+/// A room key from a device that is not in the named user's device list
+/// is refused, so its messages are never attributed to that user.
+#[tokio::test]
+async fn a_room_key_from_a_device_the_user_does_not_own_is_refused() {
+    let rig = Rig::new().await;
+    let keys = rig.mock.keys();
+    let mut impostor = Device::unlisted(USER, "IMPOSTOR");
+    let mut phone = Device::publish(keys, USER, USER_DEVICE);
+    let bot = rig.adapter("", &[]);
+    let link = connected(&bot).await;
+    impostor.share_room_key(keys, DM, BOT, BOT_DEVICE);
+    rig.mock.wake();
+    rig.mock
+        .push_encrypted(&impostor.encrypt_text(DM, "forged"));
+    phone.share_room_key(keys, DM, BOT, BOT_DEVICE);
+    rig.mock.wake();
+    rig.mock.push_encrypted(&phone.encrypt_text(DM, "genuine"));
+    eventually(|| !link.texts().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(link.texts(), ["genuine"]);
+    bot.disconnect().await;
+}
+
 #[tokio::test]
 async fn files_go_into_an_encrypted_room_as_encrypted_attachments_both_ways() {
     let rig = Rig::new().await;

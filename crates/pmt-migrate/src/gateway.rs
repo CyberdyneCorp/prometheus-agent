@@ -19,6 +19,7 @@ use jiff::Timestamp;
 use pmt_core::error::Error;
 use serde_json::{Map, Value, json};
 
+use crate::catalog;
 use crate::component::Component;
 use crate::config::{flatten, json_to_toml};
 use crate::env::{self, Class};
@@ -28,51 +29,42 @@ use crate::plan::{Dest, Existing, Source, Step};
 use crate::report::{Disposition, Entry};
 use crate::writes::{self, Writes};
 
-/// `.env` prefixes and their platform, longest first.
+/// `.env` prefixes of the built-in platforms and their platform (the
+/// catalog platforms' are `catalog`'s).
 const PREFIXES: &[(&str, &str)] = &[
-    ("WHATSAPP_CLOUD_", "whatsapp_cloud"),
-    ("WECOM_CALLBACK_", "wecom_callback"),
-    ("GOOGLE_CHAT_", "google_chat"),
-    ("BLUEBUBBLES_", "bluebubbles"),
-    ("MATTERMOST_", "mattermost"),
     ("TELEGRAM_", "telegram"),
-    ("DINGTALK_", "dingtalk"),
     ("WHATSAPP_", "whatsapp"),
     ("DISCORD_", "discord"),
     ("SIGNAL_", "signal"),
     ("MATRIX_", "matrix"),
     ("WEBHOOK_", "webhook"),
-    ("YUANBAO_", "yuanbao"),
-    ("SIMPLEX_", "simplex"),
-    ("PHOTON_", "photon"),
-    ("FEISHU_", "feishu"),
-    ("WEIXIN_", "weixin"),
-    ("QQBOT_", "qqbot"),
     ("SLACK_", "slack"),
     ("EMAIL_", "email"),
-    ("WECOM_", "wecom"),
-    ("TEAMS_", "teams"),
-    ("LINE_", "line"),
-    ("NTFY_", "ntfy"),
-    ("BUZZ_", "buzz"),
-    ("SMS_", "sms"),
-    ("IRC_", "irc"),
-    ("QQ_", "qqbot"),
 ];
+
+/// Whether `platform` is served by a catalog plugin, not built in.
+fn catalog_platform(src: &Source<'_>, platform: &str) -> bool {
+    catalog::is_adapter(platform) && !src.host.known(Registry::Platform, platform, None)
+}
 
 /// Whether Prometheus serves `platform`: a built-in adapter, or a catalog
 /// adapter plugin the catalog offers.
 fn served(src: &Source<'_>, platform: &str) -> bool {
     src.host.known(Registry::Platform, platform, None)
-        || (crate::plugins::CATALOG_ADAPTERS.contains(&platform)
+        || (catalog::is_adapter(platform)
             && src.host.known(Registry::CatalogPlugin, platform, None))
 }
 
-/// The platform an `.env` name configures.
+/// The platform an `.env` name configures (the longest matching prefix:
+/// `WHATSAPP_CLOUD_` before `WHATSAPP_`).
 fn platform_of(name: &str) -> Option<(&'static str, &str)> {
     PREFIXES
         .iter()
-        .find_map(|(prefix, p)| name.strip_prefix(prefix).map(|rest| (*p, rest)))
+        .copied()
+        .chain(catalog::prefixes())
+        .filter(|(prefix, _)| name.starts_with(prefix))
+        .max_by_key(|(prefix, _)| prefix.len())
+        .map(|(prefix, p)| (p, &name[prefix.len()..]))
 }
 
 /// One platform's settings, collected from the config and `.env`.
@@ -185,7 +177,6 @@ pub fn plan(src: &Source<'_>) -> Result<GatewayStep, Error> {
         pairings: Vec::new(),
     };
     let mut platforms: BTreeMap<String, Platform> = BTreeMap::new();
-    let supported = |p: &str| served(src, p);
     for root in ["platforms", "gateway.platforms"] {
         if let Some(defs) = src.get(root).and_then(Value::as_object) {
             for (name, def) in defs {
@@ -205,7 +196,7 @@ pub fn plan(src: &Source<'_>) -> Result<GatewayStep, Error> {
     }
     let global = src.env_value("GATEWAY_ALLOWED_USERS").map(csv);
     for (name, mut p) in platforms {
-        if !supported(&name) || !p.used {
+        if !migrated(src, &name, &p, &mut step) {
             continue;
         }
         if let Some(users) = &global {
@@ -215,6 +206,33 @@ pub fn plan(src: &Source<'_>) -> Result<GatewayStep, Error> {
     }
     pairings(src, &mut step)?;
     Ok(step)
+}
+
+/// Whether platform `name`'s settings become a table. A catalog platform
+/// is migrated exactly when the plugins component installs its plugin,
+/// else the table would name a platform no plugin provides.
+fn migrated(src: &Source<'_>, name: &str, p: &Platform, step: &mut GatewayStep) -> bool {
+    if !served(src, name) {
+        return false;
+    }
+    if !catalog_platform(src, name) {
+        return p.used;
+    }
+    if catalog::used(src, name) {
+        return true;
+    }
+    not_enabled(name, p, step);
+    false
+}
+
+/// The settings of a catalog platform Hermes did not turn on.
+fn not_enabled(name: &str, p: &Platform, step: &mut GatewayStep) {
+    for i in &p.entries {
+        let entry = &mut step.entries[*i];
+        entry.disposition = Disposition::Skipped;
+        entry.target = None;
+        entry.reason = format!("{name} is not enabled in the Hermes profile");
+    }
 }
 
 fn push(step: &mut GatewayStep, entry: Entry) -> usize {
@@ -405,11 +423,11 @@ fn env_entry(
     let supported = served(src, platform);
     if class == Class::Secret {
         if supported {
-            name_credential(
-                platforms.entry(platform.to_owned()).or_default(),
-                name,
-                rest,
-            );
+            let p = platforms.entry(platform.to_owned()).or_default();
+            match catalog::secret(name) {
+                Some((_, secret)) => refer(p, secret),
+                None => name_credential(p, name, rest),
+            }
         }
         return;
     }
@@ -425,7 +443,17 @@ fn env_entry(
         return;
     }
     let p = platforms.entry(platform.to_owned()).or_default();
-    let (disposition, to, why) = env_setting(platform, rest, value, p);
+    let (disposition, to, why) = match catalog::option(platform, name, value) {
+        Some((key, option)) => {
+            insert_path(&mut p.table, &format!("options.{key}"), option);
+            (
+                Disposition::Transformed,
+                Some(format!("gateway.platforms.{platform}.options.{key}")),
+                String::new(),
+            )
+        }
+        None => env_setting(platform, rest, value, p),
+    };
     if disposition != Disposition::Unsupported {
         p.used = true;
     }
@@ -444,6 +472,19 @@ fn name_credential(p: &mut Platform, name: &str, rest: &str) {
     p.used = true;
     if !p.table.contains_key("token_secret") && rest.contains("TOKEN") {
         p.table.insert("token_secret".to_owned(), json!(name));
+    }
+}
+
+/// A catalog plugin's credential: stored under the plugin's secret name
+/// (the secrets component), and named by the option that takes it.
+fn refer(p: &mut Platform, secret: &catalog::Secret) {
+    p.used = true;
+    if let Some(option) = secret.option {
+        insert_path(
+            &mut p.table,
+            &format!("options.{option}"),
+            json!(secret.plugin),
+        );
     }
 }
 
@@ -496,10 +537,7 @@ fn env_setting(
 }
 
 fn is_true(value: &str) -> bool {
-    matches!(
-        value.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
+    catalog::truthy(value)
 }
 
 /// Writes `[gateway.platforms.<name>]` (disabled, allowlist without

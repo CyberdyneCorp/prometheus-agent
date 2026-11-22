@@ -156,7 +156,9 @@ const PROCESS_CONTROL: &[&str] = &[
     "TZ",
 ];
 
-/// Platform prefixes whose settings belong to the gateway component.
+/// Prefixes of built-in platforms and gateway features whose settings
+/// belong to the gateway component (catalog platforms' prefixes are
+/// `catalog`'s).
 pub const PLATFORM_PREFIXES: &[&str] = &[
     "TELEGRAM_",
     "DISCORD_",
@@ -166,24 +168,6 @@ pub const PLATFORM_PREFIXES: &[&str] = &[
     "EMAIL_",
     "WHATSAPP_",
     "WEBHOOK_",
-    "MATTERMOST_",
-    "DINGTALK_",
-    "FEISHU_",
-    "WECOM_",
-    "WEIXIN_",
-    "BLUEBUBBLES_",
-    "QQ_",
-    "QQBOT_",
-    "YUANBAO_",
-    "LINE_",
-    "SMS_",
-    "NTFY_",
-    "IRC_",
-    "BUZZ_",
-    "SIMPLEX_",
-    "PHOTON_",
-    "TEAMS_",
-    "GOOGLE_CHAT_",
     "GATEWAY_",
     "A2A_",
     "API_SERVER_",
@@ -210,10 +194,13 @@ pub fn classify(name: &str, known_secret: &dyn Fn(&str) -> bool) -> Class {
     if let Some((_, key, transform)) = SETTINGS.iter().find(|(n, _, _)| *n == name) {
         return Class::Setting(key, *transform);
     }
-    if data::is_hermes_secret(name) || known_secret(name) || secret_shaped(name) {
+    let catalog_secret = crate::catalog::secret(name).is_some();
+    if data::is_hermes_secret(name) || known_secret(name) || secret_shaped(name) || catalog_secret {
         return Class::Secret;
     }
-    if PLATFORM_PREFIXES.iter().any(|p| name.starts_with(p)) {
+    if PLATFORM_PREFIXES.iter().any(|p| name.starts_with(p))
+        || crate::catalog::platform_of(name).is_some()
+    {
         return Class::Platform;
     }
     if UNSUPPORTED.contains(&name) || data::is_hermes_setting(name) || name.starts_with("HERMES_") {
@@ -258,5 +245,11 @@ mod tests {
         assert_eq!(classify("PYTHONPATH", &none), Class::ProcessControl);
         assert_eq!(classify("TELEGRAM_ALLOWED_USERS", &none), Class::Platform);
         assert_eq!(classify("TELEGRAM_BOT_TOKEN", &none), Class::Secret);
+        // Catalog platforms: their settings and their credentials.
+        assert_eq!(classify("TWILIO_ACCOUNT_SID", &none), Class::Platform);
+        assert_eq!(
+            classify("MSGRAPH_WEBHOOK_CLIENT_STATE", &none),
+            Class::Secret
+        );
     }
 }
