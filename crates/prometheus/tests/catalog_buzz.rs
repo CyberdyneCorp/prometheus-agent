@@ -3,9 +3,10 @@
 //! `REQ` replays from `since`, live `EVENT`s; held by the sidecar's socket
 //! bridge) and a fake Buzz CLI the real sidecar runs: the conformance
 //! suite, the private key passed by environment only, mention gating,
-//! the poll fallback and the SHA-256 check of inbound media.
+//! the poll fallback and the SHA-256 check of inbound media. Unix only: the
+//! fake CLI is an executable `node` script, which Windows cannot spawn.
 
-#![cfg(feature = "gateway")]
+#![cfg(all(unix, feature = "gateway"))]
 
 mod common;
 
