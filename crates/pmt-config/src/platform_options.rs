@@ -508,6 +508,50 @@ pub struct MatrixOptions {
     pub auto_join: MatrixAutoJoin,
     /// How a room maps onto sessions.
     pub session_scope: MatrixSessionScope,
+    /// End-to-end encryption: `off`, `optional` (encrypted rooms work when
+    /// encryption starts; otherwise they are not read) or `required` (the
+    /// adapter does not start without it).
+    pub e2ee: MatrixE2ee,
+}
+
+/// `gateway.platforms.matrix.options.e2ee`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MatrixE2ee {
+    /// No encryption: encrypted rooms are not read or written.
+    Off,
+    /// Encryption when it can start; a warning and none otherwise.
+    #[default]
+    Optional,
+    /// Encryption or nothing: the adapter fails closed
+    /// (`matrix_e2ee_unavailable`).
+    Required,
+}
+
+/// `gateway.platforms.matrix.options.auto_join`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MatrixAutoJoin {
+    /// Invites from authorized users (`allow_users`).
+    #[default]
+    Authorized,
+    /// Every invite.
+    All,
+    /// None: the bot joins rooms only by hand.
+    None,
+}
+
+/// `gateway.platforms.matrix.options.session_scope`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MatrixSessionScope {
+    /// The room's conversation, each thread its own session.
+    #[default]
+    Auto,
+    /// One session (and workspace binding) per room: threads included.
+    Room,
+    /// Every top-level message starts its own thread session.
+    Thread,
 }
 
 /// `gateway.platforms.signal.options`.

@@ -80,6 +80,7 @@ The keys of `[gateway.platforms.<platform>] options` for each first-party adapte
 |---|---|---|---|---|---|
 | `gateway.platforms.matrix.options.allowed_rooms` | array of string | unset | any | `next_session` | Rooms (internal `!` room ids, not `#` aliases) the bot reads; checked before any other gating. Two-member rooms (DMs) are exempt; empty reads every joined room. |
 | `gateway.platforms.matrix.options.auto_join` | one of "authorized", "all", "none" | `"authorized"` | `"authorized"`, `"all"`, `"none"` | `next_session` | Which invites the bot accepts. |
+| `gateway.platforms.matrix.options.e2ee` | one of "off", "optional", "required" | `"optional"` | `"off"`, `"optional"`, `"required"` | `next_session` | End-to-end encryption: `off`, `optional` (encrypted rooms work when encryption starts; otherwise they are not read) or `required` (the adapter does not start without it). |
 | `gateway.platforms.matrix.options.homeserver` | string | unset | any | `next_session` | The homeserver URL. |
 | `gateway.platforms.matrix.options.session_scope` | one of "auto", "room", "thread" | `"auto"` | `"auto"`, `"room"`, `"thread"` | `next_session` | How a room maps onto sessions. |
 

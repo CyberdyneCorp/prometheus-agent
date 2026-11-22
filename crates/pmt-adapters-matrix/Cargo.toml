@@ -13,6 +13,13 @@ repository.workspace = true
 kit = []
 
 [dependencies]
+# Secret storage (recovery key) of end-to-end encryption: AES-256-CTR,
+# HKDF and HMAC-SHA-256.
+aes.workspace = true
+base64.workspace = true
+ring.workspace = true
+serde.workspace = true
+vodozemac.workspace = true
 futures-util.workspace = true
 jiff.workspace = true
 pmt-config.workspace = true

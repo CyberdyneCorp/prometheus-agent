@@ -121,6 +121,9 @@ webpki = { package = "rustls-webpki", version = "0.103", default-features = fals
 # (`client_key_password_secret`).
 pkcs8 = { version = "0.10", default-features = false, features = ["encryption", "pem", "std"] }
 base64 = "0.23"
+# Olm/Megolm end-to-end encryption of the Matrix adapter (pure Rust, by the
+# Matrix.org Foundation; >= 0.11.2 for RUSTSEC-2026-0451 and -0510).
+vodozemac = "0.11.2"
 # Daemon-owned terminals (desktop-app, Embedded terminals are daemon-owned PTYs).
 portable-pty = "0.9"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }

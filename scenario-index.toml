@@ -5351,6 +5351,9 @@ capabilities = [
 "Progress is silent" = ["crates/pmt-gateway/tests/messaging/presentation.rs::only_the_final_reply_of_a_turn_is_marked_notifying", "crates/pmt-adapters-telegram/tests/notify.rs::final_messages_notify_and_unmarked_ones_follow_the_notification_mode"]
 "Backlog replay on request" = ["crates/pmt-adapters-telegram/tests/presentation.rs::the_backlog_is_replayed_in_order_when_asked"]
 
+[platform-adapters."Matrix end-to-end encryption"]
+"Required encryption fails closed" = { tests = ["crates/pmt-adapters-matrix/tests/e2ee.rs::required_encryption_with_a_corrupted_store_fails_closed_and_reads_no_rooms", "crates/pmt-adapters-matrix/tests/e2ee.rs::a_store_whose_one_time_keys_no_longer_match_the_server_is_refused"], note = "the mock homeserver serves the key endpoints and another user's vodozemac device exchanges Olm/Megolm with the adapter (crates/pmt-adapters-matrix/tests/e2ee.rs covers decryption, encrypted replies and attachments, cross-signing and dropped events too)" }
+
 [platform-adapters."Slack multiple workspaces"]
 "Reply goes to the right workspace" = ["crates/pmt-adapters-slack/tests/workspaces.rs::a_message_from_the_second_workspace_is_answered_with_its_token", "crates/pmt-adapters-slack/tests/workspaces.rs::a_channel_never_seen_is_found_in_its_workspace_after_a_restart"]
 

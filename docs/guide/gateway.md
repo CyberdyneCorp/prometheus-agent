@@ -257,8 +257,23 @@ The other first-party adapters:
   `room` (one session and workspace binding per room) or `thread` (every
   top-level message starts its own thread). Events older than the
   adapter's start minus 5 seconds are dropped; more than 10 such drops
-  after the first 30 seconds log one warning naming clock skew. Rooms are
-  not end-to-end encrypted yet.
+  after the first 30 seconds log one warning naming clock skew.
+  Encrypted rooms work with end-to-end encryption (`options.e2ee`:
+  `optional` by default, `off` or `required`); the access token must
+  belong to a device. The device's Olm/Megolm keys live in
+  `<profile>/platforms/matrix/crypto/` (mode 0700, pickles encrypted with
+  the generated secret `MATRIX_CRYPTO_STORE_KEY`); its keys are uploaded
+  at first connect, replies and files into an encrypted room are
+  encrypted for every member device, and nothing is sent into one in the
+  clear. With the secret `MATRIX_RECOVERY_KEY` (the account's recovery
+  key) the device is signed with the self-signing key from secret storage
+  at every start, so other users' clients trust it. An event that cannot
+  be decrypted is dropped with one warning per room. When encryption
+  cannot start (a corrupted store, a token without a device, a store whose
+  keys no longer match the homeserver, which names the remediation:
+  delete the store and the key secret and sign in as a new device),
+  `required` stops the adapter (`fatal`, `matrix_e2ee_unavailable`,
+  before any room is read) and `optional` goes on without encrypted rooms.
 - **Signal** talks to a signal-cli HTTP daemon at `options.http_url` for
   the account `options.account` (E.164). Run the daemon with
   `--receive-mode on-connection` so Signal holds messages while the

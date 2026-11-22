@@ -24,6 +24,9 @@ pub struct Endpoints {
     /// The DNS-over-HTTPS resolvers (JSON API) asked for fallback
     /// addresses of the API host when it does not connect.
     pub doh: Vec<String>,
+    /// How long connecting (`getMe`, fallbacks included) may take before
+    /// the gateway retries.
+    pub connect_bound: Duration,
 }
 
 impl Default for Endpoints {
@@ -32,6 +35,7 @@ impl Default for Endpoints {
             api: "https://api.telegram.org".to_owned(),
             files: "https://api.telegram.org/file".to_owned(),
             doh: crate::net::DOH_RESOLVERS.map(str::to_owned).to_vec(),
+            connect_bound: Duration::from_secs(30),
         }
     }
 }

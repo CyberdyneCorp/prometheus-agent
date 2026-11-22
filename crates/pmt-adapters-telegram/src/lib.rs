@@ -282,9 +282,6 @@ impl Telegram {
     }
 }
 
-/// How long connecting may take before the gateway retries.
-const CONNECT_BOUND: std::time::Duration = std::time::Duration::from_secs(30);
-
 /// A chat or thread id as the Bot API takes it (numbers stay numbers).
 pub(crate) fn chat(id: &str) -> Value {
     id.parse::<i64>().map_or_else(|_| json!(id), |n| json!(n))
@@ -446,14 +443,15 @@ impl Adapter for Telegram {
         Box::pin(async move {
             let token = credential(&self.scope, &self.secret)?;
             let api = self.api_with(token);
-            let me = tokio::time::timeout(CONNECT_BOUND, api.call("getMe", &json!({})))
+            let bound = self.endpoints.connect_bound;
+            let me = tokio::time::timeout(bound, api.call("getMe", &json!({})))
                 .await
                 .map_err(|_| AdapterError {
                     retryable: true,
                     code: "telegram_unreachable".to_owned(),
                     message: format!(
                         "Telegram: the Bot API did not answer within {} s",
-                        CONNECT_BOUND.as_secs()
+                        bound.as_secs()
                     ),
                 })?
                 .map_err(|e| connect_error(&e))?;

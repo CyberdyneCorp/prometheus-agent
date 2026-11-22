@@ -209,3 +209,34 @@ async fn a_slow_resolver_is_given_up_on_after_the_discovery_timeout() {
     assert_eq!(api.calls("getMe").len(), 1);
     rig.bot.disconnect().await;
 }
+
+#[tokio::test]
+async fn connecting_gives_up_at_the_connect_bound() {
+    // A server that accepts connections and never answers.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    pmt_core::spawn::spawn(async move {
+        let mut held = Vec::new();
+        while let Ok((stream, _)) = listener.accept().await {
+            held.push(stream);
+        }
+    });
+    let home = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let setup = kit_setup(home.path(), "telegram", "", &[(TOKEN_SECRET, TOKEN)]).unwrap();
+    let endpoints = Endpoints {
+        doh: Vec::new(),
+        connect_bound: Duration::from_secs(1),
+        ..Endpoints::at(&format!("http://127.0.0.1:{port}"))
+    };
+    let bot = Telegram::new(&setup, endpoints).unwrap();
+    let started = Instant::now();
+    let err = bot.connect(Arc::new(Link)).await.unwrap_err();
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(err.code, "telegram_unreachable");
+    assert!(err.retryable);
+    assert!(err.message.contains("within 1 s"), "{}", err.message);
+}
