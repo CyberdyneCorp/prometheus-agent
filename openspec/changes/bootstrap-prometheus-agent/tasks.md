@@ -710,6 +710,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 - [x] 79.1 Implement plugin collections (tag refs refused), Python package and Nix plugin sources (unpinned packages refused) and the catalog tool for agent-initiated installs (the model cannot pick a version); verify with catalog fixtures (spec: plugin-system)
 - [ ] 79.2 Ship the first-party disk-cleanup and google_meet plugins and the catalog plugins for Home Assistant and Camofox; verify each plugin's scenarios in CI (spec: plugin-system)
+  - Progress (79.2): done and tested: the `camofox` catalog plugin (plugins/first-party/camofox, crates/pmt-plugins/tests/first_party_camofox.rs) and the Camofox migration (URL into `plugins.entries.camofox.url`, core `browser` toolset disabled; scenario "Migrated Camofox profile"); `homeassistant` exists as a catalog adapter plugin (78.7). Still open: the first-party `disk-cleanup` and `google_meet` plugins (scenarios "Project test file is never swept", "Non-Meet URL rejected"), their embedding in the binary, and the official catalog entries for `homeassistant` and `camofox` (they need packages signed with the release key, the M2 signing gap).
 
 ## 80. M3 Pets and achievements
 
