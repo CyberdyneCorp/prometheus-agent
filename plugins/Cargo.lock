@@ -297,6 +297,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-camofox"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "first-party-daytona"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,20 @@
+# Catalog plugin: browser tools on a Camofox anti-detection Firefox REST
+# server (spec: plugin-system, Catalog plugins for Home Assistant and
+# Camofox). Point it at the server with
+# `prometheus config set plugins.entries.camofox.url http://localhost:9377`
+# (a server elsewhere needs its host granted:
+# `prometheus plugins grants approve camofox "network <host>:<port>"`),
+# then `prometheus plugins enable camofox`. A migrated Hermes Camofox
+# profile gets it installed with the URL set and the core `browser`
+# toolset disabled.
+manifest_version = 1
+id = "camofox"
+version = "1.0.0"
+kind = "wasm"
+description = "Browser tools on a Camofox anti-detection Firefox server: open, read, click, type, scroll, go back and close tabs."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["tool@1.2"]
+
+[capabilities]
+network = ["localhost:9377", "127.0.0.1:9377"]

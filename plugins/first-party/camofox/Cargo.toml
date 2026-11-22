@@ -1,0 +1,12 @@
+[package]
+name = "first-party-camofox"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen.workspace = true
+serde_json.workspace = true

@@ -559,3 +559,16 @@ memory and identity file, and runs in its own process on the line
 interface rather than in the daemon. It shows a banner, changes no setting, and needs `--model` and
 `--provider`, exiting 78 without them. `plugins.safe_mode = true` skips the
 plugins alone.
+
+## Catalog plugins: Camofox
+
+`camofox` (source `plugins/first-party/camofox`) gives the model browser
+tools on a [Camofox](https://github.com/jo-inc/camofox-browser)
+anti-detection Firefox REST server: `camofox_open` (http(s) pages only),
+`camofox_snapshot`, `camofox_click` and `camofox_type` (by the snapshot's
+element refs), `camofox_scroll`, `camofox_back` and `camofox_close`. Each
+session drives its own tab, with its session id as the Camofox user. The
+server is `plugins.entries.camofox.url` (default `http://localhost:9377`;
+another host needs its network capability approved). Migrating a Hermes
+profile that browsed through Camofox installs it disabled, sets the URL
+and disables the core `browser` toolset in that profile.
