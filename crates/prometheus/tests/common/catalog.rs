@@ -487,3 +487,30 @@ pub async fn serve(adapter: Arc<dyn pmt_gateway::messaging::Adapter>) -> String 
         .await
         .unwrap()
 }
+
+/// A text field of a `multipart/form-data` body.
+pub fn multipart_field(body: &[u8], name: &str) -> String {
+    let text = String::from_utf8_lossy(body);
+    text.split(&format!("name=\"{name}\"\r\n\r\n"))
+        .nth(1)
+        .and_then(|r| r.split("\r\n").next())
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The file part of a `multipart/form-data` body: name, content type and
+/// bytes.
+pub fn multipart_file(body: &[u8]) -> Option<(String, String, Vec<u8>)> {
+    let text = String::from_utf8_lossy(body);
+    let at = text.find("filename=\"")? + "filename=\"".len();
+    let name = text[at..].split('"').next()?.to_owned();
+    let mime = text[at..]
+        .split("content-type: ")
+        .nth(1)
+        .and_then(|r| r.split("\r\n").next())
+        .unwrap_or_default()
+        .to_owned();
+    let start = body.windows(4).skip(at).position(|w| w == b"\r\n\r\n")? + at + 4;
+    let end = body[start..].windows(4).position(|w| w == b"\r\n--")? + start;
+    Some((name, mime, body[start..end].to_vec()))
+}

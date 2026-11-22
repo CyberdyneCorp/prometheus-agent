@@ -49,6 +49,8 @@ pub struct FakeAdapter {
     pub credential: Mutex<Option<String>>,
     /// The shared secret a webhook request must carry in `x-secret`.
     pub http_secret: Mutex<Option<String>>,
+    /// The client address each webhook request carried.
+    pub http_peers: Mutex<Vec<Option<String>>>,
     /// What its sender check answers, by sender (`unknown` otherwise).
     pub verdicts: Mutex<HashMap<String, Result<SenderVerdict, AdapterError>>>,
     /// Sender checks asked.
@@ -102,6 +104,7 @@ impl FakeAdapter {
             edits_tried: AtomicUsize::new(0),
             credential: Mutex::default(),
             http_secret: Mutex::default(),
+            http_peers: Mutex::default(),
             verdicts: Mutex::default(),
             sender_checks: AtomicUsize::new(0),
             menus: Mutex::default(),
@@ -444,6 +447,11 @@ impl Adapter for FakeAdapter {
     fn handle_http<'a>(&'a self, request: &'a HttpRequest) -> AdapterFuture<'a, HttpResponse> {
         let link = self.link.lock().unwrap().clone();
         let text = String::from_utf8_lossy(&request.body).into_owned();
+        self.http_peers.lock().unwrap().push(
+            request
+                .header(pmt_gateway::messaging::PEER_HEADER)
+                .map(str::to_owned),
+        );
         Box::pin(async move {
             if let Some(link) = link {
                 let mut event = Inbound::text(ChatType::Dm, "hook", "hook", &text);

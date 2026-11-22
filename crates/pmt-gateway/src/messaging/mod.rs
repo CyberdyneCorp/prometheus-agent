@@ -106,9 +106,10 @@ use tracing::Instrument as _;
 pub use adapter::{
     AccessPolicy, Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup,
     AdapterState, AdapterStatus, Addressing, Admission, Attachment, AudioOp, Button, ChatInfo,
-    CronFire, Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound, Interactive,
-    LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private, Reaction, Receipt,
-    Select, SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus, TurnState,
+    CronFire, DEFAULT_MAX_BODY, Descriptor, HistoryEntry, HttpRequest, HttpResponse, Inbound,
+    Interactive, LengthUnit, Markup, MediaKind, MediaStream, MenuCommand, Outgoing, Private,
+    Reaction, Receipt, Select, SendError, SenderVerdict, Sent, SessionHints, TaskCard, TaskStatus,
+    TurnState,
 };
 pub use agents::{
     Agents, BusyPolicy, Conversation, Lookup, ModelChoice, UpdateEvent, UpdateFeed, UpdateFromChat,
@@ -117,7 +118,7 @@ pub use agents::{
 pub use forward::ForwardOptions;
 pub use hooks::{Hook, HookBridge, Hooks, PreCommand};
 pub use http::HttpOptions;
-pub use http::{CRON_FIRE_PATH, Endpoint};
+pub use http::{CRON_FIRE_PATH, Endpoint, PEER_HEADER};
 pub use key::{ChatType, Isolation, KeyParts, Routing, SessionKey};
 pub use lane::{Background, BackgroundKind};
 pub use recovery::{CLEAN_SHUTDOWN, RESUME_ORIGIN};

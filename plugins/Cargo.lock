@@ -9,6 +9,7 @@ dependencies = [
  "aes",
  "base64",
  "cbc",
+ "crypto-bigint",
  "hmac",
  "serde_json",
  "sha1",
@@ -322,6 +323,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-google_chat"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
 name = "first-party-homeassistant"
 version = "0.1.0"
 dependencies = [
@@ -360,6 +369,14 @@ dependencies = [
  "remote-kit",
  "serde_json",
  "wit-bindgen",
+]
+
+[[package]]
+name = "first-party-msgraph_webhook"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
 ]
 
 [[package]]
@@ -412,6 +429,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "first-party-teams"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
+name = "first-party-teams_meetings"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
+ "serde_json",
+]
+
+[[package]]
 name = "first-party-vercel"
 version = "0.1.0"
 dependencies = [
@@ -443,6 +476,14 @@ version = "0.1.0"
 dependencies = [
  "adapter-kit",
  "md-5",
+ "serde_json",
+]
+
+[[package]]
+name = "first-party-whatsapp_cloud"
+version = "0.1.0"
+dependencies = [
+ "adapter-kit",
  "serde_json",
 ]
 

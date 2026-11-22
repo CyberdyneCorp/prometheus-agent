@@ -17,6 +17,7 @@
 
 pub mod adapter;
 mod adapter_media;
+mod adapter_secrets;
 pub mod adapter_tools;
 pub mod approvals;
 pub mod bridge;

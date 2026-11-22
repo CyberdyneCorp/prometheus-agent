@@ -1,0 +1,21 @@
+# First-party catalog adapter: WhatsApp through Meta's Cloud API (spec:
+# platform-adapters, WhatsApp Cloud API adapter). Meta posts webhooks to
+# the shared listener (`/p/<profile>/whatsapp_cloud/`); replies go out
+# through the Graph API. Configure `[gateway.platforms.whatsapp_cloud]`
+# with option `phone_number_id` (and optionally `api_version`, default
+# `v20.0`, `verify_token_secret`, `reengagement_template`,
+# `template_language`), store `WHATSAPP_CLOUD_ACCESS_TOKEN` and
+# `WHATSAPP_CLOUD_APP_SECRET`, and run `prometheus gateway whatsapp-cloud
+# setup` for the verify token.
+manifest_version = 1
+id = "whatsapp_cloud"
+version = "1.0.0"
+kind = "wasm"
+description = "WhatsApp through Meta's Cloud API: signed webhooks in, Graph API sends out."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["graph.facebook.com", "lookaside.fbsbx.com"]
+secrets = ["WHATSAPP_CLOUD_ACCESS_TOKEN", "WHATSAPP_CLOUD_APP_SECRET", "WHATSAPP_CLOUD_VERIFY_TOKEN"]

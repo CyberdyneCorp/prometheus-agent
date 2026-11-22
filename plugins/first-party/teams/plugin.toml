@@ -1,0 +1,20 @@
+# First-party catalog adapter: Microsoft Teams through the Bot Framework
+# (spec: platform-adapters, Microsoft Teams adapter). Teams posts
+# activities to the shared listener (`/p/<profile>/teams/`, the bot's
+# messaging endpoint), each verified by its Bot Framework JWT; replies go
+# to the conversation's Bot Connector service. Configure
+# `[gateway.platforms.teams]` with options `client_id` (the bot's app id)
+# and `tenant_id`, and optionally `require_mention` (true) and
+# `service_url`; store `TEAMS_CLIENT_SECRET`.
+manifest_version = 1
+id = "teams"
+version = "1.0.0"
+kind = "wasm"
+description = "Microsoft Teams chats through the Bot Framework: verified activities in, Adaptive Cards out."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["login.botframework.com", "login.microsoftonline.com", "smba.trafficmanager.net", "smba.infra.gcc.teams.microsoft.com", "smba.infra.dod.teams.microsoft.us"]
+secrets = ["TEAMS_CLIENT_SECRET"]

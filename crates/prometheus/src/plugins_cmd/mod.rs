@@ -23,6 +23,7 @@ mod package_cmd;
 mod pypi;
 mod python;
 mod reload;
+mod run_adapter;
 mod run_bridged;
 pub mod run_cmd;
 mod threat;

@@ -502,7 +502,14 @@ up to 5 seconds at exit for its queued deliveries.
   and stderr streamed as the plugin writes them, then its exit code; 70
   when the plugin crashes) and `prometheus plugins
   run <id>` lists them; `prometheus help` lists them under `plugin
-  commands`.
+  commands`. A `platform-adapter` plugin lists its commands in its
+  descriptor (`cli_commands: [{name, description}]`): the command starts
+  the adapter with its platform table's options and hands it
+  `{"op": "cli", "name", "args"}` through `send`, printing what it answers
+  (exit 1 on an error). Adapter descriptors may also set `max_body_bytes`
+  (the shared listener's request cap for it) and `writable_secrets`
+  (secrets it may store by polling `{"store_secret": {"name", "value"}}`,
+  only names it declares and is granted to read).
 - **An approval transport** (`approval_transport`): with
   `plugins.approval_transport = "<plugin>:<name>"` approval requests go to
   the plugin instead of the session's surface. It sees the redacted request

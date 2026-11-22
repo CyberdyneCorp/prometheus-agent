@@ -62,6 +62,13 @@ pub fn send(
         body,
     };
     let answer = http::send(&request).map_err(|e| format!("network: {e:?}"))?;
+    if let Some((_, date)) = answer
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("date"))
+    {
+        crate::time::observe(date);
+    }
     Ok(Response {
         status: answer.status,
         headers: answer.headers,

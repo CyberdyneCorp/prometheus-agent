@@ -704,6 +704,81 @@ credential stores stay unreadable either way.
   receipts are sent unless `read_receipts = false`; `dashboard_url`,
   `spectrum_url` and `dashboard_project` override Photon's defaults.
 
+- `whatsapp_cloud` (Meta's WhatsApp Cloud API): `phone_number_id` (15 to
+  17 digits), and optionally `api_version` (`v20.0`),
+  `reengagement_template` and `template_language` (`en_US`); secrets
+  `WHATSAPP_CLOUD_ACCESS_TOKEN` and `WHATSAPP_CLOUD_APP_SECRET`. Run
+  `prometheus gateway whatsapp-cloud setup` for the verify token (stored as
+  `WHATSAPP_CLOUD_VERIFY_TOKEN`, or the secret `verify_token_secret`
+  names) and paste it with the public URL of `/p/<profile>/whatsapp_cloud/`
+  into the Meta app's webhook settings. The handshake echoes the challenge
+  only for that token (403 otherwise); notifications must carry a valid
+  `X-Hub-Signature-256` (401; 503 while the app secret is missing).
+  Messages are marked read with a typing indicator. Choices become reply
+  buttons (up to 3, labels cut to 20 characters) or a list (up to 10, rows
+  cut to 24); approvals show Approve and Deny and number every choice, and
+  a numbered answer picks one. Voice replies go out as OGG/Opus voice
+  notes. Outside the 24-hour window (Graph error 131047) the
+  `reengagement_template` is sent and the reply waits for the user's
+  answer; without one the delivery fails as "WhatsApp 24-hour window
+  closed", which the outbox records and the other surfaces are told.
+- `msgraph_webhook` (Microsoft Graph change notifications): secret named by
+  `client_state_secret` (the subscriptions' `clientState`; the default
+  grant is `MSGRAPH_CLIENT_STATE`; the adapter does not start without it),
+  and optionally `accepted_resources` (a trailing `*` matches a prefix),
+  `allowed_source_cidrs` (required when `gateway.http.public = true`),
+  `max_seen_receipts` (5000) and `prompt` (`{resource}`, `{change_type}`,
+  `{subscription_id}`, `{notification.<field>}`). `validationToken` is
+  echoed as text; a batch is answered 202 (admitted or duplicate), 403
+  (every `clientState` wrong, or a source outside the ranges) or 400
+  (malformed, or nothing accepted). Each notification is a message from
+  `msgraph`; replies are kept in `plugin-data/msgraph_webhook/files/replies.jsonl`.
+  The shared listener tells adapters the client's address in the
+  `x-prometheus-peer` header (one the client sends is dropped).
+- `teams` (Microsoft Teams through the Bot Framework): `client_id` (the
+  bot's app id), `tenant_id`, secret `TEAMS_CLIENT_SECRET`, and optionally
+  `require_mention` (true) and `service_url`. Point the bot's messaging
+  endpoint at `/p/<profile>/teams/`. Every activity needs a valid Bot
+  Framework JWT (issuer, audience = `client_id`, keys from the published
+  metadata, the activity's service URL) or is answered 401; bodies over
+  1 MiB are refused. Personal chats are always answered; group chats and
+  channels only when the bot is @mentioned or a message replies to one of
+  its own (`require_mention = false` admits every channel message
+  resource-specific consent delivers). Users are their Entra ID object
+  ids. Approvals and choices are Adaptive Cards (Allow Once, Allow
+  Session, Always Allow, Deny), replaced in place with the decision.
+- `teams_meetings` (Teams meeting summaries, built on the Graph listener
+  above, at `/p/<profile>/teams_meetings/`): `client_id`, `tenant_id`,
+  secret `MSGRAPH_CLIENT_SECRET` (an app with the online-meeting
+  transcript permissions), `public_url` (the HTTPS URL Graph posts to),
+  `client_state_secret`, `delivery` (`incoming_webhook`, the URL in the
+  secret `webhook_secret` names, default `TEAMS_MEETINGS_WEBHOOK_URL`; or
+  `graph`, into the meeting chat), and optionally `use_recordings`,
+  `summary_prompt`, `renew_within_minutes` (60), `extend_minutes` (4200)
+  and `renew_check_secs` (300). `prometheus plugins run teams_meetings
+  subscribe|list|renew [<id>]|remove <id>|status|replay <meeting-id>`
+  manages it. Each meeting's transcript becomes one summary turn on the
+  profile's main route (a recording stands in, transcribed, only with
+  `use_recordings`); a meeting is summarized once, and `status` shows a
+  later notification for it as `duplicate`. Subscriptions are renewed
+  before they expire.
+- `google_chat`: Pub/Sub pull (`project_id`, `subscription`,
+  `max_messages`, default 1) or `mode = "http"` callbacks at
+  `/p/<profile>/google_chat/` (`audience` and `service_account_email`;
+  every callback's Google-signed ID token is checked, 401 otherwise);
+  secret `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` (the app's service-account key,
+  as JSON). Spaces keep one session per thread. A working-state message
+  ("Prometheus is thinking…") is replaced by the reply unless
+  `typing_indicator = false`. Choices are a Card v2 with a button each
+  (clarify adds "Other"). Attachment tokens only go to Google hosts.
+  Files: Chat lets an app attach files only as a user, so each user sends
+  `/setup-files start` once (option `oauth_client_id`, secret
+  `GOOGLE_CHAT_OAUTH_CLIENT_SECRET`), opens the link, and pastes the
+  address the browser then fails to load as `/setup-files <address>`;
+  their token is kept in the secrets store (`GOOGLE_CHAT_USER_TOKENS`) and
+  `/setup-files revoke` removes it. Without one, a file arrives as a
+  notice saying how to enable it.
+
 Adapter plugins exchange files with the host as base64 (inbound files the
 plugin downloaded under its own grants, or a local file inside its
 `fs_read` grant), and ask the host for edits, reactions and typing through

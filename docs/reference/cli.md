@@ -31725,6 +31725,7 @@ Commands:
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
   whatsapp        WhatsApp linked-device setup
+  whatsapp-cloud  WhatsApp Cloud API webhook setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
@@ -33142,6 +33143,116 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway whatsapp help help
 ```
 
+## `prometheus gateway whatsapp-cloud`
+
+```text
+WhatsApp Cloud API webhook setup
+
+Usage: prometheus gateway whatsapp-cloud [OPTIONS] <COMMAND>
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp-cloud setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus gateway whatsapp-cloud setup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp-cloud help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp-cloud help [COMMAND]
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway whatsapp-cloud help setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus gateway whatsapp-cloud help setup
+```
+
+## `prometheus gateway whatsapp-cloud help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp-cloud help help
+```
+
 ## `prometheus gateway pause`
 
 ```text
@@ -33572,6 +33683,7 @@ Commands:
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
   whatsapp        WhatsApp linked-device setup
+  whatsapp-cloud  WhatsApp Cloud API webhook setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
@@ -33808,6 +33920,25 @@ Commands:
 Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
 
 Usage: prometheus gateway help whatsapp pair
+```
+
+## `prometheus gateway help whatsapp-cloud`
+
+```text
+WhatsApp Cloud API webhook setup
+
+Usage: prometheus gateway help whatsapp-cloud [COMMAND]
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+```
+
+## `prometheus gateway help whatsapp-cloud setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus gateway help whatsapp-cloud setup
 ```
 
 ## `prometheus gateway help pause`
@@ -44139,6 +44270,7 @@ Commands:
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
   whatsapp        WhatsApp linked-device setup
+  whatsapp-cloud  WhatsApp Cloud API webhook setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
   telegram        Telegram bot maintenance
@@ -44374,6 +44506,25 @@ Commands:
 Link this profile to WhatsApp (scan the QR code, or type a pairing code on the phone); replaces an earlier link
 
 Usage: prometheus help gateway whatsapp pair
+```
+
+## `prometheus help gateway whatsapp-cloud`
+
+```text
+WhatsApp Cloud API webhook setup
+
+Usage: prometheus help gateway whatsapp-cloud [COMMAND]
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+```
+
+## `prometheus help gateway whatsapp-cloud setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus help gateway whatsapp-cloud setup
 ```
 
 ## `prometheus help gateway pause`

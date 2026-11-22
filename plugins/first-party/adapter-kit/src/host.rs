@@ -33,3 +33,31 @@ pub fn warn(message: &str) {
 pub fn info(message: &str) {
     log::log(log::Level::Info, message);
 }
+
+/// Appends `line` to the plugin's file `path` (under its data
+/// directory's `files/`), keeping its last `keep` lines.
+pub fn append_line(path: &str, line: &str, keep: usize) {
+    let old = state::read_file(path).unwrap_or_default();
+    let text = String::from_utf8_lossy(&old);
+    let mut lines: Vec<&str> = text.lines().collect();
+    lines.push(line);
+    let start = lines.len().saturating_sub(keep);
+    let mut out = lines[start..].join("\n");
+    out.push('\n');
+    if let Err(e) = state::write_file(path, out.as_bytes()) {
+        warn(&format!("cannot write {path}: {e:?}"));
+    }
+}
+
+/// Keys of the plugin's profile state.
+#[must_use]
+pub fn keys() -> Vec<String> {
+    state::keys().unwrap_or_default()
+}
+
+/// Removes `key` from the plugin's profile state.
+pub fn remove(key: &str) {
+    if let Err(e) = state::delete(key) {
+        warn(&format!("cannot remove {key}: {e:?}"));
+    }
+}

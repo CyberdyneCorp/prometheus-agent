@@ -1,0 +1,23 @@
+# First-party catalog adapter: Microsoft Graph change notifications (spec:
+# platform-adapters, Microsoft Graph change-notification listener). Graph
+# posts to the shared listener (`/p/<profile>/msgraph_webhook/`); each
+# admitted notification becomes a message to the agent (shaped by option
+# `prompt`, placeholders `{resource}`, `{change_type}`,
+# `{subscription_id}` and `{notification.<field>}`), and replies are kept
+# in `plugin-data/msgraph_webhook/files/replies.jsonl`. Configure
+# `[gateway.platforms.msgraph_webhook]` with `client_state_secret` (the
+# secret holding your subscriptions' clientState, default grant
+# `MSGRAPH_CLIENT_STATE`) and optionally `accepted_resources`,
+# `allowed_source_cidrs` (required with `gateway.http.public = true`) and
+# `max_seen_receipts` (5000).
+manifest_version = 1
+id = "msgraph_webhook"
+version = "1.0.0"
+kind = "wasm"
+description = "Microsoft Graph change notifications as messages to the agent."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+secrets = ["MSGRAPH_CLIENT_STATE"]

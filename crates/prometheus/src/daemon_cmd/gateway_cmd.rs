@@ -71,6 +71,9 @@ pub enum GatewayCommand {
     /// name without backticks).
     #[command(about = "WhatsApp linked-device setup")]
     Whatsapp(super::whatsapp_cmd::WhatsappArgs),
+    /// `WhatsApp` Cloud API webhook setup.
+    #[command(name = "whatsapp-cloud", about = "WhatsApp Cloud API webhook setup")]
+    WhatsappCloud(super::whatsapp_cloud_cmd::WhatsappCloudArgs),
     /// Stop dispatching one adapter's inbound messages (they are
     /// acknowledged and dropped) without disconnecting it; kept across
     /// restarts.
@@ -176,6 +179,7 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
         GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),
         GatewayCommand::Whatsapp(args) => super::whatsapp_cmd::run(args, ctx),
+        GatewayCommand::WhatsappCloud(args) => super::whatsapp_cloud_cmd::run(args, ctx),
         GatewayCommand::Pause { platform } => super::platform_cmd::run(platform, true, ctx),
         GatewayCommand::Resume { platform } => super::platform_cmd::run(platform, false, ctx),
         GatewayCommand::Selftest(args) => super::selftest_cmd::run(args, ctx),

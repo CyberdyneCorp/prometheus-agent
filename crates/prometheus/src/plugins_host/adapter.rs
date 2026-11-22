@@ -31,6 +31,7 @@ use pmt_plugins::host::{CallInfo, Instance};
 use serde_json::{Value, json};
 
 use super::adapter_media::{self, Inbox};
+use super::adapter_secrets::SecretWriter;
 use super::sidecar;
 
 /// How often inbound messages are polled.
@@ -128,15 +129,32 @@ pub fn factory() -> AdapterFactory {
                 )
                 .with_hint("prometheus plugins list shows why an adapter plugin did not load")
             })?;
-        let mut options = Value::Object(setup.config.options.clone().into_iter().collect());
-        options["access"] = access_of(&setup.config);
+        let options = start_options(&setup.scope, &setup.config);
         let mut adapter =
             PluginAdapter::read(Arc::clone(&plugin.instance), &setup.platform, &options)?;
         adapter.sidecar = sidecar_of(&setup.scope, plugin);
         adapter.profile_dir = setup.scope.dir().to_path_buf();
         adapter.media = Arc::new(Inbox::granted(Arc::clone(&plugin.grants)));
+        adapter.secrets = Some(Arc::new(SecretWriter::new(
+            &setup.scope,
+            &plugin.manifest.id,
+            &adapter.extras,
+            &plugin.grants.current(),
+        )));
         Ok(Arc::new(adapter) as Arc<dyn Adapter>)
     })
+}
+
+/// The options an adapter plugin starts with: its platform table's
+/// `options`, plus `access` ([`access_of`]) and `listener_public`.
+pub(crate) fn start_options(
+    scope: &pmt_config::ProfileScope,
+    config: &pmt_config::schema::PlatformConfig,
+) -> Value {
+    let mut options = Value::Object(config.options.clone().into_iter().collect());
+    options["access"] = access_of(config);
+    options["listener_public"] = json!(listener_public(scope));
+    options
 }
 
 /// Installs the runtime and packages of the sidecar of the enabled adapter
@@ -188,6 +206,14 @@ fn access_of(config: &pmt_config::schema::PlatformConfig) -> Value {
         "allow_chats": config.allow_chats,
         "allow_all": config.allow_all,
     })
+}
+
+/// Whether the shared webhook listener may face other hosts
+/// (`gateway.http.public` in daemon.toml), handed to plugins as
+/// `options.listener_public`: a public listener needs stricter options of
+/// some (Graph's source ranges).
+fn listener_public(scope: &pmt_config::ProfileScope) -> bool {
+    pmt_config::DaemonConfig::load(scope.home()).is_ok_and(|c| c.gateway.http.public)
 }
 
 /// What starts `plugin`'s sidecar, when it declares one.
@@ -298,6 +324,11 @@ struct PluginAdapter {
     tool_ops: bool,
     /// The owning profile's directory (where its tools look it up).
     profile_dir: std::path::PathBuf,
+    /// The descriptor's keys beyond the gateway's (`max_body_bytes`,
+    /// `writable_secrets`, ...).
+    extras: Value,
+    /// Where its `store_secret` items go (set by the factory).
+    secrets: Option<Arc<SecretWriter>>,
     /// Its registration with [`super::adapter_tools`] while connected.
     tool_token: Mutex<Option<u64>>,
 }
@@ -349,10 +380,12 @@ impl PluginAdapter {
         let descriptor = Descriptor::from_value(&value).map_err(invalid)?;
         let credential = credential_of(&value["credential_options"], options);
         Ok(Self {
+            tool_ops: value["tool_ops"] == true,
+            extras: value,
+            secrets: None,
             instance,
             descriptor,
             credential,
-            tool_ops: value["tool_ops"] == true,
             profile_dir: std::path::PathBuf::new(),
             tool_token: Mutex::default(),
             options: options.to_string(),
@@ -487,6 +520,7 @@ async fn poll(
     link: Arc<dyn AdapterLink>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
     media: Arc<Inbox>,
+    secrets: Option<Arc<SecretWriter>>,
 ) {
     loop {
         tokio::time::sleep(POLL_EVERY).await;
@@ -515,6 +549,9 @@ async fn poll(
             Vec::new()
         });
         for value in &values {
+            if secrets.as_ref().is_some_and(|s| s.consume(value)) {
+                continue;
+            }
             link.submit(inbound(value, &media)).await;
         }
     }
@@ -595,6 +632,7 @@ impl Adapter for PluginAdapter {
                 link,
                 Arc::clone(&self.crashes),
                 Arc::clone(&self.media),
+                self.secrets.clone(),
             ));
             if let Some(old) = lock(&self.poller).replace(task) {
                 old.abort();
@@ -761,6 +799,13 @@ impl Adapter for PluginAdapter {
 
     fn credential_identity(&self) -> Option<String> {
         self.credential.clone()
+    }
+
+    fn max_body_bytes(&self) -> usize {
+        self.extras["max_body_bytes"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .unwrap_or(pmt_gateway::messaging::DEFAULT_MAX_BODY)
     }
 
     fn verify_http(&self, _request: &HttpRequest) -> bool {

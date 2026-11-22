@@ -23,12 +23,16 @@ pub mod bindings {
 pub mod bridge;
 pub mod clock;
 pub mod crypt;
+pub mod graph;
 pub mod host;
+pub mod jwt;
 pub mod message;
 pub mod net;
+pub mod oauth;
 pub mod policy;
 pub mod sign;
 pub mod text;
+pub mod time;
 
 pub use bindings::exports::prometheus::platform_adapter::plugin::{
     Guest, HttpRequest, HttpResponse,

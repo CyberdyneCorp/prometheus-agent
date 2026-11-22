@@ -34,6 +34,7 @@ mod turn;
 mod update_chat;
 mod update_rpc;
 mod watchdog;
+mod whatsapp_cloud_cmd;
 mod whatsapp_cmd;
 
 use std::fmt::Write as _;

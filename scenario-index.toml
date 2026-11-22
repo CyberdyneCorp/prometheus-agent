@@ -5376,6 +5376,23 @@ capabilities = [
 [platform-adapters."ntfy adapter"]
 "Outgoing-only target" = ["crates/prometheus/tests/catalog_ntfy.rs::without_an_allowlist_ntfy_admits_nothing_but_still_publishes"]
 
+[platform-adapters."WhatsApp Cloud API adapter"]
+"Wrong verify token" = ["crates/prometheus/tests/catalog_whatsapp_cloud.rs::a_handshake_with_the_wrong_verify_token_is_refused"]
+"Window closed" = ["crates/prometheus/tests/gateway_whatsapp_cloud.rs::a_cron_delivery_outside_the_window_fails_its_outbox_entry", "crates/prometheus/tests/catalog_whatsapp_cloud.rs::outside_the_window_a_send_fails_or_the_template_invites_back"]
+
+[platform-adapters."Microsoft Graph change-notification listener"]
+"Validation handshake" = ["crates/prometheus/tests/catalog_msgraph_webhook.rs::the_validation_token_is_echoed_as_plain_text"]
+
+[platform-adapters."Microsoft Teams adapter"]
+"Unsigned activity" = ["crates/prometheus/tests/catalog_teams.rs::an_activity_without_a_valid_jwt_is_refused_and_admits_nothing"]
+
+[platform-adapters."Teams meeting summary pipeline"]
+"Duplicate notification summarized once" = ["crates/prometheus/tests/catalog_teams_meetings.rs::a_second_notification_for_a_summarized_transcript_is_a_duplicate"]
+"Subscription renewed before expiry" = ["crates/prometheus/tests/catalog_teams_meetings.rs::the_ticker_renews_a_subscription_expiring_soon"]
+
+[platform-adapters."Google Chat adapter"]
+"Per-user file delivery" = ["crates/prometheus/tests/catalog_google_chat.rs::a_user_who_completed_setup_files_gets_native_files"]
+
 [platform-adapters."Mattermost adapter"]
 "Channel outside allowlist" = ["crates/prometheus/tests/catalog_mattermost.rs::a_mention_outside_the_allowed_channels_is_ignored"]
 

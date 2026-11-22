@@ -425,11 +425,12 @@ pub async fn listen(adapter: Arc<dyn Adapter>) -> Result<String, String> {
     let prefix = format!("/p/kit/{}", adapter.describe().platform);
     let base = format!("http://{addr}{prefix}");
     pmt_core::spawn::spawn(async move {
-        while let Ok((stream, _)) = listener.accept().await {
+        while let Ok((stream, peer)) = listener.accept().await {
             pmt_core::spawn::spawn(serve_connection(
                 Arc::clone(&adapter),
                 prefix.clone(),
                 stream,
+                peer.ip(),
             ));
         }
     });
@@ -440,8 +441,10 @@ async fn serve_connection(
     adapter: Arc<dyn Adapter>,
     prefix: String,
     stream: tokio::net::TcpStream,
+    peer: std::net::IpAddr,
 ) {
-    let service = hyper::service::service_fn(move |request| {
+    let service = hyper::service::service_fn(move |mut request: hyper::Request<_>| {
+        request.extensions_mut().insert(super::http::Peer(peer));
         let (adapter, prefix) = (Arc::clone(&adapter), prefix.clone());
         async move {
             let answer = route_kit(adapter.as_ref(), &prefix, request).await;
