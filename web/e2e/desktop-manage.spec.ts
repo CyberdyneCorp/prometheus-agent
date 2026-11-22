@@ -112,7 +112,9 @@ test("a duplicate chord flags both shortcuts until one changes", async ({ page }
   await page.locator('input[data-shortcut="new-session"]').fill("CommandOrControl+Shift+Y");
   await page.locator('input[data-shortcut="new-session"]').blur();
   await expect(page.locator("li[data-conflict=true]")).toHaveCount(0);
-  // The machine keeps the binding.
+  // The machine keeps the binding: wait for the store to hold it, since a
+  // reload while the patch is in flight drops it.
+  await expect.poll(() => readFileSync(`${env("PMT_HOME")}/ui-prefs.json`, "utf8")).toContain("CommandOrControl+Shift+Y");
   await page.reload();
   await expect(page.locator(".connection")).toHaveText(/Connected/, { timeout: 60_000 });
   await manage(page, "shortcuts");
