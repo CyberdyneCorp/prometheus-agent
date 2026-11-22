@@ -5,6 +5,7 @@
 
 pub mod backend;
 pub mod catalog;
+pub mod collection;
 pub mod computer_use;
 pub mod dashboard;
 pub mod desktop_ui;

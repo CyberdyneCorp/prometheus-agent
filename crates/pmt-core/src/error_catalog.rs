@@ -1185,6 +1185,10 @@ error_codes! {
     /// A plugin the install-time threat scan refused.
     PLUGINS_THREAT = ("plugins.threat", PermissionDenied,
         "The install-time threat scan graded the plugin `dangerous` (refused; `--force` does not override it), graded it `caution` without confirmation or `--force`, or could not finish (it fails closed); the message names each finding, file and line.");
+    /// A plugin collection file that is invalid (a non-SHA ref, a secret
+    /// seed, grants) or was installed non-interactively.
+    PLUGINS_COLLECTION = ("plugins.collection", InvalidInput,
+        "The plugin collection is invalid: an entry without a catalog name or repo, a ref that is not a full 40-hex commit SHA, a subdir leaving the repository, a secret-shaped config seed or a grant; the message names the entry.");
     /// A plugin catalog or package that could not be fetched.
     PLUGINS_CATALOG = ("plugins.catalog", Unavailable,
         "The plugin catalog entry, package or repository could not be fetched or read; the message names it.");

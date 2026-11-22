@@ -155,6 +155,8 @@ unicode-width.workspace = true
 # `debug bundle` archives (`.tar.zst`).
 tar.workspace = true
 zstd.workspace = true
+# `plugins install pypi:<dist>==<version>` reads the wheel.
+zip.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 # The controlling terminal's device and session leader (`-c` per terminal);

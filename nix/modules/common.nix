@@ -72,11 +72,40 @@ rec {
         description = "MCP servers of the default profile (mcp.servers.<name> tables).";
       };
       plugins = mkOption {
-        type = types.listOf types.package;
+        type = types.listOf (
+          types.either types.package (
+            types.submodule {
+              options = {
+                id = mkOption {
+                  type = types.strMatching "[a-z0-9][a-z0-9_-]*";
+                  description = "The plugin's id (it installs as nix-managed-<id>).";
+                };
+                source = mkOption {
+                  type = types.nullOr types.path;
+                  default = null;
+                  description = "A plugin directory (plugin.toml or plugin.yaml).";
+                };
+                pypi = mkOption {
+                  type = types.nullOr (types.strMatching "[A-Za-z0-9._-]+==[A-Za-z0-9._+!]+");
+                  default = null;
+                  example = "hermes-spotify==1.2.0";
+                  description = "A Python plugin distribution at an exact version.";
+                };
+              };
+            }
+          )
+        );
         default = [ ];
+        example = lib.literalExpression ''[ pkgs.my-plugin { id = "spotify"; pypi = "hermes-spotify==1.2.0"; } ]'';
         description = ''
-          Plugin packages linked read-only into the default profile's
-          plugins/; signature checks and capability grants still apply.
+          Plugins of the default profile: directories (packages or
+          `{ id; source; }`) and Python distributions (`{ id; pypi; }`).
+          Each is installed as `plugins/nix-managed-<id>/` with install
+          record source `nix` and enabled in the generated config; a plugin
+          dropped from this list is removed, and user-installed plugins are
+          never touched. The threat scan and capability grants still apply
+          (approve them with `prometheus plugins grants approve
+          nix-managed-<id>`).
         '';
       };
       container = {
@@ -89,9 +118,35 @@ rec {
       };
     };
 
-  # The default profile's settings, MCP servers included.
+  # One declared plugin as the `plugins nix-sync` manifest entry.
+  pluginEntry =
+    plugin:
+    if lib.isDerivation plugin then
+      {
+        id = plugin.pname or plugin.name;
+        source = "${plugin}";
+      }
+    else
+      assert lib.assertMsg (
+        (plugin.source == null) != (plugin.pypi == null)
+      ) "programs.prometheus.plugins: plugin '${plugin.id}' needs exactly one of source or pypi";
+      { inherit (plugin) id; }
+      // lib.optionalAttrs (plugin.source != null) { source = "${plugin.source}"; }
+      // lib.optionalAttrs (plugin.pypi != null) { inherit (plugin) pypi; };
+
+  # The ids the declared plugins install under.
+  nixPluginIds = cfg: map (p: "nix-managed-${(pluginEntry p).id}") cfg.plugins;
+
+  # The default profile's settings, MCP servers and the declared plugins'
+  # enablement included.
   defaultSettings =
-    cfg: lib.recursiveUpdate cfg.settings (lib.optionalAttrs (cfg.mcpServers != { }) { mcp.servers = cfg.mcpServers; });
+    cfg:
+    lib.recursiveUpdate cfg.settings (
+      lib.optionalAttrs (cfg.mcpServers != { }) { mcp.servers = cfg.mcpServers; }
+      // lib.optionalAttrs (cfg.plugins != [ ]) {
+        plugins.enabled = lib.unique ((cfg.settings.plugins.enabled or [ ]) ++ nixPluginIds cfg);
+      }
+    );
 
   # Dotted keys of the leaves of `attrs` (a list is a leaf).
   leafKeys =
@@ -128,9 +183,15 @@ rec {
           install -m 0600 ${source} "$HOME_DIR/profiles/default/${name}"
         '') cfg.documents
       );
-      pluginLines = lib.concatMapStrings (plugin: ''
-        ln -sfn ${plugin} "$HOME_DIR/profiles/default/plugins/${plugin.pname or plugin.name}"
-      '') cfg.plugins;
+      # Always run, so plugins dropped from the list are removed; a
+      # failing plugin is reported without failing the activation.
+      pluginManifest = pkgs.writeText "prometheus-nix-plugins.json" (
+        builtins.toJSON { plugins = map pluginEntry cfg.plugins; }
+      );
+      pluginLines = ''
+        ${cfg.package}/bin/prometheus --home "$HOME_DIR" --profile default plugins nix-sync ${pluginManifest} \
+          || echo "prometheus: some Nix-declared plugins were not installed (see above)" >&2
+      '';
     in
     ''
       HOME_DIR=${lib.escapeShellArg cfg.home}
@@ -140,7 +201,6 @@ rec {
       ''}
       ${profileLines}
       ${documentLines}
-      ${lib.optionalString (cfg.plugins != [ ]) ''install -d -m 0700 "$HOME_DIR/profiles/default/plugins"''}
       ${pluginLines}
     '';
 

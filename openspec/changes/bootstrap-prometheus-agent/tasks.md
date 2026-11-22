@@ -708,7 +708,7 @@ Groups are ordered by milestone (M0 scaffolding, then M1, M2, M3) and by depende
 
 ## 79. M3 Plugin catalog and first-party plugins
 
-- [ ] 79.1 Implement plugin collections (tag refs refused), Python package and Nix plugin sources (unpinned packages refused) and the catalog tool for agent-initiated installs (the model cannot pick a version); verify with catalog fixtures (spec: plugin-system)
+- [x] 79.1 Implement plugin collections (tag refs refused), Python package and Nix plugin sources (unpinned packages refused) and the catalog tool for agent-initiated installs (the model cannot pick a version); verify with catalog fixtures (spec: plugin-system)
 - [ ] 79.2 Ship the first-party disk-cleanup and google_meet plugins and the catalog plugins for Home Assistant and Camofox; verify each plugin's scenarios in CI (spec: plugin-system)
 
 ## 80. M3 Pets and achievements

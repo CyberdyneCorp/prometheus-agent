@@ -29,24 +29,36 @@ use crate::output::{json, print_raw};
 ///
 /// `skill.hub_unavailable` when the HTTP client cannot be built.
 pub(crate) fn hub(env: &Env) -> Result<Hub, Error> {
-    let network = &env.scope.config().network;
+    hub_for(&env.scope, &env.launch)
+}
+
+/// [`hub`] of `scope` outside a `skills` command (the `catalog_manage`
+/// host).
+///
+/// # Errors
+///
+/// As [`hub`].
+pub(crate) fn hub_for(
+    scope: &pmt_config::ProfileScope,
+    launch: &pmt_core::env::LaunchEnv,
+) -> Result<Hub, Error> {
+    let network = &scope.config().network;
     let policy = OutboundPolicy {
         force_ipv4: network.force_ipv4,
         extra_ca_file: network.extra_ca_file.as_ref().map(Into::into),
         proxy: network.proxy.clone(),
     };
-    let endpoints = env
-        .launch
+    let endpoints = launch
         .test_skills_hub()
         .map_or_else(Endpoints::public, Endpoints::under);
     let mut hub = Hub::new(
         Arc::new(Client::new(&policy)?),
         endpoints,
-        env.scope.dir(),
-        &env.scope.config().skills,
+        scope.dir(),
+        &scope.config().skills,
     );
     let secret = |name: &str| {
-        env.scope
+        scope
             .secrets()
             .resolve(name)
             .ok()
@@ -121,6 +133,34 @@ pub(super) fn install(
     }
     eprint!("{}", install_text(&*english(), &installed));
     Ok(0)
+}
+
+/// Installs skill `identifier` into `scope` as `skills install` does
+/// (the `catalog_manage` host); answers the installed skill's name.
+///
+/// # Errors
+///
+/// The hub's refusal or failure.
+pub(crate) fn install_for(
+    scope: &pmt_config::ProfileScope,
+    launch: &pmt_core::env::LaunchEnv,
+    identifier: &str,
+) -> Result<String, Error> {
+    let env = Env {
+        scope: scope.clone(),
+        user_home: launch.user_home().cloned(),
+        cwd: None,
+        bundled: pmt_skills::bundled::Bundled::builtin(),
+        json: false,
+        launch: launch.clone(),
+    };
+    let installed = install::install(
+        &hub(&env)?,
+        &Identifier::parse(identifier)?,
+        &Options::default(),
+    )?;
+    after_install(&env, &installed);
+    Ok(installed.name)
 }
 
 /// What an install tells the user.

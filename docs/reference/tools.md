@@ -41,6 +41,7 @@ Every tool name the shipped toolsets refer to, and every shipped toolset. Pages 
 | `project` | `project` |  |  | Switch or create the session's project (desktop, tui and dashboard sessions) |
 | `desktop_ui` | `react_to_message`, `read_terminal`, `close_terminal`, `desktop_preview`, `drive_preview`, `annotate_preview`, `read_window_below`, `focus_pane`, `gui_tour`, `show_tip`, `set_theme` |  |  | The desktop window: reactions, terminal and preview panes, tours, tips, appearance |
 | `onboarding` | `setup_beat` |  |  | The first-run onboarding chat's setup cards |
+| `catalog` | `catalog_manage` |  |  | Plugin and skill installs the user approves on a card (desktop and tui sessions) |
 | `acp` |  | `coding` |  | The coding tools for ACP editor sessions |
 | `acp_unattended` | `web_search`, `web_extract`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `skills_list`, `skill_view`, `skill_manage`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `clarify`, `delegate_task`, `manage_connections` |  |  | ACP tools for clients that cannot answer prompts: no shell or code execution |
 | `api_server` | `web_search`, `web_extract`, `terminal`, `process`, `read_file`, `write_file`, `patch`, `search_files`, `vision_analyze`, `image_generate`, `skills_list`, `skill_view`, `skill_manage`, `browser_exec`, `browser_cdp`, `browser_dialog`, `browser_vault`, `browser_close_profile`, `todo`, `memory`, `session_search`, `execute_code`, `delegate_task`, `cronjob`, `manage_connections` |  |  | The core tools without speech, clarify and computer use, for API server callers |
@@ -304,6 +305,10 @@ Toolsets: `desktop_ui`.
 ### `setup_beat`
 
 Toolsets: `onboarding`.
+
+### `catalog_manage`
+
+Toolsets: `catalog`.
 
 ### `a2a_discover`
 

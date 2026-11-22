@@ -35546,7 +35546,7 @@ Plugins: list, enable and disable them, manage their capability grants, and run 
 Usage: prometheus plugins [OPTIONS] <COMMAND>
 
 Commands:
-  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
   search         Catalog entries matching a word
   browse         Every catalog entry, by tier and category
   show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
@@ -35556,6 +35556,7 @@ Commands:
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
   run            Runs a command a plugin registered (`cli_commands`), or lists them
+  collection     Shareable plugin collections: review, install or export a pinned set of plugins
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
@@ -35606,13 +35607,13 @@ Options:
 ## `prometheus plugins install`
 
 ```text
-Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
 
 Usage: prometheus plugins install [OPTIONS] <IDENTIFIER>
 
 Arguments:
   <IDENTIFIER>
-          A catalog id, a `.pmtpkg` path or a Git URL
+          A catalog id, a `.pmtpkg` path, a Git URL or `pypi:<dist>==<version>`
 
 Options:
       --home <PATH>
@@ -36058,6 +36059,225 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus plugins collection`
+
+```text
+Shareable plugin collections: review, install or export a pinned set of plugins
+
+Usage: prometheus plugins collection [OPTIONS] <COMMAND>
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus plugins collection show [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          A `prometheus-collection.toml` (or Hermes `hermes-pack.yaml`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus plugins collection install [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          A `prometheus-collection.toml` (or Hermes `hermes-pack.yaml`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus plugins collection export [OPTIONS]
+
+Options:
+      --enabled-only
+          Only the enabled plugins
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins collection help [COMMAND]
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins collection help show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus plugins collection help show
+```
+
+## `prometheus plugins collection help install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus plugins collection help install
+```
+
+## `prometheus plugins collection help export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus plugins collection help export
+```
+
+## `prometheus plugins collection help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins collection help help
 ```
 
 ## `prometheus plugins hooks`
@@ -37100,6 +37320,49 @@ Options:
           Print help
 ```
 
+## `prometheus plugins nix-sync`
+
+```text
+Install the plugins the Nix modules declare (a JSON manifest) as `nix-managed-<id>` and remove the ones no longer declared (run by the modules' activation)
+
+Usage: prometheus plugins nix-sync [OPTIONS] <MANIFEST>
+
+Arguments:
+  <MANIFEST>
+          The manifest the module generated
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins panels`
 
 ```text
@@ -37193,7 +37456,7 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins help [COMMAND]
 
 Commands:
-  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
   search         Catalog entries matching a word
   browse         Every catalog entry, by tier and category
   show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
@@ -37203,6 +37466,7 @@ Commands:
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
   run            Runs a command a plugin registered (`cli_commands`), or lists them
+  collection     Shareable plugin collections: review, install or export a pinned set of plugins
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
@@ -37222,7 +37486,7 @@ Commands:
 ## `prometheus plugins help install`
 
 ```text
-Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
 
 Usage: prometheus plugins help install
 ```
@@ -37297,6 +37561,43 @@ Usage: prometheus plugins help check-updates
 Runs a command a plugin registered (`cli_commands`), or lists them
 
 Usage: prometheus plugins help run
+```
+
+## `prometheus plugins help collection`
+
+```text
+Shareable plugin collections: review, install or export a pinned set of plugins
+
+Usage: prometheus plugins help collection [COMMAND]
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+```
+
+## `prometheus plugins help collection show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus plugins help collection show
+```
+
+## `prometheus plugins help collection install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus plugins help collection install
+```
+
+## `prometheus plugins help collection export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus plugins help collection export
 ```
 
 ## `prometheus plugins help hooks`
@@ -37477,6 +37778,14 @@ Usage: prometheus plugins help reload
 Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
 
 Usage: prometheus plugins help panel-call
+```
+
+## `prometheus plugins help nix-sync`
+
+```text
+Install the plugins the Nix modules declare (a JSON manifest) as `nix-managed-<id>` and remove the ones no longer declared (run by the modules' activation)
+
+Usage: prometheus plugins help nix-sync
 ```
 
 ## `prometheus plugins help panels`
@@ -44411,7 +44720,7 @@ Plugins: list, enable and disable them, manage their capability grants, and run 
 Usage: prometheus help plugins [COMMAND]
 
 Commands:
-  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
   search         Catalog entries matching a word
   browse         Every catalog entry, by tier and category
   show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
@@ -44421,6 +44730,7 @@ Commands:
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
   run            Runs a command a plugin registered (`cli_commands`), or lists them
+  collection     Shareable plugin collections: review, install or export a pinned set of plugins
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
@@ -44439,7 +44749,7 @@ Commands:
 ## `prometheus help plugins install`
 
 ```text
-Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
 
 Usage: prometheus help plugins install
 ```
@@ -44514,6 +44824,43 @@ Usage: prometheus help plugins check-updates
 Runs a command a plugin registered (`cli_commands`), or lists them
 
 Usage: prometheus help plugins run
+```
+
+## `prometheus help plugins collection`
+
+```text
+Shareable plugin collections: review, install or export a pinned set of plugins
+
+Usage: prometheus help plugins collection [COMMAND]
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+```
+
+## `prometheus help plugins collection show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus help plugins collection show
+```
+
+## `prometheus help plugins collection install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus help plugins collection install
+```
+
+## `prometheus help plugins collection export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus help plugins collection export
 ```
 
 ## `prometheus help plugins hooks`
@@ -44694,6 +45041,14 @@ Usage: prometheus help plugins reload
 Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
 
 Usage: prometheus help plugins panel-call
+```
+
+## `prometheus help plugins nix-sync`
+
+```text
+Install the plugins the Nix modules declare (a JSON manifest) as `nix-managed-<id>` and remove the ones no longer declared (run by the modules' activation)
+
+Usage: prometheus help plugins nix-sync
 ```
 
 ## `prometheus help plugins panels`

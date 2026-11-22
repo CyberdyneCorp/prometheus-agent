@@ -4271,6 +4271,7 @@ dependencies = [
  "unicode-width",
  "url",
  "wiremock",
+ "zip",
  "zstd",
 ]
 

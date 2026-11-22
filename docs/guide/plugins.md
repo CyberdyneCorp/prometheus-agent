@@ -114,6 +114,85 @@ requests new capabilities: secrets GITHUB_TOKEN` until you approve it
 [Writing a plugin](plugin-authoring.md) covers `validate`, `pack` and
 `sign`.
 
+### Python distributions
+
+```sh
+prometheus plugins install pypi:hermes-spotify==1.2.0
+```
+
+A Hermes plugin published as a Python distribution installs at an exact
+version only (`pypi:hermes-spotify` alone exits 2 with `pypi plugins need
+an exact version: pypi:<dist>==<version>`). Its pure-Python wheel is taken
+from the package index (`runtimes.mirrors.pypi` in `daemon.toml`, else uv's
+`UV_DEFAULT_INDEX`, else PyPI) and checked against the index's `sha256`;
+its `hermes_agent.plugins` (or `prometheus.plugins`) entry point becomes a
+`python` plugin named after the entry point, with the wheel's files under
+`site/` (the audit reads what runs) and its own pinned bridge environment.
+Index packages carry no publisher signature, so `plugins.signature_policy`
+applies as for a local package, and the install record says `pypi`.
+
+### Collections
+
+A collection is a shareable, reviewable plugin set:
+`prometheus-collection.toml` (a Hermes `hermes-pack.yaml` is translated).
+
+```toml
+name = "starter"
+skills = ["github-pr-review"]
+
+[[plugins]]
+name = "weather"                      # a catalog id ...
+ref = "<40-hex commit>"
+
+[[plugins]]
+repo = "https://github.com/acme/tools" # ... or a repository
+subdir = "plugins/notes"
+ref = "<40-hex commit>"
+[plugins.config]                      # seeds for plugins.entries.notes
+folder = "inbox"
+```
+
+```sh
+prometheus plugins collection show starter.toml     # plugins, sources, refs, capabilities
+prometheus plugins collection install starter.toml  # one confirmation, then each plugin's own flow
+prometheus plugins collection export [--enabled-only]
+```
+
+Every entry pins a full commit SHA (`ref = "v1.2.0"` is refused with
+`entry 'weather': ref must be a full commit SHA`). A collection carries no
+grants and no secrets: a grant key or a secret-shaped seed (`*token*`,
+`*key*`, `*secret*`, `*password*`) is refused, and `export` strips them.
+`install` needs a terminal (exit 4 otherwise, and there is no `--yes`):
+after one confirmation each plugin goes through the normal install
+(signature policy, threat scan, kill list) and the usual `Enable '<id>'
+now?` and capability questions; seeds never overwrite a value you set. A
+plugin that fails is reported, the rest continue, and the command exits 5.
+`export` lists the plugins whose provenance pins a commit (catalog and Git
+installs).
+
+### Nix
+
+The NixOS and Home Manager modules declare plugins of the default profile
+in `programs.prometheus.plugins`: plugin directories (packages, or
+`{ id = "notes"; source = ./notes; }`) and Python distributions
+(`{ id = "spotify"; pypi = "hermes-spotify==1.2.0"; }`). Activation
+installs each as `plugins/nix-managed-<id>/` with install record source
+`nix`, enables it in the generated config, and removes a `nix-managed-*`
+plugin once it is no longer declared; plugins you installed yourself are
+never touched. The threat scan and capability grants still apply: approve
+them with `prometheus plugins grants approve nix-managed-<id>`.
+
+### From the agent
+
+In desktop and TUI sessions the model has
+[`catalog_manage`](../reference/tools.md#catalog_manage) (toolset
+`catalog`): it can search the plugin catalog and the official skills, and
+ask to install items it names only by kind and id. You see one card with a
+row per item and install or skip each; Prometheus picks the source, pinned
+ref, checks and profile, and a plugin lands disabled without grants. On
+other surfaces the tool answers with the `prometheus plugins install` and
+`prometheus skills install` commands instead.
+
 ## Enabling a plugin
 
 Nothing found runs until you enable it. In a profile with no plugins:

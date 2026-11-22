@@ -54,6 +54,8 @@ pub struct PluginsStep {
     enabled: Vec<String>,
     /// Entry index per plugin id.
     planned: Vec<(String, usize)>,
+    /// The Camofox server URL of a profile that browsed through Camofox.
+    camofox_url: Option<String>,
 }
 
 impl Step for PluginsStep {
@@ -66,9 +68,7 @@ impl Step for PluginsStep {
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
-        for (id, index) in &self.catalog {
-            install_catalog(id, dest, &mut self.entries[*index])?;
-        }
+        self.install_catalog_plugins(dest)?;
         let Some(dir) = self.dir.clone() else {
             return Ok(());
         };
@@ -187,6 +187,7 @@ pub fn plan(src: &Source<'_>) -> Result<PluginsStep, Error> {
         dir: None,
         enabled: enabled.clone(),
         planned: Vec::new(),
+        camofox_url: None,
     };
     let dir = src.profile.path("plugins");
     let mut ids: Vec<String> = std::fs::read_dir(&dir)
@@ -253,6 +254,11 @@ fn integrations(src: &Source<'_>, step: &mut PluginsStep) {
     let camofox = src.get("browser.cloud_provider").and_then(Value::as_str) == Some("camofox");
     if camofox || src.env_value("CAMOFOX_URL").is_some() {
         needed.push(("camofox", "the Camofox browser"));
+        let url = src
+            .env_value("CAMOFOX_URL")
+            .or_else(|| src.get("browser.camofox.url").and_then(Value::as_str))
+            .unwrap_or(CAMOFOX_DEFAULT_URL);
+        step.camofox_url = Some(url.to_owned());
     }
     for adapter in CATALOG_ADAPTERS {
         let via_env = src.env.iter().any(|e| {
@@ -287,6 +293,70 @@ fn integrations(src: &Source<'_>, step: &mut PluginsStep) {
             });
         }
     }
+}
+
+impl PluginsStep {
+    /// Installs the catalog plugins Hermes integrations need, and sets up
+    /// a migrated Camofox profile.
+    fn install_catalog_plugins(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+        for (id, index) in &self.catalog {
+            install_catalog(id, dest, &mut self.entries[*index])?;
+            if id == "camofox"
+                && let Some(url) = &self.camofox_url
+                && self.entries[*index].disposition == Disposition::Transformed
+            {
+                configure_camofox(url, dest, &mut self.entries, *index)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Where Hermes looks for a Camofox server when nothing names one.
+const CAMOFOX_DEFAULT_URL: &str = "http://localhost:9377";
+
+/// A migrated Camofox profile (spec: plugin-system, Catalog plugins for
+/// Home Assistant and Camofox): the plugin's server URL, and the core
+/// `browser` toolset disabled so the model browses through the plugin.
+fn configure_camofox(
+    url: &str,
+    dest: &Dest<'_>,
+    entries: &mut [Entry],
+    index: usize,
+) -> Result<(), Error> {
+    let text = dest
+        .scope
+        .profile()
+        .config_file()
+        .raw()?
+        .unwrap_or_default();
+    let doc: toml::Table = toml::from_str(&text).unwrap_or_default();
+    let mut disabled: Vec<String> = writes::lookup_value(&doc, "tools.disabled_toolsets")
+        .and_then(toml::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    if !disabled.iter().any(|t| t == "browser") {
+        disabled.push("browser".to_owned());
+    }
+    let mut out = writes::Writes::default();
+    out.key("plugins.entries.camofox.url", url, index);
+    out.key(
+        "tools.disabled_toolsets",
+        toml_edit::Value::Array(disabled.iter().map(String::as_str).collect()),
+        index,
+    );
+    out.apply_merged(dest, entries)?;
+    let entry = &mut entries[index];
+    entry.reason = format!(
+        "{}; plugins.entries.camofox.url = {url} and the core browser toolset is disabled in this profile",
+        entry.reason
+    );
+    Ok(())
 }
 
 /// Installs catalog plugin `id` unless the profile already has a plugin

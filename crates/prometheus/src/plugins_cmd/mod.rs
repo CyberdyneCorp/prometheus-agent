@@ -4,20 +4,23 @@
 //! provenance; Hot reload respects the prompt-cache invariant;
 //! platform-adapters, Adapter conformance kit).
 //!
-//! `dev` is the plugin development loop ([`dev`]); `run` (plugin CLI
-//! subcommands), `collection` (M3) and `hooks` (shell hooks) arrive with
-//! their owners.
+//! `dev` is the plugin development loop ([`dev`]); `run` runs plugin CLI
+//! subcommands, `collection` installs shareable plugin sets
+//! ([`collection_cmd`]) and `hooks` manages shell hooks.
 
 mod adapter;
 #[cfg(feature = "gateway")]
 pub mod adapter_plugin;
 mod catalog_cmd;
+mod collection_cmd;
 mod dev;
 pub mod hooks_cmd;
 mod inspect;
 pub(crate) mod install;
 pub(crate) mod manage;
+mod nix_sync;
 mod package_cmd;
+mod pypi;
 mod python;
 mod reload;
 mod run_bridged;
@@ -38,7 +41,8 @@ pub use self::dev::DevArgs;
 #[derive(Debug, Subcommand)]
 pub enum PluginsCommand {
     /// Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file,
-    /// or a Git URL with `--ref <full commit SHA>`.
+    /// a Git URL with `--ref <full commit SHA>`, or a Python distribution
+    /// `pypi:<dist>==<version>`.
     Install(InstallArgs),
     /// Catalog entries matching a word.
     Search {
@@ -102,6 +106,13 @@ pub enum PluginsCommand {
         /// Its arguments.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
+    },
+    /// Shareable plugin collections: review, install or export a pinned
+    /// set of plugins.
+    Collection {
+        /// What to do.
+        #[command(subcommand)]
+        action: collection_cmd::CollectionAction,
     },
     /// Shell hooks, gateway hook directories and outbound webhooks.
     Hooks {
@@ -188,6 +199,14 @@ pub enum PluginsCommand {
         /// The plugin id.
         id: String,
     },
+    /// Install the plugins the Nix modules declare (a JSON manifest) as
+    /// `nix-managed-<id>` and remove the ones no longer declared (run by
+    /// the modules' activation).
+    #[command(name = "nix-sync", hide = true)]
+    NixSync {
+        /// The manifest the module generated.
+        manifest: PathBuf,
+    },
     /// The desktop app's plugin panels (`[ui]`) as JSON: the desktop
     /// shell runs this through its bundled binary.
     #[command(hide = true)]
@@ -210,7 +229,7 @@ pub enum PluginsCommand {
 #[derive(Debug, Args)]
 #[allow(clippy::struct_excessive_bools)] // independent command-line switches
 pub struct InstallArgs {
-    /// A catalog id, a `.pmtpkg` path or a Git URL.
+    /// A catalog id, a `.pmtpkg` path, a Git URL or `pypi:<dist>==<version>`.
     pub identifier: String,
     /// The full commit SHA of a Git install.
     #[arg(long = "ref", value_name = "SHA")]
@@ -299,6 +318,10 @@ fn changed(command: &PluginsCommand) -> Change<'_> {
             command: GrantsAction::Approve { id, .. } | GrantsAction::Revoke { id, .. },
         } => Change::Plugin(id),
         PluginsCommand::Install(_)
+        | PluginsCommand::NixSync { .. }
+        | PluginsCommand::Collection {
+            action: collection_cmd::CollectionAction::Install { .. },
+        }
         | PluginsCommand::Update { id: None, .. }
         | PluginsCommand::Remove { .. }
         | PluginsCommand::Adopt { .. }
@@ -338,6 +361,7 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         ),
         PluginsCommand::CheckUpdates => update::check(ctx),
         PluginsCommand::Hooks { action } => hooks_cmd::run(ctx, action),
+        PluginsCommand::Collection { action } => collection_cmd::run(ctx, action),
         PluginsCommand::Run { id, command, args } => {
             run_cmd::run(ctx, id, command.as_deref(), args)
         }
@@ -353,6 +377,7 @@ fn dispatch(command: &PluginsCommand, ctx: &Context<'_>) -> Result<u8, Error> {
         PluginsCommand::Doctor => inspect::doctor(ctx),
         PluginsCommand::Reload { id } => reload::reload(ctx, id.as_deref()),
         PluginsCommand::TestAdapter { path } => adapter::test_adapter(path),
+        PluginsCommand::NixSync { manifest } => nix_sync::sync(ctx, manifest),
         PluginsCommand::PanelCall { id } => crate::plugins_host::dashboard::serve_call(ctx, id),
         PluginsCommand::Panels { all_profiles } => {
             crate::plugins_host::desktop::panels(ctx, *all_profiles)

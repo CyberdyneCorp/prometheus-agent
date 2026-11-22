@@ -162,6 +162,8 @@ fn every_shipped_toolset_expands_to_its_specified_tools() {
             strings(pmt_tools::agent_level_desktop::DESKTOP_UI_TOOLS),
         ),
         ("onboarding", strings(&["setup_beat"])),
+        // plugin-system, Catalog tool for agent-initiated installs.
+        ("catalog", strings(&["catalog_manage"])),
         (
             "debugging",
             [
@@ -264,13 +266,12 @@ fn a_cli_session_cannot_obtain_desktop_tools() {
     assert!(gated_of(&Cli).is_empty());
     assert!(gated_of(&Cron).is_empty());
     assert!(gated_of(&Gateway("telegram".to_owned())).is_empty());
-    // `catalog` folds in once registered (plugin-system's catalog tool).
-    assert_eq!(gated_of(&Desktop), ["desktop_ui", "project"]);
+    assert_eq!(gated_of(&Desktop), ["desktop_ui", "project", "catalog"]);
     assert_eq!(
         gated_of(&Onboarding),
-        ["desktop_ui", "onboarding", "project"]
+        ["desktop_ui", "onboarding", "project", "catalog"]
     );
-    assert_eq!(gated_of(&Tui), ["project"]);
+    assert_eq!(gated_of(&Tui), ["project", "catalog"]);
     assert_eq!(gated_of(&Dashboard), ["project"]);
     // Gated toolsets stay out of `core`.
     for name in pmt_tools::agent_level_desktop::SURFACE_GATED {

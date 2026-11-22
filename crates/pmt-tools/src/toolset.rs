@@ -325,8 +325,8 @@ fn agent_messaging() -> [Toolset; 2] {
 /// The GUI surfaces' toolsets (spec: tool-system, Surface toolsets come
 /// from the session; desktop-app, Desktop UI toolset contract; First-run
 /// onboarding chat; projects, Project tool for GUI sessions), all
-/// surface-gated: `project` (desktop, tui and dashboard), `desktop_ui`
-/// and `onboarding`.
+/// surface-gated: `project` (desktop, tui and dashboard), `desktop_ui`,
+/// `onboarding` and `catalog` (desktop and tui).
 fn gui_toolsets() -> Vec<Toolset> {
     vec![
         surface_gated(Toolset::new(
@@ -343,6 +343,11 @@ fn gui_toolsets() -> Vec<Toolset> {
             crate::agent_level_desktop::ONBOARDING,
             "The first-run onboarding chat's setup cards",
             &["setup_beat"],
+        )),
+        surface_gated(Toolset::new(
+            crate::agent_level_desktop::CATALOG,
+            "Plugin and skill installs the user approves on a card (desktop and tui sessions)",
+            &[crate::catalog_manage::NAME],
         )),
     ]
 }

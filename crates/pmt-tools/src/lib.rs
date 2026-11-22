@@ -32,6 +32,7 @@ pub mod approval;
 pub mod args;
 pub mod browser;
 pub mod budget;
+pub mod catalog_manage;
 pub mod code_exec;
 pub mod computer_use;
 pub mod connectors;

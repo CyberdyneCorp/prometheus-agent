@@ -21,6 +21,7 @@ pub mod adapter_tools;
 pub mod approvals;
 pub mod bridge;
 pub mod catalog;
+pub mod catalog_tool;
 pub mod dashboard;
 pub mod desktop;
 pub mod dev;
