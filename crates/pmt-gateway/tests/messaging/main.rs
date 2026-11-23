@@ -13,6 +13,7 @@ mod delivery;
 mod display;
 mod fake_adapter;
 mod features;
+mod forwarding;
 mod groups;
 mod health;
 mod identity;

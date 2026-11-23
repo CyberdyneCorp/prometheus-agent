@@ -188,6 +188,10 @@ pub(crate) fn start(shared: &Arc<Shared>) {
     if shared.forwarder.set(Arc::clone(&forwarder)).is_err() {
         return;
     }
+    // Adapters start first (the upstream gets their descriptors on
+    // connect), so one may already report `connected`: it is only as good
+    // as an upstream not reached yet.
+    shared.adapters.upstream_changed(false, "not connected yet");
     let span = tracing::info_span!("forward", upstream = forwarder.options.url);
     pmt_core::spawn::spawn(supervise(forwarder).instrument(span));
 }

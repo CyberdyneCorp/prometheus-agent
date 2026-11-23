@@ -676,7 +676,8 @@ async fn connect_once(
             code: "unconfirmed".to_owned(),
             message: UNCONFIRMED.to_owned(),
         };
-        slot.set(AdapterState::Degraded, Some(&unconfirmed));
+        let (state, error) = behind_upstream(shared, AdapterState::Degraded, Some(unconfirmed));
+        slot.set(state, error.as_ref());
     }
     if outcome.is_ok() {
         super::menus::register(shared, key, slot);
@@ -960,6 +961,25 @@ fn live(state: AdapterState, code: Option<&str>) -> bool {
         || (state == AdapterState::Degraded && code == Some("unconfirmed"))
 }
 
+/// A forwarding host's adapter is only as good as its upstream: a live
+/// state is `degraded` with [`UPSTREAM_DOWN`] while the upstream is down.
+fn behind_upstream(
+    shared: &Weak<Shared>,
+    state: AdapterState,
+    error: Option<AdapterError>,
+) -> (AdapterState, Option<AdapterError>) {
+    let upstream = shared
+        .upgrade()
+        .and_then(|shared| shared.forwarder.get().map(|f| f.down_reason()))
+        .flatten();
+    match upstream {
+        Some(why) if live(state, error.as_ref().map(|e| e.code.as_str())) => {
+            (AdapterState::Degraded, Some(upstream_down(&why)))
+        }
+        _ => (state, error),
+    }
+}
+
 fn upstream_down(why: &str) -> AdapterError {
     AdapterError {
         retryable: true,
@@ -998,18 +1018,7 @@ impl AdapterLink for Link {
         let Some(slot) = self.slot.upgrade() else {
             return;
         };
-        // A forwarding host's adapter is only as good as its upstream.
-        let upstream = self
-            .shared
-            .upgrade()
-            .and_then(|shared| shared.forwarder.get().map(|f| f.down_reason()))
-            .flatten();
-        let (state, error) = match upstream {
-            Some(why) if live(state, error.as_ref().map(|e| e.code.as_str())) => {
-                (AdapterState::Degraded, Some(upstream_down(&why)))
-            }
-            _ => (state, error),
-        };
+        let (state, error) = behind_upstream(&self.shared, state, error);
         slot.set(state, error.as_ref());
         if matches!(state, AdapterState::Retrying | AdapterState::Fatal) {
             slot.lost.notify_one();

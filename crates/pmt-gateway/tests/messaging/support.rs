@@ -736,6 +736,8 @@ pub struct Setup {
     pub locks: bool,
     /// `gateway.http.listen` (default: any free loopback port).
     pub http_listen: Option<std::net::SocketAddr>,
+    /// Forward to an upstream daemon (an adapter host).
+    pub forward: Option<pmt_gateway::messaging::ForwardOptions>,
 }
 
 impl Setup {
@@ -755,6 +757,7 @@ impl Setup {
             credentials: Vec::new(),
             locks: false,
             http_listen: None,
+            forward: None,
         }
     }
 }
@@ -901,6 +904,7 @@ impl Harness {
         options.hooks = Arc::clone(&setup.hooks);
         options.relay.clone_from(&setup.relay);
         options.health.clone_from(&setup.health);
+        options.forward.clone_from(&setup.forward);
         options.drain_timeout = setup.drain;
         options.http.listen = setup
             .http_listen
