@@ -7,9 +7,6 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
-
-use expectrl::{Eof, Expect};
 
 use self::common::{ok, run, stderr, stdout, temp_home};
 
@@ -171,6 +168,10 @@ fn show_reviews_source_ref_and_capabilities_of_a_hermes_pack() {
 #[cfg(unix)]
 #[test]
 fn an_interactive_install_runs_the_normal_flow_per_plugin_and_reports_failures() {
+    use std::time::Duration;
+
+    use expectrl::{Eof, Expect};
+
     let home = temp_home();
     ok(&run(
         home.path(),
