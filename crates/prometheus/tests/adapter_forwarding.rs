@@ -175,9 +175,16 @@ fn a_non_admin_device_cannot_attach_as_an_adapter_host() {
     let host = adapter_host(up.path(), &driver);
     let url = format!("wss://localhost:{port}/adapters");
     let _host_daemon = Daemon::start_with(host.path(), &["--adapters-only", "--upstream", &url]);
-    wait("the host stays degraded", Duration::from_mins(1), || {
-        adapter_state(host.path()).contains("upstream_unreachable")
-    });
+    // Degraded from the start ("not connected yet"); wait for the
+    // upstream's refusal so the message is not sent mid-handshake.
+    wait(
+        "the upstream refused the host",
+        Duration::from_mins(1),
+        || {
+            let status = adapter_state(host.path());
+            status.contains("upstream_unreachable") && !status.contains("not connected yet")
+        },
+    );
     send(host.path(), "default", "alice", "hello");
     wait_said(
         host.path(),
