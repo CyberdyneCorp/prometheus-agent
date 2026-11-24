@@ -41,8 +41,10 @@ jobs:
     # to reach `xtask plugin-samples` (clippy 9, nextest 63 min) with the
     # docs, health and offline smoke steps still to run; the Apple silicon
     # one used 65 min and the Linux jobs up to 58 (one slow apt mirror cost
-    # 21 min and cancelled the x86_64 gnu job at 60).
-    timeout-minutes: ${{ matrix.os == 'macos-15-intel' && 150 || matrix.os == 'macos-15' && 100 || 90 }}
+    # 21 min and cancelled the x86_64 gnu job at 60). Caches are saved on
+    # main only and pull-request release builds can evict them: a cold Apple
+    # silicon run built for 85 min before its tests and was cancelled at 100.
+    timeout-minutes: ${{ matrix.os == 'macos-15' && 165 || matrix.os == 'macos-15-intel' && 150 || 90 }}
     strategy:
       fail-fast: false
       matrix:
@@ -195,7 +197,8 @@ jobs:
   build:
     name: build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # A cold cache (see `check`) left the Windows arm build compiling at 45.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
