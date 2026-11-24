@@ -17,3 +17,21 @@ release_age_exempt = ["webpki-roots", "webpki-root-certs", "rustls-native-certs"
 # version = "1.2.3"
 # reason = "why it cannot wait"
 # expires = "2026-12-31"
+
+[[waiver]]
+package = "url"
+version = "2.5.9"
+reason = "RUSTSEC-2026-0592 (stack overflow in Url::origin on nested blob: URLs); cargo deny fails until 2.5.8 is gone"
+expires = "2026-12-15"
+
+[[waiver]]
+package = "form_urlencoded"
+version = "1.2.3"
+reason = "updated together with url 2.5.9 (RUSTSEC-2026-0592), same release"
+expires = "2026-12-15"
+
+[[waiver]]
+package = "cookie"
+version = "0.18.3"
+reason = "RUSTSEC-2026-0594 (private cookie nonces can repeat after fork) in the desktop shell's tauri tree; cargo deny fails until 0.18.2 is gone"
+expires = "2026-12-15"
