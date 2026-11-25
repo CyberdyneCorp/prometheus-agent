@@ -3,7 +3,7 @@
 //! restart, slash commands, reply projection and terminal tool statuses
 //! (spec: acp-adapter).
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use pmt_rpc::contracts::{AttachParams, AttachRole, PromptSubmit, SessionAttach, SubmitParams};
@@ -211,13 +211,28 @@ fn a_daemon_restart_fails_the_prompt_and_reattach_shows_the_outcome() {
     assert_eq!(lost["error"]["message"], GATEWAY_LOST, "{lost}");
     let _daemon = daemon::start(home.path(), &[]);
     home.script("[[rule]]\ntext = \"fresh answer\"\nrepeat = true\n");
+    // Any daemon call re-attaches: the restarted daemon asks whether to
+    // resume (the editor's card is dismissed), then records the turn as
+    // crashed on its own schedule. New work sent before that is refused.
+    acp.ok("session/list", &json!({}));
+    acp.wait_for("the resume question", |f| {
+        f["method"] == "session/request_permission"
+    });
+    let deadline = Instant::now() + Duration::from_secs(30);
+    loop {
+        let transcript = home.rpc("session.transcript", &json!({"session_id": session}));
+        if transcript.to_string().contains("The turn ended (crashed)") {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "never recorded as crashed: {transcript}"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
     let id = acp.send_prompt(&session, "new work");
-    assert_eq!(acp.response(id)["result"]["stopReason"], "end_turn");
-    let transcript = home.rpc("session.transcript", &json!({"session_id": session}));
-    assert!(
-        transcript.to_string().contains("The turn ended (crashed)"),
-        "the outcome the re-attach found: {transcript}"
-    );
+    let fresh = acp.response(id);
+    assert_eq!(fresh["result"]["stopReason"], "end_turn", "{fresh}");
 }
 
 /// Scenario: Restart mid-turn, outcome unknown. An admission whose
