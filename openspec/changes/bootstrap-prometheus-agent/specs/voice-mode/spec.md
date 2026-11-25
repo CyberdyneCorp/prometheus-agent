@@ -130,7 +130,7 @@ The gateway SHALL provide `/voice` in chats with subcommands `on` (speak replies
 
 ### Requirement: Discord voice channel sessions
 The Discord adapter SHALL support `/voice join` (alias `/voice channel`), `/voice leave` and `/voice status` in a text channel, joining the voice channel the invoking user is in (refusing with "join a voice channel first" otherwise) and binding that text channel; while joined it SHALL receive each speaker's audio independently, end an utterance after 1500 ms of silence following at least 500 ms of speech, transcribe it, post `[Voice] @<user>: <transcript>` to the bound text channel, run the turn in that channel's session, and send the reply both as text and as speech in the voice channel; it SHALL require the `Connect` and `Speak` permissions and report a missing one by name.
-**Milestone:** M3
+**Milestone:** M4
 
 #### Scenario: Spoken question answered in voice
 - **GIVEN** the bot joined a voice channel via `/voice join` from `#general`
@@ -143,7 +143,7 @@ The Discord adapter SHALL support `/voice join` (alias `/voice channel`), `/voic
 
 ### Requirement: Voice channel echo suppression, access control and rebinding
 While playing speech in a voice channel the Discord adapter SHALL pause capture so the bot never transcribes its own output; it SHALL process audio only from speakers authorized by the platform's allowlist or allowed roles, re-checking role membership on every utterance and silently ignoring others; and running `/voice join` from another text channel SHALL move the binding there and drop speech captured before the move rather than posting it to the new channel.
-**Milestone:** M3
+**Milestone:** M4
 
 #### Scenario: Unauthorized speaker ignored
 - **GIVEN** a voice channel with an allowed user and a non-allowed user

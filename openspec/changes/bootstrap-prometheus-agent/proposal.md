@@ -16,7 +16,7 @@ CyberdyneCorp needs a personal/team AI agent harness that matches what Hermes Ag
   - **Observability**: one trajectory grammar for every surface, OpenTelemetry traces/metrics, and a per-session cost and token ledger with hard budgets.
   - **Capability-based security**: every tool, plugin and subagent runs under an explicit capability set; OS sandboxing (Landlock/seccomp on Linux, Seatbelt on macOS, AppContainer on Windows) for local execution; signed releases and signed plugins.
   - **Hermes migration**: one-shot import of a Hermes home (config, `.env`, sessions, memory, skills, cron jobs, profiles).
-- **Milestones**: every requirement is tagged `M1` (core single-user agent), `M2` (multi-surface + extensibility) or `M3` (desktop, dashboard, kanban, self-improvement, evals).
+- **Milestones**: every requirement is tagged `M1` (core single-user agent), `M2` (multi-surface + extensibility) `M3` (desktop, dashboard, kanban, self-improvement, evals) or `M4` (Discord voice channels and the release-signed first-party and catalog plugins, moved out of M3).
 
 ## Capabilities
 
