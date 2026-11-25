@@ -73,6 +73,12 @@ struct State {
     responses: Vec<Value>,
     /// Ephemeral messages: `(user, text)`.
     ephemeral: Vec<(String, String)>,
+    /// More workspaces: (bot token, team, bot user).
+    workspaces: Vec<(String, String, String)>,
+    /// Channels of a workspace other than [`TEAM`]: (channel, team).
+    channel_teams: Vec<(String, String)>,
+    /// The team whose token posted each message: (ts, team).
+    posted_with: Vec<(String, String)>,
 }
 
 /// The mock.
@@ -132,6 +138,44 @@ impl SlackMock {
     /// Names of the files uploaded into conversations.
     pub fn uploads(&self) -> Vec<String> {
         self.lock().uploads.clone()
+    }
+
+    /// Installs the app in another workspace: `token` is its bot token,
+    /// `bot` the bot's user id there.
+    pub fn add_workspace(&self, token: &str, team: &str, bot: &str) {
+        self.lock()
+            .workspaces
+            .push((token.to_owned(), team.to_owned(), bot.to_owned()));
+    }
+
+    /// `channel` belongs to workspace `team` (other workspaces' tokens do
+    /// not find it).
+    pub fn channel_in(&self, channel: &str, team: &str) {
+        self.lock()
+            .channel_teams
+            .push((channel.to_owned(), team.to_owned()));
+    }
+
+    /// The team whose token posted message `ts`.
+    pub fn posted_by(&self, ts: &str) -> Option<String> {
+        self.lock()
+            .posted_with
+            .iter()
+            .find(|(t, _)| t == ts)
+            .map(|(_, team)| team.clone())
+    }
+
+    /// Delivers a message event of `user` in `channel` of workspace
+    /// `team`; its `ts`.
+    pub fn inject_in(&self, team: &str, channel: &str, user: &str, text: &str) -> String {
+        let ts = self.ts();
+        let event = json!({"type": "message", "channel": channel, "channel_type": "channel",
+                           "user": user, "ts": ts, "text": text, "team": team});
+        self.envelope(
+            "events_api",
+            &json!({"team_id": team, "event": event, "type": "event_callback"}),
+        );
+        ts
     }
 
     /// Socket Mode connections opened so far.
@@ -410,23 +454,63 @@ impl SlackMock {
             .header("authorization")
             .and_then(|a| a.strip_prefix("Bearer "))
             .unwrap_or_default();
-        let wanted = if method == "apps.connections.open" {
-            APP_TOKEN
-        } else {
-            BOT_TOKEN
-        };
-        if token != wanted {
-            return refused("invalid_auth");
-        }
         let args: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
-        self.method(method, &args)
+        if method == "apps.connections.open" {
+            if token != APP_TOKEN {
+                return refused("invalid_auth");
+            }
+            return self.method(method, &args, (TEAM, BOT));
+        }
+        let Some((team, bot)) = self.workspace_of(token) else {
+            return refused("invalid_auth");
+        };
+        if !self.in_workspace(&args, &team) {
+            return refused("channel_not_found");
+        }
+        self.method(method, &args, (&team, &bot))
     }
 
-    fn method(&self, method: &str, args: &Value) -> HttpResponse {
+    /// The workspace (team, bot user) of a bot token.
+    fn workspace_of(&self, token: &str) -> Option<(String, String)> {
+        if token == BOT_TOKEN {
+            return Some((TEAM.to_owned(), BOT.to_owned()));
+        }
+        self.lock()
+            .workspaces
+            .iter()
+            .find(|(t, _, _)| t == token)
+            .map(|(_, team, bot)| (team.clone(), bot.clone()))
+    }
+
+    /// Whether the conversation a call names (if any) is in `team`.
+    fn in_workspace(&self, args: &Value, team: &str) -> bool {
+        let Some(channel) = args["channel"].as_str().or(args["channel_id"].as_str()) else {
+            return true;
+        };
+        let state = self.lock();
+        let owner = state
+            .channel_teams
+            .iter()
+            .find(|(c, _)| c == channel)
+            .map_or(TEAM, |(_, t)| t.as_str());
+        owner == team
+    }
+
+    fn method(&self, method: &str, args: &Value, (team, bot): (&str, &str)) -> HttpResponse {
         match method {
-            "auth.test" => ok(&json!({"user_id": BOT, "team_id": TEAM, "user": "kit-bot"})),
+            "auth.test" => ok(&json!({"user_id": bot, "team_id": team, "user": "kit-bot"})),
             "apps.connections.open" => ok(&json!({"url": format!("ws://{}/link", self.socket)})),
-            "chat.postMessage" => self.post(args),
+            "chat.postMessage" => {
+                let posted = self.post(args);
+                if let Ok(body) = serde_json::from_slice::<Value>(&posted.body)
+                    && let Some(ts) = body["ts"].as_str()
+                {
+                    self.lock()
+                        .posted_with
+                        .push((ts.to_owned(), team.to_owned()));
+                }
+                posted
+            }
             "chat.postEphemeral" => {
                 let entry = (
                     args["user"].as_str().unwrap_or_default().to_owned(),

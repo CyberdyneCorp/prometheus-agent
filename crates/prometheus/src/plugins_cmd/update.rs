@@ -101,7 +101,7 @@ fn moved(scope: &ProfileScope, id: &str, record: &InstallRecord) -> Option<(Stri
             (Some(&digest) != record.package_digest.as_ref())
                 .then(|| (digest, format!("package {} changed", record.location)))
         }
-        Origin::Git | Origin::Adopted => None,
+        Origin::Git | Origin::Adopted | Origin::Pypi | Origin::Nix => None,
     }
 }
 

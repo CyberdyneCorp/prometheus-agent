@@ -1,0 +1,26 @@
+# First-party catalog adapter: Mattermost (spec: platform-adapters,
+# Mattermost adapter). Posts and files go through REST API v4; the
+# `/api/v4/websocket` event stream is held by the socket bridge sidecar.
+# Configure `[gateway.platforms.mattermost]` with option `server_url` and
+# optionally `allowed_channels`, `free_response_channels`, `reply_mode`
+# (`off` or `thread`); `prometheus secrets set MATTERMOST_TOKEN` (a bot
+# or personal access token); grant the server (`prometheus grants add
+# plugin:mattermost@<digest> net.connect:<host>:443`). Allowlists name
+# 26-character user ids.
+manifest_version = 1
+id = "mattermost"
+version = "1.0.0"
+kind = "wasm"
+description = "Mattermost channels, threads and direct messages."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["127.0.0.1"]
+secrets = ["MATTERMOST_TOKEN"]
+
+[sidecar]
+runtime = "node"
+command = "sidecar/bridge.mjs"
+lockfile = "sidecar/package-lock.json"

@@ -4,26 +4,35 @@
 //! the access token in the profile's secret `MATRIX_ACCESS_TOKEN` (or the
 //! table's `token_secret`). Inbound is a `/sync` long poll whose cursor
 //! survives reconnects; replies thread, edit (`m.replace`), react
-//! (`m.annotation`) and carry media from the media repository. Rooms are
-//! unencrypted here; end-to-end encryption is a later milestone.
+//! (`m.annotation`) and carry media from the media repository. Encrypted
+//! rooms are [`e2ee`]'s (Olm/Megolm in [`crypto`]).
 
 mod api;
+mod crypto;
+mod e2ee;
 /// The mock platform the conformance kit runs this adapter against; only
 /// in builds with the `kit` feature (tests, `prometheus` with
 /// `adapter-kits`), so release binaries do not carry it.
 #[cfg(feature = "kit")]
 pub mod mock;
+/// The mock's end-to-end encryption half (key endpoints, another user's
+/// device); only with the `kit` feature.
+#[cfg(feature = "kit")]
+pub mod mock_keys;
 mod power;
+mod rooms;
 mod sync;
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use api::{Api, segment};
+pub use crypto::recovery::RECOVERY_SECRET;
+pub use e2ee::E2EE_UNAVAILABLE;
 use pmt_config::ProfileScope;
-use pmt_config::platforms::MatrixOptions;
+use pmt_config::platforms::{MatrixE2ee, MatrixOptions};
 use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
@@ -63,6 +72,15 @@ pub struct Matrix {
     poller: Mutex<Option<CancellationToken>>,
     /// Direct-message rooms the adapter opened, by user.
     dms: Mutex<HashMap<String, String>>,
+    rooms: Arc<rooms::Rooms>,
+    /// `options.e2ee`.
+    e2ee: MatrixE2ee,
+    /// End-to-end encryption, once started.
+    crypto: Mutex<Option<Arc<crypto::Crypto>>>,
+    /// Whether each room is encrypted.
+    encrypted: e2ee::Encrypted,
+    /// Rooms already warned about an event that could not be decrypted.
+    undecryptable: Arc<Mutex<HashSet<String>>>,
 }
 
 impl std::fmt::Debug for Matrix {
@@ -100,7 +118,13 @@ impl Matrix {
             )
         })?;
         let txn_base = jiff::Timestamp::now().as_millisecond().unsigned_abs();
+        let rooms = Arc::new(rooms::Rooms::new(&options, jiff::Timestamp::now()));
         Ok(Self {
+            e2ee: options.e2ee,
+            crypto: Mutex::default(),
+            encrypted: Arc::default(),
+            undecryptable: Arc::default(),
+            rooms,
             scope: setup.scope.clone(),
             secret: setup
                 .config
@@ -165,12 +189,13 @@ impl Matrix {
         kind: &str,
         content: &Value,
     ) -> Result<String, SendError> {
+        let (kind, content) = self.sealed(room, kind, content).await?;
         let path = format!(
             "/rooms/{}/send/{kind}/{}",
             segment(room),
             segment(&self.txn())
         );
-        let sent = self.api()?.put(&path, content).await?;
+        let sent = self.api()?.put(&path, &content).await?;
         sent["event_id"]
             .as_str()
             .map(str::to_owned)
@@ -203,6 +228,10 @@ impl Matrix {
             .await
             .map_err(|e| sync::sync_error(&e).1)?;
         let user_id = me["user_id"].as_str().unwrap_or_default().to_owned();
+        // Required encryption that cannot start reads no rooms.
+        let crypto = self
+            .start_crypto(&api, &user_id, me["device_id"].as_str())
+            .await?;
         let stop = CancellationToken::new();
         let run = sync::Run {
             api: api.clone(),
@@ -210,6 +239,10 @@ impl Matrix {
             user_id: user_id.clone(),
             cursor: Arc::clone(&self.cursor),
             allow_users: self.allow_users.clone(),
+            rooms: Arc::clone(&self.rooms),
+            crypto,
+            encrypted: Arc::clone(&self.encrypted),
+            undecryptable: Arc::clone(&self.undecryptable),
             stop: stop.clone(),
         };
         run.start_cursor()
@@ -231,11 +264,11 @@ impl Matrix {
         as_voice: bool,
     ) -> Result<String, SendError> {
         let (msgtype, mime) = file_kind(path, as_voice);
-        let uri = self.api()?.upload(path, mime).await?;
+        let (member, file) = self.upload_for(&message.chat_id, path, mime).await?;
         let name = path
             .file_name()
             .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned());
-        let mut content = json!({"msgtype": msgtype, "body": name, "url": uri,
+        let mut content = json!({"msgtype": msgtype, "body": name, member: file,
                                  "info": {"mimetype": mime}});
         if as_voice {
             content["org.matrix.msc3245.voice"] = json!({});
@@ -533,6 +566,6 @@ impl Adapter for Matrix {
         &'a self,
         attachment: &'a Attachment,
     ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
-        Box::pin(async move { self.api()?.download(&attachment.location).await })
+        Box::pin(async move { self.open_attachment(&attachment.location).await })
     }
 }

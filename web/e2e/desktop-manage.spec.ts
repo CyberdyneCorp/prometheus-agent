@@ -121,6 +121,23 @@ test("a duplicate chord flags both shortcuts until one changes", async ({ page }
   await expect(page.locator('input[data-shortcut="new-session"]')).toHaveValue("CommandOrControl+Shift+Y");
 });
 
+test("a preference stored from another window keeps a shortcut being typed", async ({ browser }) => {
+  const one = await (await browser.newContext()).newPage();
+  const two = await (await browser.newContext()).newPage();
+  await openDesktop(one, "one");
+  await openDesktop(two, "two");
+  await manage(one, "shortcuts");
+  const typed = one.locator('input[data-shortcut="new-tab"]');
+  await typed.fill("CommandOrControl+Shift+U");
+  // Window two stores another preference; window one hears of it while the
+  // chord is still being typed.
+  await two.evaluate(() => document.querySelector<HTMLInputElement>("input[name=message_reactions]")?.click());
+  await expect(one.locator("input[name=message_reactions]")).toBeChecked();
+  await expect(typed).toBeFocused();
+  await typed.blur();
+  await expect.poll(() => readFileSync(`${env("PMT_HOME")}/ui-prefs.json`, "utf8")).toContain("CommandOrControl+Shift+U");
+});
+
 test("the palette finds pages, sessions and actions and exports a profile without keys", async ({ page }) => {
   await openDesktop(page);
   await page.keyboard.press("Control+k");

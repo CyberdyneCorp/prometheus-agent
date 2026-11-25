@@ -33,6 +33,8 @@ tracing.workspace = true
 # The tests run the adapter against its mock.
 pmt-adapters-webhook = { path = ".", features = ["kit"] }
 tempfile.workspace = true
+# Coalescing windows run on paused time.
+tokio = { workspace = true, features = ["test-util"] }
 toml.workspace = true
 
 [lints]

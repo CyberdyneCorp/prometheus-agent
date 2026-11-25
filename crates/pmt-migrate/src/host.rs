@@ -22,6 +22,9 @@ pub enum Registry {
     Platform,
     /// Memory provider plugins installed in the profile.
     MemoryProvider,
+    /// Plugins the signed plugin catalog offers (catalog adapters, Home
+    /// Assistant, Camofox).
+    CatalogPlugin,
 }
 
 /// One imported Hermes plugin.
@@ -67,6 +70,15 @@ pub trait Host {
         enabled: &[String],
         skip: &[String],
     ) -> Result<Vec<PluginOutcome>, Error>;
+
+    /// Installs catalog plugin `id` into `scope`'s profile from the signed
+    /// catalog, disabled and without grants.
+    ///
+    /// # Errors
+    ///
+    /// When the catalog does not offer it or it cannot be fetched,
+    /// verified or installed.
+    fn install_catalog_plugin(&self, scope: &ProfileScope, id: &str) -> Result<(), Error>;
 
     /// Prints a progress line (stderr).
     fn progress(&self, line: &str);

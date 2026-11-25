@@ -14,7 +14,9 @@ use std::time::Duration;
 use pmt_config::{DaemonConfig, ProfileScope};
 use pmt_core::error::Error;
 use pmt_gateway::messaging::health::HealthOptions;
-use pmt_gateway::messaging::{AdapterFactory, Agents as _, Options, RelayOptions, RelaySource};
+use pmt_gateway::messaging::{
+    AdapterFactory, Agents as _, ForwardOptions, Options, RelayOptions, RelaySource,
+};
 
 use super::host::DaemonHost;
 use crate::context::Context;
@@ -120,6 +122,38 @@ fn relay(config: &DaemonConfig, scope: &ProfileScope) -> Result<Option<RelayOpti
     }))
 }
 
+/// Where an adapters-only daemon forwards (`daemon run --upstream`), with
+/// the device token from the launch profile's secret
+/// `daemon.upstream_ticket_secret`.
+///
+/// # Errors
+///
+/// No launch profile, or the secret is missing.
+pub(super) fn forward(
+    url: &str,
+    config: &DaemonConfig,
+    host: &Arc<DaemonHost>,
+    launch_profile: &str,
+) -> Result<ForwardOptions, Error> {
+    let scope = host.scope(launch_profile).ok_or_else(|| {
+        Error::new(
+            &pmt_core::error::codes::CONFIG_INVALID,
+            format!("profile '{launch_profile}' is not served"),
+        )
+    })?;
+    let secret = &config.daemon.upstream_ticket_secret.0;
+    let token = scope.secrets().resolve(secret).map_err(|err| {
+        err.with_hint(format!(
+            "pair this host on the upstream (`prometheus daemon pair-device <name> --role admin`) and store the token here with `prometheus secrets set {secret}`"
+        ))
+    })?;
+    Ok(ForwardOptions {
+        url: url.to_owned(),
+        token,
+        extra_ca_file: extra_ca(&scope),
+    })
+}
+
 /// The adapter factories of this build, by platform name.
 pub(super) fn factories(ctx: &Context<'_>) -> BTreeMap<String, AdapterFactory> {
     // Release builds have no test adapter to insert.
@@ -164,10 +198,7 @@ pub(super) fn factories(ctx: &Context<'_>) -> BTreeMap<String, AdapterFactory> {
         .ok()
         .filter(|a| !a.is_empty())
     {
-        let endpoints = pmt_adapters_telegram::Endpoints {
-            files: format!("{api}/file"),
-            api,
-        };
+        let endpoints = pmt_adapters_telegram::Endpoints::at(&api);
         factories.insert(
             pmt_adapters_telegram::PLATFORM.to_owned(),
             pmt_adapters_telegram::factory_at(endpoints),

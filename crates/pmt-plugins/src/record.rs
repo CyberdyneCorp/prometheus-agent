@@ -2,8 +2,8 @@
 //! authoritative provenance of an installed plugin (spec: plugin-system,
 //! Signed plugin packages and provenance; plugins CLI).
 //!
-//! It names where the plugin came from (`catalog`, `package`, `git` or
-//! `adopted`), the pinned ref, the package digest, the content digest of
+//! It names where the plugin came from (`catalog`, `package`, `git`,
+//! `adopted`, `pypi` or `nix`), the pinned ref, the package digest, the content digest of
 //! the directory as installed, the signer and tier, when it was installed
 //! and the flags that let it in (`allow_unsigned`, `allow_removed`). A
 //! directory in the profile without a record was placed by hand and never
@@ -29,6 +29,10 @@ pub enum Origin {
     Git,
     /// A directory placed by hand, then adopted.
     Adopted,
+    /// A Python distribution from a package index, at an exact version.
+    Pypi,
+    /// Declared by the Nix module; the Nix configuration owns it.
+    Nix,
 }
 
 impl Origin {
@@ -40,6 +44,8 @@ impl Origin {
             Self::Package => "package",
             Self::Git => "git",
             Self::Adopted => "adopted",
+            Self::Pypi => "pypi",
+            Self::Nix => "nix",
         }
     }
 }

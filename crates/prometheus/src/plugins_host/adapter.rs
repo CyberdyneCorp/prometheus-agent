@@ -10,7 +10,9 @@
 //! Inbound messages are polled; a trap or timeout of a plugin call puts
 //! only this adapter into `retrying` (the gateway reconnects it with
 //! backoff, which instantiates the plugin afresh), and five crashes within
-//! ten minutes make it `fatal`.
+//! ten minutes make it `fatal`; a poll error `fatal: <code>: ..` makes it
+//! `fatal` at once. Files cross the boundary as base64 (`adapter_media`);
+//! edits, deletes, reactions and typing go through `send` with an `op`.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -21,12 +23,16 @@ use pmt_core::error::{Error, codes};
 use pmt_gateway::messaging::probe::Reach;
 use pmt_gateway::messaging::{
     Adapter, AdapterError, AdapterFactory, AdapterFuture, AdapterLink, AdapterSetup, AdapterState,
-    ChatInfo, ChatType, Descriptor, HttpRequest, HttpResponse, Inbound, Outgoing, SendError,
-    SenderVerdict, Sent,
+    Attachment, ChatInfo, ChatType, Descriptor, HttpRequest, HttpResponse, Inbound, MediaStream,
+    Outgoing, SendError, SenderVerdict, Sent,
 };
 use pmt_plugins::host::platform_adapter_world as wit;
 use pmt_plugins::host::{CallInfo, Instance};
 use serde_json::{Value, json};
+
+use super::adapter_media::{self, Inbox};
+use super::adapter_secrets::SecretWriter;
+use super::sidecar;
 
 /// How often inbound messages are polled.
 const POLL_EVERY: Duration = Duration::from_millis(250);
@@ -37,72 +43,69 @@ const CRASH_WINDOW: Duration = Duration::from_mins(10);
 /// built.
 const RECHECK: Duration = Duration::from_secs(5);
 
-/// Declares the platform of every enabled `platform-adapter` plugin of
+/// Declares the platform of every installed `platform-adapter` plugin of
 /// the home's profiles (spec: platform-adapters, First-party platforms and
 /// typed platform names), so a `[gateway.platforms.<name>]` table naming
-/// one validates: read once per process, from the profiles'
-/// `plugins.enabled` lists and the plugins' manifests, before any
-/// profile's configuration is checked. The platform is the plugin id,
-/// lower case.
+/// one validates: read once per process, from the plugins' manifests,
+/// before any profile's configuration is checked. A disabled plugin counts
+/// (a migrated catalog adapter arrives disabled with its table; the
+/// adapter itself starts only once the plugin is enabled). The platform is
+/// the plugin id, lower case.
 pub fn register_platforms(home: &Path) {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
-        for platform in enabled_adapters(home) {
-            // A plugin publishes no options schema: its own `start`
-            // checks the options it is given.
-            let any = serde_json::json!({"type": "object", "additionalProperties": true});
-            pmt_config::platforms::register_plugin_platform(&platform, Some(any));
+        for platform in installed_adapters(home) {
+            register(&platform);
         }
     });
+}
+
+/// Declares the platform of plugin `id` just installed in the profile at
+/// `profile_dir`, when it is an adapter.
+pub fn register_installed(profile_dir: &Path, id: &str) {
+    if is_adapter(&profile_dir.join("plugins").join(id)) {
+        register(&id.to_lowercase());
+    }
+}
+
+fn register(platform: &str) {
+    // A plugin publishes no options schema: its own `start` checks the
+    // options it is given.
+    let any = serde_json::json!({"type": "object", "additionalProperties": true});
+    pmt_config::platforms::register_plugin_platform(platform, Some(any));
 }
 
 fn toml_of(path: &Path) -> Option<toml::Table> {
     std::fs::read_to_string(path).ok()?.parse().ok()
 }
 
-fn strings(table: Option<&toml::Value>) -> Vec<String> {
-    table
-        .and_then(toml::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|v| v.as_str().map(str::to_owned))
-        .collect()
+fn is_adapter(dir: &Path) -> bool {
+    toml_of(&dir.join("plugin.toml")).is_some_and(|m| {
+        m.get("worlds")
+            .and_then(toml::Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(toml::Value::as_str)
+            .any(|w| w.starts_with("platform-adapter@"))
+    })
 }
 
-/// The ids (lower case) of the enabled adapter plugins of every profile.
-fn enabled_adapters(home: &Path) -> Vec<String> {
-    let mut found = Vec::new();
-    let profiles = std::fs::read_dir(home.join("profiles"))
+/// The ids (lower case) of the installed adapter plugins of every profile.
+fn installed_adapters(home: &Path) -> Vec<String> {
+    let plugin_dirs = std::fs::read_dir(home.join("profiles"))
         .into_iter()
         .flatten()
-        .flatten();
-    for profile in profiles {
-        // The profile's own configuration: its plane document when the
-        // home uses a remote backend (an unreachable plane fails the
-        // profile's load later, with the same error).
-        let config = pmt_config::ConfigFile::of_profile_dir(&profile.path()).raw();
-        let Some(config) = config
-            .ok()
-            .flatten()
-            .and_then(|text| text.parse::<toml::Table>().ok())
-        else {
-            continue;
-        };
-        let plugins = config.get("plugins");
-        let disabled = strings(plugins.and_then(|p| p.get("disabled")));
-        for id in strings(plugins.and_then(|p| p.get("enabled"))) {
-            let manifest = profile.path().join("plugins").join(&id).join("plugin.toml");
-            let adapter = toml_of(&manifest).is_some_and(|m| {
-                strings(m.get("worlds"))
-                    .iter()
-                    .any(|w| w.starts_with("platform-adapter@"))
-            });
-            if adapter && !disabled.contains(&id) {
-                found.push(id.to_lowercase());
-            }
-        }
-    }
-    found
+        .flatten()
+        .flat_map(|profile| {
+            std::fs::read_dir(profile.path().join("plugins"))
+                .into_iter()
+                .flatten()
+                .flatten()
+        });
+    plugin_dirs
+        .filter(|plugin| is_adapter(&plugin.path()))
+        .map(|plugin| plugin.file_name().to_string_lossy().to_lowercase())
+        .collect()
 }
 
 /// Builds the adapter of a platform an enabled plugin of the profile
@@ -111,11 +114,10 @@ fn enabled_adapters(home: &Path) -> Vec<String> {
 pub fn factory() -> AdapterFactory {
     Arc::new(|setup: &AdapterSetup| {
         let plugins = super::current(&setup.scope, RECHECK).current();
-        let instance = plugins
+        let plugin = plugins
             .plugins
             .iter()
             .find(|p| p.manifest.adapter_platform().as_deref() == Some(setup.platform.as_str()))
-            .map(|p| Arc::clone(&p.instance))
             .ok_or_else(|| {
                 Error::new(
                     &codes::PLUGINS_LOAD,
@@ -127,9 +129,176 @@ pub fn factory() -> AdapterFactory {
                 )
                 .with_hint("prometheus plugins list shows why an adapter plugin did not load")
             })?;
-        let options = Value::Object(setup.config.options.clone().into_iter().collect());
-        Ok(Arc::new(PluginAdapter::read(instance, &setup.platform, &options)?) as Arc<dyn Adapter>)
+        let options = start_options(&setup.scope, &setup.config);
+        let mut adapter =
+            PluginAdapter::read(Arc::clone(&plugin.instance), &setup.platform, &options)?;
+        adapter.sidecar = sidecar_of(&setup.scope, plugin);
+        adapter.profile_dir = setup.scope.dir().to_path_buf();
+        adapter.media = Arc::new(Inbox::granted(Arc::clone(&plugin.grants)));
+        adapter.secrets = Some(Arc::new(SecretWriter::new(
+            &setup.scope,
+            &plugin.manifest.id,
+            &adapter.extras,
+            &plugin.grants.current(),
+        )));
+        Ok(Arc::new(adapter) as Arc<dyn Adapter>)
     })
+}
+
+/// The options an adapter plugin starts with: its platform table's
+/// `options`, plus `access` ([`access_of`]) and `listener_public`.
+pub(crate) fn start_options(
+    scope: &pmt_config::ProfileScope,
+    config: &pmt_config::schema::PlatformConfig,
+) -> Value {
+    let mut options = Value::Object(config.options.clone().into_iter().collect());
+    options["access"] = access_of(config);
+    options["listener_public"] = json!(listener_public(scope));
+    options
+}
+
+/// Installs the runtime and packages of the sidecar of the enabled adapter
+/// plugin providing `platform` (a setup command does it ahead of the
+/// first connect).
+///
+/// # Errors
+///
+/// No enabled plugin provides the platform, it declares no sidecar, or
+/// the install failed.
+pub async fn prepare_sidecar(
+    scope: &pmt_config::ProfileScope,
+    platform: &str,
+) -> Result<(), Error> {
+    let plugins = super::current(scope, RECHECK).current();
+    let sidecar = plugins
+        .plugins
+        .iter()
+        .find(|p| p.manifest.adapter_platform().as_deref() == Some(platform))
+        .and_then(|plugin| sidecar_of(scope, plugin))
+        .ok_or_else(|| {
+            Error::new(
+                &codes::PLUGINS_LOAD,
+                format!(
+                    "no enabled adapter plugin of profile '{}' runs a sidecar for '{platform}'",
+                    scope.name()
+                ),
+            )
+            .with_hint(format!(
+                "prometheus plugins install {platform}, then prometheus plugins enable {platform}"
+            ))
+        })?;
+    if sidecar.spec.declaration.runtime == pmt_plugins::manifest::sidecar::Runtime::Node {
+        sidecar::prepare_node(&sidecar.spec, &scope.config().network)
+            .await
+            .map_err(|e| Error::new(&codes::PLUGINS_LOAD, e.message))?;
+    }
+    Ok(())
+}
+
+/// The platform table's allowlists, handed to the plugin as
+/// `options.access` (`{allow_users, allow_chats, allow_all}`): the gateway
+/// still enforces them, but some platforms behave differently without one
+/// (ntfy then only publishes) or take ids of one shape only (Mattermost
+/// user ids, `SimpleX` contact ids), which the plugin checks at start.
+fn access_of(config: &pmt_config::schema::PlatformConfig) -> Value {
+    json!({
+        "allow_users": config.allow_users,
+        "allow_chats": config.allow_chats,
+        "allow_all": config.allow_all,
+    })
+}
+
+/// Whether the shared webhook listener may face other hosts
+/// (`gateway.http.public` in daemon.toml), handed to plugins as
+/// `options.listener_public`: a public listener needs stricter options of
+/// some (Graph's source ranges).
+fn listener_public(scope: &pmt_config::ProfileScope) -> bool {
+    pmt_config::DaemonConfig::load(scope.home()).is_ok_and(|c| c.gateway.http.public)
+}
+
+/// What starts `plugin`'s sidecar, when it declares one.
+fn sidecar_of(
+    scope: &pmt_config::ProfileScope,
+    plugin: &pmt_plugins::load::LoadedPlugin,
+) -> Option<Sidecar> {
+    let declaration = plugin.manifest.sidecar.clone()?;
+    let Some(dir) = plugin.dir.clone() else {
+        tracing::warn!(
+            plugin = plugin.manifest.id,
+            "an embedded plugin cannot run a sidecar"
+        );
+        return None;
+    };
+    let grants = plugin.grants.current();
+    let names = sidecar::granted_secrets(&declaration, &grants);
+    Some(Sidecar {
+        spec: sidecar::Spec {
+            home: scope.home().to_path_buf(),
+            profile: scope.name().as_str().to_owned(),
+            plugin: plugin.manifest.id.clone(),
+            plugin_dir: dir,
+            declaration,
+            secrets: Vec::new(),
+            node: None,
+            network: sidecar::granted_network(&grants),
+            confinement: super::sidecar_sandbox::Confinement {
+                sandbox: scope.config().security.sandbox.clone(),
+                home: scope.home().to_path_buf(),
+                data: scope
+                    .dir()
+                    .join("plugin-data")
+                    .join(&plugin.manifest.id)
+                    .join("sidecar"),
+                grants,
+            },
+        },
+        names,
+        scope: scope.clone(),
+        running: Mutex::default(),
+    })
+}
+
+/// A plugin's sidecar and the secrets it may receive.
+struct Sidecar {
+    spec: sidecar::Spec,
+    names: Vec<String>,
+    scope: pmt_config::ProfileScope,
+    running: Mutex<Option<sidecar::Running>>,
+}
+
+impl Sidecar {
+    /// Starts it (installing its runtime first when needed); the options
+    /// the adapter starts with then carry its `sidecar` URL and token.
+    async fn start(
+        &self,
+        link: Arc<dyn AdapterLink>,
+        options: &str,
+    ) -> Result<String, AdapterError> {
+        let mut spec = self.spec.clone();
+        // Only declared, granted secrets that resolve: never others.
+        spec.secrets = self
+            .names
+            .iter()
+            .filter_map(|n| {
+                Some((
+                    n.clone(),
+                    self.scope.secrets().resolve(n).ok()?.expose().to_owned(),
+                ))
+            })
+            .collect();
+        if spec.declaration.runtime == pmt_plugins::manifest::sidecar::Runtime::Node {
+            spec.node = Some(sidecar::prepare_node(&spec, &self.scope.config().network).await?);
+        }
+        let running = sidecar::start(&spec, link).await?;
+        let mut merged: Value = serde_json::from_str(options).unwrap_or_else(|_| json!({}));
+        merged["sidecar"] = running.options();
+        *lock(&self.running) = Some(running);
+        Ok(merged.to_string())
+    }
+
+    fn stop(&self) {
+        lock(&self.running).take();
+    }
 }
 
 /// One plugin's adapter.
@@ -141,6 +310,47 @@ struct PluginAdapter {
     link: Mutex<Option<Arc<dyn AdapterLink>>>,
     poller: Mutex<Option<tokio::task::JoinHandle<()>>>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
+    /// Inbound files the plugin handed over, until the gateway opens them.
+    media: Arc<Inbox>,
+    sidecar: Option<Sidecar>,
+    /// The credential the gateway locks across homes (spec: Credential
+    /// locks across homes): the values of the options the descriptor's
+    /// `credential_options` names (IRC: server and nickname).
+    credential: Option<String>,
+    /// The descriptor's `tool_ops`: its platform's host tools call it
+    /// ([`super::adapter_tools`]).
+    tool_ops: bool,
+    /// The owning profile's directory (where its tools look it up).
+    profile_dir: std::path::PathBuf,
+    /// The descriptor's keys beyond the gateway's (`max_body_bytes`,
+    /// `writable_secrets`, ...).
+    extras: Value,
+    /// Where its `store_secret` items go (set by the factory).
+    secrets: Option<Arc<SecretWriter>>,
+    /// Its registration with [`super::adapter_tools`] while connected.
+    tool_token: Mutex<Option<u64>>,
+}
+
+/// The credential identity of `options` for the option keys `keys` (a
+/// descriptor's `credential_options`, each `key` or `key=default`);
+/// `None` when it names none or one without a default is unset.
+fn credential_of(keys: &Value, options: &Value) -> Option<String> {
+    let keys = keys.as_array().filter(|k| !k.is_empty())?;
+    let values: Option<Vec<String>> = keys
+        .iter()
+        .map(|entry| {
+            let (key, default) = entry.as_str()?.split_once('=').map_or_else(
+                || (entry.as_str().unwrap_or_default(), None),
+                |(k, d)| (k, Some(d)),
+            );
+            match &options[key] {
+                Value::String(s) if !s.is_empty() => Some(s.to_lowercase()),
+                Value::Number(n) => Some(n.to_string()),
+                _ => default.map(str::to_lowercase),
+            }
+        })
+        .collect();
+    values.map(|v| v.join("|"))
 }
 
 impl PluginAdapter {
@@ -166,14 +376,23 @@ impl PluginAdapter {
         // Platform names are case-normalized to lower case.
         value["platform"] = Value::String(platform.to_owned());
         let descriptor = Descriptor::from_value(&value).map_err(invalid)?;
+        let credential = credential_of(&value["credential_options"], options);
         Ok(Self {
+            tool_ops: value["tool_ops"] == true,
+            extras: value,
+            secrets: None,
             instance,
             descriptor,
+            credential,
+            profile_dir: std::path::PathBuf::new(),
+            tool_token: Mutex::default(),
             options: options.to_string(),
             call,
             link: Mutex::default(),
             poller: Mutex::default(),
             crashes: Arc::default(),
+            media: Arc::default(),
+            sidecar: None,
         })
     }
 
@@ -187,6 +406,35 @@ impl PluginAdapter {
         pmt_core::spawn::blocking(move || f(&instance, &call))
             .await
             .map_err(|e| Error::new(&codes::PLUGINS_CALL, format!("plugin call: {e}")))?
+    }
+
+    /// Edits, deletes, reactions and typing travel through the plugin's
+    /// `send` as JSON with an `op` (`edit`, `delete`, `react`, `typing`),
+    /// asked only of a plugin whose descriptor declares the capability.
+    fn operation(&self, declared: bool, op: Value) -> AdapterFuture<'_, Result<(), SendError>> {
+        Box::pin(async move {
+            if !declared {
+                return Err(SendError::Unsupported);
+            }
+            let body = op.to_string();
+            match self
+                .blocking(move |instance, call| instance.adapter_send(call, &body))
+                .await
+            {
+                Ok(Ok(_)) => Ok(()),
+                Ok(Err(why)) => Err(send_error(why)),
+                Err(err) => {
+                    self.crashed(&err);
+                    Err(SendError::Network(err.message().to_owned()))
+                }
+            }
+        })
+    }
+
+    fn stop_sidecar(&self) {
+        if let Some(sidecar) = &self.sidecar {
+            sidecar.stop();
+        }
     }
 
     /// Reports a trap or timeout to the gateway (when connected).
@@ -231,8 +479,12 @@ fn crash_error(err: &Error) -> AdapterError {
 }
 
 /// One polled message: `{id, chat, chat_type, sender, text, thread,
-/// sender_name, callback}` (a button press carries its `callback` data).
-fn inbound(value: &Value) -> Inbound {
+/// sender_name, callback, reply_to, scope, is_bot, mentioned,
+/// replies_to_bot, not_addressed, attachments}` (a button press carries
+/// its `callback` data; the flags say how a group message addresses the
+/// bot, for the gateway's mention gating; attachments as
+/// [`Inbox::attachments`] reads them).
+fn inbound(value: &Value, media: &Inbox) -> Inbound {
     let text = |key: &str| value[key].as_str().map(str::to_owned);
     let chat_type = value["chat_type"]
         .as_str()
@@ -248,6 +500,14 @@ fn inbound(value: &Value) -> Inbound {
     inbound.thread_id = text("thread");
     inbound.sender_name = text("sender_name");
     inbound.callback = text("callback");
+    inbound.reply_to = text("reply_to");
+    inbound.scope_id = text("scope");
+    let flag = |key: &str| value[key].as_bool().unwrap_or(false);
+    inbound.is_bot = flag("is_bot");
+    inbound.addressing.mentioned = flag("mentioned");
+    inbound.addressing.replies_to_bot = flag("replies_to_bot");
+    inbound.addressing.not_addressed = flag("not_addressed");
+    inbound.attachments = media.attachments(value);
     inbound
 }
 
@@ -257,6 +517,8 @@ async fn poll(
     call: CallInfo,
     link: Arc<dyn AdapterLink>,
     crashes: Arc<Mutex<VecDeque<Instant>>>,
+    media: Arc<Inbox>,
+    secrets: Option<Arc<SecretWriter>>,
 ) {
     loop {
         tokio::time::sleep(POLL_EVERY).await;
@@ -265,12 +527,8 @@ async fn poll(
         let messages = match polled {
             Ok(Ok(Ok(text))) => text,
             Ok(Ok(Err(why))) => {
-                let error = AdapterError {
-                    retryable: true,
-                    code: "plugin_poll".to_owned(),
-                    message: why,
-                };
-                link.report(AdapterState::Retrying, Some(error));
+                let (state, error) = adapter_media::poll_failure(why);
+                link.report(state, Some(error));
                 return;
             }
             Ok(Err(err)) => {
@@ -289,7 +547,10 @@ async fn poll(
             Vec::new()
         });
         for value in &values {
-            link.submit(inbound(value)).await;
+            if secrets.as_ref().is_some_and(|s| s.consume(value)) {
+                continue;
+            }
+            link.submit(inbound(value, &media)).await;
         }
     }
 }
@@ -330,13 +591,17 @@ impl Adapter for PluginAdapter {
 
     fn connect(&self, link: Arc<dyn AdapterLink>) -> AdapterFuture<'_, Result<(), AdapterError>> {
         Box::pin(async move {
-            let options = self.options.clone();
+            let options = match &self.sidecar {
+                Some(sidecar) => sidecar.start(Arc::clone(&link), &self.options).await?,
+                None => self.options.clone(),
+            };
             match self
                 .blocking(move |instance, call| instance.adapter_start(call, &options))
                 .await
             {
                 Ok(Ok(())) => {}
                 Ok(Err(why)) => {
+                    self.stop_sidecar();
                     return Err(AdapterError {
                         retryable: true,
                         code: "plugin_start".to_owned(),
@@ -344,16 +609,28 @@ impl Adapter for PluginAdapter {
                     });
                 }
                 Err(err) => {
+                    self.stop_sidecar();
                     record_crash(&self.crashes);
                     return Err(crash_error(&err));
                 }
             }
             *lock(&self.link) = Some(Arc::clone(&link));
+            if self.tool_ops {
+                let token = super::adapter_tools::connected(
+                    &self.profile_dir,
+                    &self.descriptor.platform,
+                    Arc::clone(&self.instance),
+                    self.call.clone(),
+                );
+                *lock(&self.tool_token) = Some(token);
+            }
             let task = pmt_core::spawn::spawn(poll(
                 Arc::clone(&self.instance),
                 self.call.clone(),
                 link,
                 Arc::clone(&self.crashes),
+                Arc::clone(&self.media),
+                self.secrets.clone(),
             ));
             if let Some(old) = lock(&self.poller).replace(task) {
                 old.abort();
@@ -368,6 +645,14 @@ impl Adapter for PluginAdapter {
                 task.abort();
             }
             lock(&self.link).take();
+            if let Some(token) = lock(&self.tool_token).take() {
+                super::adapter_tools::disconnected(
+                    &self.profile_dir,
+                    &self.descriptor.platform,
+                    token,
+                );
+            }
+            self.stop_sidecar();
             if let Err(err) = self.blocking(Instance::adapter_stop).await {
                 tracing::warn!(plugin = %self.instance.id(), "the adapter's stop failed: {}", err.message());
             }
@@ -375,15 +660,19 @@ impl Adapter for PluginAdapter {
     }
 
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
-        let body = json!({
+        let mut body = json!({
             "chat": message.chat_id,
             "thread": message.thread_id,
             "reply_to": message.reply_to,
             "text": message.text,
             "buttons": message.buttons,
-        })
-        .to_string();
+        });
+        let attachments = message.attachments.clone();
         Box::pin(async move {
+            if !attachments.is_empty() {
+                body["attachments"] = Value::Array(adapter_media::outgoing(&attachments).await?);
+            }
+            let body = body.to_string();
             match self
                 .blocking(move |instance, call| instance.adapter_send(call, &body))
                 .await
@@ -398,6 +687,56 @@ impl Adapter for PluginAdapter {
                 }
             }
         })
+    }
+
+    fn edit<'a>(
+        &'a self,
+        message_id: &'a str,
+        message: &'a Outgoing,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op = json!({
+            "op": "edit",
+            "message_id": message_id,
+            "chat": message.chat_id,
+            "thread": message.thread_id,
+            "text": message.text,
+            "buttons": message.buttons,
+        });
+        self.operation(self.descriptor.supports_edit, op)
+    }
+
+    fn delete<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+        message_id: &'a str,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op =
+            json!({"op": "delete", "chat": chat_id, "thread": thread_id, "message_id": message_id});
+        self.operation(self.descriptor.supports_delete, op)
+    }
+
+    fn react<'a>(
+        &'a self,
+        reaction: &'a pmt_gateway::messaging::Reaction,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op = json!({
+            "op": "react",
+            "chat": reaction.chat_id,
+            "message_id": reaction.message_id,
+            "emoji": reaction.emoji,
+            "remove": reaction.remove,
+        });
+        self.operation(self.descriptor.supports_reactions, op)
+    }
+
+    fn send_typing<'a>(
+        &'a self,
+        chat_id: &'a str,
+        thread_id: Option<&'a str>,
+    ) -> AdapterFuture<'a, Result<(), SendError>> {
+        let op = json!({"op": "typing", "chat": chat_id, "thread": thread_id});
+        self.operation(self.descriptor.supports_typing, op)
     }
 
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
@@ -426,6 +765,13 @@ impl Adapter for PluginAdapter {
         })
     }
 
+    fn open_media<'a>(
+        &'a self,
+        attachment: &'a Attachment,
+    ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
+        Box::pin(async move { self.media.open(attachment) })
+    }
+
     fn authorize_sender<'a>(
         &'a self,
         inbound: &'a Inbound,
@@ -447,6 +793,17 @@ impl Adapter for PluginAdapter {
                 _ => SenderVerdict::Unknown,
             })
         })
+    }
+
+    fn credential_identity(&self) -> Option<String> {
+        self.credential.clone()
+    }
+
+    fn max_body_bytes(&self) -> usize {
+        self.extras["max_body_bytes"]
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .unwrap_or(pmt_gateway::messaging::DEFAULT_MAX_BODY)
     }
 
     fn verify_http(&self, _request: &HttpRequest) -> bool {
@@ -488,6 +845,25 @@ impl Adapter for PluginAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_credential_identity_comes_from_the_named_options() {
+        let keys = json!(["server", "nickname=prometheus-bot"]);
+        assert_eq!(
+            credential_of(
+                &keys,
+                &json!({"server": "irc.Libera.chat", "nickname": "bot"})
+            )
+            .as_deref(),
+            Some("irc.libera.chat|bot")
+        );
+        assert_eq!(
+            credential_of(&keys, &json!({"server": "irc.libera.chat"})).as_deref(),
+            Some("irc.libera.chat|prometheus-bot")
+        );
+        assert_eq!(credential_of(&keys, &json!({"nickname": "bot"})), None);
+        assert_eq!(credential_of(&Value::Null, &json!({"server": "x"})), None);
+    }
 
     #[test]
     fn the_fifth_crash_within_ten_minutes_is_fatal() {

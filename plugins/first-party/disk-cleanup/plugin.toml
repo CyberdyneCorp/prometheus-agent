@@ -1,0 +1,16 @@
+manifest_version = 1
+id = "disk-cleanup"
+version = "1.0.0"
+kind = "python"
+description = "Tracks the test and temporary files the agent creates under the profile home and <tmp>/prometheus-*, and cleans them up when a session ends"
+license = "MIT"
+requires_prometheus = ">=0.1"
+
+[capabilities]
+hooks = ["pre_tool_call", "post_tool_call", "on_session_end"]
+commands = ["disk-cleanup"]
+# The plugin itself confines every read and delete to the profile home and
+# `<tmp>/prometheus-*`, skipping protected state directories and user
+# workspace trees (the sandbox cannot express the `prometheus-*` glob).
+fs_read = ["$profile_home/**", "$tmp/**"]
+fs_write = ["$profile_home/**", "$tmp/**"]

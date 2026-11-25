@@ -1,0 +1,25 @@
+# First-party catalog plugin: Teams meeting summaries (spec:
+# platform-adapters, Teams meeting summary pipeline), built on the
+# Microsoft Graph change-notification listener: Graph posts transcript
+# (and recording) notifications to `/p/<profile>/teams_meetings/`; each
+# meeting's transcript becomes one summary turn, delivered by an incoming
+# webhook or into the meeting chat. Configure
+# `[gateway.platforms.teams_meetings]` with `client_id`, `tenant_id`,
+# `public_url` (the HTTPS URL Graph posts to), `client_state_secret`
+# (default grant `MSGRAPH_CLIENT_STATE`), `delivery` (`incoming_webhook`
+# with `webhook_secret`, default `TEAMS_MEETINGS_WEBHOOK_URL`, or
+# `graph`) and optionally `use_recordings`; store `MSGRAPH_CLIENT_SECRET`.
+# Then `prometheus plugins run teams_meetings subscribe`.
+manifest_version = 1
+id = "teams_meetings"
+version = "1.0.0"
+kind = "wasm"
+description = "Teams meeting summaries from Microsoft Graph transcript notifications."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["graph.microsoft.com", "login.microsoftonline.com", "*.webhook.office.com", "*.logic.azure.com"]
+secrets = ["MSGRAPH_CLIENT_SECRET", "MSGRAPH_CLIENT_STATE", "TEAMS_MEETINGS_WEBHOOK_URL"]
+cli_commands = ["subscribe", "list", "renew", "remove", "status", "replay"]

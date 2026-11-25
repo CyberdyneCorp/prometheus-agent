@@ -1,0 +1,40 @@
+# First-party plugin, embedded in the binary and disabled by default (spec:
+# plugin-system, First-party google_meet plugin). Enable it with
+# `prometheus plugins enable google_meet`, then
+# `prometheus plugins run google_meet install` (browser runtime) and
+# `... auth` (Google sign-in); the meet_* tools are offered from then on.
+manifest_version = 1
+id = "google_meet"
+version = "1.0.0"
+kind = "python"
+description = "Joins a Google Meet call in a background browser, transcribes its live captions and, in realtime mode, speaks through a virtual microphone"
+license = "MIT"
+requires_prometheus = ">=0.1"
+
+[capabilities]
+hooks = ["on_session_end"]
+cli_commands = ["setup", "install", "auth", "join", "status", "transcript", "say", "stop", "node"]
+# The background bot, the browser runtime's installer and the audio tools.
+subprocess = true
+# Meet itself, Google sign-in and media; OpenAI Realtime; the runtime's
+# packages and Chromium download. A remote meet node's host is granted by
+# the user (`prometheus grants add plugin:google_meet@<digest> net.connect:<host>:<port>`).
+network = [
+    "*.google.com",
+    "*.gstatic.com",
+    "*.googleapis.com",
+    "*.googleusercontent.com",
+    "api.openai.com",
+    "pypi.org",
+    "files.pythonhosted.org",
+    "cdn.playwright.dev",
+    "playwright.download.prss.microsoft.com",
+    "playwright.azureedge.net",
+]
+# Realtime speech (mode = "realtime").
+secrets = ["OPENAI_API_KEY"]
+# Meeting artifacts.
+fs_read = ["$profile_home/workspace/meetings/**"]
+fs_write = ["$profile_home/workspace/meetings/**"]
+# `node run`: the default port of a remote meet node.
+listen = [18789]

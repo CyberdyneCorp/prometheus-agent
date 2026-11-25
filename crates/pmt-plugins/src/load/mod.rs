@@ -312,7 +312,7 @@ pub struct BridgedPlugin {
 }
 
 /// The python plugins of a survey that are to run (state `loaded`, kind
-/// `python`).
+/// `python`); an embedded one's files are written to its directory first.
 #[must_use]
 pub fn bridged(surveyed: &[(Discovered, Status)], inputs: &LoadInputs<'_>) -> Vec<BridgedPlugin> {
     surveyed
@@ -322,6 +322,13 @@ pub fn bridged(surveyed: &[(Discovered, Status)], inputs: &LoadInputs<'_>) -> Ve
             let manifest = d.manifest.as_ref().ok()?.clone();
             let identity = identity(d)?;
             let requested = requested(&manifest, inputs).ok()?;
+            let dir = d.dir.clone()?;
+            if let Some(embedded) = d.embedded
+                && let Err(err) = crate::embedded::materialize(&embedded, &dir)
+            {
+                tracing::warn!(plugin = %manifest.id, "{}", err.message());
+                return None;
+            }
             let grants = Arc::new(PluginGrants::new(
                 &identity,
                 requested,
@@ -331,7 +338,7 @@ pub fn bridged(surveyed: &[(Discovered, Status)], inputs: &LoadInputs<'_>) -> Ve
                 manifest,
                 identity,
                 grants,
-                dir: d.dir.clone()?,
+                dir,
             })
         })
         .collect()

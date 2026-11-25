@@ -209,6 +209,7 @@ fn read_as(dir: &Path, id: String) -> Result<Manifest, Error> {
         ui: None,
         build: None,
         launch: Some(launch),
+        sidecar: None,
         id,
     })
 }

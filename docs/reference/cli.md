@@ -30589,11 +30589,17 @@ Options:
       --replace
           Take over messaging platform credentials (bot tokens) that a live daemon of another home or profile holds
 
+      --adapters-only
+          Run only the messaging adapters and forward every admitted event to the `--upstream` daemon, which owns the sessions (platform crypto or native dependencies on this host, the agent elsewhere)
+
   -p, --profile <NAME>
           Profile to use (default: the home's active_profile, else default)
 
       --set <KEY=VALUE>
           Override a config key for this invocation only; repeatable, never saved
+
+      --upstream <WS_URL>
+          The upstream daemon's adapter endpoint, `wss://<host>:<port>/adapters` on its remote listener (`daemon.remote`); the admin device token comes from the secret `daemon.upstream_ticket_secret` names
 
       --json
           Print one JSON document on stdout; errors go to stderr as JSON
@@ -31719,8 +31725,14 @@ Commands:
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
   whatsapp        WhatsApp linked-device setup
+  whatsapp-cloud  WhatsApp Cloud API webhook setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  telegram        Telegram bot maintenance
+  photon          Photon iMessage setup and status
+  setup           Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+  feishu          Feishu and Lark document comment rules
+  selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 
 Options:
@@ -33133,6 +33145,116 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus gateway whatsapp help help
 ```
 
+## `prometheus gateway whatsapp-cloud`
+
+```text
+WhatsApp Cloud API webhook setup
+
+Usage: prometheus gateway whatsapp-cloud [OPTIONS] <COMMAND>
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp-cloud setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus gateway whatsapp-cloud setup [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway whatsapp-cloud help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp-cloud help [COMMAND]
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+  help   Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway whatsapp-cloud help setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus gateway whatsapp-cloud help setup
+```
+
+## `prometheus gateway whatsapp-cloud help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway whatsapp-cloud help help
+```
+
 ## `prometheus gateway pause`
 
 ```text
@@ -33219,6 +33341,932 @@ Options:
           Print help
 ```
 
+## `prometheus gateway telegram`
+
+```text
+Telegram bot maintenance
+
+Usage: prometheus gateway telegram [OPTIONS] <COMMAND>
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway telegram logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus gateway telegram logout [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway telegram help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway telegram help [COMMAND]
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway telegram help logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus gateway telegram help logout
+```
+
+## `prometheus gateway telegram help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway telegram help help
+```
+
+## `prometheus gateway photon`
+
+```text
+Photon iMessage setup and status
+
+Usage: prometheus gateway photon [OPTIONS] <COMMAND>
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway photon setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus gateway photon setup [OPTIONS] --phone <PHONE>
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --phone <PHONE>
+          Your phone number in E.164 form (`+15551234567`): the number that texts the agent
+
+      --no-install
+          Leave installing the sidecar's runtime to the adapter's first connect (an offline machine, say)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway photon status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus gateway photon status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway photon help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway photon help [COMMAND]
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway photon help setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus gateway photon help setup
+```
+
+## `prometheus gateway photon help status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus gateway photon help status
+```
+
+## `prometheus gateway photon help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway photon help help
+```
+
+## `prometheus gateway setup`
+
+```text
+Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+
+Usage: prometheus gateway setup [OPTIONS] <PLATFORM>
+
+Arguments:
+  <PLATFORM>
+          The platform
+
+          Possible values:
+          - feishu: Feishu or Lark: create the bot app
+          - weixin: Weixin (personal WeChat): log the account in
+
+Options:
+      --domain <DOMAIN>
+          Feishu only: create the app on `feishu` or `lark` (a Lark account scanning a Feishu code is detected and switches it)
+
+          [possible values: feishu, lark]
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+## `prometheus gateway feishu`
+
+```text
+Feishu and Lark document comment rules
+
+Usage: prometheus gateway feishu [OPTIONS] <COMMAND>
+
+Commands:
+  comment-rules  Document comment access rules
+  help           Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus gateway feishu comment-rules [OPTIONS] <COMMAND>
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway feishu comment-rules status [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway feishu comment-rules check [OPTIONS] <DOCUMENT> <USER>
+
+Arguments:
+  <DOCUMENT>
+          The document as `<file_type>:<file_token>` (`docx:doxcn...`)
+
+  <USER>
+          The commenter's open id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway feishu comment-rules pairing [OPTIONS] <COMMAND>
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu comment-rules pairing add [OPTIONS] <USER>
+
+Arguments:
+  <USER>
+          Their open id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu comment-rules pairing remove [OPTIONS] <USER>
+
+Arguments:
+  <USER>
+          Their open id
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu comment-rules pairing list [OPTIONS]
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus gateway feishu comment-rules pairing help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules pairing help [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+  help    Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway feishu comment-rules pairing help add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu comment-rules pairing help add
+```
+
+## `prometheus gateway feishu comment-rules pairing help remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu comment-rules pairing help remove
+```
+
+## `prometheus gateway feishu comment-rules pairing help list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu comment-rules pairing help list
+```
+
+## `prometheus gateway feishu comment-rules pairing help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules pairing help help
+```
+
+## `prometheus gateway feishu comment-rules help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules help [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway feishu comment-rules help status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway feishu comment-rules help status
+```
+
+## `prometheus gateway feishu comment-rules help check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway feishu comment-rules help check
+```
+
+## `prometheus gateway feishu comment-rules help pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway feishu comment-rules help pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus gateway feishu comment-rules help pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu comment-rules help pairing add
+```
+
+## `prometheus gateway feishu comment-rules help pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu comment-rules help pairing remove
+```
+
+## `prometheus gateway feishu comment-rules help pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu comment-rules help pairing list
+```
+
+## `prometheus gateway feishu comment-rules help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu comment-rules help help
+```
+
+## `prometheus gateway feishu help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu help [COMMAND]
+
+Commands:
+  comment-rules  Document comment access rules
+  help           Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus gateway feishu help comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus gateway feishu help comment-rules [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+```
+
+## `prometheus gateway feishu help comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway feishu help comment-rules status
+```
+
+## `prometheus gateway feishu help comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway feishu help comment-rules check
+```
+
+## `prometheus gateway feishu help comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway feishu help comment-rules pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus gateway feishu help comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway feishu help comment-rules pairing add
+```
+
+## `prometheus gateway feishu help comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway feishu help comment-rules pairing remove
+```
+
+## `prometheus gateway feishu help comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway feishu help comment-rules pairing list
+```
+
+## `prometheus gateway feishu help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus gateway feishu help help
+```
+
+## `prometheus gateway selftest`
+
+```text
+Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
+
+Usage: prometheus gateway selftest [OPTIONS] <PLATFORM>
+
+Arguments:
+  <PLATFORM>
+          The platform (`slack`, `discord`, an adapter plugin's)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+      --peer-agent
+          Also replay another bot mentioning this agent
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --peer-id <ID>
+          The peer bot's sender id (with `--peer-agent`)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus gateway help`
 
 ```text
@@ -33239,8 +34287,14 @@ Commands:
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
   whatsapp        WhatsApp linked-device setup
+  whatsapp-cloud  WhatsApp Cloud API webhook setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  telegram        Telegram bot maintenance
+  photon          Photon iMessage setup and status
+  setup           Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+  feishu          Feishu and Lark document comment rules
+  selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
   help            Print this message or the help of the given subcommand(s)
 ```
 
@@ -33474,6 +34528,25 @@ Link this profile to WhatsApp (scan the QR code, or type a pairing code on the p
 Usage: prometheus gateway help whatsapp pair
 ```
 
+## `prometheus gateway help whatsapp-cloud`
+
+```text
+WhatsApp Cloud API webhook setup
+
+Usage: prometheus gateway help whatsapp-cloud [COMMAND]
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+```
+
+## `prometheus gateway help whatsapp-cloud setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus gateway help whatsapp-cloud setup
+```
+
 ## `prometheus gateway help pause`
 
 ```text
@@ -33488,6 +34561,146 @@ Usage: prometheus gateway help pause
 Clear an adapter's pause and reconnect backoff and reconnect it now
 
 Usage: prometheus gateway help resume
+```
+
+## `prometheus gateway help telegram`
+
+```text
+Telegram bot maintenance
+
+Usage: prometheus gateway help telegram [COMMAND]
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+```
+
+## `prometheus gateway help telegram logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus gateway help telegram logout
+```
+
+## `prometheus gateway help photon`
+
+```text
+Photon iMessage setup and status
+
+Usage: prometheus gateway help photon [COMMAND]
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+```
+
+## `prometheus gateway help photon setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus gateway help photon setup
+```
+
+## `prometheus gateway help photon status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus gateway help photon status
+```
+
+## `prometheus gateway help setup`
+
+```text
+Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+
+Usage: prometheus gateway help setup
+```
+
+## `prometheus gateway help feishu`
+
+```text
+Feishu and Lark document comment rules
+
+Usage: prometheus gateway help feishu [COMMAND]
+
+Commands:
+  comment-rules  Document comment access rules
+```
+
+## `prometheus gateway help feishu comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus gateway help feishu comment-rules [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+```
+
+## `prometheus gateway help feishu comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus gateway help feishu comment-rules status
+```
+
+## `prometheus gateway help feishu comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus gateway help feishu comment-rules check
+```
+
+## `prometheus gateway help feishu comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus gateway help feishu comment-rules pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus gateway help feishu comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus gateway help feishu comment-rules pairing add
+```
+
+## `prometheus gateway help feishu comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus gateway help feishu comment-rules pairing remove
+```
+
+## `prometheus gateway help feishu comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus gateway help feishu comment-rules pairing list
+```
+
+## `prometheus gateway help selftest`
+
+```text
+Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
+
+Usage: prometheus gateway help selftest
 ```
 
 ## `prometheus gateway help help`
@@ -35155,7 +36368,7 @@ Plugins: list, enable and disable them, manage their capability grants, and run 
 Usage: prometheus plugins [OPTIONS] <COMMAND>
 
 Commands:
-  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
   search         Catalog entries matching a word
   browse         Every catalog entry, by tier and category
   show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
@@ -35165,6 +36378,7 @@ Commands:
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
   run            Runs a command a plugin registered (`cli_commands`), or lists them
+  collection     Shareable plugin collections: review, install or export a pinned set of plugins
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
@@ -35215,13 +36429,13 @@ Options:
 ## `prometheus plugins install`
 
 ```text
-Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
 
 Usage: prometheus plugins install [OPTIONS] <IDENTIFIER>
 
 Arguments:
   <IDENTIFIER>
-          A catalog id, a `.pmtpkg` path or a Git URL
+          A catalog id, a `.pmtpkg` path, a Git URL or `pypi:<dist>==<version>`
 
 Options:
       --home <PATH>
@@ -35667,6 +36881,225 @@ Options:
 
   -h, --help
           Print help
+```
+
+## `prometheus plugins collection`
+
+```text
+Shareable plugin collections: review, install or export a pinned set of plugins
+
+Usage: prometheus plugins collection [OPTIONS] <COMMAND>
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus plugins collection show [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          A `prometheus-collection.toml` (or Hermes `hermes-pack.yaml`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus plugins collection install [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>
+          A `prometheus-collection.toml` (or Hermes `hermes-pack.yaml`)
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus plugins collection export [OPTIONS]
+
+Options:
+      --enabled-only
+          Only the enabled plugins
+
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
+## `prometheus plugins collection help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins collection help [COMMAND]
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+  help     Print this message or the help of the given subcommand(s)
+```
+
+## `prometheus plugins collection help show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus plugins collection help show
+```
+
+## `prometheus plugins collection help install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus plugins collection help install
+```
+
+## `prometheus plugins collection help export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus plugins collection help export
+```
+
+## `prometheus plugins collection help help`
+
+```text
+Print this message or the help of the given subcommand(s)
+
+Usage: prometheus plugins collection help help
 ```
 
 ## `prometheus plugins hooks`
@@ -36709,6 +38142,49 @@ Options:
           Print help
 ```
 
+## `prometheus plugins nix-sync`
+
+```text
+Install the plugins the Nix modules declare (a JSON manifest) as `nix-managed-<id>` and remove the ones no longer declared (run by the modules' activation)
+
+Usage: prometheus plugins nix-sync [OPTIONS] <MANIFEST>
+
+Arguments:
+  <MANIFEST>
+          The manifest the module generated
+
+Options:
+      --home <PATH>
+          Prometheus home directory (default: PROMETHEUS_HOME, else ~/.prometheus)
+
+  -p, --profile <NAME>
+          Profile to use (default: the home's active_profile, else default)
+
+      --set <KEY=VALUE>
+          Override a config key for this invocation only; repeatable, never saved
+
+      --json
+          Print one JSON document on stdout; errors go to stderr as JSON
+
+  -v, --verbose...
+          More detail; repeatable
+
+      --no-color
+          No colour (also when `NO_COLOR` is set or stdout is not a terminal)
+
+  -q, --quiet
+          Only the answer: no banner, spinner or tool previews
+
+      --safe-mode
+          Start with no plugins, MCP servers, sidecars, hooks or webhooks; a chat also ignores config.toml and rules and needs --model and --provider
+
+      --accept-hooks
+          Run shell hooks nobody approved yet (as `hooks.auto_accept`)
+
+  -h, --help
+          Print help
+```
+
 ## `prometheus plugins panels`
 
 ```text
@@ -36802,7 +38278,7 @@ Print this message or the help of the given subcommand(s)
 Usage: prometheus plugins help [COMMAND]
 
 Commands:
-  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
   search         Catalog entries matching a word
   browse         Every catalog entry, by tier and category
   show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
@@ -36812,6 +38288,7 @@ Commands:
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
   run            Runs a command a plugin registered (`cli_commands`), or lists them
+  collection     Shareable plugin collections: review, install or export a pinned set of plugins
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
@@ -36831,7 +38308,7 @@ Commands:
 ## `prometheus plugins help install`
 
 ```text
-Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
 
 Usage: prometheus plugins help install
 ```
@@ -36906,6 +38383,43 @@ Usage: prometheus plugins help check-updates
 Runs a command a plugin registered (`cli_commands`), or lists them
 
 Usage: prometheus plugins help run
+```
+
+## `prometheus plugins help collection`
+
+```text
+Shareable plugin collections: review, install or export a pinned set of plugins
+
+Usage: prometheus plugins help collection [COMMAND]
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+```
+
+## `prometheus plugins help collection show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus plugins help collection show
+```
+
+## `prometheus plugins help collection install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus plugins help collection install
+```
+
+## `prometheus plugins help collection export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus plugins help collection export
 ```
 
 ## `prometheus plugins help hooks`
@@ -37086,6 +38600,14 @@ Usage: prometheus plugins help reload
 Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
 
 Usage: prometheus plugins help panel-call
+```
+
+## `prometheus plugins help nix-sync`
+
+```text
+Install the plugins the Nix modules declare (a JSON manifest) as `nix-managed-<id>` and remove the ones no longer declared (run by the modules' activation)
+
+Usage: prometheus plugins help nix-sync
 ```
 
 ## `prometheus plugins help panels`
@@ -43439,8 +44961,14 @@ Commands:
   enroll          Enroll this home with a relay connector using a one-time token
   slack-manifest  Print (or write) a Slack app manifest for Socket Mode with one slash command per gateway command
   whatsapp        WhatsApp linked-device setup
+  whatsapp-cloud  WhatsApp Cloud API webhook setup
   pause           Stop dispatching one adapter's inbound messages (they are acknowledged and dropped) without disconnecting it; kept across restarts
   resume          Clear an adapter's pause and reconnect backoff and reconnect it now
+  telegram        Telegram bot maintenance
+  photon          Photon iMessage setup and status
+  setup           Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+  feishu          Feishu and Lark document comment rules
+  selftest        Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
 ```
 
 ## `prometheus help gateway status`
@@ -43673,6 +45201,25 @@ Link this profile to WhatsApp (scan the QR code, or type a pairing code on the p
 Usage: prometheus help gateway whatsapp pair
 ```
 
+## `prometheus help gateway whatsapp-cloud`
+
+```text
+WhatsApp Cloud API webhook setup
+
+Usage: prometheus help gateway whatsapp-cloud [COMMAND]
+
+Commands:
+  setup  Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+```
+
+## `prometheus help gateway whatsapp-cloud setup`
+
+```text
+Generate the webhook verify token (replacing an earlier one), store it and print it with the callback route
+
+Usage: prometheus help gateway whatsapp-cloud setup
+```
+
 ## `prometheus help gateway pause`
 
 ```text
@@ -43687,6 +45234,146 @@ Usage: prometheus help gateway pause
 Clear an adapter's pause and reconnect backoff and reconnect it now
 
 Usage: prometheus help gateway resume
+```
+
+## `prometheus help gateway telegram`
+
+```text
+Telegram bot maintenance
+
+Usage: prometheus help gateway telegram [COMMAND]
+
+Commands:
+  logout  Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+```
+
+## `prometheus help gateway telegram logout`
+
+```text
+Log the bot out of the public Bot API server, once, before `options.api_base_url` points it at a self-hosted server (Telegram then refuses the bot on the public server for 10 minutes)
+
+Usage: prometheus help gateway telegram logout
+```
+
+## `prometheus help gateway photon`
+
+```text
+Photon iMessage setup and status
+
+Usage: prometheus help gateway photon [COMMAND]
+
+Commands:
+  setup   Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+  status  Print what is configured and each registered number's iMessage line
+```
+
+## `prometheus help gateway photon setup`
+
+```text
+Sign in to Photon (device login), provision the project and its secret, register your phone number and install the sidecar
+
+Usage: prometheus help gateway photon setup
+```
+
+## `prometheus help gateway photon status`
+
+```text
+Print what is configured and each registered number's iMessage line
+
+Usage: prometheus help gateway photon status
+```
+
+## `prometheus help gateway setup`
+
+```text
+Create (Feishu, Lark) or log in (Weixin) a platform account by scanning a QR code; the credential goes to the secrets store
+
+Usage: prometheus help gateway setup
+```
+
+## `prometheus help gateway feishu`
+
+```text
+Feishu and Lark document comment rules
+
+Usage: prometheus help gateway feishu [COMMAND]
+
+Commands:
+  comment-rules  Document comment access rules
+```
+
+## `prometheus help gateway feishu comment-rules`
+
+```text
+Document comment access rules
+
+Usage: prometheus help gateway feishu comment-rules [COMMAND]
+
+Commands:
+  status   Print the rules file, its rules and the paired commenters
+  check    Show which rule applies to a commenter on a document and whether the bot would answer them
+  pairing  The commenters approved under the `pairing` policy
+```
+
+## `prometheus help gateway feishu comment-rules status`
+
+```text
+Print the rules file, its rules and the paired commenters
+
+Usage: prometheus help gateway feishu comment-rules status
+```
+
+## `prometheus help gateway feishu comment-rules check`
+
+```text
+Show which rule applies to a commenter on a document and whether the bot would answer them
+
+Usage: prometheus help gateway feishu comment-rules check
+```
+
+## `prometheus help gateway feishu comment-rules pairing`
+
+```text
+The commenters approved under the `pairing` policy
+
+Usage: prometheus help gateway feishu comment-rules pairing [COMMAND]
+
+Commands:
+  add     Approve a commenter
+  remove  Withdraw an approval
+  list    List the approved commenters
+```
+
+## `prometheus help gateway feishu comment-rules pairing add`
+
+```text
+Approve a commenter
+
+Usage: prometheus help gateway feishu comment-rules pairing add
+```
+
+## `prometheus help gateway feishu comment-rules pairing remove`
+
+```text
+Withdraw an approval
+
+Usage: prometheus help gateway feishu comment-rules pairing remove
+```
+
+## `prometheus help gateway feishu comment-rules pairing list`
+
+```text
+List the approved commenters
+
+Usage: prometheus help gateway feishu comment-rules pairing list
+```
+
+## `prometheus help gateway selftest`
+
+```text
+Replay synthetic messages through a platform's admission and mention gating, offline and without credentials; exits 1 when a check fails
+
+Usage: prometheus help gateway selftest
 ```
 
 ## `prometheus help pairing`
@@ -43962,7 +45649,7 @@ Plugins: list, enable and disable them, manage their capability grants, and run 
 Usage: prometheus help plugins [COMMAND]
 
 Commands:
-  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+  install        Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
   search         Catalog entries matching a word
   browse         Every catalog entry, by tier and category
   show           A plugin's details: installed state, worlds, capabilities and provenance, and its catalog entry
@@ -43972,6 +45659,7 @@ Commands:
   update         Update a plugin, or every plugin whose catalog ref or package moved; one asking for new capabilities keeps its current version active until they are approved
   check-updates  List the plugins whose catalog ref or package moved
   run            Runs a command a plugin registered (`cli_commands`), or lists them
+  collection     Shareable plugin collections: review, install or export a pinned set of plugins
   hooks          Shell hooks, gateway hook directories and outbound webhooks
   diff-grants    The capabilities a staged update asks for beyond the current grant
   dev            Serve a local plugin directory as `dev:<id>` without installing or signing it, until Ctrl+C; `--watch` rebuilds and reloads it on every source change
@@ -43990,7 +45678,7 @@ Commands:
 ## `prometheus help plugins install`
 
 ```text
-Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, or a Git URL with `--ref <full commit SHA>`
+Install a plugin: a catalog id (its pinned ref), a `.pmtpkg` file, a Git URL with `--ref <full commit SHA>`, or a Python distribution `pypi:<dist>==<version>`
 
 Usage: prometheus help plugins install
 ```
@@ -44065,6 +45753,43 @@ Usage: prometheus help plugins check-updates
 Runs a command a plugin registered (`cli_commands`), or lists them
 
 Usage: prometheus help plugins run
+```
+
+## `prometheus help plugins collection`
+
+```text
+Shareable plugin collections: review, install or export a pinned set of plugins
+
+Usage: prometheus help plugins collection [COMMAND]
+
+Commands:
+  show     Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+  install  Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+  export   Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+```
+
+## `prometheus help plugins collection show`
+
+```text
+Review a collection: every plugin, its source, pinned commit, signature and declared capabilities (fetches each entry)
+
+Usage: prometheus help plugins collection show
+```
+
+## `prometheus help plugins collection install`
+
+```text
+Review a collection, confirm once, then install each plugin with the normal install and capability-grant flow (needs a terminal)
+
+Usage: prometheus help plugins collection install
+```
+
+## `prometheus help plugins collection export`
+
+```text
+Print a collection of the installed plugins whose provenance pins a commit, with their non-secret settings
+
+Usage: prometheus help plugins collection export
 ```
 
 ## `prometheus help plugins hooks`
@@ -44245,6 +45970,14 @@ Usage: prometheus help plugins reload
 Serve one dashboard backend request of a plugin (the daemon's plugin host process: the request JSON on stdin, the answer on stdout)
 
 Usage: prometheus help plugins panel-call
+```
+
+## `prometheus help plugins nix-sync`
+
+```text
+Install the plugins the Nix modules declare (a JSON manifest) as `nix-managed-<id>` and remove the ones no longer declared (run by the modules' activation)
+
+Usage: prometheus help plugins nix-sync
 ```
 
 ## `prometheus help plugins panels`

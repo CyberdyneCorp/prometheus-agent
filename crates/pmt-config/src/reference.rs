@@ -27,12 +27,48 @@ pub fn render(root: &'static Value, header: &str, title: &str, intro: &str) -> S
     out
 }
 
+/// Renders the `options` table of every first-party adapter
+/// (`docs/reference/platform-options.md`), one section per platform, read
+/// from the schema each adapter's options are validated against.
+#[must_use]
+pub fn render_platform_options(header: &str) -> String {
+    let mut out = format!(
+        "{header}# Platform adapter options\n\n\
+         The keys of `[gateway.platforms.<platform>] options` for each first-party \
+         adapter of [`config.toml`](configuration.md). Unknown keys are rejected. \
+         An adapter plugin publishes its own schema (`prometheus gateway platforms`). \
+         Apply: `next_session` takes effect when the adapter next connects.\n"
+    );
+    for platform in crate::platforms::FIRST_PARTY {
+        let Some(schema) = crate::platforms::options_schema(platform.name) else {
+            continue;
+        };
+        let keys = keys_in(schema);
+        let _ = write!(out, "\n## {}\n\n", platform.display);
+        if keys.is_empty() {
+            out.push_str("No options.\n");
+            continue;
+        }
+        out.push_str("| Key | Type | Default | Allowed values | Apply | Description |\n");
+        out.push_str("|---|---|---|---|---|---|\n");
+        let prefix = format!("gateway.platforms.{}.options.", platform.name);
+        for key in keys {
+            out.push_str(&row_with(&prefix, &key));
+        }
+    }
+    out
+}
+
 fn row(key: &KeyInfo) -> String {
+    row_with("", key)
+}
+
+fn row_with(prefix: &str, key: &KeyInfo) -> String {
     let default = key.default.map_or_else(|| "unset".to_owned(), code);
     let mut line = String::new();
     let _ = writeln!(
         line,
-        "| `{}` | {} | {default} | {} | `{}` | {} |",
+        "| `{prefix}{}` | {} | {default} | {} | `{}` | {} |",
         key.pattern,
         escape(&type_label(key.schema)),
         allowed(key.schema),
@@ -94,6 +130,17 @@ mod tests {
         assert!(out.contains("| `compression.threshold` | number | `0.5` | > 0.0, < 1.0 |"));
         assert!(out.contains("| `providers.<name>.max_retries` | integer | `2` | 0 to 6 |"));
         assert!(out.contains("| `agent.run_budget_secs` | integer | unset |"));
+    }
+
+    #[test]
+    fn adapter_options_are_listed_per_platform() {
+        let out = super::render_platform_options("");
+        assert!(out.contains("## Webhook"), "{out}");
+        assert!(
+            out.contains("| `gateway.platforms.webhook.options.public_url` | string | unset |"),
+            "{out}"
+        );
+        assert!(out.contains("| `gateway.platforms.telegram.options.poll_timeout_secs` |"));
     }
 
     #[test]

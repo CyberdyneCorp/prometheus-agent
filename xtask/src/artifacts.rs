@@ -27,6 +27,10 @@ pub(crate) fn all() -> Vec<Artifact> {
             contents: config_reference(),
         },
         Artifact {
+            path: "docs/reference/platform-options.md",
+            contents: pmt_config::reference::render_platform_options(HEADER),
+        },
+        Artifact {
             path: "schema/daemon.schema.json",
             contents: daemon_schema(),
         },

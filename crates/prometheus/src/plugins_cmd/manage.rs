@@ -277,6 +277,24 @@ pub(super) fn enable(ctx: &Context<'_>, id: &str, grant: Option<&str>) -> Result
     Ok(0)
 }
 
+/// The sidecar process `manifest` runs beside it, as approval screens
+/// name it (it runs with the plugin's grants, so the user sees it with
+/// them).
+pub(super) fn sidecar_line(manifest: &Manifest) -> Option<String> {
+    use pmt_plugins::manifest::sidecar::Runtime;
+    let sidecar = manifest.sidecar.as_ref()?;
+    Some(match sidecar.runtime {
+        Runtime::Node => format!(
+            "run its sidecar script {} on Node, with the access granted here",
+            sidecar.command
+        ),
+        Runtime::None => format!(
+            "run its own native executable {}, with the access granted here",
+            sidecar.command
+        ),
+    })
+}
+
 /// The approval screen; `None` when no terminal can answer.
 fn ask(target: &Target) -> Result<Option<bool>, Error> {
     let mut screen = format!(
@@ -285,6 +303,9 @@ fn ask(target: &Target) -> Result<Option<bool>, Error> {
     );
     for capability in target.requested.iter() {
         let _ = writeln!(screen, "  - {}", describe(capability));
+    }
+    if let Some(line) = sidecar_line(&target.manifest) {
+        let _ = writeln!(screen, "  - {line}");
     }
     if !crate::prompt::stdin_is_tty() {
         eprint!("{screen}");
@@ -438,9 +459,39 @@ fn show(target: &Target, approval: &Approval) -> String {
             describe(capability)
         );
     }
+    if let Some(line) = sidecar_line(&target.manifest) {
+        let _ = writeln!(text, "sidecar  {line}");
+    }
     text
 }
 
 pub(super) fn cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The approval screen names the sidecar a plugin runs and its home
+    /// read access as a capability, so neither runs unseen.
+    #[test]
+    fn the_approval_screen_shows_the_sidecar_and_home_access() {
+        let text = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../plugins/first-party/raft/plugin.toml"),
+        )
+        .unwrap();
+        let manifest = Manifest::parse(&text, &semver::Version::new(0, 1, 0)).unwrap();
+        let line = sidecar_line(&manifest).unwrap();
+        assert!(line.contains("sidecar/raft-wake.mjs"), "{line}");
+        let requested = manifest
+            .capabilities
+            .requested(std::path::Path::new("/data/raft"))
+            .unwrap();
+        assert!(
+            requested.iter().any(|c| c.to_string() == "fs.read:~/**"),
+            "{requested:?}"
+        );
+    }
 }

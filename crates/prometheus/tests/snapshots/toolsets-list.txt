@@ -16,6 +16,9 @@
   browser  (5 tools)
     Browser automation
     tools: browser_exec, browser_cdp, browser_dialog, browser_vault, browser_close_profile
+  catalog  (1 tool)
+    Plugin and skill installs the user approves on a card (desktop and tui sessions)
+    tools: catalog_manage
   clarify  (1 tool)
     Ask the user a question
     tools: clarify

@@ -3,7 +3,8 @@
 //! security-boundaries, Signed plugins).
 //!
 //! The identifier is a `.pmtpkg` file, a Git URL (with `--ref <full
-//! commit SHA>`; a short or symbolic ref is refused) or a catalog id
+//! commit SHA>`; a short or symbolic ref is refused), a Python
+//! distribution `pypi:<dist>==<version>` ([`super::pypi`]) or a catalog id
 //! (resolved to its pinned ref). The plugin is staged, its signature
 //! checked (catalog installs always need one unless `--allow-unsigned`;
 //! local packages follow `plugins.signature_policy`; an invalid signature
@@ -34,12 +35,14 @@ use crate::plugins_host;
 pub(super) fn install(ctx: &Context<'_>, args: &InstallArgs) -> Result<u8, Error> {
     let scope = ctx.scope()?;
     let identifier = args.identifier.as_str();
-    let fetched = if identifier.ends_with(&format!(".{}", package::EXTENSION))
+    let fetched = if identifier.starts_with(super::pypi::PREFIX) {
+        super::pypi::fetch(&scope, identifier, args)?
+    } else if identifier.ends_with(&format!(".{}", package::EXTENSION))
         && Path::new(identifier).is_file()
     {
         from_package(&scope, Path::new(identifier), args)?
     } else if identifier.contains("://") || identifier.starts_with("git@") {
-        from_git(&scope, identifier, args, None)?
+        from_git(&scope, identifier, args, None, &GitPin::default())?
     } else {
         from_catalog(&scope, identifier, args)?
     };
@@ -54,6 +57,31 @@ pub(super) fn install(ctx: &Context<'_>, args: &InstallArgs) -> Result<u8, Error
         return Ok(0);
     }
     finish(ctx, &scope, &id, args)
+}
+
+/// Installs catalog plugin `id` into `scope`'s profile, verified like
+/// `plugins install <id>` (a signature is required) and left disabled with
+/// no grants: what `migrate from-hermes` does for a Hermes integration
+/// whose Prometheus counterpart is a catalog plugin (spec:
+/// platform-adapters, Catalog adapter set).
+///
+/// # Errors
+///
+/// As `plugins install <id>`, without prompting.
+pub(crate) fn install_from_catalog(scope: &ProfileScope, id: &str) -> Result<(), Error> {
+    let args = InstallArgs {
+        identifier: id.to_owned(),
+        git_ref: None,
+        allow_unsigned: false,
+        allow_removed: false,
+        enable: false,
+        no_enable: true,
+        grant: None,
+        force: false,
+    };
+    let fetched = from_catalog(scope, id, &args)?;
+    super::python::check_install(&fetched.staged.dir, &fetched.staged.manifest, false)?;
+    commit(scope, fetched, &args)
 }
 
 /// A staged plugin with what its record will say.
@@ -164,7 +192,7 @@ pub(super) fn from_catalog(
     let mut fetched = if entry.is_package() {
         catalog_package(scope, &entry, args)?
     } else {
-        from_git(scope, &entry.repo, args, Some(&entry))?
+        from_git(scope, &entry.repo, args, Some(&entry), &GitPin::default())?
     };
     fetched.record.source = Origin::Catalog;
     fetched.record.location.clone_from(&entry.id);
@@ -220,17 +248,33 @@ fn catalog_package(
     })
 }
 
-/// Checks out `url` at the pinned commit (`--ref`, or the catalog
-/// entry's); the tree's `plugin.minisig` signs its content digest.
+/// What a collection entry adds to a Git install: its own pinned commit
+/// (over the catalog entry's) and the plugin's directory in the repository.
+#[derive(Debug, Default)]
+pub(super) struct GitPin<'a> {
+    /// The commit to check out instead of the catalog entry's.
+    pub commit: Option<&'a str>,
+    /// The plugin's directory inside the repository.
+    pub subdir: Option<&'a str>,
+}
+
+/// Checks out `url` at the pinned commit (the collection's, the catalog
+/// entry's, or `--ref`); the tree's `plugin.minisig` signs its content
+/// digest.
 pub(super) fn from_git(
     scope: &ProfileScope,
     url: &str,
     args: &InstallArgs,
     entry: Option<&Entry>,
+    pin: &GitPin<'_>,
 ) -> Result<Fetched, Error> {
-    let commit = match (entry, args.git_ref.as_deref()) {
-        (Some(entry), _) => entry.r#ref.clone(),
-        (None, Some(sha)) if is_commit(sha) => sha.to_lowercase(),
+    let wanted = match (pin.commit, entry) {
+        (Some(sha), _) => Some(sha),
+        (None, Some(entry)) => Some(entry.r#ref.as_str()),
+        (None, None) => args.git_ref.as_deref(),
+    };
+    let commit = match wanted {
+        Some(sha) if is_commit(sha) => sha.to_lowercase(),
         _ => {
             return Err(
                 Error::new(&codes::CLI_USAGE, "--ref must be a full commit SHA")
@@ -239,7 +283,10 @@ pub(super) fn from_git(
         }
     };
     let dir = install::staging_dir(scope.dir())?;
-    let checkout = git_checkout(url, &commit, &dir);
+    let checkout = git_checkout(url, &commit, &dir).and_then(|()| match pin.subdir {
+        Some(subdir) => keep_subdir(&dir, subdir),
+        None => Ok(()),
+    });
     let signature = std::fs::read_to_string(dir.join(install::TREE_SIGNATURE)).ok();
     let _ = std::fs::remove_file(dir.join(install::TREE_SIGNATURE));
     let staged = install::stage_dir(dir, &plugins_host::running_version(), checkout)?;
@@ -298,9 +345,30 @@ pub(crate) fn git_checkout(url: &str, commit: &str, dir: &Path) -> Result<(), Er
         .map_err(|e| Error::io(&codes::PLUGINS_CATALOG, dir, &e))
 }
 
+/// Replaces the checkout in `dir` with its `subdir` (a collection entry
+/// naming a plugin inside a larger repository).
+fn keep_subdir(dir: &Path, subdir: &str) -> Result<(), Error> {
+    let inner = dir.join(subdir);
+    if !inner.is_dir() {
+        return Err(Error::new(
+            &codes::PLUGINS_CATALOG,
+            format!("the repository has no directory '{subdir}'"),
+        ));
+    }
+    let io = |e: std::io::Error| Error::io(&codes::PLUGINS_CATALOG, dir, &e);
+    let parked = dir.with_extension("subdir");
+    std::fs::rename(&inner, &parked).map_err(io)?;
+    std::fs::remove_dir_all(dir).map_err(io)?;
+    std::fs::rename(&parked, dir).map_err(io)
+}
+
 /// Applies the kill list, shows the unsigned screen, then moves the plugin
 /// into the profile with its record.
-fn commit(scope: &ProfileScope, mut fetched: Fetched, args: &InstallArgs) -> Result<(), Error> {
+pub(super) fn commit(
+    scope: &ProfileScope,
+    mut fetched: Fetched,
+    args: &InstallArgs,
+) -> Result<(), Error> {
     check_kill_list(scope, &fetched, args)?;
     super::threat::check(
         scope.config().plugins.scan_on_install,
@@ -355,6 +423,9 @@ fn unsigned_screen(scope: &ProfileScope, staged: &Staged, why: &str) -> Result<(
     for capability in requested.iter() {
         let _ = writeln!(screen, "  - {}", describe(capability));
     }
+    if let Some(line) = manage::sidecar_line(manifest) {
+        let _ = writeln!(screen, "  - {line}");
+    }
     if !crate::prompt::stdin_is_tty() {
         eprint!("{screen}");
         return Ok(());
@@ -367,7 +438,7 @@ fn unsigned_screen(scope: &ProfileScope, staged: &Staged, why: &str) -> Result<(
 }
 
 /// `--enable`, `--no-enable` or the terminal's question.
-fn finish(
+pub(super) fn finish(
     ctx: &Context<'_>,
     scope: &ProfileScope,
     id: &str,

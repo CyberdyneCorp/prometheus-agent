@@ -569,7 +569,7 @@ fn capability_escalation_on_update_waits_for_approval() {
     );
     ok(&run(home.path(), &["plugins", "remove", "weather"]));
     let listing = ok(&run(home.path(), &["plugins", "list"]));
-    assert_eq!(listing, "no plugins found\n");
+    assert!(!listing.contains("weather"), "{listing}");
 }
 
 #[test]

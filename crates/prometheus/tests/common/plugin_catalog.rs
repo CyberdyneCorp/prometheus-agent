@@ -63,16 +63,35 @@ impl CatalogServer {
     /// access to `api.weather.example`) as a package signed by a fresh
     /// publisher key, in a catalog signed with the test key.
     pub fn publish_weather(&self, home: &Path) {
-        let dir = home.join("src/weather");
-        pmt_plugins::testkit::install("sample-tool", &dir);
+        self.publish(
+            home,
+            &Published {
+                id: "weather",
+                crate_name: "sample-tool",
+                world: "tool@1.0",
+                network: "api.weather.example",
+                category: "tools",
+            },
+        );
+    }
+
+    /// Publishes `plugin` as a package signed by a fresh publisher key, in
+    /// a catalog (of that one plugin) signed with the test key.
+    pub fn publish(&self, home: &Path, plugin: &Published<'_>) {
+        let id = plugin.id;
+        let dir = home.join("src").join(id);
+        pmt_plugins::testkit::install(plugin.crate_name, &dir);
         std::fs::write(
             dir.join("plugin.toml"),
-            "manifest_version = 1\nid = \"weather\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
-             description = \"Forecasts\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
-             worlds = [\"tool@1.0\"]\n\n[capabilities]\nnetwork = [\"api.weather.example\"]\n",
+            format!(
+                "manifest_version = 1\nid = \"{id}\"\nversion = \"1.0.0\"\nkind = \"wasm\"\n\
+                 description = \"{id} plugin\"\nlicense = \"MIT\"\nrequires_prometheus = \"*\"\n\
+                 worlds = [\"{}\"]\n\n[capabilities]\nnetwork = [\"{}\"]\n",
+                plugin.world, plugin.network
+            ),
         )
         .unwrap();
-        let package = home.join("weather.pmtpkg");
+        let package = home.join(format!("{id}.pmtpkg"));
         let printed = ok(&run(
             home,
             &[
@@ -97,16 +116,17 @@ impl CatalogServer {
                 key_file.to_str().unwrap(),
             ],
         ));
+        let at = format!("/{id}.pmtpkg");
         let catalog = serde_json::json!({"plugins": [{
-            "id": "weather",
-            "repo": "https://github.com/acme/weather",
+            "id": id,
+            "repo": format!("https://github.com/acme/{id}"),
             "ref": digest,
             "tier": "community",
-            "category": "tools",
-            "capabilities_summary": "network api.weather.example",
+            "category": plugin.category,
+            "capabilities_summary": format!("network {}", plugin.network),
             "publisher_key": publisher.pk.to_base64(),
-            "package": self.url("/weather.pmtpkg"),
-            "description": "Forecasts for the agent",
+            "package": self.url(&at),
+            "description": format!("{id} for the agent"),
             "version": "1.0.0",
         }]});
         let bytes = catalog.to_string().into_bytes();
@@ -115,10 +135,21 @@ impl CatalogServer {
             sign_with(TEST_KEY, &bytes).into_bytes(),
         );
         self.serve("/catalog.json", bytes);
-        self.serve("/weather.pmtpkg", std::fs::read(&package).unwrap());
+        self.serve(&at, std::fs::read(&package).unwrap());
         self.serve(
-            "/weather.pmtpkg.minisig",
+            &format!("{at}.minisig"),
             std::fs::read(pmt_plugins::package::signature_path(&package)).unwrap(),
         );
     }
+}
+
+/// A plugin [`CatalogServer::publish`] puts in the catalog.
+pub struct Published<'a> {
+    pub id: &'a str,
+    /// The repository plugin crate it is built from (`sample-tool`).
+    pub crate_name: &'a str,
+    pub world: &'a str,
+    /// The one network host it asks for.
+    pub network: &'a str,
+    pub category: &'a str,
 }

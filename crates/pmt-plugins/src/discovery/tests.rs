@@ -102,6 +102,7 @@ fn a_built_in_id_is_reserved() {
     let embedded = [EmbeddedPlugin {
         manifest: Box::leak(text.into_boxed_str()),
         component: b"",
+        files: &[],
         enabled_by_default: false,
     }];
     let found = run_with(home.path(), None, &PluginsConfig::default(), &embedded);

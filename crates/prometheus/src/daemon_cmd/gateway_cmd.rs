@@ -71,6 +71,9 @@ pub enum GatewayCommand {
     /// name without backticks).
     #[command(about = "WhatsApp linked-device setup")]
     Whatsapp(super::whatsapp_cmd::WhatsappArgs),
+    /// `WhatsApp` Cloud API webhook setup.
+    #[command(name = "whatsapp-cloud", about = "WhatsApp Cloud API webhook setup")]
+    WhatsappCloud(super::whatsapp_cloud_cmd::WhatsappCloudArgs),
     /// Stop dispatching one adapter's inbound messages (they are
     /// acknowledged and dropped) without disconnecting it; kept across
     /// restarts.
@@ -83,6 +86,18 @@ pub enum GatewayCommand {
         /// The platform.
         platform: String,
     },
+    /// Telegram bot maintenance.
+    Telegram(super::telegram_cmd::TelegramArgs),
+    /// Photon iMessage setup and status.
+    Photon(super::photon_cmd::PhotonArgs),
+    /// Create (Feishu, Lark) or log in (Weixin) a platform account by
+    /// scanning a QR code; the credential goes to the secrets store.
+    Setup(super::gateway_setup_cmd::GatewaySetupArgs),
+    /// Feishu and Lark document comment rules.
+    Feishu(super::feishu_cmd::FeishuArgs),
+    /// Replay synthetic messages through a platform's admission and mention
+    /// gating, offline and without credentials; exits 1 when a check fails.
+    Selftest(super::selftest_cmd::SelftestArgs),
 }
 
 /// `prometheus gateway outbox` subcommands.
@@ -169,8 +184,14 @@ pub(super) fn run(command: &GatewayCommand, ctx: &Context<'_>) -> Result<u8, Err
         GatewayCommand::Enroll(args) => super::enroll_cmd::run(args, ctx),
         GatewayCommand::SlackManifest(args) => super::slack_manifest_cmd::run(args, ctx),
         GatewayCommand::Whatsapp(args) => super::whatsapp_cmd::run(args, ctx),
+        GatewayCommand::WhatsappCloud(args) => super::whatsapp_cloud_cmd::run(args, ctx),
         GatewayCommand::Pause { platform } => super::platform_cmd::run(platform, true, ctx),
         GatewayCommand::Resume { platform } => super::platform_cmd::run(platform, false, ctx),
+        GatewayCommand::Selftest(args) => super::selftest_cmd::run(args, ctx),
+        GatewayCommand::Telegram(args) => super::telegram_cmd::run(args, ctx),
+        GatewayCommand::Photon(args) => super::photon_cmd::run(args, ctx),
+        GatewayCommand::Setup(args) => super::gateway_setup_cmd::run(args, ctx),
+        GatewayCommand::Feishu(args) => super::feishu_cmd::run(args, ctx),
     }
 }
 

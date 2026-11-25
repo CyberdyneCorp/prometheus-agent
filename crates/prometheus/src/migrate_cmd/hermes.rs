@@ -79,7 +79,8 @@ pub(super) fn run(
                 dry_run: true,
                 ..options.clone()
             },
-            &super::host::MigrateHost::new(ctx.launch, super::interrupt::Interrupt::none()),
+            &super::host::MigrateHost::new(ctx.launch, super::interrupt::Interrupt::none())
+                .with_catalog_of(home.clone(), args.into_profile.clone()),
         )?;
         eprint!("{}", plan.summary());
         if !prompt::confirm("Migrate these into Prometheus?")? {
@@ -88,7 +89,8 @@ pub(super) fn run(
         }
     }
     // Ctrl+C now stops the run at the next commit boundary (exit 130).
-    let host = super::host::MigrateHost::new(ctx.launch, super::interrupt::Interrupt::listen());
+    let host = super::host::MigrateHost::new(ctx.launch, super::interrupt::Interrupt::listen())
+        .with_catalog_of(home.clone(), args.into_profile.clone());
     let report = pmt_migrate::run(&home, &options, &host)?;
     show(&report, ctx.json)?;
     Ok(report.exit_code())

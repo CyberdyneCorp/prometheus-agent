@@ -1,0 +1,26 @@
+# First-party catalog adapter: Photon iMessage (spec: platform-adapters,
+# Photon iMessage adapter). Photon's managed iMessage lines through its
+# Spectrum SDK, which the sidecar runs (photon.mjs, spectrum-ts pinned by
+# its lockfile); no public URL. Set it up with `prometheus gateway photon
+# setup --phone <E164>` (device login, project, project secret into the
+# secrets store as PHOTON_PROJECT_ID and PHOTON_PROJECT_SECRET, phone
+# registration, sidecar install) and check it with `prometheus gateway
+# photon status`. Option `read_receipts` (default true).
+manifest_version = 1
+id = "photon"
+version = "1.0.0"
+kind = "wasm"
+description = "iMessage through Photon's managed lines (Spectrum)."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["127.0.0.1", "spectrum.photon.codes", "*.photon.codes"]
+secrets = ["PHOTON_PROJECT_ID", "PHOTON_PROJECT_SECRET"]
+
+[sidecar]
+runtime = "node"
+command = "sidecar/photon.mjs"
+lockfile = "sidecar/package-lock.json"
+secrets = ["PHOTON_PROJECT_ID", "PHOTON_PROJECT_SECRET"]

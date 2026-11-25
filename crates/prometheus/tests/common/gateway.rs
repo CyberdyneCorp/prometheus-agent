@@ -19,8 +19,14 @@ pub struct Daemon {
 
 impl Daemon {
     pub fn start(home: &Path) -> Self {
+        Self::start_with(home, &[])
+    }
+
+    /// [`start`](Self::start) with extra `daemon run` arguments.
+    pub fn start_with(home: &Path, args: &[&str]) -> Self {
         let child = command(home)
             .args(["daemon", "run"])
+            .args(args)
             .env("PMT_TEST_ADAPTER_DIR", adapter_dir(home))
             .stdin(Stdio::null())
             .stdout(Stdio::null())

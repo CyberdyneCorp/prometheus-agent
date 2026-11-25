@@ -288,6 +288,7 @@ impl Lane {
             .then(|| super::reply::Spoken::new(&turn_id));
         self.mark(pending.reply_to.as_ref(), super::lifecycle::STARTED)
             .await;
+        self.turn_state(pending.reply_to.as_ref(), true).await;
         self.running = Some(Running {
             turn_id,
             requester: pending.routing.sender_id.clone(),
@@ -405,6 +406,7 @@ impl Lane {
             super::lifecycle::outcome(&finished),
         )
         .await;
+        self.turn_state(running.reply_to.as_ref(), false).await;
         self.offer_title(&session).await;
         if !running.stopped {
             let spoken = match running.speech.take() {

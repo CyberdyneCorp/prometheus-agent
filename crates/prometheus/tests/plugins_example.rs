@@ -46,7 +46,10 @@ fn the_authoring_guide_example_validates_packs_installs_and_loads() {
     );
     assert_eq!(out.status.code(), Some(0), "{}", stderr(&out));
     let listing = ok(&run(home.path(), &["plugins", "list"]));
-    assert_eq!(listing, "weather  1.0.0  wasm  user  loaded\n");
+    assert!(
+        listing.contains("weather  1.0.0  wasm  user  loaded\n"),
+        "{listing}"
+    );
     let shown = ok(&run(home.path(), &["plugins", "show", "weather"]));
     assert!(shown.contains("world tool@1.0.0"), "{shown}");
     let capabilities = ok(&run(home.path(), &["plugins", "capabilities", "weather"]));

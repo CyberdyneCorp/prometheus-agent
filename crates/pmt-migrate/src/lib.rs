@@ -16,6 +16,7 @@
 //!   catalog and the Python-bridge plugin import.
 
 pub mod agents;
+mod catalog;
 pub mod commit;
 pub mod component;
 pub mod config;

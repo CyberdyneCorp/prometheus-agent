@@ -5,6 +5,7 @@
 
 pub mod a2a;
 pub mod bots;
+pub mod catalog;
 pub mod clarify;
 pub mod connections;
 pub mod cron;
@@ -46,6 +47,7 @@ pub struct AgentTools {
     memory: Option<Arc<dyn MemoryPort>>,
     messaging: Option<Arc<dyn MessagingPort>>,
     connections: Option<Arc<pmt_tools::connectors::manage::Manager>>,
+    catalog: Option<Arc<pmt_tools::catalog_manage::Manager>>,
     delegation: Option<Arc<dyn DelegationPort>>,
     code: Option<Arc<dyn CodePort>>,
     cron: Option<Arc<dyn CronPort>>,
@@ -78,6 +80,7 @@ impl AgentTools {
             memory: None,
             messaging: None,
             connections: None,
+            catalog: None,
             delegation: None,
             code: None,
             cron: None,
@@ -117,6 +120,13 @@ impl AgentTools {
         manager: Arc<pmt_tools::connectors::manage::Manager>,
     ) -> Self {
         self.connections = Some(manager);
+        self
+    }
+
+    /// Runs `catalog_manage` through `manager`.
+    #[must_use]
+    pub fn with_catalog(mut self, manager: Arc<pmt_tools::catalog_manage::Manager>) -> Self {
+        self.catalog = Some(manager);
         self
     }
 
@@ -197,6 +207,13 @@ impl AgentTools {
                     manager.call(&arguments, Some(&card)).await
                 }
                 None => pmt_tools::connectors::manage::not_set_up(),
+            },
+            pmt_tools::catalog_manage::NAME => match &self.catalog {
+                Some(manager) => {
+                    let card = catalog::ClarifyInstallCard::new(&self.clarify);
+                    manager.call(&arguments, Some(&card)).await
+                }
+                None => ToolResult::error(pmt_tools::catalog_manage::NEEDS_CARD),
             },
             _ => return None,
         })

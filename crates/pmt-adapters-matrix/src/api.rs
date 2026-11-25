@@ -88,10 +88,20 @@ impl Api {
         let name = path
             .file_name()
             .map_or_else(|| "file".to_owned(), |n| n.to_string_lossy().into_owned());
+        self.upload_bytes(bytes, &name, mime).await
+    }
+
+    /// Uploads `bytes` named `name`; its `mxc://` URI.
+    pub(crate) async fn upload_bytes(
+        &self,
+        bytes: Vec<u8>,
+        name: &str,
+        mime: &str,
+    ) -> Result<String, SendError> {
         let url = format!(
             "{}/_matrix/media/v3/upload?filename={}",
             self.homeserver,
-            segment(&name)
+            segment(name)
         );
         let request = self
             .client

@@ -16,12 +16,17 @@
 //! read when a session starts and stay as they were for its lifetime.
 
 pub mod adapter;
+mod adapter_media;
+mod adapter_secrets;
+pub mod adapter_tools;
 pub mod approvals;
 pub mod bridge;
 pub mod catalog;
+pub mod catalog_tool;
 pub mod dashboard;
 pub mod desktop;
 pub mod dev;
+pub mod first_party;
 #[cfg(feature = "gateway")]
 pub mod gateway;
 pub mod llm;
@@ -32,6 +37,8 @@ mod outside;
 mod ports;
 pub mod providers;
 pub mod reload;
+mod sidecar;
+mod sidecar_sandbox;
 pub mod subagents;
 pub mod terminal;
 
@@ -630,7 +637,7 @@ pub fn inputs<'a>(
         profile_dir: scope.dir(),
         cwd: Some(cwd),
         config: &scope.config().plugins,
-        embedded: &[],
+        embedded: first_party::EMBEDDED,
         running: version,
         blocked,
         profile_config: Some(scope.config()),

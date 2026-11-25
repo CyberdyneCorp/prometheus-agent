@@ -1,8 +1,9 @@
 //! How a Telegram message notifies (spec: scheduled-jobs, Push
 //! notification flag, cron threads and delivery confirmation): a message
 //! the gateway marks silent goes out with `disable_notification`, text and
-//! media alike; a final (notifying) message and one the gateway leaves to
-//! the adapter notify.
+//! media alike; a final (notifying) message notifies, and one the gateway
+//! leaves to the adapter follows `options.notifications` (spec:
+//! platform-adapters, Telegram presentation options).
 
 use std::sync::Arc;
 
@@ -19,9 +20,13 @@ struct Fixture {
 }
 
 async fn bot() -> Fixture {
+    bot_with("").await
+}
+
+async fn bot_with(table: &str) -> Fixture {
     let api = BotApi::start().await;
     let home = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
-    let setup = kit_setup(home.path(), "telegram", "", &[(TOKEN_SECRET, TOKEN)]).unwrap();
+    let setup = kit_setup(home.path(), "telegram", table, &[(TOKEN_SECRET, TOKEN)]).unwrap();
     let bot = Telegram::new(&setup, api.endpoints()).unwrap();
     Fixture { home, api, bot }
 }
@@ -53,16 +58,31 @@ async fn a_silent_message_disables_the_notification_for_text_and_media() {
 }
 
 #[tokio::test]
-async fn final_and_default_messages_notify() {
+async fn final_messages_notify_and_unmarked_ones_follow_the_notification_mode() {
+    // `important` (the default): only what the gateway marks notifies.
     let f = bot().await;
-    f.bot
+    let final_reply = f
+        .bot
         .send(&message(&f, "scheduled digest", Some(true), true))
         .await
         .unwrap();
-    f.bot
-        .send(&message(&f, "a reply", None, false))
+    let progress = f
+        .bot
+        .send(&message(&f, "a status update", None, false))
         .await
         .unwrap();
     assert_eq!(f.api.calls("sendMessage").len(), 2);
-    assert!(f.api.silent().is_empty(), "{:?}", f.api.silent());
+    assert_eq!(f.api.silent(), [progress.message_id.unwrap()]);
+    assert!(!f.api.silent().contains(&final_reply.message_id.unwrap()));
+    // `all`: everything notifies unless the gateway asked for silence.
+    let f = bot_with("options = { notifications = \"all\" }").await;
+    f.bot
+        .send(&message(&f, "a status update", None, false))
+        .await
+        .unwrap();
+    f.bot
+        .send(&message(&f, "quiet digest", Some(false), false))
+        .await
+        .unwrap();
+    assert_eq!(f.api.silent().len(), 1, "{:?}", f.api.silent());
 }

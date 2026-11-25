@@ -107,10 +107,15 @@ fn start(shared: &Arc<Shared>) -> Result<SocketAddr, String> {
                     () = stop.cancelled() => return,
                     accepted = listener.accept() => accepted,
                 };
-                let Ok((stream, _)) = accepted else { continue };
+                let Ok((stream, peer)) = accepted else {
+                    continue;
+                };
                 let weak = Weak::clone(&weak);
                 pmt_core::spawn::spawn(async move {
-                    let service = service_fn(move |req| serve(Weak::clone(&weak), req));
+                    let service = service_fn(move |mut req: Request<Incoming>| {
+                        req.extensions_mut().insert(Peer(peer.ip()));
+                        serve(Weak::clone(&weak), req)
+                    });
                     let conn = hyper::server::conn::http1::Builder::new()
                         .serve_connection(TokioIo::new(stream), service);
                     if let Err(err) = conn.await {
@@ -158,6 +163,17 @@ pub(crate) fn respond(answer: HttpResponse) -> Response<Full<Bytes>> {
 
 /// Where the managed scheduler posts its fires.
 pub const CRON_FIRE_PATH: &str = "/api/cron/fire";
+
+/// The client address of a request, as the connection's accept saw it
+/// (a request extension; [`read`] hands it to the adapter as the
+/// [`PEER_HEADER`] header).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Peer(pub(crate) std::net::IpAddr);
+
+/// The header carrying the client's address to an adapter (Graph's
+/// source-range check). Any copy the client sent is dropped, so only the
+/// listener's own value reaches the adapter.
+pub const PEER_HEADER: &str = "x-prometheus-peer";
 
 /// The largest fire request read.
 const FIRE_BODY_LIMIT: usize = 64 * 1024;
@@ -228,6 +244,7 @@ async fn read(
     path: String,
 ) -> Result<HttpRequest, HttpResponse> {
     let (parts, body) = request.into_parts();
+    let peer = parts.extensions.get::<Peer>().copied();
     // A declared length over the limit is refused before anything is read.
     let declared = parts
         .headers
@@ -240,20 +257,25 @@ async fn read(
     let Ok(body) = Limited::new(body, limit).collect().await else {
         return Err(HttpResponse::status(413));
     };
+    let mut headers: Vec<(String, String)> = parts
+        .headers
+        .iter()
+        .filter(|(name, _)| name.as_str() != PEER_HEADER)
+        .map(|(name, value)| {
+            (
+                name.as_str().to_owned(),
+                String::from_utf8_lossy(value.as_bytes()).into_owned(),
+            )
+        })
+        .collect();
+    if let Some(Peer(address)) = peer {
+        headers.push((PEER_HEADER.to_owned(), address.to_string()));
+    }
     Ok(HttpRequest {
         method: parts.method.as_str().to_owned(),
         path,
         query: parts.uri.query().map(str::to_owned),
-        headers: parts
-            .headers
-            .iter()
-            .map(|(name, value)| {
-                (
-                    name.as_str().to_owned(),
-                    String::from_utf8_lossy(value.as_bytes()).into_owned(),
-                )
-            })
-            .collect(),
+        headers,
         body: body.to_bytes().to_vec(),
     })
 }

@@ -362,8 +362,19 @@ async fn a_slow_typing_call_never_stalls_the_cadence() {
 
 /// One HTTP/1.1 request on the webhook listener; the status code.
 async fn post(addr: std::net::SocketAddr, path: &str, secret: Option<&str>, body: &str) -> u16 {
+    post_with(addr, path, secret, "", body).await
+}
+
+/// [`post`] with `extra` header lines (each ending in `\r\n`).
+async fn post_with(
+    addr: std::net::SocketAddr,
+    path: &str,
+    secret: Option<&str>,
+    extra: &str,
+    body: &str,
+) -> u16 {
     let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
-    let header = secret.map_or_else(String::new, |s| format!("x-secret: {s}\r\n"));
+    let header = secret.map_or_else(String::new, |s| format!("x-secret: {s}\r\n{extra}"));
     let request = format!(
         "POST {path} HTTP/1.1\r\nhost: localhost\r\n{header}content-length: {}\r\nconnection: close\r\n\r\n{body}",
         body.len()
@@ -412,6 +423,28 @@ async fn two_profiles_share_one_webhook_listener_and_unsigned_requests_get_401()
     );
     said(&h.adapter_of("default", "webhook"), "echo: deploy done").await;
     said(&h.adapter_of("work", "webhook"), "echo: build red").await;
+}
+
+/// The adapter learns the client's address from the listener, never from
+/// the client (Graph's source-range check relies on it).
+#[tokio::test]
+async fn the_listener_names_the_client_address_and_drops_a_forged_one() {
+    let mut setup = Setup::new(&open("webhook"));
+    setup.descriptors.push(Descriptor {
+        binds_http: true,
+        ..Descriptor::new("webhook", 65_536)
+    });
+    let h = Harness::start(setup).await;
+    let adapter = h.adapter_of("default", "webhook");
+    *adapter.http_secret.lock().unwrap() = Some("s3cret".into());
+    let addr = h.gateway.http_addr().expect("the listener runs");
+    let forged = format!("{}: 52.96.0.1\r\n", pmt_gateway::messaging::PEER_HEADER);
+    assert_eq!(
+        post_with(addr, "/p/default/webhook/", Some("s3cret"), &forged, "x").await,
+        200
+    );
+    let peers = adapter.http_peers.lock().unwrap().clone();
+    assert_eq!(peers, [Some("127.0.0.1".to_owned())]);
 }
 
 /// Scenario: Port collision isolated (spec: distribution-and-update,

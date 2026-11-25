@@ -168,10 +168,25 @@ fn plan_env(src: &Source<'_>, step: &mut SecretsStep) {
             continue;
         }
         match env::classify(&e.name, &known) {
-            Class::Secret => {
-                let i = push(step, entry(Disposition::Secret).to(&e.name));
-                step.writes.secret(&e.name, &e.value, i);
-            }
+            Class::Secret => match crate::catalog::secret(&e.name) {
+                // A catalog plugin reads it under its own name.
+                Some((adapter, secret)) if secret.plugin != e.name => {
+                    let i = push(
+                        step,
+                        entry(Disposition::Secret)
+                            .to(secret.plugin)
+                            .because(format!(
+                                "stored as {} for the {} catalog plugin",
+                                secret.plugin, adapter.id
+                            )),
+                    );
+                    step.writes.secret(secret.plugin, &e.value, i);
+                }
+                _ => {
+                    let i = push(step, entry(Disposition::Secret).to(&e.name));
+                    step.writes.secret(&e.name, &e.value, i);
+                }
+            },
             Class::Unclassified => {
                 let i = push(
                     step,
@@ -495,7 +510,19 @@ fn plan_slack(src: &Source<'_>, text: &str, step: &mut SecretsStep) {
             );
             continue;
         }
-        let target = next_free("SLACK_BOT_TOKEN", &taken);
+        // A workspace installed through OAuth: the Slack adapter serves
+        // `SLACK_BOT_TOKEN_<team id>` secrets beside its own token.
+        let team_shaped = team.len() > 2
+            && team.starts_with(['T', 'E'])
+            && team
+                .chars()
+                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit());
+        let base = if team_shaped {
+            format!("SLACK_BOT_TOKEN_{team}")
+        } else {
+            "SLACK_BOT_TOKEN".to_owned()
+        };
+        let target = next_free(&base, &taken);
         taken.insert(target.clone(), bot.to_owned());
         let index = push(
             step,

@@ -16,6 +16,7 @@ mod gateway;
 pub mod mock;
 mod normalize;
 mod threads;
+pub mod tools;
 mod voice;
 
 use std::collections::BTreeSet;
@@ -37,6 +38,7 @@ use pmt_gateway::messaging::{
 use reqwest::Method;
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
+pub use tools::DiscordTools;
 
 /// The platform name.
 pub const PLATFORM: &str = "discord";
@@ -342,6 +344,7 @@ impl Adapter for Discord {
             if let Some(id) = me["id"].as_str() {
                 id.clone_into(&mut self.session.lock().expect("session poisoned").bot_id);
             }
+            tools::detect_permissions(&api, self.scope.dir()).await;
             let url = self.gateway_url(&api).await?;
             let stop = CancellationToken::new();
             if let Some(old) = self

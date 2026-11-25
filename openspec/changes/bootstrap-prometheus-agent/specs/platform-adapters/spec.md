@@ -849,7 +849,7 @@ The `irc` adapter SHALL connect to `options.server` on `options.port` (default 6
 - **THEN** it SHALL be sent as several PRIVMSG lines each within 450 bytes
 
 ### Requirement: Raft wake-only adapter
-The `raft` adapter SHALL be a wake-only adapter: it SHALL start the Raft CLI bridge as a sandboxed child with a per-start token on an ephemeral loopback port and only the Raft profile name in its environment, accept wake hints posted with that token, reject any wake payload carrying message content fields (`text`, `body`, `content`, `messages`), and inject a content-free wake notice into the session so the agent reads and replies with the Raft CLI; it SHALL hold no Raft credentials or delivery cursors.
+The `raft` adapter SHALL be a wake-only adapter: it SHALL start the Raft CLI bridge as a sandboxed child with a per-start token on an ephemeral loopback port and in its environment only the Raft profile name, that token, and the `PATH` and `HOME` the Raft CLI needs to run and find its own login, accept wake hints posted with that token, reject any wake payload carrying message content fields (`text`, `body`, `content`, `messages`), and inject a content-free wake notice into the session so the agent reads and replies with the Raft CLI; it SHALL hold no Raft credentials or delivery cursors.
 **Milestone:** M3
 
 #### Scenario: Content-bearing wake rejected

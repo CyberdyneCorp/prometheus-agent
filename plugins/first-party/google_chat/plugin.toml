@@ -1,0 +1,22 @@
+# First-party catalog adapter: Google Chat (spec: platform-adapters, Google
+# Chat adapter). Events arrive by Pub/Sub pull (options `project_id`,
+# `subscription`, `max_messages`) or as HTTP callbacks on the shared
+# listener (`/p/<profile>/google_chat/`, options `audience` and
+# `service_account_email`, each verified by its Google-signed ID token);
+# replies go through the Chat API as the app's service account (secret
+# `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON`, its JSON key). Native file delivery uses
+# each user's own OAuth token from `/setup-files` (option
+# `oauth_client_id`, secret `GOOGLE_CHAT_OAUTH_CLIENT_SECRET`; tokens kept
+# in `GOOGLE_CHAT_USER_TOKENS`).
+manifest_version = 1
+id = "google_chat"
+version = "1.0.0"
+kind = "wasm"
+description = "Google Chat spaces and DMs: Pub/Sub or verified HTTP events in, Chat API replies and cards out."
+license = "MIT"
+requires_prometheus = ">=0.1"
+worlds = ["platform-adapter@1.0"]
+
+[capabilities]
+network = ["chat.googleapis.com", "pubsub.googleapis.com", "oauth2.googleapis.com", "www.googleapis.com"]
+secrets = ["GOOGLE_CHAT_SERVICE_ACCOUNT_JSON", "GOOGLE_CHAT_OAUTH_CLIENT_SECRET", "GOOGLE_CHAT_USER_TOKENS"]

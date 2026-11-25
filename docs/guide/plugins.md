@@ -114,13 +114,94 @@ requests new capabilities: secrets GITHUB_TOKEN` until you approve it
 [Writing a plugin](plugin-authoring.md) covers `validate`, `pack` and
 `sign`.
 
+### Python distributions
+
+```sh
+prometheus plugins install pypi:hermes-spotify==1.2.0
+```
+
+A Hermes plugin published as a Python distribution installs at an exact
+version only (`pypi:hermes-spotify` alone exits 2 with `pypi plugins need
+an exact version: pypi:<dist>==<version>`). Its pure-Python wheel is taken
+from the package index (`runtimes.mirrors.pypi` in `daemon.toml`, else uv's
+`UV_DEFAULT_INDEX`, else PyPI) and checked against the index's `sha256`;
+its `hermes_agent.plugins` (or `prometheus.plugins`) entry point becomes a
+`python` plugin named after the entry point, with the wheel's files under
+`site/` (the audit reads what runs) and its own pinned bridge environment.
+Index packages carry no publisher signature, so `plugins.signature_policy`
+applies as for a local package, and the install record says `pypi`.
+
+### Collections
+
+A collection is a shareable, reviewable plugin set:
+`prometheus-collection.toml` (a Hermes `hermes-pack.yaml` is translated).
+
+```toml
+name = "starter"
+skills = ["github-pr-review"]
+
+[[plugins]]
+name = "weather"                      # a catalog id ...
+ref = "<40-hex commit>"
+
+[[plugins]]
+repo = "https://github.com/acme/tools" # ... or a repository
+subdir = "plugins/notes"
+ref = "<40-hex commit>"
+[plugins.config]                      # seeds for plugins.entries.notes
+folder = "inbox"
+```
+
+```sh
+prometheus plugins collection show starter.toml     # plugins, sources, refs, capabilities
+prometheus plugins collection install starter.toml  # one confirmation, then each plugin's own flow
+prometheus plugins collection export [--enabled-only]
+```
+
+Every entry pins a full commit SHA (`ref = "v1.2.0"` is refused with
+`entry 'weather': ref must be a full commit SHA`). A collection carries no
+grants and no secrets: a grant key or a secret-shaped seed (`*token*`,
+`*key*`, `*secret*`, `*password*`) is refused, and `export` strips them.
+`install` needs a terminal (exit 4 otherwise, and there is no `--yes`):
+after one confirmation each plugin goes through the normal install
+(signature policy, threat scan, kill list) and the usual `Enable '<id>'
+now?` and capability questions; seeds never overwrite a value you set. A
+plugin that fails is reported, the rest continue, and the command exits 5.
+`export` lists the plugins whose provenance pins a commit (catalog and Git
+installs).
+
+### Nix
+
+The NixOS and Home Manager modules declare plugins of the default profile
+in `programs.prometheus.plugins`: plugin directories (packages, or
+`{ id = "notes"; source = ./notes; }`) and Python distributions
+(`{ id = "spotify"; pypi = "hermes-spotify==1.2.0"; }`). Activation
+installs each as `plugins/nix-managed-<id>/` with install record source
+`nix`, enables it in the generated config, and removes a `nix-managed-*`
+plugin once it is no longer declared; plugins you installed yourself are
+never touched. The threat scan and capability grants still apply: approve
+them with `prometheus plugins grants approve nix-managed-<id>`.
+
+### From the agent
+
+In desktop and TUI sessions the model has
+[`catalog_manage`](../reference/tools.md#catalog_manage) (toolset
+`catalog`): it can search the plugin catalog and the official skills, and
+ask to install items it names only by kind and id. You see one card with a
+row per item and install or skip each; Prometheus picks the source, pinned
+ref, checks and profile, and a plugin lands disabled without grants. On
+other surfaces the tool answers with the `prometheus plugins install` and
+`prometheus skills install` commands instead.
+
 ## Enabling a plugin
 
-Nothing found runs until you enable it. In a profile with no plugins:
+Nothing found runs until you enable it. In a profile with only the
+built-in plugins:
 
 ```console
 $ prometheus plugins list
-no plugins found
+disk-cleanup  1.0.0  python  embedded  disabled
+google_meet  1.0.0  python  embedded  disabled
 $ prometheus plugins enable weather # exits 66
 error: no plugin 'weather' was found
 $ prometheus config set plugins.wasm.call_timeout_ms 10000
@@ -179,8 +260,14 @@ Prometheus reads and a `requires_prometheus` range that excludes it. The
 capability keys are `network`, `fs_read`, `fs_write`, `secrets`, `llm`,
 `tools_call`, `tools_override`, `hooks`, `prompt_section`, `commands`,
 `cli_commands`, `providers`, `providers_override`, `approval_transport`,
-`inject_messages`, `platform_actions`, `subprocess`, `ui`, `subagents` and
-`credentials`.
+`inject_messages`, `platform_actions`, `subprocess`, `listen` (loopback
+ports a server of the plugin accepts connections on), `ui`, `subagents` and
+`credentials`. `fs_read`/`fs_write` paths start with `$plugin_data` (the
+plugin's data directory), `$profile_home` (the profile's home), `$tmp` (the
+system temporary directory), `$workspace` or are absolute; python plugins
+read the first three as `ctx.data_dir`, `ctx.profile_home` and
+`ctx.temp_root`. The host creates a missing profile directory a granted
+`fs_write` tree names before the plugin starts.
 
 ## The WIT worlds
 
@@ -415,7 +502,14 @@ up to 5 seconds at exit for its queued deliveries.
   and stderr streamed as the plugin writes them, then its exit code; 70
   when the plugin crashes) and `prometheus plugins
   run <id>` lists them; `prometheus help` lists them under `plugin
-  commands`.
+  commands`. A `platform-adapter` plugin lists its commands in its
+  descriptor (`cli_commands: [{name, description}]`): the command starts
+  the adapter with its platform table's options and hands it
+  `{"op": "cli", "name", "args"}` through `send`, printing what it answers
+  (exit 1 on an error). Adapter descriptors may also set `max_body_bytes`
+  (the shared listener's request cap for it) and `writable_secrets`
+  (secrets it may store by polling `{"store_secret": {"name", "value"}}`,
+  only names it declares and is granted to read).
 - **An approval transport** (`approval_transport`): with
   `plugins.approval_transport = "<plugin>:<name>"` approval requests go to
   the plugin instead of the session's surface. It sees the redacted request
@@ -480,3 +574,54 @@ memory and identity file, and runs in its own process on the line
 interface rather than in the daemon. It shows a banner, changes no setting, and needs `--model` and
 `--provider`, exiting 78 without them. `plugins.safe_mode = true` skips the
 plugins alone.
+
+## Catalog plugins: Camofox
+
+`camofox` (source `plugins/first-party/camofox`) gives the model browser
+tools on a [Camofox](https://github.com/jo-inc/camofox-browser)
+anti-detection Firefox REST server: `camofox_open` (http(s) pages only),
+`camofox_snapshot`, `camofox_click` and `camofox_type` (by the snapshot's
+element refs), `camofox_scroll`, `camofox_back` and `camofox_close`. Each
+session drives its own tab, with its session id as the Camofox user. The
+server is `plugins.entries.camofox.url` (default `http://localhost:9377`;
+another host needs its network capability approved). Migrating a Hermes
+profile that browsed through Camofox installs it disabled, sets the URL
+and disables the core `browser` toolset in that profile.
+
+## First-party plugins: disk-cleanup and google_meet
+
+Two python plugins ship inside the binary, disabled by default
+(`prometheus plugins list` shows them with source `embedded`). Enabling one
+(`prometheus plugins enable <id>`) writes its files under
+`<profile>/python/embedded/<id>/` and the python bridge hosts it like any
+other.
+
+`disk-cleanup` tracks the test and temporary files the agent creates
+(`test_*`, `tmp_*`, `*.test.*`) with
+[`write_file`](../reference/tools.md#write_file),
+[`patch`](../reference/tools.md#patch) or
+[`terminal`](../reference/tools.md#terminal)
+under the profile home or `<tmp>/prometheus-*`, and removes them when the
+session ends: `test` files always, `temp` after 7 days, `cron-output` after
+14 days, plus empty directories. Old research, browser profiles and files
+over 500 MB are only listed, by `/disk-cleanup deep`. It never touches
+anything outside those roots, the profile's state directories (`logs`,
+`skills`, `plugins`, `cache`, ...), workspace trees or a git checkout.
+`/disk-cleanup status|dry-run|quick|deep|track <path> <category>|forget
+<path>` drives it; its state is `tracked.json` and the append-only
+`cleanup.log` in its plugin data.
+
+`google_meet` lets the agent join a Google Meet call: toolset `google_meet`
+(`meet_join`, `meet_status`, `meet_transcript`, `meet_say`, `meet_leave`).
+Only `https://meet.google.com/...` URLs are joined. The bot is a background
+Chromium (Playwright) that turns on Meet's live captions and writes them to
+`<profile>/workspace/meetings/<id>/transcript.txt`; no meeting audio is
+decoded. With `mode = "realtime"` and the `OPENAI_API_KEY` secret granted,
+`meet_say` speaks through a virtual microphone (PulseAudio on Linux,
+BlackHole and ffmpeg on macOS). Set it up with
+`prometheus plugins run google_meet install` (browser runtime in its plugin
+data) and `... auth` (Google sign-in); the tools are offered only once both
+exist (`... setup` checks). `... join|status|transcript|say|stop` drive a
+meeting from the shell, and `... node run|approve|list|remove|ping` runs
+the bot on another machine (`node run` listens on loopback port 18789,
+reached through an SSH tunnel; another port needs a `net.listen` grant).

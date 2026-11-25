@@ -19,12 +19,17 @@
 //! one-hour idempotency window and its transform script. A
 //! `deliver_only` route then forwards the rendered prompt to its target
 //! without any model call; a `cron_job` route fires that scheduled job
-//! with the rendered prompt as its run context (`jobs`).
+//! with the rendered prompt as its run context (`jobs`); a `coalesce`
+//! route holds bursts on one entity and runs one turn on the newest
+//! (`coalesce`). Routes made for MCP event subscriptions answer the
+//! server's control envelopes themselves (`mcp`).
 
+mod coalesce;
 mod delivery;
 mod filter;
 mod guard;
 mod jobs;
+mod mcp;
 mod render;
 mod routes;
 mod script;
@@ -85,7 +90,10 @@ pub struct Webhook {
     options: WebhookOptions,
     /// For `github_comment` (absent when it cannot be built).
     client: Option<reqwest::Client>,
-    deliveries: delivery::Deliveries,
+    deliveries: Arc<delivery::Deliveries>,
+    coalescer: coalesce::Coalescer,
+    /// Starts a coalesced group's turn; set while connected.
+    settle: Mutex<Option<coalesce::Settle>>,
 }
 
 /// The toolset of a route's runs unless it names its own.
@@ -161,7 +169,9 @@ impl Webhook {
             guard: guard::Guard::default(),
             options,
             client,
-            deliveries: delivery::Deliveries::default(),
+            deliveries: Arc::default(),
+            coalescer: coalesce::Coalescer::default(),
+            settle: Mutex::default(),
         }
     }
 
@@ -226,6 +236,8 @@ impl Webhook {
             secrets.insert(name.clone(), secret);
         }
         *self.secrets.lock().expect("secrets poisoned") = Some(secrets);
+        *self.settle.lock().expect("settle poisoned") =
+            Some(settler(Arc::clone(&link), Arc::clone(&self.deliveries)));
         *self.link.lock().expect("link poisoned") = Some(link);
         Ok(())
     }
@@ -236,19 +248,18 @@ impl Webhook {
         let Some(route) = routes.get(route_name) else {
             return status(404, &json!({"error": "unknown route"}));
         };
-        if !route.enabled {
-            return status(403, &json!({"error": "route disabled"}));
-        }
-        if request.method != "POST" {
-            return status(405, &json!({"error": "POST only"}));
-        }
         let now = tokio::time::Instant::now();
-        if !self.guard.admit(route_name, route.rate_limit_per_min, now) {
-            return status(429, &json!({"status": "rate_limited"}));
-        }
-        let Ok(payload) = serde_json::from_slice::<Value>(&request.body) else {
-            return status(400, &json!({"error": "the body is not JSON"}));
+        let payload = match self.admit(route_name, route, request, now) {
+            Ok(payload) => payload,
+            Err(answer) => return answer,
         };
+        if let Some(mcp_event) = &route.mcp_event
+            && let Some(answer) = self
+                .mcp_control(route_name, route, mcp_event, &payload)
+                .await
+        {
+            return answer;
+        }
         let event = event_type(request, &payload);
         if !route.events.is_empty() && !event.as_ref().is_some_and(|e| route.events.contains(e)) {
             return status(200, &json!({"status": "ignored", "event": event}));
@@ -259,7 +270,11 @@ impl Webhook {
                 &json!({"status": "ignored", "reason": "filter", "route": route_name}),
             );
         }
-        let delivery = delivery_id(request);
+        let delivery = route
+            .mcp_event
+            .as_ref()
+            .and_then(|_| mcp::delivery_id(&payload))
+            .unwrap_or_else(|| delivery_id(request));
         if self.guard.seen(route_name, &delivery, now) {
             return status(200, &json!({"status": "duplicate"}));
         }
@@ -267,7 +282,22 @@ impl Webhook {
             self.guard.remember(route_name, &delivery, now);
             return status(200, &json!({"status": "ignored", "reason": "script"}));
         };
-        let text = render::render(route.prompt.as_deref(), &payload);
+        let text = route
+            .mcp_event
+            .as_ref()
+            .and_then(|_| render::render_event(route.prompt.as_deref(), &payload))
+            .unwrap_or_else(|| render::render(route.prompt.as_deref(), &payload));
+        if let Some(answer) = self.coalesce(
+            route_name,
+            route,
+            &delivery,
+            &text,
+            &payload,
+            event.as_deref(),
+        ) {
+            self.guard.remember(route_name, &delivery, now);
+            return answer;
+        }
         let call = Call {
             route_name,
             route,
@@ -287,6 +317,28 @@ impl Webhook {
             self.guard.remember(route_name, &delivery, now);
         }
         answer
+    }
+
+    /// The checks before a request's payload is read: the route is on,
+    /// the method is POST, the minute's limit holds and the body is JSON.
+    fn admit(
+        &self,
+        route_name: &str,
+        route: &WebhookRoute,
+        request: &HttpRequest,
+        now: tokio::time::Instant,
+    ) -> Result<Value, HttpResponse> {
+        if !route.enabled {
+            return Err(status(403, &json!({"error": "route disabled"})));
+        }
+        if request.method != "POST" {
+            return Err(status(405, &json!({"error": "POST only"})));
+        }
+        if !self.guard.admit(route_name, route.rate_limit_per_min, now) {
+            return Err(status(429, &json!({"status": "rate_limited"})));
+        }
+        serde_json::from_slice::<Value>(&request.body)
+            .map_err(|_| status(400, &json!({"error": "the body is not JSON"})))
     }
 
     fn passes_filters(
@@ -353,21 +405,56 @@ impl Webhook {
         }
     }
 
+    /// Holds the event when its route coalesces and its key resolves: the
+    /// 202 `coalesced` answer. `None` dispatches it now.
+    fn coalesce(
+        &self,
+        route_name: &str,
+        route: &WebhookRoute,
+        delivery: &str,
+        text: &str,
+        payload: &Value,
+        event: Option<&str>,
+    ) -> Option<HttpResponse> {
+        let coalesce = route.coalesce.as_ref()?;
+        let settle = self.settle.lock().expect("settle poisoned").clone()?;
+        let Some(key) = render::key(&coalesce.key, payload) else {
+            tracing::info!(
+                platform = PLATFORM,
+                route = route_name,
+                "coalesce key {} unresolved; dispatching at once",
+                coalesce.key
+            );
+            return None;
+        };
+        let github = (route.deliver_target() == "github_comment")
+            .then(|| delivery::GithubThread::of(payload))
+            .flatten();
+        let pending = coalesce::Pending {
+            route: route_name.to_owned(),
+            delivery: delivery.to_owned(),
+            text: text.to_owned(),
+            github,
+        };
+        let window = coalesce::Window {
+            quiet: Duration::from_secs(coalesce.window_secs.max(1)),
+            max_wait: Duration::from_secs(coalesce.max_wait_secs.max(1)),
+        };
+        self.coalescer
+            .hold(format!("{route_name}\u{1f}{key}"), pending, window, settle);
+        Some(status(
+            202,
+            &json!({"status": "coalesced", "route": route_name, "event": event,
+                    "delivery_id": delivery}),
+        ))
+    }
+
     /// Submits the rendered text as a turn of the delivery's own thread.
     async fn start_turn(&self, call: &Call<'_>) -> (HttpResponse, bool) {
         let Some(link) = self.link.lock().expect("link poisoned").clone() else {
             return (HttpResponse::status(503), false);
         };
-        let mut inbound = Inbound::text(
-            ChatType::Dm,
-            call.route_name,
-            &sender(call.route_name),
-            call.text,
-        );
-        inbound.message_id = call.delivery.to_owned();
-        inbound.sender_name = Some(format!("webhook {}", call.route_name));
-        // Each delivery runs in its own conversation.
-        inbound.thread_id = Some(call.delivery.to_owned());
+        let inbound = turn_inbound(call.route_name, call.delivery, call.text);
         let body = json!({"status": "accepted", "route": call.route_name, "event": call.event,
                           "delivery_id": call.delivery});
         let target = call.route.deliver_target();
@@ -561,6 +648,37 @@ impl Webhook {
     }
 }
 
+/// The inbound of a delivery's turn: each delivery runs in its own
+/// conversation thread of the route.
+fn turn_inbound(route: &str, delivery: &str, text: &str) -> Inbound {
+    let mut inbound = Inbound::text(ChatType::Dm, route, &sender(route), text);
+    delivery.clone_into(&mut inbound.message_id);
+    inbound.sender_name = Some(format!("webhook {route}"));
+    inbound.thread_id = Some(delivery.to_owned());
+    inbound
+}
+
+/// Starts a settled coalesced group's turn (nobody waits on it, so an
+/// `origin` answer goes to the route's log).
+fn settler(link: Arc<dyn AdapterLink>, deliveries: Arc<delivery::Deliveries>) -> coalesce::Settle {
+    Arc::new(move |pending: coalesce::Pending, superseded| {
+        let (link, deliveries) = (Arc::clone(&link), Arc::clone(&deliveries));
+        Box::pin(async move {
+            let text = coalesce::noted(&pending.text, superseded);
+            let _ = deliveries.open(&pending.delivery, false, pending.github);
+            let admission = link
+                .submit(turn_inbound(&pending.route, &pending.delivery, &text))
+                .await;
+            tracing::info!(
+                platform = PLATFORM,
+                route = pending.route,
+                superseded,
+                "coalesced webhook turn submitted: {admission:?}"
+            );
+        })
+    })
+}
+
 impl Adapter for Webhook {
     fn reach(&self) -> Result<pmt_gateway::messaging::probe::Reach, String> {
         // Deliveries arrive on the daemon's listener; replies go back to
@@ -588,8 +706,14 @@ impl Adapter for Webhook {
     }
 
     fn disconnect(&self) -> AdapterFuture<'_, ()> {
-        self.link.lock().expect("link poisoned").take();
-        Box::pin(async {})
+        let settle = self.settle.lock().expect("settle poisoned").take();
+        Box::pin(async move {
+            // Held events become turns rather than being dropped.
+            if let Some(settle) = settle {
+                self.coalescer.flush(&settle).await;
+            }
+            self.link.lock().expect("link poisoned").take();
+        })
     }
 
     fn send(&self, message: &Outgoing) -> AdapterFuture<'_, Result<Sent, SendError>> {
@@ -645,8 +769,15 @@ impl Adapter for Webhook {
         let subscribed = (served.contains_key(route) && !secrets.contains_key(route))
             .then(|| self.routes.subscribed_secret(route));
         if let Some(secret) = subscribed {
+            // MCP event routes take only Standard Webhooks signatures.
+            let standard_only = served.get(route).is_some_and(|r| r.mcp_event.is_some());
+            let now = jiff::Timestamp::now().as_second();
             return secret.is_some_and(|secret| {
-                signature::verify(request, &secret, jiff::Timestamp::now().as_second())
+                if standard_only {
+                    signature::verify_standard(request, &secret, now)
+                } else {
+                    signature::verify(request, &secret, now)
+                }
             });
         }
         match secrets.get(route) {

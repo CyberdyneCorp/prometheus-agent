@@ -9,6 +9,7 @@ pub mod api_hooks;
 pub mod backend;
 pub mod bots;
 pub mod browser;
+mod cards;
 pub mod code;
 mod codex_gates;
 pub mod credentials;
@@ -53,6 +54,7 @@ mod trace;
 pub mod vision;
 pub mod voice_route;
 
+use self::cards::Cards;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -639,7 +641,7 @@ impl Factory {
         media::prime(&id.to_string()).await;
         let memory = self.memory_for(id, &model, announce).await?;
         let summarizer = self.models.summarizer(&model, id);
-        let cards = shows_cards(self.options.interactive, &session_surface);
+        let cards = Cards::of(self.options.interactive, &session_surface);
         let delegation = self.delegation_for(
             (&session, &model, &registry),
             (child, clients.as_ref()),
@@ -1010,7 +1012,7 @@ impl Factory {
             &Arc<model::SwitchableModel>,
         ),
         (selection, capabilities): (&Selection, &CapabilitySet),
-        cards: bool,
+        cards: Cards,
         delegation: &delegation::Wiring,
     ) -> Result<(Arc<AgentTools>, Option<ClarifyPrompts>), Error> {
         let (clarifier, clarify) = if self.options.interactive {
@@ -1036,7 +1038,15 @@ impl Factory {
             ),
         )?
         .with_memory(Arc::clone(memory) as _)
-        .with_connections(crate::connectors_host::manager(&self.scope, cards))
+        .with_connections(crate::connectors_host::manager(
+            &self.scope,
+            cards.connections,
+        ))
+        .with_catalog(crate::plugins_host::catalog_tool::manager(
+            &self.scope,
+            &self.launch,
+            cards.catalog,
+        ))
         .with_cron(crate::cron_host::tool::port(
             &self.scope,
             &self.launch,
@@ -1355,14 +1365,6 @@ impl Factory {
         })
         .await
     }
-}
-
-/// Whether a session shows connection cards: an interactive terminal,
-/// the TUI or the desktop (messaging chats, one-shot runs and cron get
-/// links instead).
-fn shows_cards(interactive: bool, surface: &pmt_tools::SessionSurface) -> bool {
-    use pmt_tools::SessionSurface::{Cli, Desktop, Tui};
-    interactive && matches!(surface, Cli | Tui | Desktop)
 }
 
 /// Announces each borrowed login's first use in the session (spec:

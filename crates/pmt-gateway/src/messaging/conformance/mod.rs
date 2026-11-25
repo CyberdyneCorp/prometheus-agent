@@ -204,6 +204,12 @@ pub trait MockPlatform: Send + Sync {
     fn menu(&self) -> Option<Vec<String>> {
         None
     }
+    /// The text the adapter admits for a message injected with `injected`:
+    /// the text itself, except for a wake-only adapter (Raft), which
+    /// admits a fixed content-free notice naming the event.
+    fn admitted_text(&self, injected: &str) -> String {
+        injected.to_owned()
+    }
 }
 
 /// One check's outcome.
@@ -402,8 +408,14 @@ fn check_descriptor(descriptor: &Descriptor) -> Result<(), String> {
 }
 
 /// Serves `adapter` on a loopback port the way the daemon's shared
-/// listener does (signature checked first); the prefix it answers under.
-async fn listen(adapter: Arc<dyn Adapter>) -> Result<String, String> {
+/// listener does (signature checked first); the prefix it answers under
+/// (`http://127.0.0.1:<port>/p/kit/<platform>`). Adapter tests use it to
+/// post their platform's webhooks.
+///
+/// # Errors
+///
+/// No loopback port can be bound.
+pub async fn listen(adapter: Arc<dyn Adapter>) -> Result<String, String> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| format!("cannot listen for the adapter: {e}"))?;
@@ -413,11 +425,12 @@ async fn listen(adapter: Arc<dyn Adapter>) -> Result<String, String> {
     let prefix = format!("/p/kit/{}", adapter.describe().platform);
     let base = format!("http://{addr}{prefix}");
     pmt_core::spawn::spawn(async move {
-        while let Ok((stream, _)) = listener.accept().await {
+        while let Ok((stream, peer)) = listener.accept().await {
             pmt_core::spawn::spawn(serve_connection(
                 Arc::clone(&adapter),
                 prefix.clone(),
                 stream,
+                peer.ip(),
             ));
         }
     });
@@ -428,8 +441,10 @@ async fn serve_connection(
     adapter: Arc<dyn Adapter>,
     prefix: String,
     stream: tokio::net::TcpStream,
+    peer: std::net::IpAddr,
 ) {
-    let service = hyper::service::service_fn(move |request| {
+    let service = hyper::service::service_fn(move |mut request: hyper::Request<_>| {
+        request.extensions_mut().insert(super::http::Peer(peer));
         let (adapter, prefix) = (Arc::clone(&adapter), prefix.clone());
         async move {
             let answer = route_kit(adapter.as_ref(), &prefix, request).await;
@@ -491,10 +506,11 @@ impl Kit {
     }
 
     fn texts(&self, text: &str) -> usize {
+        let admitted = self.platform.admitted_text(text);
         self.link
             .accepted()
             .iter()
-            .filter(|i| i.text == text)
+            .filter(|i| i.text == admitted)
             .count()
     }
 
@@ -503,11 +519,12 @@ impl Kit {
         if !eventually(|| self.texts("conformance hello") > 0).await {
             return Err("the injected message never arrived".to_owned());
         }
+        let admitted = self.platform.admitted_text("conformance hello");
         let inbound = self
             .link
             .accepted()
             .into_iter()
-            .find(|i| i.text == "conformance hello")
+            .find(|i| i.text == admitted)
             .ok_or("lost")?;
         let (chat, user) = self.platform.dm();
         let problems = [

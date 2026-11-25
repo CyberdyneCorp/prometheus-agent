@@ -8,7 +8,8 @@
 //! `fs_read`/`fs_write` paths it was granted. With a `network` grant it may
 //! connect only to its own loopback egress proxy, which admits the granted
 //! hosts (on Linux from a network namespace of its own); without one it
-//! has no network. It starts children only with
+//! has no network. It accepts connections only on the loopback ports of a
+//! `listen` grant. It starts children only with
 //! `subprocess` granted. Each start gets a fresh proxy, kept until the
 //! next start. Under credential injection the sidecar holds the
 //! placeholder of each mapped secret it was granted, its proxy puts the
@@ -96,7 +97,10 @@ impl Sandboxed {
             .map(|t| Capability::parse(t))
             .collect::<Result<_, _>>()?;
         for capability in granted {
-            if matches!(capability, Capability::FsRead(_) | Capability::FsWrite(_)) {
+            if matches!(
+                capability,
+                Capability::FsRead(_) | Capability::FsWrite(_) | Capability::NetListen { .. }
+            ) {
                 set = set.union(&std::iter::once(capability.clone()).collect());
             }
         }

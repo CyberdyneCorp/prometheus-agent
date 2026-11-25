@@ -18,40 +18,17 @@ use crate::plan::{Dest, Source, Step};
 use crate::report::{Disposition, Entry};
 use crate::writes;
 
-/// Hermes platforms Prometheus serves through catalog adapter plugins
-/// (spec: platform-adapters, Catalog adapter set).
-const CATALOG_ADAPTERS: &[&str] = &[
-    "whatsapp_cloud",
-    "msgraph_webhook",
-    "teams",
-    "google_chat",
-    "mattermost",
-    "dingtalk",
-    "feishu",
-    "wecom",
-    "wecom_callback",
-    "weixin",
-    "bluebubbles",
-    "photon",
-    "qqbot",
-    "yuanbao",
-    "line",
-    "sms",
-    "ntfy",
-    "irc",
-    "raft",
-    "buzz",
-    "simplex",
-    "homeassistant",
-];
-
 /// The planned plugins component.
 pub struct PluginsStep {
     entries: Vec<Entry>,
+    /// Catalog plugins to install, with their entry.
+    catalog: Vec<(String, usize)>,
     dir: Option<std::path::PathBuf>,
     enabled: Vec<String>,
     /// Entry index per plugin id.
     planned: Vec<(String, usize)>,
+    /// The Camofox server URL of a profile that browsed through Camofox.
+    camofox_url: Option<String>,
 }
 
 impl Step for PluginsStep {
@@ -64,6 +41,7 @@ impl Step for PluginsStep {
     }
 
     fn apply(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+        self.install_catalog_plugins(dest)?;
         let Some(dir) = self.dir.clone() else {
             return Ok(());
         };
@@ -178,9 +156,11 @@ pub fn plan(src: &Source<'_>) -> Result<PluginsStep, Error> {
     let enabled = names(src.get("plugins.enabled"));
     let mut step = PluginsStep {
         entries: Vec::new(),
+        catalog: Vec::new(),
         dir: None,
         enabled: enabled.clone(),
         planned: Vec::new(),
+        camofox_url: None,
     };
     let dir = src.profile.path("plugins");
     let mut ids: Vec<String> = std::fs::read_dir(&dir)
@@ -236,37 +216,137 @@ fn names(value: Option<&Value>) -> Vec<String> {
 /// counterpart is a catalog plugin.
 fn integrations(src: &Source<'_>, step: &mut PluginsStep) {
     let mut needed: Vec<(&str, &str)> = Vec::new();
-    let platform_used = |p: &str| {
-        src.get(&format!("platforms.{p}.enabled"))
-            .and_then(Value::as_bool)
-            == Some(true)
-    };
-    if src.env_value("HASS_TOKEN").is_some() || src.get("platforms.homeassistant").is_some() {
-        needed.push(("homeassistant", "Home Assistant"));
-    }
     let camofox = src.get("browser.cloud_provider").and_then(Value::as_str) == Some("camofox");
     if camofox || src.env_value("CAMOFOX_URL").is_some() {
         needed.push(("camofox", "the Camofox browser"));
+        let url = src
+            .env_value("CAMOFOX_URL")
+            .or_else(|| src.get("browser.camofox.url").and_then(Value::as_str))
+            .unwrap_or(CAMOFOX_DEFAULT_URL);
+        step.camofox_url = Some(url.to_owned());
     }
-    for adapter in CATALOG_ADAPTERS {
-        let via_env = src.env.iter().any(|e| {
-            e.name
-                .to_ascii_lowercase()
-                .starts_with(&format!("{adapter}_"))
-                && crate::env::secret_shaped(&e.name)
-        });
-        let builtin = src.host.known(Registry::Platform, adapter, None);
-        if !builtin && *adapter != "homeassistant" && (platform_used(adapter) || via_env) {
-            needed.push((adapter, "a messaging platform"));
+    for adapter in crate::catalog::ADAPTERS {
+        let builtin = src.host.known(Registry::Platform, adapter.id, None);
+        if !builtin && crate::catalog::used(src, adapter.id) {
+            let what = if adapter.id == "homeassistant" {
+                "Home Assistant"
+            } else {
+                "a messaging platform"
+            };
+            needed.push((adapter.id, what));
         }
     }
     for (id, what) in needed {
-        step.entries.push(
-            Entry::new(Component::Plugins, format!("integration:{id}"), Disposition::Unsupported)
-                .to(format!("catalog plugin {id}"))
-                .because(format!(
+        let entry = Entry::new(
+            Component::Plugins,
+            format!("integration:{id}"),
+            Disposition::Transformed,
+        )
+        .to(format!("catalog plugin {id}"));
+        if src.host.known(Registry::CatalogPlugin, id, None) {
+            step.entries.push(entry.because(format!(
+                "Hermes used {what}; the signed catalog plugin '{id}' is installed disabled and without grants (review it with `prometheus plugins show {id}`, enable it with `prometheus plugins enable {id}`)"
+            )));
+            step.catalog.push((id.to_owned(), step.entries.len() - 1));
+        } else {
+            step.entries.push(Entry {
+                disposition: Disposition::Unsupported,
+                ..entry.because(format!(
                     "Hermes used {what}; Prometheus serves it with the signed catalog plugin '{id}', which this catalog does not offer yet (install it disabled with `prometheus plugins install {id}` once it does)"
-                )),
+                ))
+            });
+        }
+    }
+}
+
+impl PluginsStep {
+    /// Installs the catalog plugins Hermes integrations need, and sets up
+    /// a migrated Camofox profile.
+    fn install_catalog_plugins(&mut self, dest: &Dest<'_>) -> Result<(), Error> {
+        for (id, index) in &self.catalog {
+            install_catalog(id, dest, &mut self.entries[*index])?;
+            // An already installed plugin (Skipped) still gets the
+            // profile set up: Camofox use in Hermes implies the core browser
+            // toolset is off.
+            if id == "camofox"
+                && let Some(url) = &self.camofox_url
+                && self.entries[*index].disposition != Disposition::Failed
+            {
+                configure_camofox(url, dest, &mut self.entries, *index)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Where Hermes looks for a Camofox server when nothing names one.
+const CAMOFOX_DEFAULT_URL: &str = "http://localhost:9377";
+
+/// A migrated Camofox profile (spec: plugin-system, Catalog plugins for
+/// Home Assistant and Camofox): the plugin's server URL, and the core
+/// `browser` toolset disabled so the model browses through the plugin. A
+/// URL the profile already sets is kept.
+fn configure_camofox(
+    url: &str,
+    dest: &Dest<'_>,
+    entries: &mut [Entry],
+    index: usize,
+) -> Result<(), Error> {
+    let text = dest
+        .scope
+        .profile()
+        .config_file()
+        .raw()?
+        .unwrap_or_default();
+    let doc: toml::Table = toml::from_str(&text).unwrap_or_default();
+    let mut disabled: Vec<String> = writes::lookup_value(&doc, "tools.disabled_toolsets")
+        .and_then(toml::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
+    if !disabled.iter().any(|t| t == "browser") {
+        disabled.push("browser".to_owned());
+    }
+    let url = writes::lookup_value(&doc, "plugins.entries.camofox.url")
+        .and_then(toml::Value::as_str)
+        .unwrap_or(url)
+        .to_owned();
+    let mut out = writes::Writes::default();
+    out.key("plugins.entries.camofox.url", url.as_str(), index);
+    out.key(
+        "tools.disabled_toolsets",
+        toml_edit::Value::Array(disabled.iter().map(String::as_str).collect()),
+        index,
+    );
+    out.apply_merged(dest, entries)?;
+    let entry = &mut entries[index];
+    entry.reason = format!(
+        "{}; plugins.entries.camofox.url = {url} and the core browser toolset is disabled in this profile",
+        entry.reason
+    );
+    Ok(())
+}
+
+/// Installs catalog plugin `id` unless the profile already has a plugin
+/// of that id (an earlier run, or the user).
+fn install_catalog(id: &str, dest: &Dest<'_>, entry: &mut Entry) -> Result<(), Error> {
+    let dir = dest.scope.dir().join("plugins").join(id);
+    if dir.exists() {
+        entry.disposition = Disposition::Skipped;
+        entry.reason = format!("plugin '{id}' is already installed; kept");
+        return Ok(());
+    }
+    dest.keep(&dir)?;
+    if let Err(err) = dest.host.install_catalog_plugin(dest.scope, id) {
+        entry.disposition = Disposition::Failed;
+        entry.reason = format!(
+            "the catalog plugin could not be installed: {} (retry with `prometheus plugins install {id}`)",
+            err.message()
         );
     }
+    Ok(())
 }

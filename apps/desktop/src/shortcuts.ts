@@ -61,6 +61,11 @@ export function conflicts(chords: Map<string, string>): Set<string> {
   return new Set([...byChord.values()].filter((ids) => ids.length > 1).flat());
 }
 
+function sameBindings(a: Record<string, string>, b: Record<string, string>): boolean {
+  const ids = Object.keys(a);
+  return ids.length === Object.keys(b).length && ids.every((id) => a[id] === b[id]);
+}
+
 export class Shortcuts {
   private readonly actions = new Map<string, Action>();
   private overrides: Record<string, string> = {};
@@ -77,7 +82,11 @@ export class Shortcuts {
 
   /** The bindings the machine keeps. */
   load(overrides: unknown): void {
-    this.overrides = overrides && typeof overrides === "object" ? { ...(overrides as Record<string, string>) } : {};
+    const stored = overrides && typeof overrides === "object" ? { ...(overrides as Record<string, string>) } : {};
+    // Every stored preference (this window's own saves too) lands here: a
+    // render for unchanged bindings would drop a chord still being typed.
+    if (sameBindings(stored, this.overrides)) return;
+    this.overrides = stored;
     this.render();
   }
 

@@ -115,6 +115,11 @@ impl LoadParams<'_> {
             "profile": self.profile,
             "dir": self.dir,
             "data_dir": self.data_dir,
+            // `<profile>/plugin-data/<id>` sits in the profile's home.
+            "profile_home": self.data_dir.parent().and_then(Path::parent),
+            // The host's temporary directory (the sidecar's own `TMPDIR` is
+            // private).
+            "temp_root": std::env::temp_dir(),
             "secrets": self.secrets,
             "capabilities": self.capabilities,
             "manifest": self.manifest,

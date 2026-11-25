@@ -119,35 +119,15 @@ async fn decide(
     shared
         .last_inbound
         .record(owner, platform, &inbound.chat_id, &inbound.message_id);
-    let chat = format!("{owner}:{platform}:{}", inbound.chat_id);
-    if inbound.is_bot && !shared.guard.admit(&chat, Instant::now()) {
-        tracing::info!(
-            profile = owner,
-            platform,
-            "bot message refused: bot-loop cool-down"
-        );
+    if !bot_admitted(shared, owner, platform, &mut inbound, gateway) {
         return Admission::Dropped;
     }
-    if !super::admit_groups::bot_admitted(shared, owner, platform, &inbound, gateway) {
-        return Admission::Dropped;
-    }
-    if inbound.is_bot {
-        // An admitted bot message (or a chunk of its burst) is a handoff:
-        // `gateway.bots` already decided, group gating does not again.
-        inbound.addressing.mentioned = true;
-    }
-    let dedup = &gateway.dedup;
-    let duplicate = shared.dedup.seen(
-        &format!("{owner}/{platform}"),
-        &inbound.chat_id,
-        &inbound.message_id,
-        Duration::from_secs(dedup.ttl_secs),
-        dedup.max_entries as usize,
-        Instant::now(),
-    );
-    if duplicate {
+    if duplicate(shared, owner, platform, &inbound, gateway) {
         tracing::debug!(profile = owner, platform, "dropped a redelivered event");
         return Admission::Duplicate;
+    }
+    if let Some(forwarder) = shared.forwarder.get() {
+        return forwarded(shared, forwarder, owner, platform, inbound).await;
     }
     if is_start_ping(&inbound) {
         let greeting = pmt_i18n::t!(shared.strings(owner), "gateway.greeting");
@@ -190,6 +170,84 @@ async fn decide(
     let (routing, key) =
         super::profile_routes::routing(shared, owner, platform, (&inbound, person), gateway);
     lane::input(shared, &key, routing, inbound, prepared)
+}
+
+/// Whether a message passes the bot rules (always, from a person): the
+/// chat's bot-loop cool-down and `gateway.bots`. An admitted bot message
+/// (or a chunk of its burst) is a handoff, marked as addressing the bot:
+/// `gateway.bots` already decided, group gating does not again.
+fn bot_admitted(
+    shared: &Shared,
+    owner: &str,
+    platform: &str,
+    inbound: &mut Inbound,
+    gateway: &GatewayConfig,
+) -> bool {
+    let chat = format!("{owner}:{platform}:{}", inbound.chat_id);
+    if inbound.is_bot && !shared.guard.admit(&chat, Instant::now()) {
+        tracing::info!(
+            profile = owner,
+            platform,
+            "bot message refused: bot-loop cool-down"
+        );
+        return false;
+    }
+    if !super::admit_groups::bot_admitted(shared, owner, platform, inbound, gateway) {
+        return false;
+    }
+    if inbound.is_bot {
+        inbound.addressing.mentioned = true;
+    }
+    true
+}
+
+/// Whether the event was admitted before (a platform's redelivery).
+fn duplicate(
+    shared: &Shared,
+    owner: &str,
+    platform: &str,
+    inbound: &Inbound,
+    gateway: &GatewayConfig,
+) -> bool {
+    let dedup = &gateway.dedup;
+    shared.dedup.seen(
+        &format!("{owner}/{platform}"),
+        &inbound.chat_id,
+        &inbound.message_id,
+        Duration::from_secs(dedup.ttl_secs),
+        dedup.max_entries as usize,
+        Instant::now(),
+    )
+}
+
+/// An adapters-only daemon's admitted event goes to its upstream, which
+/// owns the session; while the upstream is unreachable the sender is told.
+async fn forwarded(
+    shared: &Shared,
+    forwarder: &super::forward::Forwarder,
+    owner: &str,
+    platform: &str,
+    inbound: Inbound,
+) -> Admission {
+    let (reply_to, chat) = (inbound.clone(), inbound.chat_id.clone());
+    if let Some(admission) = forwarder.forward(owner, platform, inbound).await {
+        return admission;
+    }
+    tracing::warn!(
+        profile = owner,
+        platform,
+        chat,
+        "upstream unreachable; event not forwarded"
+    );
+    reply(
+        shared,
+        owner,
+        platform,
+        &reply_to,
+        super::upstream::UNAVAILABLE,
+    )
+    .await;
+    Admission::Dropped
 }
 
 /// The routing of an admitted event and its conversation key.

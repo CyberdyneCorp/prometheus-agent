@@ -6,7 +6,7 @@ One agent core runs behind every surface: CLI, full-screen TUI, messaging gatewa
 
 It ships as one signed binary, `prometheus` (alias `pmt`). Extensions run as sandboxed WebAssembly components with explicit capability grants, as MCP servers, or as existing Hermes Python plugins through an out-of-process bridge.
 
-> **Status: M0–M2 done, M3 in progress.** The core agent (M1) and the multi-surface and extension layer (M2) are merged. From M3, the web dashboard, the desktop app, ACP, A2A, kanban, harness evolution, the experience library, eval suites and the upgrades (memory, search, TUI, routing, egress, runtimes, providers, the Lightpanda browser engine and the bot screen), bot mode, computer use, voice upgrades (except Discord voice channels) and pets are in; the catalog platform adapters and the plugin catalog are in review, and the M3 exit criteria are next (88 of 101 tasks ticked). The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
+> **Status: M0–M3 implemented; three M3 items open.** The core agent (M1), the multi-surface and extension layer (M2) and the desktop, dashboard and self-improvement milestone (M3) are in: 98 of 101 M3 tasks are ticked and every M3 spec scenario but four maps to a test. Still open: Discord voice channel sessions (task 77.2, a follow-up change; its four scenarios are deferred in the index), signing the catalog plugins and catalog entries with the release key (79.2, needs the maintainer's key) and the M3 exit gate (81.3), which closes once `scripts/check` is green on `main`. The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
 
 ## Why Prometheus
 
@@ -42,6 +42,32 @@ Captured from the real `prometheus` binary with the offline `mock` provider and 
 <p align="center">
   <img src="docs/images/cli-status.png" width="720" alt="A terminal running prometheus status (daemon running, dashboard listener, scheduler, mock provider health) and prometheus sessions list">
   <br><sub><code>prometheus status</code> and <code>prometheus sessions list</code> against the running daemon.</sub>
+</p>
+
+### Desktop app, kanban, self-improvement and bots (M3)
+
+The same setup: the real binary, the `mock` provider and an isolated home. The desktop app runs its real page in a browser at the webview origin, its native shell commands served by the real shell core.
+
+<p align="center">
+  <img src="docs/images/desktop-chat.png" width="820" alt="The desktop app: connections and profiles on the left, a chat where the agent runs total.sh twice through the terminal tool and reports Total: 85.15, the composer with the model picker, and an orange pet in the corner">
+  <br><sub>The desktop app (<code>prometheus desktop</code>) with a chat on the local daemon and the profile's pet keeping watch.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/desktop-bots.png" width="410" alt="The desktop's Bots pane: a Work section with Research Buddy (a teal star avatar) and Scribe (a purple hexagon), and the default bot with its generated face">
+  <img src="docs/images/desktop-screen.png" width="410" alt="The desktop's Screen pane streaming the agent's virtual display, with the agent in control and a Take over button">
+  <br><sub>Bot Mode's roster: every profile is a bot with a title, avatar and section. The Screen pane streams the bot's own display and lets you take it over (here a stand-in VNC server shows a captured frame).</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/dashboard-kanban.png" width="820" alt="The dashboard's Kanban page: no worker running, the default board with seven tasks assigned to the analyst and writer profiles, two done and five ready, and the backlog counts">
+  <br><sub>The kanban board in the dashboard: tasks assigned to worker profiles, which the daemon's dispatcher runs.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/dashboard-evolution.png" width="410" alt="The dashboard's harness-evolution run: six proposal stages of a parallel k=2 run, the selector's pick agg2 because it totals the debits too, the candidate diffs and the adopted proposal">
+  <img src="docs/images/dashboard-experience.png" width="410" alt="The dashboard's experience library: the accounting domain with one high-confidence lesson, debits are negative amounts; sum every line, never only the positive ones">
+  <br><sub>After <code>prometheus demo --evolve</code>: the evolution run that fixed the ledger harness, and the lesson it filed in the experience library for later sessions.</sub>
 </p>
 
 ## Features
@@ -149,18 +175,22 @@ The workspace mirrors this split. Each crate owns one area:
 | Crate | Owns |
 |---|---|
 | `prometheus` | The binary: CLI, daemon entry point |
-| `pmt-core` | Shared types, ids, error taxonomy, exit codes |
-| `pmt-config` | Typed TOML config, profiles, secrets store |
-| `pmt-store` | SQLite sessions, search, retention |
-| `pmt-providers` | Model providers, credentials, routing |
-| `pmt-agent` | Turn loop, prompt, compression |
-| `pmt-tools`, `pmt-sandbox` | Tool registry, execution environments, OS sandboxes |
-| `pmt-skills`, `pmt-memory` | Skills and memory |
+| `pmt-core`, `pmt-net` | Shared types, ids, error taxonomy, exit codes; outbound HTTP and destination policy |
+| `pmt-config`, `pmt-vault` | Typed TOML config, profiles, secrets store; the credential vault |
+| `pmt-store`, `pmt-backup` | SQLite sessions, search, retention; backups and snapshots |
+| `pmt-providers`, `pmt-local` | Model providers, credentials, routing; local models |
+| `pmt-agent`, `pmt-automation`, `pmt-delegation` | Turn loop, prompt, compression; `/goal`, `/loop`, `/heartbeat`; subagents |
+| `pmt-tools`, `pmt-sandbox`, `pmt-worktrees` | Tool registry, execution environments, OS sandboxes, git worktrees |
+| `pmt-skills`, `pmt-skillhub`, `pmt-memory` | Skills, the skills hub and memory |
 | `pmt-obs` | Trajectories, logs, traces, cost ledger |
 | `pmt-plugins`, `pmt-mcp`, `pmt-pybridge` | WASM host, MCP, Python bridge |
-| `pmt-gateway`, `pmt-tui`, `pmt-web`, `pmt-acp` | Surfaces |
+| `pmt-gateway`, `pmt-rpc`, `pmt-adapters-*` | The daemon, its client protocol and the first-party messaging adapters |
+| `pmt-tui`, `pmt-web`, `pmt-desktop`, `pmt-acp`, `pmt-api` | Surfaces: TUI, dashboard, desktop shell core, editors, OpenAI-compatible API |
+| `pmt-a2a`, `pmt-sdk` | Agent2Agent protocol; embedding Prometheus in Rust programs |
 | `pmt-cron`, `pmt-kanban` | Scheduling and the task board |
-| `pmt-evolve`, `pmt-eval` | Harness evolution, replay and evals |
+| `pmt-evolve`, `pmt-eval` | Harness evolution and the experience library; replay and evals |
+| `pmt-voice`, `pmt-media` | Voice mode and wake word; image, video and speech tools |
+| `pmt-i18n`, `pmt-pets`, `pmt-update` | UI languages; pets and achievements; release verification and self-update |
 | `pmt-migrate` | Hermes and other agent importers |
 
 Design decisions are in [`design.md`](openspec/changes/bootstrap-prometheus-agent/design.md).
@@ -186,7 +216,7 @@ flowchart LR
 | **M0** Scaffolding | Workspace, `scripts/check`, CI on Tier 1/2 targets, health and perf gates, generated references | 12 | Done |
 | **M1** Core agent | Config and profiles, sessions, providers and subscription sign-in, tools, sandbox, turn loop, compression, skills, memory, CLI, self-update; offline `prometheus demo` | 154 | Done |
 | **M2** Multi-surface and extensibility | Daemon and RPC, TUI, messaging gateway and adapters, WASM/MCP/Python plugins, delegation, worktrees, cron, voice, local models, API server, Hermes migration | 204 | Done |
-| **M3** Desktop, dashboard, self-improvement | Desktop app, dashboard, ACP, kanban, harness evolution, experience library, evals, A2A, bot mode, computer use | 101 | In progress |
+| **M3** Desktop, dashboard, self-improvement | Desktop app, dashboard, ACP, kanban, harness evolution, experience library, evals, A2A, bot mode, computer use, voice upgrades, catalog adapters and plugins, pets | 101 | 98 done; 77.2, 79.2 and the exit gate 81.3 open |
 
 Each milestone ends with exit tests run in CI. Task-level detail is in [`tasks.md`](openspec/changes/bootstrap-prometheus-agent/tasks.md).
 

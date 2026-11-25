@@ -3,7 +3,8 @@
 //! survives reconnects, so the homeserver replays everything the adapter
 //! missed; the first connect only takes the current cursor (history is not
 //! answered). A two-member room is a DM; a reply in a thread carries the
-//! thread root; invites from allowed users are accepted.
+//! thread root; which rooms are read and invites accepted, and stale
+//! events, are [`crate::rooms`]'s.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -36,6 +37,12 @@ pub(crate) struct Run {
     pub(crate) user_id: String,
     pub(crate) cursor: Arc<Mutex<Cursor>>,
     pub(crate) allow_users: Vec<String>,
+    pub(crate) rooms: Arc<crate::rooms::Rooms>,
+    /// End-to-end encryption, when running.
+    pub(crate) crypto: Option<Arc<crate::crypto::Crypto>>,
+    pub(crate) encrypted: crate::e2ee::Encrypted,
+    /// Rooms already warned about an undecryptable event.
+    pub(crate) undecryptable: Arc<Mutex<std::collections::HashSet<String>>>,
     pub(crate) stop: CancellationToken,
 }
 
@@ -52,7 +59,13 @@ fn media(content: &Value) -> Option<Attachment> {
         "m.file" => MediaKind::Document,
         _ => return None,
     };
-    let mut attachment = Attachment::new(kind, content["url"].as_str()?);
+    // An encrypted attachment carries its URL and key under `file`.
+    let location = if content["file"].is_object() {
+        crate::crypto::attachment::location(&content["file"])?
+    } else {
+        content["url"].as_str()?.to_owned()
+    };
+    let mut attachment = Attachment::new(kind, &location);
     attachment.name = text(&content["filename"]).or_else(|| text(&content["body"]));
     attachment.duration_secs = content["info"]["duration"]
         .as_u64()
@@ -215,6 +228,7 @@ impl Run {
                     return;
                 }
             };
+            self.keys(&synced).await;
             self.joined(&synced["rooms"]["join"]).await;
             self.invited(&synced["rooms"]["invite"]).await;
             // The cursor moves only after the batch was handed over.
@@ -224,6 +238,7 @@ impl Run {
 
     async fn joined(&self, rooms: &Value) {
         for (room, data) in rooms.as_object().into_iter().flatten() {
+            self.note_encryption(room, data);
             if let Some(count) = data["summary"]["m.joined_member_count"].as_u64() {
                 let count = usize::try_from(count).unwrap_or(usize::MAX);
                 self.cursor
@@ -241,15 +256,87 @@ impl Run {
                         .members
                         .remove(room);
                 }
-                if event["type"].as_str() != Some("m.room.message") {
-                    continue;
-                }
-                let count = members(&self.api, &self.cursor, room).await;
-                if let Some(inbound) = message(event, room, &self.user_id, count) {
-                    self.link.submit(inbound).await;
+                match event["type"].as_str() {
+                    Some("m.room.message") => self.room_message(room, event).await,
+                    Some("m.room.encrypted") => self.encrypted_message(room, event).await,
+                    _ => {}
                 }
             }
         }
+    }
+
+    /// Takes `/sync`'s room keys and tops up the one-time keys.
+    async fn keys(&self, synced: &Value) {
+        let Some(crypto) = &self.crypto else { return };
+        crypto
+            .receive_to_device(&synced["to_device"]["events"])
+            .await;
+        if let Some(count) = synced["device_one_time_keys_count"]["signed_curve25519"].as_u64()
+            && let Err(why) = crypto.top_up(count).await
+        {
+            tracing::warn!(platform = crate::PLATFORM, "{why}");
+        }
+    }
+
+    /// Notes the rooms whose state or timeline turns encryption on.
+    fn note_encryption(&self, room: &str, data: &Value) {
+        let turned_on = ["state", "timeline"].iter().any(|part| {
+            data[part]["events"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|e| e["type"] == "m.room.encryption")
+        });
+        if turned_on {
+            self.encrypted
+                .lock()
+                .expect("encrypted poisoned")
+                .insert(room.to_owned(), true);
+        }
+    }
+
+    /// Decrypts an encrypted room event and handles it as a message; one
+    /// that cannot be decrypted is dropped (one WARN per room), never
+    /// passed on as ciphertext.
+    async fn encrypted_message(&self, room: &str, event: &Value) {
+        let decrypted = match &self.crypto {
+            Some(crypto) => crypto.decrypt(room, event),
+            None => Err("end-to-end encryption is not running (options.e2ee)".to_owned()),
+        };
+        match decrypted {
+            Ok(clear) if clear["type"] == "m.room.message" => self.room_message(room, &clear).await,
+            Ok(_) => {}
+            Err(why) => {
+                let first = self
+                    .undecryptable
+                    .lock()
+                    .expect("undecryptable poisoned")
+                    .insert(room.to_owned());
+                if first {
+                    tracing::warn!(
+                        platform = crate::PLATFORM,
+                        room,
+                        "an encrypted event was dropped: {why} (warned once per room)"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Submits a room message the room rules admit (allowed room, not
+    /// stale), scoped to its session.
+    async fn room_message(&self, room: &str, event: &Value) {
+        let count = members(&self.api, &self.cursor, room).await;
+        if !self.rooms.reads(room, count) {
+            return;
+        }
+        let Some(inbound) = message(event, room, &self.user_id, count) else {
+            return;
+        };
+        if self.rooms.stale(inbound.timestamp, Timestamp::now()) {
+            return;
+        }
+        self.link.submit(self.rooms.scoped(inbound)).await;
     }
 
     /// Joins rooms an allowed user invited the bot to.
@@ -265,11 +352,11 @@ impl Run {
                 })
                 .and_then(|e| e["sender"].as_str());
             let Some(inviter) = inviter else { continue };
-            if !self.allow_users.iter().any(|u| u == inviter) {
+            if !self.rooms.joins(inviter, &self.allow_users) {
                 tracing::info!(
                     platform = crate::PLATFORM,
                     room,
-                    "ignored an invite from an unlisted user"
+                    "ignored an invite (options.auto_join)"
                 );
                 continue;
             }

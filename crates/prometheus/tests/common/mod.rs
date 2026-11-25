@@ -340,6 +340,16 @@ pub mod a2a;
 pub mod api;
 #[cfg(feature = "gateway")]
 pub mod bots;
+#[cfg(feature = "gateway")]
+pub mod catalog;
+#[cfg(feature = "gateway")]
+pub mod catalog_crypt;
+#[cfg(feature = "gateway")]
+pub mod catalog_feishu;
+#[cfg(feature = "gateway")]
+pub mod catalog_jwt;
+#[cfg(feature = "gateway")]
+pub mod catalog_ws;
 #[cfg(all(unix, feature = "dashboard"))]
 pub mod connections;
 #[cfg(feature = "dashboard")]

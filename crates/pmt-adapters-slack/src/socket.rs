@@ -37,12 +37,14 @@ pub(crate) struct Run {
     /// The client with the app-level token.
     pub(crate) app: Api,
     pub(crate) link: Arc<dyn AdapterLink>,
-    pub(crate) bot_user: String,
-    pub(crate) team: Option<String>,
+    /// The workspaces served: each event is routed by its team.
+    pub(crate) workspaces: Arc<crate::workspaces::Workspaces>,
     pub(crate) extra_ca: Option<PathBuf>,
     /// How the WebSocket reaches the network.
     pub(crate) proxy: pmt_gateway::messaging::proxy::Proxy,
     pub(crate) slash: Arc<crate::slash::Replies>,
+    /// Which reactions start a turn.
+    pub(crate) reactions: crate::ReactionRule,
     pub(crate) stop: CancellationToken,
 }
 
@@ -158,18 +160,31 @@ impl Run {
 
     async fn envelope(&self, envelope: &Value) {
         let payload = &envelope["payload"];
+        let workspace = self.workspaces.of_team(team_of(payload));
+        let team = Some(workspace.team.as_str()).filter(|t| !t.is_empty());
+        let bot_user = workspace.bot_user.as_str();
         let inbound = match envelope["type"].as_str() {
             Some("events_api") => {
                 let event = &payload["event"];
-                normalize::message(event, self.team.as_deref(), &self.bot_user)
-                    .or_else(|| normalize::app_home(event, self.team.as_deref()))
+                normalize::message(event, team, bot_user)
+                    .or_else(|| normalize::app_home(event, team))
+                    .or_else(|| normalize::reaction(event, team, bot_user, &self.reactions))
             }
             Some("interactive") => normalize::action(payload),
-            Some("slash_commands") => self.slash.event(payload, self.team.as_deref()),
+            Some("slash_commands") => self.slash.event(payload, team),
             _ => None,
         };
         if let Some(inbound) = inbound {
+            self.workspaces.learn(&inbound.chat_id, &workspace.team);
             self.link.submit(inbound).await;
         }
     }
+}
+
+/// The workspace an envelope's payload comes from.
+fn team_of(payload: &Value) -> Option<&str> {
+    payload["team_id"]
+        .as_str()
+        .or_else(|| payload["team"]["id"].as_str())
+        .or_else(|| payload["event"]["team"].as_str())
 }

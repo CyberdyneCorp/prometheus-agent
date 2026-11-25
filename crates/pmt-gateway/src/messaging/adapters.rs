@@ -234,12 +234,92 @@ impl Adapters {
             .filter(|s| matches!(s.state(), AdapterState::Connected | AdapterState::Degraded))
     }
 
-    /// A send succeeded: a degraded adapter is confirmed active.
+    /// A send succeeded: a degraded adapter is confirmed active (not one
+    /// degraded because the forwarding upstream is unreachable, nor one
+    /// serving only some of its accounts).
     pub(crate) fn confirm(&self, profile: &str, platform: &str) {
         if let Some(slot) = self.slot(profile, platform)
             && slot.state() == AdapterState::Degraded
+            && !matches!(
+                slot.status().code.as_deref(),
+                Some(UPSTREAM_DOWN | super::adapter::PARTIAL_OUTAGE)
+            )
         {
             slot.set(AdapterState::Connected, None);
+        }
+    }
+
+    /// Sends (or with `edit_of` edits) a message already rendered for the
+    /// platform: what a forwarding host's upstream asks for.
+    pub(crate) async fn send_rendered(
+        &self,
+        profile: &str,
+        platform: &str,
+        message: &Outgoing,
+        edit_of: Option<&str>,
+    ) -> Result<Option<String>, SendError> {
+        let slot = self
+            .ready(profile, platform)
+            .ok_or_else(|| SendError::Network("the adapter is not connected".to_owned()))?;
+        match edit_of {
+            Some(id) => slot.adapter.edit(id, message).await.map(|()| None),
+            None => slot.adapter.send(message).await.map(|sent| sent.message_id),
+        }
+    }
+
+    /// Opens an inbound attachment with `profile`'s adapter of `platform`.
+    pub(crate) async fn open_media(
+        &self,
+        profile: &str,
+        platform: &str,
+        attachment: &super::adapter::Attachment,
+    ) -> Result<super::adapter::MediaStream, SendError> {
+        let slot = self
+            .slot(profile, platform)
+            .ok_or_else(|| SendError::Network("the adapter is not running".to_owned()))?;
+        slot.adapter.open_media(attachment).await
+    }
+
+    /// The descriptor of each running adapter's platform (the first
+    /// profile's where several run it).
+    pub(crate) fn descriptors(&self) -> BTreeMap<String, Descriptor> {
+        let mut out = BTreeMap::new();
+        for ((_, platform), slot) in self.slots.read().expect("adapters poisoned").iter() {
+            if !slot.relayed {
+                out.entry(platform.clone())
+                    .or_insert_with(|| slot.descriptor.clone());
+            }
+        }
+        out
+    }
+
+    /// Whether any profile runs an adapter of `platform`.
+    pub(crate) fn runs(&self, platform: &str) -> bool {
+        self.slots
+            .read()
+            .expect("adapters poisoned")
+            .keys()
+            .any(|(_, p)| p == platform)
+    }
+
+    /// The forwarding upstream became reachable (`up`) or not: connected
+    /// adapters turn `degraded` with [`UPSTREAM_DOWN`], and back.
+    pub(crate) fn upstream_changed(&self, up: bool, why: &str) {
+        let slots: Vec<Arc<Slot>> = self
+            .slots
+            .read()
+            .expect("adapters poisoned")
+            .values()
+            .cloned()
+            .collect();
+        let error = upstream_down(why);
+        for slot in slots {
+            let status = slot.status();
+            if up && status.code.as_deref() == Some(UPSTREAM_DOWN) {
+                slot.set(AdapterState::Connected, None);
+            } else if !up && live(status.state, status.code.as_deref()) {
+                slot.set(AdapterState::Degraded, Some(&error));
+            }
         }
     }
 
@@ -596,7 +676,8 @@ async fn connect_once(
             code: "unconfirmed".to_owned(),
             message: UNCONFIRMED.to_owned(),
         };
-        slot.set(AdapterState::Degraded, Some(&unconfirmed));
+        let (state, error) = behind_upstream(shared, AdapterState::Degraded, Some(unconfirmed));
+        slot.set(state, error.as_ref());
     }
     if outcome.is_ok() {
         super::menus::register(shared, key, slot);
@@ -830,7 +911,7 @@ fn front_profile(
             .write()
             .expect("adapters poisoned")
             .remove(&key);
-        let view: Arc<dyn Adapter> = Arc::new(RelayView::new(relay, platform));
+        let view: Arc<dyn Adapter> = Arc::new(RelayView::new(relay, profile, platform));
         launch_slot(shared, key, view, true);
     }
 }
@@ -870,6 +951,43 @@ pub(crate) async fn disconnect_all(shared: &Shared) {
     }
 }
 
+/// The adapter error code of a forwarding host's adapters while its
+/// upstream is unreachable.
+pub(crate) const UPSTREAM_DOWN: &str = "upstream_unreachable";
+
+/// Connected, or freshly connected and not yet confirmed.
+fn live(state: AdapterState, code: Option<&str>) -> bool {
+    state == AdapterState::Connected
+        || (state == AdapterState::Degraded && code == Some("unconfirmed"))
+}
+
+/// A forwarding host's adapter is only as good as its upstream: a live
+/// state is `degraded` with [`UPSTREAM_DOWN`] while the upstream is down.
+fn behind_upstream(
+    shared: &Weak<Shared>,
+    state: AdapterState,
+    error: Option<AdapterError>,
+) -> (AdapterState, Option<AdapterError>) {
+    let upstream = shared
+        .upgrade()
+        .and_then(|shared| shared.forwarder.get().map(|f| f.down_reason()))
+        .flatten();
+    match upstream {
+        Some(why) if live(state, error.as_ref().map(|e| e.code.as_str())) => {
+            (AdapterState::Degraded, Some(upstream_down(&why)))
+        }
+        _ => (state, error),
+    }
+}
+
+fn upstream_down(why: &str) -> AdapterError {
+    AdapterError {
+        retryable: true,
+        code: UPSTREAM_DOWN.to_owned(),
+        message: format!("the upstream daemon is unreachable: {why}"),
+    }
+}
+
 /// An adapter's way to the gateway.
 struct Link {
     shared: Weak<Shared>,
@@ -900,6 +1018,7 @@ impl AdapterLink for Link {
         let Some(slot) = self.slot.upgrade() else {
             return;
         };
+        let (state, error) = behind_upstream(&self.shared, state, error);
         slot.set(state, error.as_ref());
         if matches!(state, AdapterState::Retrying | AdapterState::Fatal) {
             slot.lost.notify_one();

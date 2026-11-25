@@ -133,6 +133,46 @@ natively; a rich message Telegram refuses is sent as `MarkdownV2` in
 4096-character parts, and a Bot API without rich messages turns them off
 until the adapter restarts.
 
+A self-hosted Bot API server lifts Telegram's 20 MB limit on the files a
+bot may download to 2048 MB: log the bot out of the public server once
+(`prometheus gateway telegram logout`), then point
+`options.api_base_url` (and `options.file_base_url`, default
+`<api_base_url>/file`) at your server. With `options.local_mode = true`
+(a server run with `--local`) files are read from the absolute path the
+server returns, which must be readable on this host (`local Bot API file
+not readable: <path>` otherwise). `gateway.media.max_inbound_bytes`
+(128 MB) still applies: a larger file is refused with the effective
+maximum named.
+
+Where `api.telegram.org` does not connect (blocked DNS or addresses), the
+adapter retries on fallback addresses: those DNS-over-HTTPS discovery
+finds (asked once per connection, given up on after
+`options.fallback_discovery_timeout_secs`, 5 by default), then
+`options.fallback_ips` (by default `149.154.166.110` and
+`149.154.167.220`). TLS is still validated for `api.telegram.org`, the
+first address that works is kept for the connection, and connecting gives
+up after 30 seconds (the gateway then retries). `options.fallback_ips = []`
+turns this off, as does a proxy (it resolves the host itself) or a
+self-hosted server; `options.force_ipv4 = true` connects over IPv4 only.
+
+How the bot presents itself:
+
+- `options.notifications = "important"` (the default) delivers silently
+  everything but final replies, approvals and command confirmations;
+  `all` notifies for every message.
+- Progress and long-running notices are edited in place; when an edit
+  fails, the update is sent as a new message.
+- `options.pin_during_turn = true` pins the message that started a turn
+  (silently) while the turn runs.
+- `options.status_indicator = true` sets the bot's short description to
+  `options.status_online` ("Online") while the daemon serves it and to
+  `options.status_offline` ("Offline") after a clean stop.
+- `options.drop_pending_on_cold_boot` (default `true`) drops the updates
+  queued while the daemon was stopped, on its first start only: a
+  reconnect, or a restart of the adapter, keeps them.
+- `options.disable_link_previews = true` sends messages without link
+  previews.
+
 Discord reads `DISCORD_BOT_TOKEN`, connects to the Discord Gateway and
 resumes the session after a dropped connection, so missed messages are
 replayed; the bot needs the Message Content privileged intent, and
@@ -149,6 +189,18 @@ sharing the application sets. Both adapters send buttons for approvals, typing
 indicators, reactions and files, and both read the token from the owning
 profile's secrets only.
 
+The Discord adapter also brings two tools to Discord sessions (and to
+sessions that enable their toolsets): `discord` (`fetch_messages`,
+`search_members`, `create_thread`) and `discord_admin` (`list_guilds`,
+`server_info`, `list_channels`, `channel_info`, `list_roles`,
+`member_info`, `list_pins`, `pin_message`, `unpin_message`,
+`delete_message`, `add_role`, `remove_role`). `options.server_actions`
+lists the actions they may use: the others are left out of both tools and
+refused when called ("action add_role disabled by config"); an unknown
+name fails validation. Without the Server Members intent (checked at
+connect, remembered for a day) `member_info` and `search_members` are
+hidden.
+
 The other first-party adapters:
 
 - **Slack** uses Socket Mode with the app-level token `SLACK_APP_TOKEN`
@@ -163,7 +215,21 @@ The other first-party adapters:
   `prometheus gateway slack-manifest` prints an app manifest with Socket
   Mode, the scopes, the events and every slash command (`--write` saves
   it as `<profile>/slack-manifest.json`, `--commands-only` prints the
-  command list).
+  command list). `options.reaction_triggers` makes reactions start
+  turns: `true` for any reaction on the bot's own messages, or a list of
+  emoji names (`["eyes"]`) on any message (default `false`: reactions are
+  dropped). The turn's text is `reaction:added:<emoji>` with the reacted
+  message as its reply context, it answers in
+  `options.reaction_trigger_target` (`channel` or `channel:thread_ts`)
+  when set, and the reacting user must be authorized like any author.
+  One app can serve several workspaces: list more bot-token secrets in
+  `options.bot_token_secrets`, and workspaces installed through OAuth add
+  theirs as `SLACK_BOT_TOKEN_<team id>` (a Hermes `slack_tokens.json` is
+  migrated that way). Each token is checked with `auth.test` at connect
+  (a token listed twice counts once); events and replies are routed by
+  workspace, and a refused token leaves the adapter `degraded`
+  (`partial_outage`, naming the team) while the other workspaces are
+  served.
 - **Email** polls the inbox over IMAP every `options.poll_interval_secs`
   (15) and answers over SMTP as `options.address` with the password in
   `EMAIL_PASSWORD`. `options.imap_host` and `options.smtp_host` are
@@ -183,8 +249,31 @@ The other first-party adapters:
   Allowlist entries are whole addresses.
 - **Matrix** syncs with `options.homeserver` using `MATRIX_ACCESS_TOKEN`;
   the sync cursor survives reconnects, a two-member room is a direct
-  chat, and invites from `allow_users` are accepted. Rooms are not
-  end-to-end encrypted yet.
+  chat. `options.allowed_rooms` (internal `!room:server` ids; a `#alias`
+  fails validation) limits the rooms read, before any other gating,
+  direct chats exempt. `options.auto_join` accepts invites from
+  `authorized` users (`allow_users`, the default), `all` or `none`.
+  `options.session_scope` is `auto` (each thread its own session),
+  `room` (one session and workspace binding per room) or `thread` (every
+  top-level message starts its own thread). Events older than the
+  adapter's start minus 5 seconds are dropped; more than 10 such drops
+  after the first 30 seconds log one warning naming clock skew.
+  Encrypted rooms work with end-to-end encryption (`options.e2ee`:
+  `optional` by default, `off` or `required`); the access token must
+  belong to a device. The device's Olm/Megolm keys live in
+  `<profile>/platforms/matrix/crypto/` (mode 0700, pickles encrypted with
+  the generated secret `MATRIX_CRYPTO_STORE_KEY`); its keys are uploaded
+  at first connect, replies and files into an encrypted room are
+  encrypted for every member device, and nothing is sent into one in the
+  clear. With the secret `MATRIX_RECOVERY_KEY` (the account's recovery
+  key) the device is signed with the self-signing key from secret storage
+  at every start, so other users' clients trust it. An event that cannot
+  be decrypted is dropped with one warning per room. When encryption
+  cannot start (a corrupted store, a token without a device, a store whose
+  keys no longer match the homeserver, which names the remediation:
+  delete the store and the key secret and sign in as a new device),
+  `required` stops the adapter (`fatal`, `matrix_e2ee_unavailable`,
+  before any room is read) and `optional` goes on without encrypted rooms.
 - **Signal** talks to a signal-cli HTTP daemon at `options.http_url` for
   the account `options.account` (E.164). Run the daemon with
   `--receive-mode on-connection` so Signal holds messages while the
@@ -296,6 +385,64 @@ prompt = "ALERT {alert.name} on {alert.host}"
 filters = { equals = { path = "payload.alert.severity", value = "critical" } }
 ```
 
+**Coalescing.** A burst of events about one item (a pull request pushed
+five times in a minute) should run one turn, not five. A route with a
+`coalesce` block holds events whose `key` resolves to the same value:
+`key` is a payload dot path (`pull_request.number`, optionally prefixed
+`payload.`) or a template (`{repository.full_name}#{number}`). Each newer
+event replaces the pending one and restarts the quiet window of
+`window_secs` (30); the turn runs on the newest event when the window
+elapses, or `max_wait_secs` (300) after the group's first event, so a
+steady stream cannot starve it. The sender gets 202
+`{"status":"coalesced",...}` at once (after the duplicate check, so a
+redelivery is still answered `duplicate`), and the turn's input ends with
+a note of how many earlier events it superseded. An event whose key does
+not resolve runs at once. Pending groups are flushed, not dropped, when
+the adapter stops. Coalescing applies only to routes that run a turn:
+with `deliver_only` or `cron_job` it fails validation, as does an empty
+`key`.
+
+```toml
+[gateway.platforms.webhook.routes.pr]
+secret_secret = "GITHUB_WEBHOOK_SECRET"
+events = ["pull_request"]
+prompt = "Review PR #{pull_request.number}: {pull_request.title}"
+coalesce = { key = "pull_request.number", window_secs = 60 }
+```
+
+**Public URL.** `gateway.platforms.webhook.options.public_url` is the
+`https://` origin that reaches the daemon's listener from outside (a
+reverse proxy or tunnel in front of `gateway.http.listen`); a route's
+public address is `<public_url>/p/<profile>/webhook/<route>`. It is
+required for [MCP event subscriptions](mcp.md#events), which refuse a
+plain `http://` origin.
+
+```toml
+[gateway.platforms.webhook]
+options = { public_url = "https://hooks.example.com" }
+```
+
+**MCP events.** A route created by an MCP server's `subscribe_event` (see
+[MCP servers](mcp.md#events)) is kept in `<profile>/webhooks.toml` with an
+`mcp_event` block and accepts only Standard Webhooks signatures with its
+own generated secret. A body with a top-level `type` is a control
+envelope answered without a turn: `verification` echoes its challenge,
+`terminated` removes the route and tells its `deliver` target, `gap`
+resumes from the fresh cursor it carries, and an unknown type is
+acknowledged. Any other body is an event occurrence: its replay cursor is
+remembered, a retry of the same `eventId` is answered `duplicate`, and it
+runs through the route's normal pipeline. The event's `data` is inserted
+into the prompt after the template is rendered, as JSON cut at 32,000
+characters, so text inside it is never read as a placeholder.
+
+`prometheus gateway selftest <platform> [--peer-agent [--peer-id <id>]]`
+replays synthetic messages through the platform's admission and mention
+gating, offline and without credentials: a direct message and a group
+mention from an authorized sender, and with `--peer-agent` another bot
+mentioning this agent. Each failed check is named with its category
+(`config`, `platform_connectivity`, `bot_identity` or `routing_logic`);
+it exits 0 only when every check passes (`--json` prints the report).
+
 `prometheus plugins test-adapter <platform>` runs the adapter conformance
 kit (connect and reconnect, descriptor, normalization, deduplication,
 splitting at the declared limit, retry classification, cards and every
@@ -403,6 +550,287 @@ sample through the listener and prints the session it started.
 prometheus webhooks subscribe deploys --events push --deliver telegram:123
 prometheus webhooks test deploys
 ```
+
+### Catalog adapters
+
+Other platforms arrive as first-party adapter plugins from the plugin
+catalog (`prometheus plugins install <id>`, then `prometheus plugins
+enable <id>`); each passes the conformance kit against a mock of its
+platform. Adapters that hold a socket (IRC, Home Assistant, ntfy,
+Mattermost, DingTalk, Feishu, SimpleX, WeCom, Weixin, QQ Bot, Yuanbao, Buzz) run a small
+Node sidecar, the socket bridge, which connects only to the hosts the
+plugin was granted; a server other than the declared default is granted
+with `prometheus grants add plugin:<id>@<digest> net.connect:<host>:<port>`.
+Every sidecar runs under the OS sandbox: it reads the system toolchain,
+its plugin's files and runtime and the plugin's `fs.read` grants, writes
+only its data directory (`<profile>/plugin-data/<id>/sidecar`, also its
+`TMPDIR`) and the plugin's `fs.write` grants, connects only on the ports of
+the plugin's `net.connect` grants, and starts processes only with a
+`process.spawn` grant. A sidecar that runs a platform CLI keeping its own
+login in the user's home asks for `fs_read = ["~/**"]` in `[capabilities]`
+(Raft), which the user approves like any other capability; credential
+stores stay unreadable either way. The approval screen also names the
+sidecar the plugin runs (its command, and whether it is a Node script or
+the plugin's own executable).
+
+- `sms` (Twilio): set `account_sid`, `phone_number` and `public_url` (the
+  exact webhook URL configured in Twilio, which it signs) and the secret
+  `TWILIO_AUTH_TOKEN`. A webhook with a bad `X-Twilio-Signature` is
+  answered 401; messages from the adapter's own number are ignored;
+  replies are plain text (Markdown stripped) of at most 1600 characters,
+  and choices are numbered.
+- `irc`: `server`, `channels`, and optionally `port` (6697 with
+  `use_tls`, the default, else 6667) and `nickname` (`prometheus-bot`);
+  secrets `IRC_SERVER_PASSWORD` and `IRC_NICKSERV_PASSWORD` (NickServ
+  `IDENTIFY`). Channels are groups (a message starting with or naming the
+  nickname mentions the bot), private messages are DMs, and replies are
+  `PRIVMSG` lines of at most 450 bytes. The server and nickname are locked
+  across homes like a bot token.
+- `homeassistant`: `url` (default `http://homeassistant.local:8123`),
+  secret `HASS_TOKEN`, and what to watch: `watch_domains`,
+  `watch_entities` or `watch_all` (off by default; nothing is forwarded,
+  with a warning, until one is set), minus `ignore_entities`, each entity
+  at most once per `cooldown_secs` (30). `event_template` shapes the
+  event text (`{name} ({entity_id}) changed from {old} to {new}`). Replies
+  become persistent notifications; a cron job delivers to
+  `homeassistant:<notify target>`. The platform brings the
+  `homeassistant` toolset: `ha_list_entities`, `ha_get_state`,
+  `ha_list_services` and `ha_call_service`, which refuses the
+  `shell_command`, `command_line`, `python_script`, `pyscript`, `hassio`
+  and `rest_command` domains.
+- `raft` (wake-only): `raft_profile` (and `raft_command`, default `raft`).
+  Its sidecar runs `raft agent bridge` with only the profile, a wake token
+  made fresh at every start, and `PATH`/`HOME` in its environment; each
+  wake hint becomes a content-free notice and the agent reads and answers
+  with the Raft CLI. A hint carrying `text`, `body`, `content` or
+  `messages`, or sent with an earlier start's token, is refused. The
+  bridge child runs inside the sidecar's OS sandbox (it may read the home,
+  where the Raft CLI keeps its login, but no credential store).
+- `ntfy`: `topic`, and optionally `server_url` (`https://ntfy.sh`),
+  `publish_topic` (the topic) and `markdown`; secret `NTFY_TOKEN` for a
+  protected topic. The topic is the only identity: list it in
+  `allow_users` to admit what is published there. Without any allowlist
+  the adapter only publishes (cron deliveries, `prometheus gateway send`)
+  and subscribes to nothing. A 401 or 404 stops it (`ntfy_unauthorized`,
+  `ntfy_topic_not_found`); replies longer than 4096 characters are cut
+  with a notice.
+- `mattermost`: `server_url`, secret `MATTERMOST_TOKEN`, and optionally
+  `allowed_channels` (checked first: other channels are ignored even when
+  the bot is mentioned), `free_response_channels` (no mention needed) and
+  `reply_mode` (`off` or `thread`). DMs are always answered; `allow_users`
+  takes 26-character user ids. Files go both ways.
+- `line`: `public_url` (the HTTPS URL of the adapter's route; LINE fetches
+  sent media from it) and secrets `LINE_CHANNEL_SECRET` and
+  `LINE_CHANNEL_ACCESS_TOKEN`; `allowed_users`, `allowed_groups` and
+  `allowed_rooms` take `U`, `C` and `R` ids. Replies use the free reply
+  token, then Push. A turn slower than `slow_response_secs` (45; 0 off)
+  spends the token on a "Still thinking" button whose press delivers the
+  answer.
+- `bluebubbles` (iMessage): `server_url`, `public_url` (where the
+  BlueBubbles server reaches the adapter's route) and secret
+  `BLUEBUBBLES_PASSWORD`; the webhook is registered at connect and removed
+  at a clean stop. With the server's Private API, tapbacks, typing and
+  read receipts (`send_read_receipts`, default on) work. Groups can be
+  limited to `mention_patterns` with `require_mention`.
+- `dingtalk`: `client_id` and secret `DINGTALK_CLIENT_SECRET` (Stream
+  Mode, no public URL); `card_template_id` streams replies into one AI
+  Card; groups need an @mention unless listed in `free_response_chats` or
+  matching `mention_patterns`. Replies follow an incoming message (its
+  session webhook) and are cut at 20000 characters.
+- `simplex`: a local `simplex-chat -p 5225` daemon (`ws_url`, default
+  `ws://127.0.0.1:5225`). `allow_users` takes numeric contact ids (a
+  display name fails validation); contact requests are accepted
+  (`auto_accept`) but stay unauthorized until paired; groups are heard
+  only when listed in `allow_groups`. Receiving files needs a grant on the
+  daemon's files folder (`fs.read:<folder>/**`); files are sent by path.
+
+- `feishu` (Feishu, or Lark with `domain = "lark"`): create the bot app
+  with `prometheus gateway setup feishu` (scan the QR code with the Feishu
+  or Lark app; the secret is stored as `FEISHU_APP_SECRET`, the app id and
+  domain as options), or set `app_id` and the secret by hand.
+  `connection_mode = "websocket"` (the default) holds Feishu's long
+  connection through the bridge sidecar; `"webhook"` takes events at
+  `/p/<profile>/feishu/`, checked with the secrets
+  `FEISHU_VERIFICATION_TOKEN` (required: webhook mode refuses to start
+  without it) and `FEISHU_ENCRYPT_KEY` (signature
+  `sha256(timestamp + nonce + key + body)`, encrypted bodies, 401 on a
+  mismatch, 1 MB bodies, 120 requests a minute per source, a warning after
+  25 failures in a row). `dm_policy` (`pairing` by default) with
+  `allow_from`; `group_policy` (`allowlist` by default, `open`,
+  `disabled`) with `group_allow_from`, `admins`, `require_mention`
+  (true) and per-chat `group_rules.<chat_id> = {policy, allowlist,
+  blacklist, require_mention}` (`policy` also `blacklist` or
+  `admin_only`); an empty group allowlist drops group messages with one
+  warning per chat. Quick messages from one sender are joined (0.6 s, up to
+  8 messages or 4000 characters; `batch_delay_ms = 0` turns it off), files
+  wait 0.8 s for their caption. Markdown goes out as a rich post (plain
+  text when Feishu refuses it), approvals as cards whose presses count once.
+  Document comments that mention the bot become turns in chat
+  `comment:<type>:<token>:<comment>:<whole|local>` carrying the document
+  text and the thread (last 20 messages of whole-document comments, 12 of
+  a selection's); the reply goes into the thread in 4000-character pieces.
+  Who may comment is set in `<profile>/plugin-data/feishu/files/comment_rules.json`
+  (`{"policy": "pairing", "allow_from": [..], "documents": {"docx:<token>":
+  {..}, "*": {..}}}`: the exact document rule, else `*`, else the top
+  level; policy `allowlist` or `pairing`); `prometheus gateway feishu
+  comment-rules status`, `check <type:token> <open_id>` and `pairing
+  add|remove|list` manage it. Meeting invitations with an inviter and a
+  meeting number reach the inviter's direct chat. The `feishu_doc`
+  (`feishu_doc_read`) and `feishu_drive` (`feishu_drive_list_comments`,
+  `feishu_drive_list_comment_replies` with pages of at most 100,
+  `feishu_drive_reply_comment`, `feishu_drive_add_comment`) toolsets call
+  the Open API with the app's credentials and are only in Feishu sessions.
+- `wecom` (WeCom smart robot, no public URL): `bot_id`, secret
+  `WECOM_BOT_SECRET`, and optionally `websocket_url`,
+  `stream_keepalive_secs` (120), `dm_policy` (`open`, `allowlist`,
+  `pairing`, `disabled`), `allow_from`, `group_policy`, `group_allow_from`
+  and per-group sender allowlists `groups = {G1 = {allow_from = [..]}}`.
+  Replies stream into one native message that edits update; after 330 s
+  later parts go out as new messages. Inbound media is decrypted with its
+  message's key; outbound media over WeCom's limits (image 10 MB, voice
+  2 MB, video 10 MB) goes as a file with a notice, over 20 MB not at all.
+  Grant the media hosts the bot downloads from.
+- `wecom_callback` (self-built WeCom apps): `apps = [{name, corp_id,
+  agent_id}, ...]` (up to 4) and, for the n-th app, secrets
+  `WECOM_CALLBACK_CORP_SECRET_<n>`, `WECOM_CALLBACK_TOKEN_<n>` and
+  `WECOM_CALLBACK_AES_KEY_<n>`. Callbacks arrive on the shared listener,
+  are acknowledged at once, and are answered through the app the user
+  wrote to (users are `<corp_id>:<user_id>`); text is split at 2048 bytes.
+- `weixin` (a personal WeChat account over the iLink bot API): option
+  `account_id` and secret `WEIXIN_TOKEN`; `dm_policy` (open), `allow_from`,
+  `group_policy` (disabled; a warning when enabled), `group_allow_from`.
+  The per-peer context token is kept across restarts; an expired session
+  pauses polling for 10 minutes; media is AES-128-ECB both ways. Log in
+  with `prometheus gateway setup weixin`: scan the QR code with WeChat and
+  confirm; the token is stored as `WEIXIN_TOKEN` and the account id as
+  `options.account_id` (an expired code is refreshed up to three times).
+- `qqbot`: `app_id`, secret `QQBOT_CLIENT_SECRET`, and optionally
+  `dm_policy`, `group_policy`, `allow_from`, `group_allow_from` and
+  `keyboards = true` (approvals as message keyboards; numbered text
+  otherwise, answered by the number). A voice message with QQ's own
+  transcript arrives as that text, without the clip; files over 10 MB are
+  uploaded in parts.
+- `yuanbao`: `app_id`, secret `YUANBAO_APP_SECRET`, and optionally
+  `dm_policy`, `group_policy` (`open` by default), `allow_from`,
+  `group_allow_from`. Chats are `direct:<account>` and
+  `group:<group code>`; forwarded chat history arrives as its senders'
+  lines; media is fetched only from public HTTPS URLs. The `yuanbao`
+  toolset (`yb_query_group_info`, `yb_query_group_members`, `yb_send_dm`,
+  `yb_search_sticker` with at most 50 results, `yb_send_sticker`) acts
+  through the adapter, so it works in the process that runs the gateway.
+
+- `buzz` (Block's Nostr relay): `relay_url` (wss://), `channels`, `name`
+  (the bot's mention name) and secret `BUZZ_PRIVATE_KEY` (nsec or hex);
+  optionally `transport` (`auto`, `websocket`, `poll`), `poll_interval_secs`
+  (4), `cli_path` (`buzz`), `reply_in_thread` (true) and
+  `attachment_hosts`. The relay socket authenticates with NIP-42 and
+  subscribes from the moment it connects (no history replay); when it
+  cannot connect, `auto` polls through the Buzz CLI. Everything is sent
+  with the Buzz CLI, which receives the key in its environment only.
+  Channels answer only when the bot is mentioned (name, npub or key); DMs
+  always. Inbound files are fetched only from the relay's origin or
+  `attachment_hosts` over HTTPS, and only kept when their SHA-256 matches.
+
+- `photon` (iMessage through Photon's managed lines): run `prometheus
+  gateway photon setup --phone <E164>` (device login in the browser,
+  project and project secret into the secrets store, your number
+  registered, sidecar installed; `--no-install` leaves the install to the
+  first connect) and `prometheus gateway photon status` (the iMessage line
+  each number texts). The sidecar runs Photon's Spectrum SDK; inbound
+  files reach the agent as markers naming the file and its type, never
+  their bytes. Choices go out as native polls (a vote, or replying with
+  the number, picks one); a reply starting with `[effect:<name>]` (`slam`,
+  `loud`, `gentle`, `invisible_ink`, ...) is sent with that effect. Read
+  receipts are sent unless `read_receipts = false`; `dashboard_url`,
+  `spectrum_url` and `dashboard_project` override Photon's defaults.
+
+- `whatsapp_cloud` (Meta's WhatsApp Cloud API): `phone_number_id` (15 to
+  17 digits), and optionally `api_version` (`v20.0`),
+  `reengagement_template` and `template_language` (`en_US`); secrets
+  `WHATSAPP_CLOUD_ACCESS_TOKEN` and `WHATSAPP_CLOUD_APP_SECRET`. Run
+  `prometheus gateway whatsapp-cloud setup` for the verify token (stored as
+  `WHATSAPP_CLOUD_VERIFY_TOKEN`, or the secret `verify_token_secret`
+  names) and paste it with the public URL of `/p/<profile>/whatsapp_cloud/`
+  into the Meta app's webhook settings. The handshake echoes the challenge
+  only for that token (403 otherwise); notifications must carry a valid
+  `X-Hub-Signature-256` (401; 503 while the app secret is missing).
+  Messages are marked read with a typing indicator. Choices become reply
+  buttons (up to 3, labels cut to 20 characters) or a list (up to 10, rows
+  cut to 24); approvals show Approve and Deny and number every choice, and
+  a numbered answer picks one. Voice replies go out as OGG/Opus voice
+  notes. Outside the 24-hour window (Graph error 131047) the
+  `reengagement_template` is sent and the reply waits for the user's
+  answer; without one the delivery fails as "WhatsApp 24-hour window
+  closed", which the outbox records and the other surfaces are told.
+- `msgraph_webhook` (Microsoft Graph change notifications): secret named by
+  `client_state_secret` (the subscriptions' `clientState`; the default
+  grant is `MSGRAPH_CLIENT_STATE`; the adapter does not start without it),
+  and optionally `accepted_resources` (a trailing `*` matches a prefix),
+  `allowed_source_cidrs` (required when `gateway.http.public = true`),
+  `max_seen_receipts` (5000) and `prompt` (`{resource}`, `{change_type}`,
+  `{subscription_id}`, `{notification.<field>}`). `validationToken` is
+  echoed as text; a batch is answered 202 (admitted or duplicate), 403
+  (every `clientState` wrong, or a source outside the ranges) or 400
+  (malformed, or nothing accepted). Each notification is a message from
+  `msgraph`; replies are kept in `plugin-data/msgraph_webhook/files/replies.jsonl`.
+  The shared listener tells adapters the client's address in the
+  `x-prometheus-peer` header (one the client sends is dropped).
+- `teams` (Microsoft Teams through the Bot Framework): `client_id` (the
+  bot's app id), `tenant_id`, secret `TEAMS_CLIENT_SECRET`, and optionally
+  `require_mention` (true) and `service_url`. Point the bot's messaging
+  endpoint at `/p/<profile>/teams/`. Every activity needs a valid Bot
+  Framework JWT (issuer, audience = `client_id`, keys from the published
+  metadata, the activity's service URL) or is answered 401; bodies over
+  1 MiB are refused. Personal chats are always answered; group chats and
+  channels only when the bot is @mentioned or a message replies to one of
+  its own (`require_mention = false` admits every channel message
+  resource-specific consent delivers). Users are their Entra ID object
+  ids. Approvals and choices are Adaptive Cards (Allow Once, Allow
+  Session, Always Allow, Deny), replaced in place with the decision.
+- `teams_meetings` (Teams meeting summaries, built on the Graph listener
+  above, at `/p/<profile>/teams_meetings/`): `client_id`, `tenant_id`,
+  secret `MSGRAPH_CLIENT_SECRET` (an app with the online-meeting
+  transcript permissions), `public_url` (the HTTPS URL Graph posts to),
+  `client_state_secret`, `delivery` (`incoming_webhook`, the URL in the
+  secret `webhook_secret` names, default `TEAMS_MEETINGS_WEBHOOK_URL`; or
+  `graph`, into the meeting chat), and optionally `use_recordings`,
+  `summary_prompt`, `renew_within_minutes` (60), `extend_minutes` (4200)
+  and `renew_check_secs` (300). `prometheus plugins run teams_meetings
+  subscribe|list|renew [<id>]|remove <id>|status|replay <meeting-id>`
+  manages it. Each transcript of a meeting becomes one summary turn, in a
+  session of its own, on the profile's main route (a recording stands in,
+  transcribed, only with `use_recordings`). A transcript is summarized
+  once, keyed by meeting id and transcript (its `contentCorrelationId`,
+  which the recording of the same occurrence shares, else its id): `status`
+  shows a later notification for it as `duplicate`, while the next
+  occurrence of a recurring meeting brings a new transcript and its own
+  summary. A summary whose delivery fails for good, or that has not been
+  delivered within an hour, no longer blocks a later notification for the
+  same transcript. Subscriptions are renewed before they expire.
+- `google_chat`: Pub/Sub pull (`project_id`, `subscription`,
+  `max_messages`, default 1) or `mode = "http"` callbacks at
+  `/p/<profile>/google_chat/` (`audience` and `service_account_email`;
+  every callback's Google-signed ID token is checked, 401 otherwise);
+  secret `GOOGLE_CHAT_SERVICE_ACCOUNT_JSON` (the app's service-account key,
+  as JSON). Spaces keep one session per thread. A working-state message
+  ("Prometheus is thinking…") is replaced by the reply unless
+  `typing_indicator = false`. Choices are a Card v2 with a button each
+  (clarify adds "Other"). Attachment tokens only go to Google hosts.
+  Files: Chat lets an app attach files only as a user, so each user sends
+  `/setup-files start` once (option `oauth_client_id`, secret
+  `GOOGLE_CHAT_OAUTH_CLIENT_SECRET`), opens the link, and pastes the
+  address the browser then fails to load as `/setup-files <address>`;
+  their token is kept in the secrets store (`GOOGLE_CHAT_USER_TOKENS`) and
+  `/setup-files revoke` removes it. Without one, a file arrives as a
+  notice saying how to enable it.
+
+Adapter plugins exchange files with the host as base64 (inbound files the
+plugin downloaded under its own grants, or a local file inside its
+`fs_read` grant), and ask the host for edits, reactions and typing through
+the same `send` call. A plugin may also name an attachment by a bare
+reference the gateway passes on: a `geo:` URI for a location, or an
+http(s) URL; anything else (a local path above all) is dropped, since
+local files must come through the grant-checked path.
 
 ## Who may talk to the agent
 
@@ -880,6 +1308,47 @@ sends `send`, `edit` and `egress` requests with an `id`, answered by
 "message":..}}`. Enrollment is `POST <connector-url>/v1/enroll` with
 `{"token","gateway_id"?,"wake_url"?}`, answered by `{"gateway_id",
 "credential","relay_url"?}` or a 4xx `{"error":"already_used"|"expired"}`.
+
+The same frames carry optional additions older connectors ignore: an
+inbound frame's `addressing` (`mentioned`, `replies_to_bot`,
+`in_bot_thread`, `not_addressed`) and `attachments`, a descriptor's
+`descriptors` (each adapter's own descriptor, by platform), a `profile`
+on `send`, `edit` and `media` requests, a `media` request
+(`{"type":"media","id","profile","platform","location"}`, answered with
+base64 `data`) and outgoing attachments carrying their bytes as base64
+`data` (25 MiB at most each).
+
+## Adapter host forwarding
+
+Some platforms need crypto or native libraries on one machine (Matrix
+encryption keys on a Mac) while the agent runs elsewhere (a container).
+`prometheus daemon run --adapters-only --upstream wss://<host>:<port>/adapters`
+runs only the configured adapters on this host and forwards every event
+they admit to the upstream daemon, which owns every session; the
+upstream's replies, edits and attachment reads come back and go out
+through the local adapters.
+
+- **The upstream** enables its remote attachment listener
+  (`[daemon.remote] enabled = true`, see
+  [Remote clients](dashboard.md#remote-clients-and-paired-devices)) and pairs the host as an
+  admin device: `prometheus daemon pair-device matrix-host --role admin
+  --profile-binding default`. Only an admin device may attach at
+  `/adapters` (others are closed with 4403), because the host vouches for
+  the senders it forwards, and it may address only the profiles its
+  device is bound to. One host attaches at a time, and not to a daemon
+  that dials a relay connector.
+- **The host** stores that token in the secret
+  `daemon.upstream_ticket_secret` names (`UPSTREAM_TICKET` by default:
+  `prometheus secrets set UPSTREAM_TICKET`), trusts the upstream's
+  certificate (a self-signed one through `network.extra_ca_file`), and
+  runs with `--adapters-only --upstream`. It keeps sender authorization,
+  pairing, the bot-loop guard and deduplication; it runs no scheduler,
+  automation or network listener, and no session.
+
+Profiles are matched by name. While the upstream cannot be reached the
+host's adapters are `degraded` with `upstream_unreachable`, a person
+writing in is told `Upstream agent unavailable, try again shortly.`, and
+the host reconnects with backoff (1 s to 1 min).
 
 ## Health export
 

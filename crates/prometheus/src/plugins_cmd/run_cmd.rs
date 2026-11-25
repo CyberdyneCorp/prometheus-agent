@@ -53,6 +53,13 @@ pub(super) fn run(
             format!("plugin '{id}' is not loaded: {why}"),
         ));
     }
+    if let Some(plugin) = loaded
+        .plugins
+        .iter()
+        .find(|p| p.manifest.id == id && p.manifest.adapter_platform().is_some())
+    {
+        return super::run_adapter::run(&scope, plugin, command, args);
+    }
     let entries: Vec<_> = loaded
         .surfaces
         .cli

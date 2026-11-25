@@ -29,6 +29,8 @@ pub const DM: &str = "!dm:kit";
 pub const USER: &str = "@kit:kit";
 /// The bot's user id.
 pub const BOT: &str = "@bot:kit";
+/// The bot's device (the access token's).
+pub const BOT_DEVICE: &str = "BOTDEVICE";
 /// A thread root in the DM.
 pub const THREAD: &str = "$root";
 const LIMIT: usize = 32_000;
@@ -54,11 +56,18 @@ struct State {
     power: Vec<(String, i64)>,
     /// Reading power levels fails with 403.
     refuse_power: bool,
+    /// The DM room is end-to-end encrypted.
+    encrypted: bool,
+    /// `/sync` requests served.
+    syncs: usize,
+    /// Every room event sent: (room, type, content).
+    events: Vec<(String, String, Value)>,
 }
 
 /// The mock.
 pub struct MatrixMock {
     state: Mutex<State>,
+    keys: crate::mock_keys::Keys,
     arrived: Notify,
     addr: Mutex<Option<SocketAddr>>,
 }
@@ -73,6 +82,7 @@ impl MatrixMock {
             }),
             arrived: Notify::new(),
             addr: Mutex::new(None),
+            keys: crate::mock_keys::Keys::default(),
         });
         let server = Arc::clone(&mock);
         let addr = mock_server::serve(move |request| {
@@ -137,6 +147,47 @@ impl MatrixMock {
         mock_server::json(200, &json!({"users": users, "users_default": 0}))
     }
 
+    /// The homeserver's key store (end-to-end encryption).
+    pub fn keys(&self) -> &crate::mock_keys::Keys {
+        &self.keys
+    }
+
+    /// Turns end-to-end encryption on in the DM room.
+    pub fn encrypt_dm(&self) {
+        self.lock().encrypted = true;
+    }
+
+    /// Every room event the bot sent: (room, type, content).
+    pub fn events(&self) -> Vec<(String, String, Value)> {
+        self.lock().events.clone()
+    }
+
+    /// A stored media file's bytes.
+    pub fn media(&self, mxc: &str) -> Option<Vec<u8>> {
+        let id = mxc.strip_prefix("mxc://kit/")?;
+        self.lock()
+            .media
+            .iter()
+            .find(|(m, _)| m == id)
+            .map(|(_, b)| b.clone())
+    }
+
+    /// `/sync` requests served so far.
+    pub fn syncs(&self) -> usize {
+        self.lock().syncs
+    }
+
+    /// Wakes `/sync` long polls (to-device events arrived).
+    pub fn wake(&self) {
+        self.arrived.notify_waiters();
+    }
+
+    /// Appends an `m.room.encrypted` event of `USER` with `content` to the
+    /// DM's timeline.
+    pub fn push_encrypted(&self, content: &Value) -> String {
+        self.push_event("m.room.encrypted", content)
+    }
+
     /// Redactions received.
     pub fn redactions(&self) -> usize {
         self.lock().redactions
@@ -154,9 +205,24 @@ impl MatrixMock {
 
     /// Appends an event of `USER` to the DM's timeline.
     pub fn push(&self, content: &Value) -> String {
+        self.push_event("m.room.message", content)
+    }
+
+    /// Delivers an encrypted event labelled as sent by `sender` (what a
+    /// malicious homeserver could do with another user's session).
+    pub fn push_encrypted_as(&self, sender: &str, content: &Value) -> String {
+        self.push_event_as(sender, "m.room.encrypted", content)
+    }
+
+    fn push_event(&self, kind: &str, content: &Value) -> String {
+        self.push_event_as(USER, kind, content)
+    }
+
+    fn push_event_as(&self, sender: &str, kind: &str, content: &Value) -> String {
         let id = format!("${}", self.id());
-        let event = json!({"type": "m.room.message", "event_id": id, "sender": USER,
-                           "origin_server_ts": 1_700_000_000_000_i64, "content": content});
+        let event = json!({"type": kind, "event_id": id, "sender": sender,
+                           "origin_server_ts": jiff::Timestamp::now().as_millisecond(),
+                           "content": content});
         let mut state = self.lock();
         state.timeline.push(event.clone());
         state.last_event = Some(event);
@@ -195,8 +261,13 @@ impl MatrixMock {
             .collect();
         let parts: Vec<&str> = parts.iter().map(String::as_str).collect();
         let body: Value = serde_json::from_slice(&request.body).unwrap_or(Value::Null);
+        if let Some(answer) = self.encryption(&request.method, &parts, &body) {
+            return answer;
+        }
         match (request.method.as_str(), parts.as_slice()) {
-            ("GET", ["account", "whoami"]) => mock_server::json(200, &json!({"user_id": BOT})),
+            ("GET", ["account", "whoami"]) => {
+                mock_server::json(200, &json!({"user_id": BOT, "device_id": BOT_DEVICE}))
+            }
             ("GET", ["sync"]) => {
                 self.sync(request.query.as_deref().unwrap_or_default())
                     .await
@@ -240,6 +311,22 @@ impl MatrixMock {
         }
     }
 
+    /// The key endpoints and the DM's encryption state; `None` for other
+    /// requests.
+    fn encryption(&self, method: &str, parts: &[&str], body: &Value) -> Option<HttpResponse> {
+        if let ("GET", ["rooms", room, "state", "m.room.encryption", ..]) = (method, parts) {
+            return Some(if *room == DM && self.lock().encrypted {
+                mock_server::json(200, &json!({"algorithm": "m.megolm.v1.aes-sha2"}))
+            } else {
+                error(404, "M_NOT_FOUND")
+            });
+        }
+        let answer = self.keys.serve((BOT, BOT_DEVICE), method, parts, body)?;
+        // To-device messages may wait for the bot's long poll.
+        self.arrived.notify_waiters();
+        Some(answer)
+    }
+
     async fn sync(&self, query: &str) -> HttpResponse {
         let param = |name: &str| {
             query
@@ -251,6 +338,7 @@ impl MatrixMock {
         let wait =
             Duration::from_millis(param("timeout").and_then(|t| t.parse().ok()).unwrap_or(0));
         let deadline = tokio::time::Instant::now() + wait;
+        self.lock().syncs += 1;
         loop {
             let notified = self.arrived.notified();
             {
@@ -263,9 +351,15 @@ impl MatrixMock {
                     // An initial sync: the cursor only.
                     return mock_server::json(200, &json!({"next_batch": format!("s{end}")}));
                 };
-                let invites = std::mem::take(&mut state.invites);
-                if from < end || !invites.is_empty() {
-                    return mock_server::json(200, &batch(&state.timeline[from..], end, &invites));
+                let keys_waiting = self.keys.has_to_device(BOT, BOT_DEVICE);
+                if from < end || !state.invites.is_empty() || keys_waiting {
+                    let invites = std::mem::take(&mut state.invites);
+                    let mut answer = batch(&state.timeline[from..], end, &invites);
+                    answer["to_device"]["events"] =
+                        json!(self.keys.take_to_device(BOT, BOT_DEVICE));
+                    answer["device_one_time_keys_count"]["signed_curve25519"] =
+                        json!(self.keys.one_time_key_count(BOT, BOT_DEVICE));
+                    return mock_server::json(200, &answer);
                 }
             }
             if tokio::time::timeout_at(deadline, notified).await.is_err() {
@@ -279,6 +373,9 @@ impl MatrixMock {
 
     fn send(&self, room: &str, kind: &str, body: &Value) -> HttpResponse {
         let mut state = self.lock();
+        state
+            .events
+            .push((room.to_owned(), kind.to_owned(), body.clone()));
         if kind == "m.reaction" {
             let relation = &body["m.relates_to"];
             state.reactions.push((

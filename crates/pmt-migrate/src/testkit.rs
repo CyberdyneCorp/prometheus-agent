@@ -43,6 +43,7 @@ impl Host for FakeHost {
             Registry::Theme => &["mono"],
             Registry::Platform => &["telegram", "discord"],
             Registry::MemoryProvider => &[],
+            Registry::CatalogPlugin => &["mattermost"],
         };
         names.contains(&name)
     }
@@ -63,6 +64,18 @@ impl Host for FakeHost {
         _: &[String],
     ) -> Result<Vec<PluginOutcome>, Error> {
         Ok(Vec::new())
+    }
+
+    /// Writes a stand-in manifest, as the catalog install would.
+    fn install_catalog_plugin(&self, scope: &ProfileScope, id: &str) -> Result<(), Error> {
+        let dir = scope.dir().join("plugins").join(id);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("plugin.toml"),
+            format!("id = \"{id}\"\nworlds = [\"platform-adapter@1.0\"]\n"),
+        )
+        .unwrap();
+        Ok(())
     }
 
     fn progress(&self, _: &str) {}

@@ -36,8 +36,50 @@ use crate::context::Context;
 ///
 /// `home.locked` (75) when a daemon or chat holds the home, `config.*`
 /// (78) for `daemon.toml` or when no profile loads, listener errors.
-pub(super) fn run(home: &Path, ctx: &Context<'_>, replace_locks: bool) -> Result<u8, Error> {
-    run_with(home, ctx, replace_locks, None)
+pub(super) fn run(home: &Path, ctx: &Context<'_>, mode: &RunMode) -> Result<u8, Error> {
+    run_with(home, ctx, mode, None)
+}
+
+/// How `daemon run` runs.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct RunMode {
+    /// `--replace`: take over credential locks live holders keep.
+    pub replace_locks: bool,
+    /// `--adapters-only --upstream <url>` (spec: platform-adapters, Adapter
+    /// host forwarding mode): only the adapters run; admitted events go to
+    /// the upstream daemon at this URL, which owns the sessions, so no
+    /// scheduler, automation or network surface runs here.
+    pub upstream: Option<String>,
+}
+
+/// The daemon's background loops; an adapters-only daemon runs none that
+/// would start sessions (cron, automation, kanban, evolution).
+struct Background(Vec<tokio::task::JoinHandle<()>>);
+
+impl Background {
+    fn start(host: &Arc<DaemonHost>, home: &Path, ctx: &Context<'_>, adapters_only: bool) -> Self {
+        let mut tasks = vec![
+            pmt_core::spawn::spawn(super::host::watch(Arc::clone(host))),
+            pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(host))),
+            pmt_core::spawn::spawn(super::host::sample_health(Arc::clone(host))),
+            super::watchdog::background(home, ctx.launch),
+        ];
+        if !adapters_only {
+            tasks.extend([
+                pmt_core::spawn::spawn(super::host::schedule_cron(Arc::clone(host))),
+                pmt_core::spawn::spawn(super::host::schedule_automation(Arc::clone(host))),
+                pmt_core::spawn::spawn(super::host::schedule_kanban(Arc::clone(host))),
+                pmt_core::spawn::spawn(super::host::schedule_evolve(Arc::clone(host))),
+            ]);
+        }
+        Self(tasks)
+    }
+
+    fn abort(&self) {
+        for task in &self.0 {
+            task.abort();
+        }
+    }
 }
 
 /// Where `prometheus serve` opens the dashboard listener at start.
@@ -59,7 +101,7 @@ pub struct ServeDashboard {
 pub(crate) fn run_with(
     home: &Path,
     ctx: &Context<'_>,
-    replace_locks: bool,
+    mode: &RunMode,
     dashboard: Option<&ServeDashboard>,
 ) -> Result<u8, Error> {
     let span = tracing::info_span!("daemon", component = "gateway");
@@ -101,22 +143,22 @@ pub(crate) fn run_with(
             );
             DaemonHost::adopt(&host);
             let options = server_options(home, ctx, &config, host.names(), health_url);
-            let watcher = pmt_core::spawn::spawn(super::host::watch(Arc::clone(&host)));
-            let sweeper = pmt_core::spawn::spawn(super::host::sweep_worktrees(Arc::clone(&host)));
-            let scheduler = pmt_core::spawn::spawn(super::host::schedule_cron(Arc::clone(&host)));
-            let automation =
-                pmt_core::spawn::spawn(super::host::schedule_automation(Arc::clone(&host)));
-            let kanban = pmt_core::spawn::spawn(super::host::schedule_kanban(Arc::clone(&host)));
-            let evolve = pmt_core::spawn::spawn(super::host::schedule_evolve(Arc::clone(&host)));
-            let sampler = pmt_core::spawn::spawn(super::host::sample_health(Arc::clone(&host)));
-            let liveness = super::watchdog::background(home, ctx.launch);
+            let background = Background::start(&host, home, ctx, mode.upstream.is_some());
             let server = Server::new(options, Arc::clone(&host) as Arc<dyn pmt_gateway::Host>)?;
             super::host::publish_usage(&host, &server);
             host.set_server(&server);
             publish_context_grown(&server);
             let mut messaging =
                 super::messaging::options(home, &config, &host, launch_profile.as_str(), ctx)?;
-            messaging.replace_locks = replace_locks;
+            messaging.replace_locks = mode.replace_locks;
+            if let Some(url) = &mode.upstream {
+                messaging.forward = Some(super::messaging::forward(
+                    url,
+                    &config,
+                    &host,
+                    launch_profile.as_str(),
+                )?);
+            }
             let agents = Arc::clone(&host) as Arc<dyn pmt_gateway::messaging::Agents>;
             match Gateway::start(Arc::clone(&server), agents, messaging).await {
                 Ok(gateway) => host.set_gateway(gateway),
@@ -124,14 +166,7 @@ pub(crate) fn run_with(
                     // The daemon cannot tell whether its last stop was clean.
                     tracing::error!("{err}");
                     eprint!("{}", crate::output::render_error(&err, false));
-                    watcher.abort();
-                    sweeper.abort();
-                    scheduler.abort();
-                    automation.abort();
-                    kanban.abort();
-                    evolve.abort();
-                    sampler.abort();
-                    liveness.abort();
+                    background.abort();
                     return Ok(pmt_core::exit::FAILURE);
                 }
             }
@@ -140,22 +175,19 @@ pub(crate) fn run_with(
                 ctx.launch,
                 enabled_adapters(&scopes_of(&server, &host)),
             );
-            let _listeners = start_listeners(home, &config, &server, &host, dashboard).await?;
+            let _listeners = if mode.upstream.is_some() {
+                Listeners::default()
+            } else {
+                start_listeners(home, &config, &server, &host, dashboard).await?
+            };
             if let Some(systemd) = &systemd {
                 systemd.notify("READY=1");
             }
             let drain = Duration::from_secs(config.daemon.restart_drain_secs);
             let exit = pmt_gateway::run(&lock, home, server, drain, shutdown_signal()).await;
             super::inventory::unregister(home, ctx.launch);
-            watcher.abort();
-            sweeper.abort();
-            scheduler.abort();
-            automation.abort();
-            kanban.abort();
-            evolve.abort();
+            background.abort();
             crate::kanban_host::release(home, "daemon");
-            sampler.abort();
-            liveness.abort();
             exit.map(exit_code)
         }
         .in_current_span(),

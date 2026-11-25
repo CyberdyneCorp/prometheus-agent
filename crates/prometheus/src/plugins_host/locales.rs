@@ -24,7 +24,7 @@ pub fn language_packs(config: &Config, profile_dir: &Path) -> Vec<PackLocale> {
         profile_dir,
         cwd: None,
         config: &config.plugins,
-        embedded: &[],
+        embedded: super::first_party::EMBEDDED,
         running: &running,
         blocked: &blocked,
         profile_config: Some(config),

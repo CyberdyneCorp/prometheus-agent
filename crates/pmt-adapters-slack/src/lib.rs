@@ -18,6 +18,7 @@ mod normalize;
 mod slash;
 mod socket;
 mod stream;
+mod workspaces;
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -27,6 +28,7 @@ use api::Api;
 pub use api::Endpoints;
 use pmt_config::ProfileScope;
 use pmt_config::platforms::SlackOptions;
+use pmt_config::schema::SecretName;
 use pmt_core::error::Error;
 use pmt_gateway::messaging::adapter::credential;
 use pmt_gateway::messaging::{
@@ -36,6 +38,7 @@ use pmt_gateway::messaging::{
 };
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
+pub use workspaces::OAUTH_SECRET_PREFIX;
 
 /// The platform name.
 pub const PLATFORM: &str = "slack";
@@ -56,17 +59,27 @@ pub fn factory() -> AdapterFactory {
 pub struct Slack {
     scope: ProfileScope,
     bot_secret: String,
+    /// More workspaces' bot token secrets (`options.bot_token_secrets`).
+    listed: Vec<SecretName>,
     app_secret: String,
     endpoints: Endpoints,
     client: reqwest::Client,
     extra_ca: Option<std::path::PathBuf>,
     /// How the WebSocket reaches the platform.
     proxy: pmt_gateway::messaging::proxy::Proxy,
-    api: Mutex<Option<Api>>,
+    /// The workspaces connected, from `auth.test` at connect.
+    workspaces: Mutex<Option<Arc<workspaces::Workspaces>>>,
     socket: Mutex<Option<CancellationToken>>,
     slash: Arc<slash::Replies>,
-    /// The bot's user id and workspace, from `auth.test` at connect.
-    me: Mutex<(String, Option<String>)>,
+    reactions: ReactionRule,
+}
+
+/// Which reactions start a turn, and where it answers (spec:
+/// platform-adapters, Slack reaction triggers).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ReactionRule {
+    pub(crate) triggers: pmt_config::platforms::ReactionTriggers,
+    pub(crate) target: Option<String>,
 }
 
 impl std::fmt::Debug for Slack {
@@ -104,6 +117,7 @@ impl Slack {
                 .token_secret
                 .as_ref()
                 .map_or_else(|| TOKEN_SECRET.to_owned(), |s| s.0.clone()),
+            listed: options.bot_token_secrets,
             app_secret: options
                 .app_token_secret
                 .map_or_else(|| APP_TOKEN_SECRET.to_owned(), |s| s.0),
@@ -111,10 +125,13 @@ impl Slack {
             client,
             extra_ca,
             proxy,
-            api: Mutex::default(),
+            workspaces: Mutex::default(),
             socket: Mutex::default(),
             slash: Arc::default(),
-            me: Mutex::default(),
+            reactions: ReactionRule {
+                triggers: options.reaction_triggers,
+                target: options.reaction_trigger_target,
+            },
         })
     }
 
@@ -126,9 +143,14 @@ impl Slack {
         }
     }
 
+    fn connected(&self) -> Option<Arc<workspaces::Workspaces>> {
+        self.workspaces.lock().expect("workspaces poisoned").clone()
+    }
+
+    /// The primary workspace's client.
     fn api(&self) -> Result<Api, SendError> {
-        if let Some(api) = self.api.lock().expect("api poisoned").clone() {
-            return Ok(api);
+        if let Some(workspaces) = self.connected() {
+            return Ok(workspaces.primary().api.clone());
         }
         // A one-shot send without the daemon has not connected.
         let token = credential(&self.scope, &self.bot_secret)
@@ -136,20 +158,22 @@ impl Slack {
         Ok(self.api_with(token))
     }
 
+    /// The client of the workspace `channel` belongs to.
+    async fn api_for(&self, channel: &str) -> Result<Api, SendError> {
+        match self.connected() {
+            Some(workspaces) => Ok(workspaces.of_channel(channel).await.api.clone()),
+            None => self.api(),
+        }
+    }
+
     async fn connect_with(&self, link: Arc<dyn AdapterLink>) -> Result<(), AdapterError> {
-        let bot = self.api_with(credential(&self.scope, &self.bot_secret)?);
+        let tokens = workspaces::tokens(&self.scope, &self.bot_secret, &self.listed)?;
         let app = self.api_with(credential(&self.scope, &self.app_secret)?);
-        let me = bot.call("auth.test", &json!({})).await.map_err(|e| {
-            if api::unauthorized(&e) {
-                socket::lost("unauthorized", "Slack rejected the bot token", false)
-            } else {
-                socket::lost(
-                    "slack_unreachable",
-                    format!("Slack: {}", e.describe()),
-                    true,
-                )
-            }
-        })?;
+        let (served, refused) = workspaces::verify(tokens, |t| self.api_with(t)).await;
+        let Some(served) = workspaces::Workspaces::new(served) else {
+            return Err(workspaces::none_connected(&refused));
+        };
+        let served = Arc::new(served);
         let stop = CancellationToken::new();
         if let Some(old) = self
             .socket
@@ -159,21 +183,26 @@ impl Slack {
         {
             old.cancel();
         }
-        *self.api.lock().expect("api poisoned") = Some(bot);
-        let bot_user = me["user_id"].as_str().unwrap_or_default().to_owned();
-        let team = me["team_id"].as_str().map(str::to_owned);
-        *self.me.lock().expect("me poisoned") = (bot_user.clone(), team.clone());
+        *self.workspaces.lock().expect("workspaces poisoned") = Some(Arc::clone(&served));
+        let report = Arc::clone(&link);
         socket::open(socket::Run {
             app,
             link,
-            bot_user,
-            team,
+            workspaces: served,
             extra_ca: self.extra_ca.clone(),
             proxy: self.proxy.clone(),
             slash: Arc::clone(&self.slash),
+            reactions: self.reactions.clone(),
             stop,
         })
-        .await
+        .await?;
+        if !refused.is_empty() {
+            // Only those workspaces are out; the others are served.
+            let error = workspaces::partial(&refused);
+            tracing::warn!(platform = PLATFORM, "{}", error.message);
+            report.report(pmt_gateway::messaging::AdapterState::Degraded, Some(error));
+        }
+        Ok(())
     }
 }
 
@@ -324,7 +353,7 @@ impl Adapter for Slack {
                 slash::respond(&self.client, &url, posts).await?;
                 return Ok(Sent { message_id: None });
             }
-            let api = self.api()?;
+            let api = self.api_for(&message.chat_id).await?;
             let mut first = None;
             if !message.text.is_empty() || message.attachments.is_empty() {
                 let sent = api.call("chat.postMessage", &post_body(&message)).await?;
@@ -360,7 +389,11 @@ impl Adapter for Slack {
                 "text": message.text,
                 "blocks": blocks,
             });
-            self.api()?.call("chat.update", &body).await.map(drop)
+            self.api_for(&message.chat_id)
+                .await?
+                .call("chat.update", &body)
+                .await
+                .map(drop)
         })
     }
 
@@ -372,7 +405,11 @@ impl Adapter for Slack {
     ) -> AdapterFuture<'a, Result<(), SendError>> {
         Box::pin(async move {
             let body = json!({"channel": chat_id, "ts": message_id});
-            self.api()?.call("chat.delete", &body).await.map(drop)
+            self.api_for(chat_id)
+                .await?
+                .call("chat.delete", &body)
+                .await
+                .map(drop)
         })
     }
 
@@ -392,7 +429,11 @@ impl Adapter for Slack {
                 "timestamp": reaction.message_id,
                 "name": name,
             });
-            self.api()?.call(method, &body).await.map(drop)
+            self.api_for(&reaction.chat_id)
+                .await?
+                .call(method, &body)
+                .await
+                .map(drop)
         })
     }
 
@@ -446,7 +487,8 @@ impl Adapter for Slack {
     fn chat_info<'a>(&'a self, chat_id: &'a str) -> AdapterFuture<'a, Result<ChatInfo, SendError>> {
         Box::pin(async move {
             let found = self
-                .api()?
+                .api_for(chat_id)
+                .await?
                 .call("conversations.info", &json!({"channel": chat_id}))
                 .await?;
             let channel = &found["channel"];
@@ -471,7 +513,9 @@ impl Adapter for Slack {
         &'a self,
         message: &'a Outgoing,
     ) -> AdapterFuture<'a, Result<String, SendError>> {
-        Box::pin(async move { stream::start(&self.api()?, message).await })
+        Box::pin(
+            async move { stream::start(&self.api_for(&message.chat_id).await?, message).await },
+        )
     }
 
     fn stream_append<'a>(
@@ -480,7 +524,9 @@ impl Adapter for Slack {
         message_id: &'a str,
         text: &'a str,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
-        Box::pin(async move { stream::append(&self.api()?, chat_id, message_id, text).await })
+        Box::pin(async move {
+            stream::append(&self.api_for(chat_id).await?, chat_id, message_id, text).await
+        })
     }
 
     fn stream_task<'a>(
@@ -489,7 +535,9 @@ impl Adapter for Slack {
         message_id: &'a str,
         task: &'a TaskCard,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
-        Box::pin(async move { stream::task(&self.api()?, chat_id, message_id, task).await })
+        Box::pin(async move {
+            stream::task(&self.api_for(chat_id).await?, chat_id, message_id, task).await
+        })
     }
 
     fn stream_stop<'a>(
@@ -497,7 +545,9 @@ impl Adapter for Slack {
         chat_id: &'a str,
         message_id: &'a str,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
-        Box::pin(async move { stream::stop(&self.api()?, chat_id, message_id).await })
+        Box::pin(
+            async move { stream::stop(&self.api_for(chat_id).await?, chat_id, message_id).await },
+        )
     }
 
     fn set_status<'a>(
@@ -506,7 +556,9 @@ impl Adapter for Slack {
         thread_id: Option<&'a str>,
         status: Option<&'a str>,
     ) -> AdapterFuture<'a, Result<(), SendError>> {
-        Box::pin(async move { stream::status(&self.api()?, chat_id, thread_id, status).await })
+        Box::pin(async move {
+            stream::status(&self.api_for(chat_id).await?, chat_id, thread_id, status).await
+        })
     }
 
     fn reply_privately<'a>(&'a self, to: &'a Private) -> AdapterFuture<'a, Result<(), SendError>> {
@@ -517,7 +569,8 @@ impl Adapter for Slack {
             if let Some(thread) = &to.thread_id {
                 body["thread_ts"] = json!(thread);
             }
-            self.api()?
+            self.api_for(&to.chat_id)
+                .await?
                 .call("chat.postEphemeral", &body)
                 .await
                 .map(|_| ())
@@ -532,7 +585,8 @@ impl Adapter for Slack {
         // A Slack thread is the replies to a root message: the title is it.
         Box::pin(async move {
             let posted = self
-                .api()?
+                .api_for(chat_id)
+                .await?
                 .call(
                     "chat.postMessage",
                     &json!({"channel": chat_id, "text": title}),
@@ -550,11 +604,14 @@ impl Adapter for Slack {
         inbound: &'a Inbound,
     ) -> AdapterFuture<'a, Result<Vec<String>, SendError>> {
         Box::pin(async move {
-            let team = inbound
-                .scope_id
-                .clone()
-                .or_else(|| self.me.lock().expect("me poisoned").1.clone());
-            directory::member_groups(&self.api()?, team.as_deref(), &inbound.sender_id).await
+            let (api, team) = match self.connected() {
+                Some(served) => {
+                    let workspace = served.of_team(inbound.scope_id.as_deref());
+                    (workspace.api.clone(), Some(workspace.team.clone()))
+                }
+                None => (self.api()?, inbound.scope_id.clone()),
+            };
+            directory::member_groups(&api, team.as_deref(), &inbound.sender_id).await
         })
     }
 
@@ -569,8 +626,14 @@ impl Adapter for Slack {
         limit: usize,
     ) -> AdapterFuture<'a, Result<Vec<HistoryEntry>, SendError>> {
         Box::pin(async move {
-            let bot = self.me.lock().expect("me poisoned").0.clone();
-            directory::history(&self.api()?, &bot, chat_id, thread_id, limit).await
+            let (api, bot) = match self.connected() {
+                Some(served) => {
+                    let workspace = served.of_channel(chat_id).await;
+                    (workspace.api.clone(), workspace.bot_user.clone())
+                }
+                None => (self.api()?, String::new()),
+            };
+            directory::history(&api, &bot, chat_id, thread_id, limit).await
         })
     }
 
@@ -578,7 +641,21 @@ impl Adapter for Slack {
         &'a self,
         attachment: &'a Attachment,
     ) -> AdapterFuture<'a, Result<MediaStream, SendError>> {
-        Box::pin(async move { self.api()?.download(&attachment.location).await })
+        Box::pin(async move {
+            // A private file opens with its own workspace's token: each is
+            // tried, the primary first.
+            let Some(served) = self.connected() else {
+                return self.api()?.download(&attachment.location).await;
+            };
+            let mut last = SendError::Unsupported;
+            for workspace in served.all() {
+                match workspace.api.download(&attachment.location).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(err) => last = err,
+                }
+            }
+            Err(last)
+        })
     }
 }
 

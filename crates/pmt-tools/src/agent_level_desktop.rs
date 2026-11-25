@@ -65,6 +65,7 @@ pub fn tools() -> Vec<RegisteredTool> {
         .collect();
     tools.push(RegisteredTool::agent_loop(setup_beat()));
     tools.push(RegisteredTool::agent_loop(project()));
+    tools.push(crate::catalog_manage::registered());
     tools
 }
 

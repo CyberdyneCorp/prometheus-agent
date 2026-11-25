@@ -5,11 +5,14 @@
 //! The token is only ever part of the URL, never logged.
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use pmt_gateway::messaging::multipart::Form;
 use pmt_gateway::messaging::{MediaStream, SendError};
 use serde_json::Value;
+
+use crate::net::Transport;
 
 /// Where the Bot API lives.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,6 +21,12 @@ pub struct Endpoints {
     pub api: String,
     /// The file download base (`https://api.telegram.org/file`).
     pub files: String,
+    /// The DNS-over-HTTPS resolvers (JSON API) asked for fallback
+    /// addresses of the API host when it does not connect.
+    pub doh: Vec<String>,
+    /// How long connecting (`getMe`, fallbacks included) may take before
+    /// the gateway retries.
+    pub connect_bound: Duration,
 }
 
 impl Default for Endpoints {
@@ -25,6 +34,22 @@ impl Default for Endpoints {
         Self {
             api: "https://api.telegram.org".to_owned(),
             files: "https://api.telegram.org/file".to_owned(),
+            doh: crate::net::DOH_RESOLVERS.map(str::to_owned).to_vec(),
+            connect_bound: Duration::from_secs(30),
+        }
+    }
+}
+
+impl Endpoints {
+    /// The API at `api` (files under `<api>/file`), with the public
+    /// DNS-over-HTTPS resolvers.
+    #[must_use]
+    pub fn at(api: &str) -> Self {
+        let api = api.trim_end_matches('/');
+        Self {
+            api: api.to_owned(),
+            files: format!("{api}/file"),
+            ..Self::default()
         }
     }
 }
@@ -32,7 +57,7 @@ impl Default for Endpoints {
 /// A Bot API client for one token.
 #[derive(Clone)]
 pub(crate) struct Api {
-    pub(crate) client: reqwest::Client,
+    pub(crate) transport: Arc<Transport>,
     pub(crate) endpoints: Endpoints,
     pub(crate) token: String,
 }
@@ -65,13 +90,19 @@ impl Api {
         body: &Value,
         timeout: Duration,
     ) -> Result<Value, SendError> {
-        let request = self
-            .client
-            .post(self.url(method))
-            .header("content-type", "application/json")
-            .body(body.to_string())
-            .timeout(timeout);
-        answer(request.send().await).await
+        let url = self.url(method);
+        let body = body.to_string();
+        let sent = self
+            .transport
+            .send(|client| {
+                client
+                    .post(&url)
+                    .header("content-type", "application/json")
+                    .body(body.clone())
+                    .timeout(timeout)
+            })
+            .await;
+        answer(sent).await
     }
 
     /// Uploads a file with `method` (`sendPhoto`, `sendDocument`, ...).
@@ -92,25 +123,50 @@ impl Api {
             form.text(key, value);
         }
         form.file(file_field, &name, &bytes);
-        let request = self
-            .client
-            .post(self.url(method))
-            .header("content-type", form.content_type())
-            .body(form.finish())
-            .timeout(Duration::from_mins(5));
-        answer(request.send().await).await
+        let url = self.url(method);
+        let content_type = form.content_type();
+        let body = form.finish();
+        let sent = self
+            .transport
+            .send(|client| {
+                client
+                    .post(&url)
+                    .header("content-type", &content_type)
+                    .body(body.clone())
+                    .timeout(Duration::from_mins(5))
+            })
+            .await;
+        answer(sent).await
     }
 
-    /// Opens a file the Bot API stores (`getFile`, then its download).
-    pub(crate) async fn download(&self, file_id: &str) -> Result<MediaStream, SendError> {
+    /// Opens a file the Bot API stores (`getFile`, then its download, or
+    /// a read of the path a `--local` server returns), refusing one over
+    /// `files.limit` before reading it.
+    pub(crate) async fn download(
+        &self,
+        file_id: &str,
+        files: &FileAccess,
+    ) -> Result<MediaStream, SendError> {
         let file = self
             .call("getFile", &serde_json::json!({"file_id": file_id}))
             .await?;
+        if let Some(size) = file["file_size"].as_u64()
+            && size > files.limit
+        {
+            return Err(SendError::Permanent(files.oversize(size)));
+        }
         let path = file["file_path"]
             .as_str()
             .ok_or_else(|| SendError::Permanent("the file has no download path".to_owned()))?;
+        if files.local && Path::new(path).is_absolute() {
+            return local_file(path, file["file_size"].as_u64()).await;
+        }
         let url = format!("{}/bot{}/{path}", self.endpoints.files, self.token);
-        let response = self.client.get(url).send().await.map_err(transport)?;
+        let response = self
+            .transport
+            .send(|client| client.get(&url))
+            .await
+            .map_err(transport)?;
         if !response.status().is_success() {
             return Err(status_error(
                 response.status().as_u16(),
@@ -133,6 +189,107 @@ impl Api {
             chunks: Box::pin(chunks),
         })
     }
+}
+
+/// The public Bot API serves bots files up to 20 MB.
+pub(crate) const PUBLIC_FILE_LIMIT: u64 = 20 * 1024 * 1024;
+/// A self-hosted Bot API server serves them up to 2048 MB.
+pub(crate) const LOCAL_SERVER_FILE_LIMIT: u64 = 2048 * 1024 * 1024;
+
+/// How inbound files are read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FileAccess {
+    /// The effective maximum: the server's, lowered by
+    /// `gateway.media.max_inbound_bytes`.
+    pub(crate) limit: u64,
+    /// A self-hosted server (its limit is the larger one).
+    pub(crate) self_hosted: bool,
+    /// `--local` mode: read the absolute path the server returns.
+    pub(crate) local: bool,
+}
+
+impl FileAccess {
+    /// The access of a server (`self_hosted` or the public one) under the
+    /// gateway's inbound cap (`0`: none).
+    pub(crate) fn new(self_hosted: bool, local: bool, gateway_cap: u64) -> Self {
+        let server = if self_hosted {
+            LOCAL_SERVER_FILE_LIMIT
+        } else {
+            PUBLIC_FILE_LIMIT
+        };
+        let limit = if gateway_cap == 0 {
+            server
+        } else {
+            server.min(gateway_cap)
+        };
+        Self {
+            limit,
+            self_hosted,
+            local,
+        }
+    }
+
+    /// What the user is told about a file of `size` bytes.
+    pub(crate) fn oversize(&self, size: u64) -> String {
+        let mb = |b: u64| b.div_ceil(1024 * 1024);
+        let hint = if self.self_hosted || self.limit < PUBLIC_FILE_LIMIT {
+            ""
+        } else {
+            "; a self-hosted Bot API server (options.api_base_url) raises Telegram's limit to 2048 MB"
+        };
+        format!(
+            "the file is {} MB, over the {} MB maximum{hint}",
+            mb(size),
+            mb(self.limit)
+        )
+    }
+}
+
+/// A file a `--local` Bot API server stored at `path`.
+async fn local_file(path: &str, declared: Option<u64>) -> Result<MediaStream, SendError> {
+    let unreadable = |e: std::io::Error| {
+        SendError::Permanent(format!("local Bot API file not readable: {path} ({e})"))
+    };
+    let file = tokio::fs::File::open(path).await.map_err(unreadable)?;
+    let declared_len = match declared {
+        Some(len) => Some(len),
+        None => Some(file.metadata().await.map_err(unreadable)?.len()),
+    };
+    let chunks = futures_util::stream::unfold(file, |mut file| async move {
+        use tokio::io::AsyncReadExt as _;
+        let mut buf = vec![0; 64 * 1024];
+        match file.read(&mut buf).await {
+            Ok(0) => None,
+            Ok(n) => {
+                buf.truncate(n);
+                Some((Ok(buf), file))
+            }
+            Err(e) => Some((Err(e.to_string()), file)),
+        }
+    });
+    Ok(MediaStream {
+        declared_len,
+        chunks: Box::pin(chunks),
+    })
+}
+
+/// Logs the bot out of the public Bot API server, so a self-hosted one
+/// may serve it (Telegram's `logOut`; once per migration).
+///
+/// # Errors
+///
+/// What the server answered.
+pub async fn log_out(
+    client: &reqwest::Client,
+    endpoints: &Endpoints,
+    token: &str,
+) -> Result<(), SendError> {
+    let api = Api {
+        transport: Arc::new(Transport::direct(client.clone())),
+        endpoints: endpoints.clone(),
+        token: token.to_owned(),
+    };
+    api.call("logOut", &serde_json::json!({})).await.map(|_| ())
 }
 
 /// A transport error: before the request left it is `network`; a
