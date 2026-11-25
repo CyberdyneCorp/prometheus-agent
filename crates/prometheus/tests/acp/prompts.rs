@@ -230,8 +230,24 @@ fn a_daemon_restart_fails_the_prompt_and_reattach_shows_the_outcome() {
         );
         std::thread::sleep(Duration::from_millis(100));
     }
-    let id = acp.send_prompt(&session, "new work");
-    let fresh = acp.response(id);
+    // The adapter learns the outcome from the replayed `turn.finished`,
+    // which can reach it just after the transcript shows the boundary:
+    // until then new work is refused as `unknown_execution`.
+    let fresh = loop {
+        let id = acp.send_prompt(&session, "new work");
+        let answer = acp.response(id);
+        let refused = answer["error"]["message"]
+            .as_str()
+            .is_some_and(|m| m.starts_with("unknown_execution"));
+        if !refused {
+            break answer;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the outcome never settled: {answer}"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    };
     assert_eq!(fresh["result"]["stopReason"], "end_turn", "{fresh}");
 }
 
