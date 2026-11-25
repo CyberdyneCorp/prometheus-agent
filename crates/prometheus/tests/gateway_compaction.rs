@@ -55,7 +55,10 @@ fn idle_compaction(home: &Path) {
         send(home, "default", "u1", q);
         wait("the answer", Duration::from_mins(1), || long(home) == n + 1);
     }
-    std::thread::sleep(Duration::from_millis(1_200));
+    // Idle time runs from the session's newest row, which can be stored
+    // after the chat shows the answer: a margin over the 1 s threshold
+    // keeps a slow runner from measuring a shorter pause.
+    std::thread::sleep(Duration::from_millis(2_500));
     send(home, "default", "u1", "back again");
     wait_said(home, "default", "fast done");
     let committed = compactions(home);
