@@ -61,10 +61,11 @@ fn idle_compaction(home: &Path) {
     std::thread::sleep(Duration::from_millis(2_500));
     send(home, "default", "u1", "back again");
     wait_said(home, "default", "fast done");
-    let committed = compactions(home);
-    assert!(
-        committed.iter().any(|c| c.contains("\"idle\"")),
-        "{committed:?}"
+    // The trajectory has its own writer thread, which can trail the chat.
+    wait(
+        "the idle compaction in the trajectory",
+        Duration::from_secs(30),
+        || compactions(home).iter().any(|c| c.contains("\"idle\"")),
     );
 }
 
