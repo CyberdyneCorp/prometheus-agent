@@ -6,7 +6,7 @@ One agent core runs behind every surface: CLI, full-screen TUI, messaging gatewa
 
 It ships as one signed binary, `prometheus` (alias `pmt`). Extensions run as sandboxed WebAssembly components with explicit capability grants, as MCP servers, or as existing Hermes Python plugins through an out-of-process bridge.
 
-> **Status: M0–M3 implemented; three M3 items open.** The core agent (M1), the multi-surface and extension layer (M2) and the desktop, dashboard and self-improvement milestone (M3) are in: 98 of 101 M3 tasks are ticked and every M3 spec scenario but four maps to a test. Still open: Discord voice channel sessions (task 77.2, a follow-up change; its four scenarios are deferred in the index), signing the catalog plugins and catalog entries with the release key (79.2, needs the maintainer's key) and the M3 exit gate (81.3), which closes once `scripts/check` is green on `main`. The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
+> **Status: M0–M3 complete; M4 next.** The core agent (M1), the multi-surface and extension layer (M2) and the desktop, dashboard and self-improvement milestone (M3) are done: all 99 M3 tasks are ticked, every M1–M3 spec scenario maps to a test and the M3 exit tests run in CI. M4 holds two items moved out of M3: Discord voice channel sessions (task 82.1; its four scenarios are deferred in the index) and publishing the first-party and catalog plugins signed with the release key (83.1, needs the maintainer's key). The full target behavior is specified in [`openspec/changes/bootstrap-prometheus-agent/`](openspec/changes/bootstrap-prometheus-agent/).
 
 ## Why Prometheus
 
@@ -216,7 +216,8 @@ flowchart LR
 | **M0** Scaffolding | Workspace, `scripts/check`, CI on Tier 1/2 targets, health and perf gates, generated references | 12 | Done |
 | **M1** Core agent | Config and profiles, sessions, providers and subscription sign-in, tools, sandbox, turn loop, compression, skills, memory, CLI, self-update; offline `prometheus demo` | 154 | Done |
 | **M2** Multi-surface and extensibility | Daemon and RPC, TUI, messaging gateway and adapters, WASM/MCP/Python plugins, delegation, worktrees, cron, voice, local models, API server, Hermes migration | 204 | Done |
-| **M3** Desktop, dashboard, self-improvement | Desktop app, dashboard, ACP, kanban, harness evolution, experience library, evals, A2A, bot mode, computer use, voice upgrades, catalog adapters and plugins, pets | 101 | 98 done; 77.2, 79.2 and the exit gate 81.3 open |
+| **M3** Desktop, dashboard, self-improvement | Desktop app, dashboard, ACP, kanban, harness evolution, experience library, evals, A2A, bot mode, computer use, voice upgrades, catalog adapters and plugins, pets | 99 | Done |
+| **M4** Voice channels and signed plugins | Discord voice channel sessions; the first-party and catalog plugins published with release-signed catalog entries | 2 | Open |
 
 Each milestone ends with exit tests run in CI. Task-level detail is in [`tasks.md`](openspec/changes/bootstrap-prometheus-agent/tasks.md).
 
@@ -264,7 +265,7 @@ Rules that CI enforces: no `unsafe` outside allowlisted modules, cognitive compl
 |---|---|
 | [`proposal.md`](openspec/changes/bootstrap-prometheus-agent/proposal.md) | Scope and the 44 capabilities |
 | [`design.md`](openspec/changes/bootstrap-prometheus-agent/design.md) | Architecture decisions and shared contracts |
-| [`specs/`](openspec/changes/bootstrap-prometheus-agent/specs/) | One behavior spec per capability, requirements tagged M1–M3 |
+| [`specs/`](openspec/changes/bootstrap-prometheus-agent/specs/) | One behavior spec per capability, requirements tagged M1–M4 |
 | [`docs/`](docs/) | Docs site; `docs/reference/` is generated from code |
 | [`docs/hermes-parity.md`](docs/hermes-parity.md) | Every Hermes feature mapped to its Prometheus requirement |
 | [`perf/README.md`](perf/README.md) | Performance budgets and baselines |

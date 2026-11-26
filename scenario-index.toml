@@ -119,6 +119,12 @@ capabilities = [
     "pets",
 ]
 
+# M4 (task groups 82-83): Discord voice channels and the release-signed
+# catalog plugins, moved out of M3; partial until its exit.
+[milestones.M4]
+capabilities = ["voice-mode"]
+partial = true
+
 [workspace-architecture."Single binary with subcommand surfaces"]
 "Alias invocation" = ["crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_identity_line", "crates/prometheus/tests/version.rs::pmt_alias_prints_the_same_version_json"]
 "Unknown subcommand" = ["crates/prometheus/tests/chat_cli.rs::a_mistyped_subcommand_exits_2_with_a_suggestion"]
@@ -5221,12 +5227,12 @@ capabilities = [
 "Refuses without TTS" = ["crates/prometheus/tests/wake_line.rs::wake_refuses_to_arm_without_tts_and_names_what_is_missing", "crates/pmt-voice/src/wake/command.rs::arming_names_the_missing_tts_provider"]
 
 [voice-mode."Discord voice channel sessions"]
-"Spoken question answered in voice" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
-"Join without being in voice" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
+"Spoken question answered in voice" = { deferred = "M4: Discord voice channel sessions (task 82.1)" }
+"Join without being in voice" = { deferred = "M4: Discord voice channel sessions (task 82.1)" }
 
 [voice-mode."Voice channel echo suppression, access control and rebinding"]
-"Unauthorized speaker ignored" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
-"No self-echo" = { deferred = "M3 follow-up: Discord voice channel sessions (task 77.2) land in their own change" }
+"Unauthorized speaker ignored" = { deferred = "M4: Discord voice channel sessions (task 82.1)" }
+"No self-echo" = { deferred = "M4: Discord voice channel sessions (task 82.1)" }
 
 [voice-mode."Wake engines and false-trigger control"]
 "Ambient spike ignored" = { tests = ["crates/pmt-voice/tests/wake.rs::an_ambient_spike_does_not_fire_but_a_held_phrase_does", "crates/pmt-voice/src/wake/engine.rs::one_spiking_frame_does_not_fire_but_three_in_a_row_do"], note = "a stand-in worker speaks the engine protocol and scores one spiking frame, a quiet one, then three held frames; the real openWakeWord driver sends the same scores" }

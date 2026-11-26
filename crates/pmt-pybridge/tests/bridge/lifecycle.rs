@@ -133,6 +133,10 @@ fn a_crash_loop_marks_the_plugin_failed_and_spares_the_rest() {
 fn a_memory_leak_is_terminated_naming_the_limit() {
     let mut settings = quick();
     settings.limits.max_memory_bytes = 128 * 1024 * 1024;
+    // The memory sampler runs every 500 ms (macOS has no rlimit to end it
+    // sooner); `quick`'s 200 ms pings could declare the busy hog
+    // unresponsive first on a loaded runner. Production pings every 15 s.
+    settings.ping_every = Duration::from_secs(5);
     let rig = rig("echo", settings);
     let err = rig
         .supervisor

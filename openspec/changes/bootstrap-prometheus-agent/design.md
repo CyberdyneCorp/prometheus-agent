@@ -125,7 +125,7 @@ Specs reference these instead of redefining them.
 
 ## Risks / Trade-offs
 
-- [Parity scope is very large] → Milestones M1–M3 with independently shippable cuts; tasks.md is grouped by milestone.
+- [Parity scope is very large] → Milestones M1–M4 with independently shippable cuts; tasks.md is grouped by milestone.
 - [WASM component tooling maturity] → Pin wasmtime; MCP and Python bridge remain as escape hatches.
 - [OS sandbox differences across platforms] → Capability model is the contract; enforcement strength per OS is reported by `prometheus doctor` and documented.
 - [Self-improvement cost] → Opt-in, hard budget ledger, cached sessions, never runs inside a user turn.
